@@ -18,6 +18,7 @@ import { cn } from '@/lib/utils';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
+import { useUIStore } from '@/store/ui';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 
@@ -48,6 +49,56 @@ interface WalletData {
   isDefault: boolean;
 }
 
+interface Allocation {
+  token: string;
+  weight: number;
+}
+
+interface TransactionCheck {
+  field: string;
+  valid: boolean;
+}
+
+interface GasRecommendation {
+  maxFeeGwei: number;
+  priorityFeeGwei: number;
+  waitBlocks: number;
+}
+
+interface DetectedPattern {
+  type: string;
+  risk: string;
+  hops?: number;
+  occurrences?: number;
+  count?: number;
+  largest?: string;
+}
+
+interface ActionResultData extends Record<string, unknown> {
+  result?: Record<string, unknown>;
+  error?: string;
+  message?: string;
+  totalValue?: number;
+  allocations?: Allocation[];
+  totalUnrealizedPnl?: number;
+  concentrationRisk?: string;
+  hhi?: number;
+  stablecoinExposure?: number;
+  checks?: TransactionCheck[];
+  valid?: boolean;
+  network?: string;
+  maxGasCostEth?: number;
+  warnings?: string[];
+  recommendations?: Record<string, GasRecommendation>;
+  gasLimit?: number;
+  networkCongestion?: string;
+  baseFeeStats?: { avg: number };
+  blocksAnalyzed?: number;
+  patterns?: DetectedPattern[];
+  riskSummary?: { high?: number; moderate?: number; informational?: number };
+  totalTransactions?: number;
+}
+
 type CryptoTab = 'portfolio' | 'transactions' | 'wallets';
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -69,7 +120,7 @@ export default function CryptoLensPage() {
 
   // ── Backend action state ───────────────────────────────────────────────────
   const runAction = useRunArtifact('crypto');
-  const [actionResult, setActionResult] = useState<Record<string, unknown> | null>(null);
+  const [actionResult, setActionResult] = useState<ActionResultData | null>(null);
   const [isRunningAction, setIsRunningAction] = useState(false);
 
   const handleRunAction = async (action: string) => {
@@ -78,7 +129,7 @@ export default function CryptoLensPage() {
     setActionResult(null);
     try {
       const result = await runAction.mutateAsync({ id: targetId, action });
-      setActionResult(result as Record<string, unknown>);
+      setActionResult(result as ActionResultData);
     } catch (err) {
       setActionResult({ error: err instanceof Error ? err.message : 'Action failed' });
     } finally {
@@ -290,8 +341,9 @@ export default function CryptoLensPage() {
       setSendTo('');
       setSendDescription('');
       setShowSendModal(false);
-    } catch {
-      // Errors handled silently
+    } catch (e) {
+      console.error('Send transaction failed:', e);
+      useUIStore.getState().addToast({ type: 'error', message: 'Transaction failed' });
     } finally {
       setTransacting(false);
     }
@@ -314,8 +366,9 @@ export default function CryptoLensPage() {
       setWalletAddress('');
       setWalletChainId('');
       setShowAddWallet(false);
-    } catch {
-      // Errors handled silently
+    } catch (e) {
+      console.error('Add wallet failed:', e);
+      useUIStore.getState().addToast({ type: 'error', message: 'Failed to add wallet' });
     }
   }, [walletName, walletAddress, walletChainId, wallets.length, createWallet]);
 
@@ -337,8 +390,9 @@ export default function CryptoLensPage() {
       setChainName('');
       setChainSymbol('');
       setShowAddChain(false);
-    } catch {
-      // Errors handled silently
+    } catch (e) {
+      console.error('Add chain failed:', e);
+      useUIStore.getState().addToast({ type: 'error', message: 'Failed to add chain' });
     }
   }, [chainName, chainSymbol, createChain]);
 
@@ -351,8 +405,9 @@ export default function CryptoLensPage() {
   const handleDeleteWallet = useCallback(async (id: string) => {
     try {
       await removeWallet(id);
-    } catch {
-      // Errors handled silently
+    } catch (e) {
+      console.error('Delete wallet failed:', e);
+      useUIStore.getState().addToast({ type: 'error', message: 'Failed to delete wallet' });
     }
   }, [removeWallet]);
 
@@ -1113,13 +1168,13 @@ export default function CryptoLensPage() {
             </button>
             <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">Result</p>
             {(() => {
-              const r = (actionResult as any)?.result ?? actionResult;
+              const r: ActionResultData = (actionResult?.result as ActionResultData) ?? actionResult;
               if (!r) return null;
               return (
                 <div className="text-xs space-y-3 max-h-72 overflow-y-auto">
                   {/* Error */}
-                  {(actionResult as any)?.error && (
-                    <p className="text-red-400">{(actionResult as any).error}</p>
+                  {actionResult?.error && (
+                    <p className="text-red-400">{actionResult.error}</p>
                   )}
                   {r?.message && !r?.error && (
                     <p className="text-gray-300">{r.message}</p>
@@ -1134,7 +1189,7 @@ export default function CryptoLensPage() {
                           <p className="text-[10px] text-gray-500">Total Value</p>
                         </div>
                         <div className="p-2 bg-lattice-bg rounded text-center">
-                          <p className={`text-sm font-bold ${r.totalUnrealizedPnl >= 0 ? 'text-neon-green' : 'text-red-400'}`}>
+                          <p className={`text-sm font-bold ${(r.totalUnrealizedPnl ?? 0) >= 0 ? 'text-neon-green' : 'text-red-400'}`}>
                             {r.totalUnrealizedPnl != null ? `${r.totalUnrealizedPnl >= 0 ? '+' : ''}$${r.totalUnrealizedPnl.toLocaleString()}` : '—'}
                           </p>
                           <p className="text-[10px] text-gray-500">Unrealized P&L</p>
@@ -1148,7 +1203,7 @@ export default function CryptoLensPage() {
                         <span className="ml-auto text-gray-500">HHI: {r.hhi}</span>
                       </div>
                       <div className="space-y-1">
-                        {(r.allocations as any[]).map((h: any) => (
+                        {(r.allocations as Allocation[]).map((h: Allocation) => (
                           <div key={h.token} className="flex items-center gap-2">
                             <span className="text-gray-300 w-12 font-mono">{h.token}</span>
                             <div className="flex-1 bg-lattice-bg rounded-full h-1.5">
@@ -1158,7 +1213,7 @@ export default function CryptoLensPage() {
                           </div>
                         ))}
                       </div>
-                      {r.stablecoinExposure > 0 && (
+                      {(r.stablecoinExposure ?? 0) > 0 && (
                         <p className="text-[10px] text-gray-500">Stablecoin exposure: {r.stablecoinExposure}%</p>
                       )}
                     </div>
@@ -1174,7 +1229,7 @@ export default function CryptoLensPage() {
                         <span className="text-gray-400">{r.network}</span>
                         <span className="ml-auto text-gray-500">Gas: {r.maxGasCostEth} ETH</span>
                       </div>
-                      {r.warnings.length > 0 && (
+                      {(r.warnings?.length ?? 0) > 0 && (
                         <div className="space-y-1">
                           {(r.warnings as string[]).map((w: string, i: number) => (
                             <div key={i} className="flex items-center gap-1.5 text-yellow-400 bg-yellow-500/10 px-2 py-1 rounded">
@@ -1184,7 +1239,7 @@ export default function CryptoLensPage() {
                         </div>
                       )}
                       <div className="space-y-1">
-                        {(r.checks as any[]).map((c: any) => (
+                        {(r.checks as TransactionCheck[]).map((c: TransactionCheck) => (
                           <div key={c.field} className="flex items-center justify-between text-[10px]">
                             <span className="text-gray-500 font-mono">{c.field}</span>
                             <span className={c.valid ? 'text-neon-green' : 'text-red-400'}>{c.valid ? 'OK' : 'FAIL'}</span>
@@ -1211,9 +1266,9 @@ export default function CryptoLensPage() {
                         {(['slow', 'standard', 'fast'] as const).map(speed => (
                           <div key={speed} className="p-2 bg-lattice-bg rounded text-center space-y-0.5">
                             <p className="text-[10px] text-gray-500 capitalize">{speed}</p>
-                            <p className="font-bold text-neon-green text-sm">{(r.recommendations as any)[speed].maxFeeGwei} Gwei</p>
-                            <p className="text-[10px] text-gray-500">+{(r.recommendations as any)[speed].priorityFeeGwei} tip</p>
-                            <p className="text-[10px] text-gray-400">{(r.recommendations as any)[speed].waitBlocks} blocks</p>
+                            <p className="font-bold text-neon-green text-sm">{(r.recommendations as Record<string, GasRecommendation>)[speed].maxFeeGwei} Gwei</p>
+                            <p className="text-[10px] text-gray-500">+{(r.recommendations as Record<string, GasRecommendation>)[speed].priorityFeeGwei} tip</p>
+                            <p className="text-[10px] text-gray-400">{(r.recommendations as Record<string, GasRecommendation>)[speed].waitBlocks} blocks</p>
                           </div>
                         ))}
                       </div>
@@ -1245,7 +1300,7 @@ export default function CryptoLensPage() {
                         <p className="text-neon-green text-[11px]">No suspicious patterns detected.</p>
                       )}
                       <div className="space-y-1">
-                        {(r.patterns as any[]).map((p: any, i: number) => (
+                        {(r.patterns as DetectedPattern[]).map((p: DetectedPattern, i: number) => (
                           <div key={i} className="p-2 bg-lattice-bg rounded space-y-0.5">
                             <div className="flex items-center justify-between">
                               <span className="text-gray-200 font-mono text-[10px]">{p.type.replace(/_/g, ' ')}</span>

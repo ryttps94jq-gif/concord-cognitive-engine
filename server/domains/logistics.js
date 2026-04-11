@@ -249,6 +249,176 @@ export default function registerLogisticsActions(registerLensAction) {
   });
 
   /**
+   * complianceAudit
+   * Audit shipment compliance: documentation, weight limits, hazmat, customs.
+   * artifact.data.shipments: [{ shipmentId, weight, weightLimit, documents, hazmat, customs, ... }]
+   */
+  registerLensAction("logistics", "complianceAudit", (ctx, artifact, _params) => {
+    const shipments = artifact.data?.shipments || [artifact.data];
+    const results = [];
+    let passCount = 0;
+    let failCount = 0;
+
+    for (const shipment of shipments) {
+      const checks = [];
+      // Documentation check
+      const docs = shipment.documents || [];
+      const requiredDocs = ['bill_of_lading', 'packing_list', 'commercial_invoice'];
+      const missingDocs = requiredDocs.filter(d => !docs.some(doc => (doc.type || doc.name || '').toLowerCase().replace(/\s+/g, '_') === d));
+      checks.push({ check: 'documentation', passed: missingDocs.length === 0, details: missingDocs.length > 0 ? `Missing: ${missingDocs.join(', ')}` : 'All required documents present' });
+
+      // Weight limits
+      const weight = parseFloat(shipment.weight) || 0;
+      const weightLimit = parseFloat(shipment.weightLimit) || Infinity;
+      const weightOk = weight <= weightLimit;
+      checks.push({ check: 'weight_limit', passed: weightOk, details: weightOk ? `${weight}/${weightLimit} within limit` : `Overweight: ${weight}/${weightLimit}` });
+
+      // Hazmat
+      const hazmat = shipment.hazmat || shipment.hazardousMaterials || null;
+      if (hazmat) {
+        const hasCert = !!hazmat.certification;
+        const hasLabels = !!hazmat.labels || !!hazmat.labeled;
+        const hasPackaging = !!hazmat.properPackaging || !!hazmat.packagingApproved;
+        const hazmatOk = hasCert && hasLabels && hasPackaging;
+        checks.push({ check: 'hazmat', passed: hazmatOk, details: hazmatOk ? 'Hazmat compliant' : `Missing: ${[!hasCert && 'certification', !hasLabels && 'labels', !hasPackaging && 'packaging'].filter(Boolean).join(', ')}` });
+      }
+
+      // Customs
+      const customs = shipment.customs || null;
+      if (customs) {
+        const hasDeclaration = !!customs.declaration;
+        const hasTariffCode = !!customs.tariffCode || !!customs.hsCode;
+        const customsOk = hasDeclaration && hasTariffCode;
+        checks.push({ check: 'customs', passed: customsOk, details: customsOk ? 'Customs documentation complete' : `Missing: ${[!hasDeclaration && 'declaration', !hasTariffCode && 'tariff_code'].filter(Boolean).join(', ')}` });
+      }
+
+      const allPassed = checks.every(c => c.passed);
+      if (allPassed) passCount++; else failCount++;
+      results.push({ shipmentId: shipment.shipmentId || shipment.id, status: allPassed ? 'compliant' : 'non-compliant', checks });
+    }
+
+    return {
+      ok: true,
+      result: {
+        auditedAt: new Date().toISOString(),
+        shipmentsAudited: results.length,
+        compliant: passCount,
+        nonCompliant: failCount,
+        complianceRate: results.length > 0 ? Math.round((passCount / results.length) * 100) : 100,
+        shipments: results,
+      },
+    };
+  });
+
+  /**
+   * fleetReport
+   * Fleet summary: total vehicles, active/idle, mileage, fuel, maintenance due.
+   * artifact.data.vehicles: [{ vehicleId, name, status, currentMileage, fuelConsumed, lastServiceDate, serviceIntervalDays }]
+   */
+  registerLensAction("logistics", "fleetReport", (ctx, artifact, _params) => {
+    const vehicles = artifact.data?.vehicles || [];
+    const now = new Date();
+    let totalMileage = 0;
+    let totalFuel = 0;
+    let maintenanceDueCount = 0;
+    const active = [];
+    const idle = [];
+
+    for (const v of vehicles) {
+      const mileage = parseFloat(v.currentMileage) || 0;
+      const fuel = parseFloat(v.fuelConsumed) || parseFloat(v.fuelUsed) || 0;
+      totalMileage += mileage;
+      totalFuel += fuel;
+
+      const isActive = v.status === 'active' || v.status === 'in_transit' || v.status === 'en_route';
+      if (isActive) active.push(v.vehicleId || v.name);
+      else idle.push(v.vehicleId || v.name);
+
+      const lastService = v.lastServiceDate ? new Date(v.lastServiceDate) : null;
+      const intervalDays = parseInt(v.serviceIntervalDays, 10) || 90;
+      if (lastService) {
+        const daysSince = Math.floor((now - lastService) / 86400000);
+        if (daysSince >= intervalDays) maintenanceDueCount++;
+      }
+    }
+
+    const avgMileage = vehicles.length > 0 ? Math.round(totalMileage / vehicles.length) : 0;
+    const avgFuel = vehicles.length > 0 ? Math.round((totalFuel / vehicles.length) * 100) / 100 : 0;
+
+    return {
+      ok: true,
+      result: {
+        generatedAt: new Date().toISOString(),
+        totalVehicles: vehicles.length,
+        activeCount: active.length,
+        idleCount: idle.length,
+        activeVehicles: active,
+        idleVehicles: idle,
+        totalMileage: Math.round(totalMileage),
+        averageMileage: avgMileage,
+        totalFuelConsumed: Math.round(totalFuel * 100) / 100,
+        averageFuelPerVehicle: avgFuel,
+        maintenanceDueCount,
+      },
+    };
+  });
+
+  /**
+   * maintenanceAlert
+   * Check vehicle maintenance schedules for overdue service based on mileage/date thresholds.
+   * artifact.data.vehicles: [{ vehicleId, name, currentMileage, lastServiceMileage, serviceIntervalMiles, lastServiceDate, serviceIntervalDays }]
+   */
+  registerLensAction("logistics", "maintenanceAlert", (ctx, artifact, _params) => {
+    const vehicles = artifact.data?.vehicles || [];
+    const now = new Date();
+    const alerts = [];
+
+    for (const v of vehicles) {
+      const reasons = [];
+      const curMiles = parseFloat(v.currentMileage) || 0;
+      const lastMiles = parseFloat(v.lastServiceMileage) || 0;
+      const intervalMiles = parseFloat(v.serviceIntervalMiles) || 5000;
+      const milesSince = curMiles - lastMiles;
+      if (milesSince >= intervalMiles) {
+        reasons.push({ type: 'mileage', message: `${Math.round(milesSince)} miles since last service (interval: ${intervalMiles})`, overBy: Math.round(milesSince - intervalMiles) });
+      }
+
+      const lastDate = v.lastServiceDate ? new Date(v.lastServiceDate) : null;
+      const intervalDays = parseInt(v.serviceIntervalDays, 10) || 90;
+      if (lastDate) {
+        const daysSince = Math.floor((now - lastDate) / 86400000);
+        if (daysSince >= intervalDays) {
+          reasons.push({ type: 'calendar', message: `${daysSince} days since last service (interval: ${intervalDays})`, overBy: daysSince - intervalDays });
+        }
+      }
+
+      if (reasons.length > 0) {
+        alerts.push({
+          vehicleId: v.vehicleId,
+          name: v.name,
+          currentMileage: curMiles,
+          lastServiceDate: v.lastServiceDate || null,
+          severity: reasons.some(r => r.overBy > (r.type === 'mileage' ? intervalMiles * 0.5 : intervalDays * 0.5)) ? 'critical' : 'warning',
+          reasons,
+        });
+      }
+    }
+
+    alerts.sort((a, b) => (b.severity === 'critical' ? 1 : 0) - (a.severity === 'critical' ? 1 : 0));
+
+    return {
+      ok: true,
+      result: {
+        checkedAt: new Date().toISOString(),
+        totalVehicles: vehicles.length,
+        alertCount: alerts.length,
+        criticalCount: alerts.filter(a => a.severity === 'critical').length,
+        alerts,
+      },
+    };
+  });
+
+  /**
    * inventoryAudit
    * Compare physical count quantities vs system quantities to identify discrepancies.
    * artifact.data.inventoryRecords: [{ sku, name, systemQty, physicalQty, location, unitCost }]

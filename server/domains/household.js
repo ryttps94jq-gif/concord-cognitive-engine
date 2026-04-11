@@ -91,6 +91,166 @@ export default function registerHouseholdActions(registerLensAction) {
   });
 
   /**
+   * maintenanceCheck
+   * Check home maintenance items for overdue tasks based on schedule/intervals.
+   * artifact.data.maintenanceItems: [{ name, lastCompleted, intervalDays, category, priority }]
+   * params.lookaheadDays (default 14)
+   */
+  registerLensAction("household", "maintenanceCheck", (ctx, artifact, params) => {
+    const items = artifact.data.maintenanceItems || [];
+    const lookaheadDays = params.lookaheadDays != null ? params.lookaheadDays : 14;
+    const now = new Date();
+
+    const overdue = [];
+    const upcoming = [];
+    const current = [];
+
+    for (const item of items) {
+      const lastDone = item.lastCompleted ? new Date(item.lastCompleted) : null;
+      const interval = parseInt(item.intervalDays, 10) || 30;
+
+      if (!lastDone) {
+        overdue.push({ name: item.name, category: item.category || "general", priority: item.priority || "normal", status: "never-completed", daysOverdue: null });
+        continue;
+      }
+
+      const nextDue = new Date(lastDone.getTime() + interval * 86400000);
+      const daysUntil = Math.ceil((nextDue - now) / 86400000);
+
+      if (daysUntil < 0) {
+        overdue.push({ name: item.name, category: item.category || "general", priority: item.priority || "normal", lastCompleted: item.lastCompleted, nextDue: nextDue.toISOString().split("T")[0], daysOverdue: Math.abs(daysUntil), status: "overdue" });
+      } else if (daysUntil <= lookaheadDays) {
+        upcoming.push({ name: item.name, category: item.category || "general", priority: item.priority || "normal", nextDue: nextDue.toISOString().split("T")[0], daysUntil, status: "upcoming" });
+      } else {
+        current.push({ name: item.name, category: item.category || "general", nextDue: nextDue.toISOString().split("T")[0], daysUntil, status: "current" });
+      }
+    }
+
+    overdue.sort((a, b) => (b.daysOverdue || 999) - (a.daysOverdue || 999));
+    upcoming.sort((a, b) => a.daysUntil - b.daysUntil);
+
+    const result = {
+      checkedAt: now.toISOString(),
+      totalItems: items.length,
+      overdueCount: overdue.length,
+      upcomingCount: upcoming.length,
+      currentCount: current.length,
+      overdue,
+      upcoming,
+    };
+
+    artifact.data.maintenanceCheckResult = result;
+
+    return { ok: true, result };
+  });
+
+  /**
+   * rotateChores
+   * Rotate chore assignments among household members based on current assignments.
+   * artifact.data.chores: [{ name, currentAssignee, frequency }]
+   * artifact.data.members: [string] or [{ name }]
+   */
+  registerLensAction("household", "rotateChores", (ctx, artifact, _params) => {
+    const chores = artifact.data.chores || [];
+    const rawMembers = artifact.data.members || [];
+    const members = rawMembers.map(m => typeof m === "string" ? m : m.name);
+
+    if (members.length === 0) return { ok: true, result: { error: "No household members defined." } };
+    if (chores.length === 0) return { ok: true, result: { error: "No chores defined." } };
+
+    const newAssignments = [];
+    for (const chore of chores) {
+      const currentIdx = members.indexOf(chore.currentAssignee);
+      const nextIdx = currentIdx === -1 ? 0 : (currentIdx + 1) % members.length;
+      const assignee = members[nextIdx];
+      newAssignments.push({
+        chore: chore.name,
+        previousAssignee: chore.currentAssignee || null,
+        newAssignee: assignee,
+        frequency: chore.frequency || "weekly",
+      });
+      chore.currentAssignee = assignee;
+    }
+
+    const choreCounts = {};
+    for (const a of newAssignments) choreCounts[a.newAssignee] = (choreCounts[a.newAssignee] || 0) + 1;
+
+    const result = {
+      rotatedAt: new Date().toISOString(),
+      totalChores: chores.length,
+      members: members.length,
+      assignments: newAssignments,
+      choresPerMember: choreCounts,
+    };
+
+    artifact.data.lastChoreRotation = result;
+
+    return { ok: true, result };
+  });
+
+  /**
+   * weeklySummary
+   * Summarize weekly household activity.
+   * artifact.data.chores: [{ name, completedDate, currentAssignee }]
+   * artifact.data.mealPlan: [{ day, meal, recipe }]
+   * artifact.data.shoppingList: [{ item, purchased }]
+   * artifact.data.upcomingTasks: [{ name, dueDate }]
+   */
+  registerLensAction("household", "weeklySummary", (ctx, artifact, _params) => {
+    const now = new Date();
+    const weekAgo = new Date(now.getTime() - 7 * 86400000);
+    const weekAhead = new Date(now.getTime() + 7 * 86400000);
+
+    // Chores completed this week
+    const chores = artifact.data.chores || [];
+    const completedChores = chores.filter(c => {
+      if (!c.completedDate) return false;
+      const d = new Date(c.completedDate);
+      return d >= weekAgo && d <= now;
+    });
+
+    // Meals planned
+    const mealPlan = artifact.data.mealPlan || [];
+    const mealsPlanned = mealPlan.length;
+
+    // Shopping status
+    const shoppingList = artifact.data.shoppingList || artifact.data.groceryList?.list || [];
+    const totalShoppingItems = shoppingList.length;
+    const purchasedItems = shoppingList.filter(i => i.purchased || i.done).length;
+
+    // Upcoming tasks
+    const upcoming = (artifact.data.upcomingTasks || []).filter(t => {
+      if (!t.dueDate) return true;
+      const d = new Date(t.dueDate);
+      return d >= now && d <= weekAhead;
+    });
+
+    // Maintenance items due
+    const maintenanceItems = artifact.data.maintenanceItems || [];
+    const maintenanceDue = maintenanceItems.filter(m => {
+      if (!m.lastCompleted || !m.intervalDays) return false;
+      const nextDue = new Date(new Date(m.lastCompleted).getTime() + parseInt(m.intervalDays, 10) * 86400000);
+      return nextDue <= weekAhead;
+    });
+
+    const result = {
+      generatedAt: now.toISOString(),
+      weekOf: weekAgo.toISOString().split("T")[0],
+      choresCompleted: completedChores.length,
+      totalChores: chores.length,
+      choreCompletionRate: chores.length > 0 ? Math.round((completedChores.length / chores.length) * 10000) / 100 : 0,
+      mealsPlanned,
+      shoppingProgress: { total: totalShoppingItems, purchased: purchasedItems, remaining: totalShoppingItems - purchasedItems },
+      upcomingTasks: upcoming.map(t => ({ name: t.name, dueDate: t.dueDate || "unscheduled" })),
+      maintenanceDueSoon: maintenanceDue.map(m => m.name),
+    };
+
+    artifact.data.weeklySummary = result;
+
+    return { ok: true, result };
+  });
+
+  /**
    * maintenanceDue
    * Flag household items or systems past their service date.
    * artifact.data.maintenanceItems: [{ name, lastServiceDate, intervalDays, category, notes }]

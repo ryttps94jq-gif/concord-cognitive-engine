@@ -335,7 +335,7 @@ export default function AffectLensPage() {
     setIsRunning(action);
     try {
       const res = await runAction.mutateAsync({ id: bridge.selectedId, action });
-      setter((res.result as Record<string, unknown>) || null);
+      if (res.ok === false) { setter({ message: `Action failed: ${(res as Record<string, unknown>).error || 'Unknown error'}` } as Record<string, unknown>); } else { setter((res.result as Record<string, unknown>) || null); }
     } catch (e) {
       console.error(`Action ${action} failed:`, e);
     }

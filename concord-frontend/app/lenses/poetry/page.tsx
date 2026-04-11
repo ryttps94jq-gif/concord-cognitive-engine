@@ -264,7 +264,7 @@ export default function PoetryPage() {
     setActiveAction(action);
     try {
       const res = await runAction.mutateAsync({ id: targetId, action });
-      setActionResult({ action, ...(res.result as Record<string, unknown>) });
+      if (res.ok === false) { setActionResult({ action, message: `Action failed: ${(res as Record<string, unknown>).error || 'Unknown error'}` }); } else { setActionResult({ action, ...(res.result as Record<string, unknown>) }); }
     } catch (err) {
       console.error('Poetry action failed:', err);
     } finally {

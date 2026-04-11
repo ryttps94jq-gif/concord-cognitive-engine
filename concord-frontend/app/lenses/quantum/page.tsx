@@ -70,7 +70,7 @@ export default function QuantumLensPage() {
     setQuantumActiveAction(action);
     try {
       const res = await runAction.mutateAsync({ id, action });
-      setQuantumActionResult({ action, ...(res.result as Record<string, unknown>) });
+      if (res.ok === false) { setQuantumActionResult({ action, message: `Action failed: ${(res as Record<string, unknown>).error || 'Unknown error'}` }); } else { setQuantumActionResult({ action, ...(res.result as Record<string, unknown>) }); }
     } catch (err) { console.error('Quantum action failed:', err); }
     finally { setQuantumActiveAction(null); }
   };

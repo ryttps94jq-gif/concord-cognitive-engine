@@ -128,6 +128,119 @@ export default function registerHealthcareActions(registerLensAction) {
   });
 
   /**
+   * exportEncounter
+   * Format encounter data into a structured export.
+   * artifact.data.encounter or artifact.data: { patientName, date, chiefComplaints, diagnosis, plan, vitals, notes }
+   */
+  registerLensAction("healthcare", "exportEncounter", (ctx, artifact, _params) => {
+    const enc = artifact.data.encounter || artifact.data;
+    const patientName = enc.patientName || artifact.data.patientName || artifact.title;
+    const date = enc.date || enc.encounterDate || new Date().toISOString().split("T")[0];
+    const chiefComplaints = enc.chiefComplaints || enc.complaints || [];
+    const diagnosis = enc.diagnosis || enc.diagnoses || [];
+    const plan = enc.plan || enc.treatmentPlan || [];
+    const vitals = enc.vitals || {};
+    const provider = enc.provider || enc.physician || "";
+    const notes = enc.notes || "";
+
+    const exported = {
+      exportedAt: new Date().toISOString(),
+      patient: {
+        name: patientName,
+        id: artifact.data.patientId || artifact.id,
+        dob: enc.dob || artifact.data.dob || null,
+      },
+      encounter: {
+        date,
+        provider,
+        type: enc.type || "office-visit",
+        chiefComplaints: Array.isArray(chiefComplaints) ? chiefComplaints : [chiefComplaints],
+        vitals: {
+          bp: vitals.bp || vitals.bloodPressure || null,
+          hr: vitals.hr || vitals.heartRate || null,
+          temp: vitals.temp || vitals.temperature || null,
+          rr: vitals.rr || vitals.respiratoryRate || null,
+          o2sat: vitals.o2sat || vitals.spO2 || null,
+          weight: vitals.weight || null,
+        },
+        diagnosis: Array.isArray(diagnosis) ? diagnosis : [diagnosis],
+        plan: Array.isArray(plan) ? plan : [plan],
+        notes,
+      },
+    };
+
+    artifact.data.lastExport = exported;
+
+    return { ok: true, result: exported };
+  });
+
+  /**
+   * soapAutoFill
+   * Generate a SOAP note template from artifact data.
+   * artifact.data: { chiefComplaint, symptoms, vitals, examFindings, conditions, assessment, medications, plan }
+   */
+  registerLensAction("healthcare", "soapAutoFill", (ctx, artifact, _params) => {
+    const d = artifact.data;
+
+    const subjective = {
+      chiefComplaint: d.chiefComplaint || d.complaints?.[0] || "",
+      hpi: d.hpi || d.historyOfPresentIllness || "",
+      symptoms: d.symptoms || [],
+      reviewOfSystems: d.reviewOfSystems || d.ros || {},
+      allergies: d.allergies || [],
+      medications: d.medications || d.prescriptions?.map(p => p.drug) || [],
+      socialHistory: d.socialHistory || "",
+      familyHistory: d.familyHistory || "",
+    };
+
+    const objective = {
+      vitals: {
+        bp: d.vitals?.bp || d.vitals?.bloodPressure || null,
+        hr: d.vitals?.hr || d.vitals?.heartRate || null,
+        temp: d.vitals?.temp || d.vitals?.temperature || null,
+        rr: d.vitals?.rr || d.vitals?.respiratoryRate || null,
+        o2sat: d.vitals?.o2sat || d.vitals?.spO2 || null,
+        weight: d.vitals?.weight || null,
+        height: d.vitals?.height || null,
+      },
+      examFindings: d.examFindings || d.physicalExam || {},
+      labs: d.labs || d.labResults || [],
+    };
+
+    const conditions = d.conditions || d.diagnoses || [];
+    const assessment = {
+      diagnoses: Array.isArray(conditions)
+        ? conditions.map(c => typeof c === "string" ? c : c.name || c.code || "")
+        : [conditions],
+      clinicalImpression: d.assessment || d.clinicalImpression || "",
+    };
+
+    const planSection = {
+      orders: d.orders || [],
+      prescriptions: d.prescriptions || d.newPrescriptions || [],
+      procedures: d.procedures || [],
+      referrals: d.referrals || [],
+      followUp: d.followUp || d.plan?.followUp || "",
+      patientEducation: d.patientEducation || [],
+    };
+
+    const soapNote = {
+      generatedAt: new Date().toISOString(),
+      patientName: d.patientName || artifact.title,
+      patientId: d.patientId || artifact.id,
+      date: d.date || new Date().toISOString().split("T")[0],
+      subjective,
+      objective,
+      assessment,
+      plan: planSection,
+    };
+
+    artifact.data.soapNote = soapNote;
+
+    return { ok: true, result: soapNote };
+  });
+
+  /**
    * generateSummary
    * Create a consolidated patient summary from encounters, labs, and
    * treatments stored in artifact.data.

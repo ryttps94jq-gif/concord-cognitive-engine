@@ -23,6 +23,8 @@ module.exports = {
           pink: '#ec4899',
           green: '#22c55e',
         },
+        'accent-warm': '#E8A44C',
+        'accent-cool': '#5B8DEF',
         resonance: {
           low: '#3b82f6',
           mid: '#8b5cf6',

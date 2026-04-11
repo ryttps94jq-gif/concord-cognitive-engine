@@ -13,6 +13,7 @@ import { ErrorState } from '@/components/common/EmptyState';
 import { useLensDTUs } from '@/hooks/useLensDTUs';
 import { LensContextPanel } from '@/components/lens/LensContextPanel';
 import { FeedbackWidget } from '@/components/feedback/FeedbackWidget';
+import { useUIStore } from '@/store/ui';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
@@ -63,7 +64,7 @@ export default function ResearchLensPage() {
     setResearchActiveAction(action);
     try {
       const res = await runResearchAction.mutateAsync({ id, action });
-      setResearchActionResult({ action, ...(res.result as Record<string, unknown>) });
+      if (res.ok === false) { setResearchActionResult({ action, message: `Action failed: ${(res as Record<string, unknown>).error || 'Unknown error'}` }); } else { setResearchActionResult({ action, ...(res.result as Record<string, unknown>) }); }
     } catch (err) { console.error('Research action failed:', err); }
     finally { setResearchActiveAction(null); }
   }, [hyperDTUs, megaDTUs, regularDTUs, runResearchAction]);
@@ -155,7 +156,9 @@ export default function ResearchLensPage() {
       setSavingDTU(false);
       refetch();
       refetchDTUs();
-    } catch {
+    } catch (e) {
+      console.error('Failed to save research DTU:', e);
+      useUIStore.getState().addToast({ type: 'error', message: 'Failed to save research result' });
       setSavingDTU(false);
     }
   }, [generateResult, refetch, refetchDTUs]);

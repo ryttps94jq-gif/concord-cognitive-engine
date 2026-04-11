@@ -102,7 +102,13 @@ export default function InferenceLensPage() {
     if (!artifactId) return;
     runAction.mutate(
       { id: artifactId, action, params: {} },
-      { onSuccess: (res) => setInfActionResult({ action, data: res.result }) }
+      {
+        onSuccess: (res) => setInfActionResult({ action, data: res.result }),
+        onError: (e) => {
+          console.error(`Action failed:`, e);
+          setInfActionResult({ action, data: { error: `Action failed: ${e instanceof Error ? e.message : 'Unknown error'}` } });
+        },
+      }
     );
   }, [infArtifacts, runAction]);
 

@@ -113,7 +113,7 @@ export function Sidebar() {
         `}
       >
         {/* Logo */}
-        <div className="h-16 flex items-center justify-between px-4 border-b border-lattice-border">
+        <div className="h-16 flex items-center justify-between px-4 border-b border-transparent bg-gradient-to-r from-neon-blue/20 via-neon-purple/10 to-transparent bg-[length:100%_1px] bg-bottom bg-no-repeat">
           <Link href="/" className="flex items-center gap-2" aria-label="Go to dashboard">
             <span className="text-2xl" aria-hidden="true">&#x1f9e0;</span>
             {showLabel && (
@@ -168,7 +168,7 @@ export function Sidebar() {
 
           {/* Core 5 Section Label */}
           {showLabel && (
-            <p className="px-3 py-1 text-xs uppercase tracking-wider text-neon-cyan mb-1">
+            <p className="px-3 py-1 text-xs uppercase tracking-widest text-gray-500 font-medium mb-1">
               Workspaces
             </p>
           )}
@@ -209,7 +209,7 @@ export function Sidebar() {
 
           {/* System Pages */}
           {showLabel && (
-            <p className="px-3 py-1 text-xs uppercase tracking-wider text-neon-cyan mb-1">
+            <p className="px-3 py-1 text-xs uppercase tracking-widest text-gray-500 font-medium mb-1">
               Systems
             </p>
           )}

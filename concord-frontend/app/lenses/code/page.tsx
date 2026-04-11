@@ -632,8 +632,8 @@ export default function CodeLensPage() {
     setRunningCodeAction(action);
     try {
       const res = await runCodeAction.mutateAsync({ id: targetId, action });
-      setCodeActionResult(res.result as Record<string, unknown>);
-    } catch (e) { console.error(`[Code] Action ${action} failed:`, e); }
+      if (res.ok === false) { setCodeActionResult({ message: `Action failed: ${(res as Record<string, unknown>).error || 'Unknown error'}` }); } else { setCodeActionResult(res.result as Record<string, unknown>); }
+    } catch (e) { console.error(`[Code] Action ${action} failed:`, e); setCodeActionResult({ message: `Action failed: ${e instanceof Error ? e.message : 'Unknown error'}` }); }
     setRunningCodeAction(null);
   };
 

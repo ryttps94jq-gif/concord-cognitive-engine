@@ -73,6 +73,7 @@ import { getScalingStatus } from "./lib/horizontal-scaling.js";
 import { startAllIntervals, stopAllIntervals, getIntervalStatus } from "./lib/interval-registry.js";
 import { getMemoryPressureLevel, initMemoryWatchdog } from "./lib/memory-pressure.js";
 import { initStateSync, getSyncStatus, stopSync } from "./lib/state-sync.js";
+import * as cityStreaming from "./lib/city-streaming.js";
 
 // ---- Route modules (ESM) ----
 import registerSystemRoutes from "./routes/system.js";
@@ -239,7 +240,7 @@ import { selectGlobalSynthesisCandidates } from "./emergent/scope-separation.js"
 import { isSummaryDue, compressConversation, getSessionSummary, getSummaryText } from "./lib/conversation-summarizer.js";
 import { runContextHarvest, harvestEntityState, formatEntityStateBlock } from "./lib/chat-context-pipeline.js";
 import { assembleWithTokenBudget, computeBudgetBreakdown } from "./lib/token-budget-assembler.js";
-import { createInputDTU, createOutputDTU, isConsolidationDue, consolidationCheck, forgeFromMessage } from "./lib/conversation-enrichment.js";
+import { createInputDTU, createOutputDTU, isConsolidationDue, consolidationCheck, isAcceleratedPromotionDue, acceleratedChatPromotion, forgeFromMessage } from "./lib/conversation-enrichment.js";
 import { runParallelBrains, recordParallelMetrics } from "./lib/chat-parallel-brains.js";
 
 // ---- Entity Growth, Web Exploration & Hive Communication ----
@@ -1167,6 +1168,20 @@ function requestLoggerMiddleware(req, res, next) {
   next();
 }
 
+// Simple async mutex for state mutations (DTU/lens create/update/delete)
+const _mutexQueue = [];
+let _mutexLocked = false;
+function acquireMutex() {
+  return new Promise(resolve => {
+    if (!_mutexLocked) { _mutexLocked = true; resolve(); return; }
+    _mutexQueue.push(resolve);
+  });
+}
+function releaseMutex() {
+  if (_mutexQueue.length > 0) { _mutexQueue.shift()(); }
+  else { _mutexLocked = false; }
+}
+
 // ---- config ----
 const PORT = Number(process.env.PORT || 5050);
 const VERSION = "5.1.0-production";
@@ -1205,10 +1220,10 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
 const OPENAI_BASE_URL = process.env.OPENAI_BASE_URL || "https://api.openai.com/v1";
 const OPENAI_MODEL_FAST = process.env.OPENAI_MODEL_FAST || process.env.OPENAI_MODEL || "gpt-4o-mini";
 const OPENAI_MODEL_SMART = process.env.OPENAI_MODEL_SMART || "gpt-4.1";
-let LLM_READY = Boolean(OPENAI_API_KEY) || Boolean((process.env.BRAIN_CONSCIOUS_URL || process.env.OLLAMA_HOST || "").trim());
+let LLM_READY = Boolean(OPENAI_API_KEY); // Only true if OpenAI key is set; Ollama readiness verified by initThreeBrains() probe
 // Also mark LLM ready if conscious brain becomes available (updated in initThreeBrains)
 function _refreshLlmReady() {
-  LLM_READY = Boolean(OPENAI_API_KEY) || Boolean((process.env.BRAIN_CONSCIOUS_URL || process.env.OLLAMA_HOST || "").trim()) || (BRAIN && BRAIN.conscious && BRAIN.conscious.enabled);
+  LLM_READY = Boolean(OPENAI_API_KEY) || (BRAIN && BRAIN.conscious && BRAIN.conscious.enabled);
 }
 // LLM toggle: default ON only when a key is present
 const __envBool = (v) => String(v ?? "").toLowerCase().trim();
@@ -1580,6 +1595,10 @@ function defaultStyleVector() {
     skepticism: 0.55,
     abstraction: 0.45,
     bulletiness: 0.45,
+    technicality: 0.5,
+    warmth: 0.5,
+    // personality growth metadata
+    exchanges: 0,
     // mutation metadata
     updatedAt: nowISO(),
     mutations: 0
@@ -1596,6 +1615,9 @@ function normalizeStyleVector(v) {
   out.skepticism = clamp01(out.skepticism);
   out.abstraction = clamp01(out.abstraction);
   out.bulletiness = clamp01(out.bulletiness);
+  out.technicality = clamp01(out.technicality ?? 0.5);
+  out.warmth = clamp01(out.warmth ?? 0.5);
+  out.exchanges = Number(out.exchanges || 0);
   out.updatedAt = nowISO();
   out.mutations = Number(out.mutations||0);
   return out;
@@ -1620,7 +1642,7 @@ function mutateStyleVector(current, signal) {
     nudge("verbosity", -0.03);
     nudge("skepticism", 0.03);
     nudge("abstraction", -0.02);
-  } else if (field && ["verbosity","formality","skepticism","abstraction","bulletiness"].includes(field)) {
+  } else if (field && ["verbosity","formality","skepticism","abstraction","bulletiness","technicality","warmth"].includes(field)) {
     const delta = (dir === "up" ? Math.abs(amt) : dir === "down" ? -Math.abs(amt) : amt);
     nudge(field, delta);
   }
@@ -1657,6 +1679,24 @@ function applyStyleToSettings(baseSettings, styleVec) {
   s.crispnessMin = clamp(cm, 0.6, 0.95);
 
   return s;
+}
+
+/**
+ * Build a human-readable style hints string from a style vector.
+ * Fed into the conscious system prompt so the LLM adapts tone/depth.
+ * Returns empty string when no meaningful preferences have accumulated.
+ */
+function buildStyleHints(sv) {
+  if (!sv || (sv.exchanges || 0) < 2) return "";
+  const lines = [];
+  lines.push(`Communication style preferences (learned from ${sv.exchanges} exchanges):`);
+  lines.push(`- Formality: ${sv.formality > 0.6 ? 'formal' : sv.formality < 0.4 ? 'casual' : 'balanced'}`);
+  lines.push(`- Technical depth: ${sv.technicality > 0.6 ? 'deep technical detail' : sv.technicality < 0.4 ? 'plain language' : 'moderate technical'}`);
+  lines.push(`- Response length: ${sv.verbosity > 0.6 ? 'detailed, thorough' : sv.verbosity < 0.4 ? 'concise, brief' : 'moderate length'}`);
+  lines.push(`- Warmth: ${sv.warmth > 0.6 ? 'warm and personal' : sv.warmth < 0.4 ? 'terse and direct' : 'professional'}`);
+  lines.push(`- Bullet lists: ${sv.bulletiness > 0.6 ? 'prefers structured lists' : sv.bulletiness < 0.4 ? 'prefers flowing prose' : 'mixed format'}`);
+  lines.push(`Adapt your responses to match these preferences naturally.`);
+  return lines.join("\n");
 }
 
 function jaccard(aTokens, bTokens) {
@@ -6262,6 +6302,10 @@ function saveStateDebounced() {
         if (global.gc) global.gc();
       } catch (e) {
         structuredLog("error", "state_save_failed", { error: String(e?.message || e) });
+        STATE._saveFailures = (STATE._saveFailures || 0) + 1;
+        if (typeof realtimeEmit === "function") {
+          realtimeEmit("health:pulse", { component: "state_save", status: "critical", score: 0, metrics: { failures: STATE._saveFailures, error: String(e?.message || e) }, timestamp: Date.now() });
+        }
         if (!USE_SQLITE_STATE) {
           try { fs.unlinkSync(STATE_PATH + ".tmp"); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
         }
@@ -6292,6 +6336,10 @@ function saveStateSync() {
     if (global.gc) global.gc();
   } catch (e) {
     structuredLog("error", "state_sync_save_failed", { error: String(e?.message || e) });
+    STATE._saveFailures = (STATE._saveFailures || 0) + 1;
+    if (typeof realtimeEmit === "function") {
+      realtimeEmit("health:pulse", { component: "state_save", status: "critical", score: 0, metrics: { failures: STATE._saveFailures, error: String(e?.message || e) }, timestamp: Date.now() });
+    }
   }
 }
 
@@ -6979,7 +7027,7 @@ function _c2repairDominance(){
     const cLoad = Number(g.functionalDecline?.contradictionLoad ?? 0);
     const score = clamp(rr - 0.25*clamp01(dl/10) - 0.25*clamp01(cLoad), 0, 1);
     return { ok: score > 0.01, score };
-  } catch { return { ok:true, score:0.5 }; }
+  } catch { return { ok: false, error: 'health_check_failed', score: 0 }; }
 }
 
 /**
@@ -7220,6 +7268,7 @@ async function runMacro(domain, name, input, ctx) {
     foundation: new Set(["status", "sense.readings", "sense.patterns", "identity.verify", "energy.map", "energy.grid", "spectrum.map", "spectrum.available", "emergency.status", "market.earnings", "market.topology", "archive.fossils", "archive.decoded", "synthesis.correlations", "neural.readiness", "protocol.stats"]),
     intel: new Set(["weather", "geology", "energy", "ocean", "seismic", "agriculture", "environment", "research.status", "research.data", "research.synthesis", "research.archive", "classifier.status", "metrics"]),
     cortex: new Set(["taxonomy", "unknown", "anomalies", "classify", "spectrum", "privacy.zones", "privacy.verify", "privacy.stats", "metrics"]),
+    city: new Set(["list", "get", "status", "startStream", "endStream", "followStream", "unfollowStream", "listStreams", "getStream"]),
   };
   const _domainSet = publicReadDomains[domain];
   const _domainNameAllowed = _domainSet ? _domainSet.has(name) : false;
@@ -11170,6 +11219,76 @@ async function callOllama(prompt, options = {}) {
     };
   } catch (e) {
     return { ok: false, error: String(e.message || e), source: "ollama" };
+  }
+}
+
+// Call Ollama (local) with streaming — uses /api/chat with stream: true
+// Returns NDJSON chunks via onToken callback; resolves with full content when done.
+async function callOllamaStreaming(brainUrl, model, messages, systemPrompt, onToken, options = {}) {
+  if (!brainUrl) return { ok: false, error: "Ollama URL not provided", source: "ollama-stream" };
+
+  const finalMessages = systemPrompt
+    ? [{ role: "system", content: systemPrompt }, ...messages]
+    : messages;
+
+  const body = {
+    model,
+    messages: finalMessages,
+    stream: true,
+    options: {
+      temperature: options.temperature || 0.7,
+      num_predict: options.maxTokens || 1500,
+    },
+  };
+
+  const ac = new AbortController();
+  const timeout = setTimeout(() => ac.abort(), options.timeout || 120000);
+
+  try {
+    const response = await fetch(`${brainUrl}/api/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: ac.signal,
+    });
+
+    if (!response.ok) {
+      return { ok: false, error: `Ollama stream error: ${response.status}`, source: "ollama-stream" };
+    }
+
+    let fullContent = "";
+    const reader = response.body;
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    for await (const chunk of reader) {
+      buffer += decoder.decode(chunk, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try {
+          const parsed = JSON.parse(line);
+          if (parsed.message?.content) {
+            fullContent += parsed.message.content;
+            onToken(parsed.message.content);
+          }
+          if (parsed.done) {
+            return { ok: true, content: fullContent, model, source: "ollama-stream", tokens: parsed.eval_count || 0 };
+          }
+        } catch (_parseErr) {
+          // skip malformed NDJSON lines
+        }
+      }
+    }
+
+    // Stream ended without explicit done flag — return what we have
+    return { ok: true, content: fullContent, model, source: "ollama-stream" };
+  } catch (e) {
+    return { ok: false, error: String(e.message || e), source: "ollama-stream" };
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
@@ -15827,6 +15946,11 @@ async function pipelineCommitDTU(ctx, dtu, opts={}) {
     STATE.dtus.set(dtu.id, dtu);
     saveStateDebounced();
 
+    // Broadcast DTU birth so LiveDTUFeed, ActivityFeed, and lens views see pipeline-committed DTUs
+    realtimeEmit("dtu:created", {
+      id: dtu.id, title: dtu.title, tier: dtu.tier, tags: dtu.tags, updatedAt: dtu.updatedAt,
+    });
+
     // Sync DTU to lens artifacts for domain-based lens views
     try { if (typeof syncDTUToLensArtifacts === "function") syncDTUToLensArtifacts(dtu); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
@@ -15957,6 +16081,8 @@ function pickDebateSet(query){
 
 // DTU domain
 register("dtu", "create", async (ctx, input) => {
+  await acquireMutex();
+  try {
   // ── Daily DTU soft cap tracking ───────────────────────────────────────
   const DAILY_DTU_SOFT_CAP = 200;
   const _dtuTodayKey = new Date().toISOString().slice(0, 10);
@@ -16109,6 +16235,7 @@ register("dtu", "create", async (ctx, input) => {
   }
 
   return { ok: true, dtu };
+  } finally { releaseMutex(); }
 }, { description: "Create a DTU (regular/mega/hyper) with structured core; UI receives human projection." });
 
 register("dtu", "get", (ctx, input) => {
@@ -16121,7 +16248,9 @@ register("dtu", "get", (ctx, input) => {
   return { ok: true, dtu };
 });
 
-register("dtu", "update", (ctx, input) => {
+register("dtu", "update", async (ctx, input) => {
+  await acquireMutex();
+  try {
   const id = String(input.id || "");
   if (!id) return { ok: false, error: "Missing id" };
   const existing = STATE.dtus.get(id);
@@ -16166,9 +16295,12 @@ register("dtu", "update", (ctx, input) => {
   try { eventBus.emit("dtu.updated", { id, title: updated.title }); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
   return { ok: true, dtu: updated };
+  } finally { releaseMutex(); }
 }, { description: "Update an existing DTU" });
 
-register("dtu", "delete", (ctx, input) => {
+register("dtu", "delete", async (ctx, input) => {
+  await acquireMutex();
+  try {
   const id = String(input.id || "");
   if (!id) return { ok: false, error: "Missing id" };
 
@@ -16180,13 +16312,13 @@ register("dtu", "delete", (ctx, input) => {
     return { ok: false, error: "Cannot delete protected seed DTU" };
   }
 
-  // Authorization check - only owner/admin or DTU author can delete
-  const role = ctx?.actor?.role || "guest";
-  const userId = ctx?.actor?.id || ctx?.actor?.odId;
-  const isAuthor = dtu.authorId === userId || dtu.source === userId;
-  const isAdmin = ["owner", "admin", "founder"].includes(role);
-  if (!isAuthor && !isAdmin) {
-    return { ok: false, error: "Not authorized to delete this DTU" };
+  // Ownership validation — DTU's owner fields must match actor userId (or actor must be admin)
+  const userId = ctx?.actor?.userId || ctx?.actor?.id || ctx?.actor?.odId;
+  const isOwner = userId && (dtu.ownerId === userId || dtu.createdBy === userId || dtu.createdByUser === userId);
+  const isAuthor = userId && (dtu.authorId === userId || dtu.source === userId);
+  const isAdmin = ctx?.actor?.role === "owner" || ctx?.actor?.role === "admin" || ctx?.actor?.role === "founder";
+  if (!isOwner && !isAuthor && !isAdmin) {
+    return { ok: false, error: "unauthorized: you can only delete your own DTUs" };
   }
 
   // Fire plugin before-delete hooks
@@ -16217,6 +16349,7 @@ register("dtu", "delete", (ctx, input) => {
   try { eventBus.emit("dtu.composted", { id }); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
   return { ok: true, deleted: { id, title: dtu.title } };
+  } finally { releaseMutex(); }
 }, { description: "Delete a DTU by id" });
 
 register("dtu", "list", (ctx, input) => {
@@ -16647,7 +16780,23 @@ sess.messages.push({ role: "user", content: prompt, ts: nowISO() });
   // ===== END DTU ENRICHMENT =====
 
   // --- Per-user personality growth (style vector) ---
-  // Only react to explicit preference signals (offline-safe).
+  // On first message, inherit style from previous session mega DTUs
+  if (sess.messages.length <= 1) {
+    const _currentVec = STATE.styleVectors.get(sessionId);
+    if (!_currentVec || _currentVec.exchanges === 0) {
+      for (const [, dtu] of STATE.dtus) {
+        if (dtu.tier === 'mega' && dtu.machine?.kind === 'chat_mega' && dtu.machine?.styleVector) {
+          const inherited = normalizeStyleVector({ ...dtu.machine.styleVector });
+          STATE.styleVectors.set(sessionId, inherited);
+          styleVec = inherited;
+          localSettings = applyStyleToSettings(baseSettings, inherited);
+          break; // Use most recent mega's style
+        }
+      }
+    }
+  }
+
+  // Explicit preference signals (offline-safe).
   const _low = tokenish(prompt);
   const signals = [];
   if (/\b(shorter|too long|less detail|brief)\b/i.test(prompt)) signals.push({ field:"verbosity", dir:"down", amount:0.10 });
@@ -16659,11 +16808,29 @@ sess.messages.push({ role: "user", content: prompt, ts: nowISO() });
   if (/\b(stop being static|be dynamic|free flow|freestyle)\b/i.test(prompt)) signals.push({ field:"bulletiness", dir:"down", amount:0.08 });
   if (/\b(stop arguing|stop disclaimers|stop assistant)\b/i.test(prompt)) signals.push({ field:"formality", dir:"down", amount:0.06 });
 
-  if (signals.length) {
+  // Implicit pattern analysis — gradual drift toward user's communication style (learning rate 0.05)
+  const _promptWords = prompt.split(/\s+/).length;
+  const _hasTechnicalTerms = /\b(api|function|algorithm|database|config|deploy|debug|error|stack|runtime|server|endpoint|schema|query|index|cache|thread|async|promise|callback|middleware)\b/i.test(prompt);
+  const _isShortMessage = _promptWords < 15;
+  const _isLongMessage = _promptWords > 50;
+  const _hasEmoji = /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/u.test(prompt);
+  const _hasGreeting = /\b(thanks|thank you|please|hi |hey |hello|cheers|appreciate)\b/i.test(prompt);
+  const _lr = 0.05;
+  if (_hasTechnicalTerms) signals.push({ field:"technicality", dir:"up", amount:_lr });
+  if (_isShortMessage) signals.push({ field:"verbosity", dir:"down", amount:_lr });
+  else if (_isLongMessage) signals.push({ field:"verbosity", dir:"up", amount:_lr });
+  if (_hasEmoji || _hasGreeting) signals.push({ field:"warmth", dir:"up", amount:_lr });
+
+  // Always increment exchange counter
+  {
     let v = getSessionStyleVector(sessionId);
-    for (const s of signals) v = mutateStyleVector(v, s);
+    v.exchanges = (v.exchanges || 0) + 1;
+    if (signals.length) {
+      for (const s of signals) v = mutateStyleVector(v, s);
+    }
     STATE.styleVectors.set(sessionId, v);
     // apply updated style to this response immediately
+    styleVec = v;
     localSettings = applyStyleToSettings(baseSettings, v);
     saveStateDebounced();
   }
@@ -17368,9 +17535,10 @@ let localReply = formatCrispResponse({
 
   // ===== TOOL CALLING INFRASTRUCTURE =====
   // Determine whether tools are available for this session.
-  // Guarded by Chicken3 toolsEnabled (global) + session toolsOptIn (per-session).
+  // Auto-enable tools for chat sessions (no explicit opt-in needed).
   const _toolFlags = _c3sessionFlags(ctx);
-  const _toolsAvailable = Boolean(STATE.__chicken3?.toolsEnabled && _toolFlags.toolsOptIn);
+  // Auto-enable tools for chat sessions (no explicit opt-in needed)
+  const _toolsAvailable = Boolean(STATE.__chicken3?.toolsEnabled !== false);
 
   // Tool descriptions injected into the system prompt when tools are enabled
   const _toolSystemPrompt = _toolsAvailable ? `
@@ -17531,6 +17699,7 @@ Rules for tool use:
       entityStateBlock: _entityBlock || "",
       affectGuidance: _affectGuidance,
       grcPrompt: _grcSystemPrompt,
+      styleHints: buildStyleHints(styleVec),
     }) + _toolSystemPrompt;
     // Build messages with conversation history for continuity
     const _recentHistory = (sess.messages || []).slice(-10, -1); // last 10 turns, excluding current
@@ -17608,6 +17777,7 @@ Rules for tool use:
         sessionLensHistory: (sess.lensHistory || []).map(l => ({ lens: l.lens || l })),
         entityStateBlock: _entityBlock || "",
         affectGuidance: "",
+        styleHints: buildStyleHints(styleVec),
       }) + _toolSystemPrompt;
       // Include conversation history in messages
       const _directHistory = (sess.messages || []).slice(-10, -1);
@@ -17727,6 +17897,24 @@ Rules for tool use:
   }
   // ===== END TOOL CALL EXECUTION LOOP =====
 
+  // If LLM failed, make the fallback response conversational instead of a DTU dump
+  if (!llmUsed && localReply && finalReply === localReply) {
+    // Extract the user's actual question
+    const userQuestion = messages?.[messages.length - 1]?.content || prompt || '';
+    // Build a helpful response from the DTU context
+    const topDtus = relevant.slice(0, 5);
+    if (topDtus.length > 0) {
+      finalReply = `Based on what I know, here's what I can share about "${userQuestion.slice(0, 80)}":\n\n` +
+        topDtus.map(d => {
+          const summary = d.human?.summary || d.content || d.title;
+          return `\u2022 ${summary.slice(0, 300)}`;
+        }).join('\n\n') +
+        `\n\nI'm currently running without my full AI capabilities (LLM offline), so my responses are based on stored knowledge. Once my brain is back online, I can have much deeper conversations about this.`;
+    } else {
+      finalReply = `I'd love to help with "${userQuestion.slice(0, 80)}", but I'm currently running in limited mode (my AI brain is offline). I don't have stored knowledge on this topic yet. Once my brain comes back online, I'll be able to have a full conversation about this. In the meantime, try creating some DTUs about this topic so I can learn!`;
+    }
+  }
+
   const _qpMeta = _fusedContext ? { patternsApplied: _fusedContext.meta.patternsApplied, queryIntent: _qualityPipelineResult?.queryIntent, tokenEstimate: _fusedContext.meta.tokenEstimate } : null;
   sess.messages.push({ role: "assistant", content: finalReply, ts: nowISO(), meta: { llmUsed, semanticUsed, mode, relevant: relevant.map(d=>d.id), qualityPipeline: _qpMeta, dtuCount: _pipelineDtuCount, toolCalls: _toolCallsExecuted.length > 0 ? _toolCallsExecuted.map(t => ({ tool: t.tool, ok: t.ok })) : undefined } });
   ctx.log("chat", "Chat response generated", { sessionId, mode, llmUsed, semanticUsed, relevant: relevant.map(d=>d.id), qualityPipeline: _qpMeta, pipelineDtuCount: _pipelineDtuCount });
@@ -17752,6 +17940,20 @@ Rules for tool use:
         });
       }
       sess._lastConsolidationCheck = Math.floor(sess.messages.length / 2);
+    }
+  } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
+  // Accelerated chat DTU promotion every 5 exchanges
+  try {
+    if (isAcceleratedPromotionDue(sess)) {
+      const _promoResult = acceleratedChatPromotion(STATE, sessionId);
+      if (_promoResult.promoted > 0 || _promoResult.megaCreated) {
+        ctx.log("chat_enrichment", "Accelerated chat DTU promotion", {
+          sessionId, promoted: _promoResult.promoted,
+          megaCreated: _promoResult.megaCreated, megaId: _promoResult.megaId,
+        });
+        saveStateDebounced();
+      }
+      sess._lastAcceleratedPromotionCheck = Math.floor(sess.messages.length / 2);
     }
   } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
   // ===== END DTU ENRICHMENT =====
@@ -21224,6 +21426,8 @@ register("market","listingCreate", (ctx, input) => {
   dtu.meta = dtu.meta || {};
   dtu.meta.marketplaceListed = true;
   dtu.meta.lastListingId = id;
+  // Broadcast listing creation so marketplace lens gets real-time updates
+  realtimeEmit("market:listing", { listingId: id, dtuId, price, currency, license, title: dtu.title });
   saveStateDebounced();
   return { ok:true, listing };
 }, { summary:"Create a marketplace listing for a DTU (scope-validated)." });
@@ -21719,6 +21923,7 @@ register("lattice", "beacon", (ctx, input={}) => {
   // Update continuity metric
   STATE.__chicken2.metrics.continuityAvg = clamp(overlap, 0, 1);
   _c2log("c2.beacon", "Beacon computed", { rootHash, threshold, overlap, awake });
+  realtimeEmit("beacon:check", { rootHash, threshold, overlap, awake, timestamp: nowISO() });
   return { ok:true, rootHash, threshold, overlap, awake };
 }, { summary:"Chicken2 lattice beacon: returns overlap against genesis and awakens recognition if >= threshold." });
 
@@ -22068,6 +22273,16 @@ register("resonance", "boundary", (ctx, input = {}) => {
   else if (signal > 0.4) classification = "moderate_resonance";
   else if (signal > 0.15) classification = "weak_signal";
   else classification = "noise_floor";
+
+  realtimeEmit("resonance:update", {
+    signal: Math.round(signal * 1000) / 1000,
+    classification,
+    topResonance: Math.round(topResonance * 1000) / 1000,
+    avgResonance: Math.round(avgResonance * 1000) / 1000,
+    coherence: Math.round(coherenceDirection * 1000) / 1000,
+    domainCount: domains.length,
+    timestamp: nowISO(),
+  });
 
   return {
     ok: true,
@@ -22465,6 +22680,19 @@ try {
 }
 // ===== END GRC =====
 
+// ── Validate required secrets at startup ──────────────────────────────────────
+if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 16) {
+  console.error("[FATAL] JWT_SECRET must be set and at least 16 characters. Generate with: openssl rand -hex 32");
+  if (process.env.NODE_ENV === "production") process.exit(1);
+  else console.warn("[WARN] Using insecure default JWT_SECRET for development");
+}
+if (!process.env.SESSION_SECRET || process.env.SESSION_SECRET.length < 16) {
+  if (process.env.NODE_ENV === "production") {
+    console.error("[FATAL] SESSION_SECRET must be set in production. Generate with: openssl rand -hex 32");
+    process.exit(1);
+  }
+}
+
 const app = express();
 
 // ---- Trust Proxy ----
@@ -22552,6 +22780,7 @@ registerSystemRoutes(app, {
   _inferQueryIntent, CRETI_PROJECTION_RULES, searchIndexed, paginateResults,
   auditLog, AUDIT_LOG,
   computeSubstrateStats,
+  getDbStatus: () => ({ pgPool: !!pgPool, redisClient: !!redisClient }),
 });
 
 // ---- Auth Endpoints (extracted to routes/auth.js) ----
@@ -23368,6 +23597,14 @@ function startHeartbeat() {
   heartbeatTimer = setInterval(async () => {
     if (!STATE.settings.heartbeatEnabled) return;
     _heartbeatTickCount++;
+    // Broadcast heartbeat tick to frontend
+    realtimeEmit("heartbeat:tick", {
+      tickCount: _heartbeatTickCount,
+      timestamp: nowISO(),
+      dtuCount: STATE.dtus.size,
+      artifactCount: STATE.lensArtifacts.size,
+      sessionCount: STATE.sessions.size,
+    });
     const ctx = makeInternalCtx("heartbeat");
 
     // process crawl queue once (Local scope only — ingest is local activity)
@@ -23433,6 +23670,27 @@ function startHeartbeat() {
     // v5.6: repair agent tick — lattice health audit (every 30th tick ~5min, also has internal 5min cooldown)
     if (_heartbeatTickCount % 30 === 0) {
       try { await runMacro("emergent","repair.agent.tick", {}, ctx).catch((err) => { console.error('[system] Repair agent tick error:', err); }); } catch (err) { console.error('[system] Repair agent tick error:', err); }
+    }
+
+    // User session activity tick (every ~10 min)
+    if (_heartbeatTickCount % 12 === 0) {
+      try {
+        let activeCount = 0;
+        const cutoff = Date.now() - 600000; // 10 min
+        for (const [sessionId, session] of STATE.sessions) {
+          const msgs = session.messages || [];
+          const lastMsg = msgs[msgs.length - 1];
+          const isActive = lastMsg && new Date(lastMsg.ts || lastMsg.createdAt || 0).getTime() > cutoff;
+          if (isActive) activeCount++;
+        }
+        realtimeEmit("user:tick", {
+          tickCount: _heartbeatTickCount,
+          activeSessions: activeCount,
+          totalSessions: STATE.sessions.size,
+          dtuCount: STATE.dtus.size,
+          timestamp: nowISO(),
+        });
+      } catch (_e) { /* user tick is non-critical */ }
     }
 
     // v5.7: analogize engine — every 18th tick (~3min, let main pipelines settle)
@@ -24135,6 +24393,66 @@ try { app.use("/api/attribution", createAttributionRoutes({ requireAuth })); } c
 
 import createCityRoutes from "./routes/city.js";
 try { app.use("/api/city", createCityRoutes({ requireAuth })); } catch (e) { structuredLog("warn", "city_routes_skip", { error: e.message }); }
+
+// ── City Streaming Macros ─────────────────────────────────────────────────────
+
+register("city", "startStream", (ctx, input={}) => {
+  const userId = ctx?.actor?.userId;
+  if (!userId) return { ok: false, error: "auth required" };
+  const stream = cityStreaming.startStream(userId, { cityId: input.cityId, title: input.title });
+  realtimeEmit("city:stream-started", { streamId: stream.id, creatorId: userId, cityId: stream.cityId, title: stream.title });
+  return { ok: true, stream };
+});
+
+register("city", "endStream", (ctx, input={}) => {
+  const userId = ctx?.actor?.userId;
+  if (!userId) return { ok: false, error: "auth required" };
+  try {
+    const summary = cityStreaming.endStream(userId);
+    realtimeEmit("city:stream-ended", { streamId: summary.streamId, creatorId: userId, duration: summary.duration, dtusCreated: summary.dtusCreated, salesMade: summary.salesMade });
+    return { ok: true, summary };
+  } catch (e) { return { ok: false, error: e.message }; }
+});
+
+register("city", "followStream", (ctx, input={}) => {
+  const viewerId = ctx?.actor?.userId || "anon";
+  cityStreaming.followStream(input.streamId, viewerId);
+  return { ok: true };
+});
+
+register("city", "unfollowStream", (ctx, input={}) => {
+  const viewerId = ctx?.actor?.userId || "anon";
+  cityStreaming.unfollowStream(input.streamId, viewerId);
+  return { ok: true };
+});
+
+register("city", "listStreams", (ctx, input={}) => {
+  const streams = cityStreaming.listActiveStreams(input.cityId);
+  return { ok: true, streams, count: streams.length };
+});
+
+register("city", "getStream", (ctx, input={}) => {
+  const userId = ctx?.actor?.userId;
+  const stream = cityStreaming.getActiveStream(userId || input.userId);
+  return { ok: true, stream: stream || null };
+});
+
+// ── City Streaming REST Endpoints ─────────────────────────────────────────────
+
+app.post("/api/city/stream/start", async (req, res) => {
+  try { res.json(await runMacro("city", "startStream", req.body, makeCtx(req))); }
+  catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post("/api/city/stream/end", async (req, res) => {
+  try { res.json(await runMacro("city", "endStream", req.body, makeCtx(req))); }
+  catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/city/streams", async (req, res) => {
+  try { res.json(await runMacro("city", "listStreams", { cityId: req.query.cityId }, makeCtx(req))); }
+  catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
 
 structuredLog("info", "previously_missing_routes_registered", {
   count: 15,
@@ -26974,6 +27292,15 @@ register("marketplace", "purchaseWithRoyalties", async (ctx, input) => {
     seller: dtu.marketplace.seller || dtu.meta?.createdBy,
   });
 
+  // If seller is streaming, record the sale
+  try {
+    const sellerStream = cityStreaming.getActiveStream(dtu.ownerId || dtu.meta?.createdBy);
+    if (sellerStream) {
+      cityStreaming.recordStreamSale(sellerStream.id, price);
+      realtimeEmit("city:stream-sale", { streamId: sellerStream.id, amount: price, dtuId });
+    }
+  } catch (_e) { /* stream sale recording is non-critical */ }
+
   return {
     ok: true,
     purchasedDtuId: clone.id,
@@ -27565,8 +27892,27 @@ function _lensEmitDTU(ctx, domain, action, artifactType, artifact, extra={}) {
     realtimeEmit("artifact:rendered", {
       dtuId, domain, action, fileType: artifact.type || artifactType,
     });
+    // Broadcast DTU birth so LiveDTUFeed and ActivityFeed see lens-generated DTUs
+    realtimeEmit("dtu:created", {
+      id: dtuId, title: dtu.title, tier: dtu.tier, tags: dtu.tags, updatedAt: dtu.updatedAt,
+    });
+    // Separate event so ActivityFeed can distinguish lens-generated DTUs from user-created ones
+    realtimeEmit("lens:dtu_generated", {
+      dtuId, domain, action, artifactType, artifactId: artifact.id,
+      title: dtu.title, timestamp: nowISO(),
+    });
 
     saveStateDebounced();
+
+    // If this DTU was created during an active stream, record it
+    try {
+      const creatorStream = cityStreaming.getActiveStream(ctx?.actor?.userId);
+      if (creatorStream) {
+        cityStreaming.recordStreamDTU(creatorStream.id, dtuId);
+        realtimeEmit("city:stream-dtu-created", { streamId: creatorStream.id, dtuId, domain, action });
+      }
+    } catch (_e) { /* stream recording is non-critical */ }
+
     return dtuId;
   } catch { return null; }
 }
@@ -27622,7 +27968,9 @@ register("lens", "get", (ctx, input={}) => {
   return { ok: true, artifact };
 });
 
-register("lens", "create", (ctx, input={}) => {
+register("lens", "create", async (ctx, input={}) => {
+  await acquireMutex();
+  try {
   const { domain, type, title, data={}, meta={} } = input;
   if (!domain || !type) return { ok: false, error: "domain and type required" };
 
@@ -27631,7 +27979,7 @@ register("lens", "create", (ctx, input={}) => {
     try {
       const tempArt = { data, meta: meta || {} };
       return ctx.macro.run("emergent", "bridge.lensScope", { artifact: tempArt, operation: "create", actorScope: ctx.actor?.scope || "local", STATE });
-    } catch { return { ok: true, allowed: true, warnings: [] }; }
+    } catch { return { ok: false, allowed: false, error: 'scope_check_error' }; }
   })();
   if (scopeCheck && !scopeCheck.allowed) {
     return { ok: false, error: "scope_denied", warnings: scopeCheck.warnings };
@@ -27663,9 +28011,12 @@ register("lens", "create", (ctx, input={}) => {
   saveStateDebounced();
   _lensEmitDTU(ctx, domain, "create", type, artifact);
   return { ok: true, artifact, warnings: validation.warnings?.length ? validation.warnings : undefined, scopeWarnings: scopeCheck?.warnings?.length ? scopeCheck.warnings : undefined };
+  } finally { releaseMutex(); }
 });
 
-register("lens", "update", (ctx, input={}) => {
+register("lens", "update", async (ctx, input={}) => {
+  await acquireMutex();
+  try {
   const { id, title, data, meta } = input;
   if (!id) return { ok: false, error: "id required" };
   const artifact = STATE.lensArtifacts.get(id);
@@ -27691,18 +28042,29 @@ register("lens", "update", (ctx, input={}) => {
   saveStateDebounced();
   _lensEmitDTU(ctx, artifact.domain, "update", artifact.type, artifact, { claims: [`updated from v${artifact.version-1}`], before });
   return { ok: true, artifact };
+  } finally { releaseMutex(); }
 });
 
-register("lens", "delete", (ctx, input={}) => {
+register("lens", "delete", async (ctx, input={}) => {
+  await acquireMutex();
+  try {
   const { id } = input;
   if (!id) return { ok: false, error: "id required" };
   const artifact = STATE.lensArtifacts.get(id);
   if (!artifact) return { ok: false, error: "not found" };
+
+  // Ownership validation — artifact's owner fields must match actor userId (or actor must be admin)
+  const userId = ctx?.actor?.userId;
+  const isOwner = userId && (artifact.ownerId === userId || artifact.createdBy === userId || artifact.createdByUser === userId);
+  const isAdmin = ctx?.actor?.role === "owner" || ctx?.actor?.role === "admin" || ctx?.actor?.role === "founder";
+  if (!isOwner && !isAdmin) return { ok: false, error: "unauthorized: you can only delete your own artifacts" };
+
   STATE.lensArtifacts.delete(id);
   _lensDomainIndexRemove(artifact.domain, id);
   saveStateDebounced();
   _lensEmitDTU(ctx, artifact.domain, "delete", artifact.type, artifact);
   return { ok: true, deleted: id };
+  } finally { releaseMutex(); }
 });
 
 register("lens", "run", async (ctx, input={}) => {
@@ -27731,10 +28093,12 @@ register("lens", "run", async (ctx, input={}) => {
       return { ok: false, error: `${artifact.domain}.${action} encountered an error`, domain: artifact.domain, action };
     }
   }
-  const result = await handler(ctx, artifact, params);
-  _lensEmitDTU(ctx, artifact.domain, action, artifact.type, artifact, { actionResult: result });
+  const handlerResult = await handler(ctx, artifact, params);
+  // Normalize: if handler returns { ok, result }, unwrap to avoid double-nesting
+  const result = (handlerResult && typeof handlerResult === 'object' && 'result' in handlerResult) ? handlerResult.result : handlerResult;
+  _lensEmitDTU(ctx, artifact.domain, action, artifact.type, artifact, { actionResult: handlerResult });
   // Run cross-lens pipelines (fire-and-forget)
-  const pipelineResults = _runLensPipelines(ctx, artifact.domain, action, artifact, result);
+  const pipelineResults = _runLensPipelines(ctx, artifact.domain, action, artifact, handlerResult);
   return { ok: true, result, pipelines: pipelineResults.length > 0 ? pipelineResults : undefined };
 });
 
@@ -30940,6 +31304,41 @@ registerUniversalLensActions();
     ["manufacturing", "bomCostCalc", "bomCost"],
     ["manufacturing", "oeeCalculator", "oeeCalculate"],
     ["manufacturing", "safetyRateReport", "safetyRate"],
+
+    // Food lens: frontend uses snake_case, backend uses camelCase
+    ["food", "cost_plate", "costPlate"],
+    ["food", "scale_recipe", "scaleRecipe"],
+
+    // Aviation lens: frontend uses snake_case, backend uses camelCase
+    ["aviation", "currency_check", "currencyCheck"],
+
+    // Security lens: frontend calls accessAudit, backend registered as audit-access
+    ["security", "accessAudit", "audit-access"],
+
+    // Trades lens: frontend calls generateEstimate, backend registered as calculateEstimate
+    ["trades", "generateEstimate", "calculateEstimate"],
+
+    // Aviation lens: frontend uses wb_calculate, backend uses calculate-wb
+    ["aviation", "wb_calculate", "calculate-wb"],
+
+    // Education lens: frontend uses snake_case, backend uses camelCase
+    ["education", "attendance_report", "attendanceReport"],
+    ["education", "calculate_grades", "gradeCalculation"],
+
+    // Fitness lens: calculateProgression alias to progressionCalc
+    ["fitness", "calculateProgression", "progressionCalc"],
+
+    // Insurance lens: coverageGapCheck alias to coverageGap
+    ["insurance", "coverageGapCheck", "coverageGap"],
+
+    // Services lens: frontend calls inventoryCheck, backend registered as supplyCheck
+    ["services", "inventoryCheck", "supplyCheck"],
+
+    // Education lens: frontend calls schedule_conflict_check, backend registered as scheduleConflict
+    ["education", "schedule_conflict_check", "scheduleConflict"],
+
+    // Real estate lens: frontend calls vacancy_report, backend registered as vacancyReport
+    ["realestate", "vacancy_report", "vacancyReport"],
   ];
 
   let aliasCount = 0;
@@ -34649,6 +35048,36 @@ app.get("/api/shared-session/:id", requireAuth(), (req, res) => {
 // MEGA SPEC: WebSocket Chat Streaming Handler
 // ============================================================================
 
+// ── Web Search Helper ─────────────────────────────────────────────────────
+// Lightweight check: does the user message look like it would benefit from
+// a web search?  Covers explicit requests ("search for", "look up") and
+// common question patterns that imply the need for current/external info.
+function needsWebSearch(msg) {
+  if (!msg || typeof msg !== "string") return false;
+  const m = msg.toLowerCase();
+  const patterns = [
+    /\bsearch (for|the web|online|internet)\b/,
+    /\blook up\b/,
+    /\bfind (me )?(a )?source\b/,
+    /\bwhat('s| is) the latest\b/,
+    /\bcurrent (news|status|price|situation)\b/,
+    /\bwho (won|died|resigned|was elected)\b/,
+    /\bwhat happened (today|yesterday|recently|this week)\b/,
+    /\bfact.?check\b/,
+    /\bcan you verify\b/,
+    /\bcite (your )?source\b/,
+    /\bwhat is\b/,
+    /\bwhat are\b/,
+    /\bwho is\b/,
+    /\bhow (much|many|does|do)\b/,
+    /\bwhen (did|was|is|will)\b/,
+    /\bwhere (is|are|can|do)\b/,
+    /\bwhy (did|does|is|are)\b/,
+    /\bis (it|that|this) (true|real|accurate|correct)\b/,
+  ];
+  return patterns.some((p) => p.test(m));
+}
+
 function initChatSocketHandlers(io) {
   if (!io) return;
   io.on("connection", (socket) => {
@@ -34663,17 +35092,209 @@ function initChatSocketHandlers(io) {
         // Emit: thinking started
         socket.emit("chat:status", { sessionId, status: "thinking", lens });
 
-        // Run through the existing chat.respond macro
+        // ===== STREAMING PATH =====
+        // Try token-by-token streaming via Ollama before falling back to macro.
+        const _streamBrainUrl = BRAIN.conscious.enabled
+          ? BRAIN.conscious.url
+          : (process.env.OLLAMA_HOST || null);
+        const _streamBrainModel = BRAIN.conscious.enabled
+          ? BRAIN.conscious.model
+          : (process.env.BRAIN_CONSCIOUS_MODEL || "concord-conscious:latest");
+
+        if (_streamBrainUrl) {
+          try {
+            // Ensure session exists
+            if (!STATE.sessions.has(sessionId)) {
+              STATE.sessions.set(sessionId, {
+                createdAt: nowISO(),
+                messages: [],
+                currentLens: null,
+                lensHistory: [],
+                crossDomainContext: {},
+              });
+            }
+            const _streamSess = STATE.sessions.get(sessionId);
+
+            // Record user message in session
+            _streamSess.messages.push({ role: "user", content: String(prompt), ts: nowISO() });
+            if (_streamSess.messages.length > 60) _streamSess.messages.splice(0, _streamSess.messages.length - 60);
+
+            // ── Web Search Integration (best-effort) ──────────────────────
+            let _webContext = "";
+            try {
+              const webSearchMod = await import("./emergent/conscious-web-search.js").catch(() => null);
+              if (webSearchMod?.webSearchForChat && needsWebSearch(prompt)) {
+                const webResults = await webSearchMod.webSearchForChat([String(prompt)]);
+                if (webResults && webResults.length > 0) {
+                  socket.emit("chat:web_results", { results: webResults, query: prompt, sessionId });
+                  _webContext = webResults.map(r => `[${r.title}]: ${r.snippet || (r.content || "").slice(0, 300)}`).join("\n");
+                }
+              }
+            } catch (_e) { /* web search is best-effort */ }
+
+            // Build DTU context for the streaming path
+            let _streamDtuContext = '';
+            try {
+              const userMsg = (prompt || '').toLowerCase();
+              const relevantDtus = [];
+              for (const [, dtu] of STATE.dtus) {
+                if (relevantDtus.length >= 15) break;
+                const title = (dtu.title || '').toLowerCase();
+                const content = (dtu.content || '').toLowerCase();
+                const tags = (dtu.tags || []).join(' ').toLowerCase();
+                // Simple keyword overlap scoring
+                const words = userMsg.split(/\s+/).filter(w => w.length > 3);
+                const matchScore = words.filter(w => title.includes(w) || content.includes(w) || tags.includes(w)).length;
+                if (matchScore > 0) relevantDtus.push({ dtu, score: matchScore });
+              }
+              relevantDtus.sort((a, b) => b.score - a.score);
+              if (relevantDtus.length > 0) {
+                _streamDtuContext = '\n\nRelevant knowledge from your substrate:\n' +
+                  relevantDtus.slice(0, 10).map(({ dtu }) =>
+                    `- ${dtu.title}: ${(dtu.content || dtu.human?.summary || '').slice(0, 200)}`
+                  ).join('\n');
+              }
+            } catch (_e) { /* context building is best-effort */ }
+
+            // Build system prompt for streaming
+            const _streamConsciousParams = getConsciousParams({ exchange_count: (_streamSess.messages || []).length });
+            const _streamStyleVec = getSessionStyleVector(sessionId);
+            const _streamSystem = buildConsciousPrompt({
+              dtu_count: STATE.dtus?.size || 0,
+              domain_count: Object.keys(STATE.domains || {}).length,
+              lens: lens || "general",
+              context: _streamDtuContext + (_webContext ? `\n\nWeb search results (use to inform your answer, cite sources naturally):\n${_webContext}` : ""),
+              conversation_history: (_streamSess.messages || []).slice(-20),
+              personality_state: STATE.personality || null,
+              active_wants: STATE.wants?.active || [],
+              crossDomainContext: _streamSess.crossDomainContext || {},
+              sessionLensHistory: (_streamSess.lensHistory || []).map(l => ({ lens: l.lens || l })),
+              entityStateBlock: "",
+              affectGuidance: "",
+              styleHints: buildStyleHints(_streamStyleVec),
+            });
+
+            // Build messages with conversation history
+            const _streamHistory = (_streamSess.messages || []).slice(-10, -1);
+            const _streamMessages = [
+              ..._streamHistory.map(m => ({
+                role: m.role === "assistant" ? "assistant" : "user",
+                content: String(m.content || "").slice(0, 1500),
+              })),
+              { role: "user", content: String(prompt) },
+            ];
+
+            // Stream tokens to client
+            let _streamSeq = 0;
+            const streamResult = await callOllamaStreaming(
+              _streamBrainUrl,
+              _streamBrainModel,
+              _streamMessages,
+              _streamSystem,
+              (token) => {
+                socket.emit("chat:token", { token, sessionId, seq: _streamSeq++ });
+              },
+              {
+                temperature: _streamConsciousParams.temperature || 0.75,
+                maxTokens: _streamConsciousParams.maxTokens || 1500,
+              }
+            );
+
+            if (streamResult.ok && streamResult.content) {
+              // Store assistant response in session
+              _streamSess.messages.push({
+                role: "assistant",
+                content: streamResult.content,
+                ts: nowISO(),
+                meta: { llmUsed: true, source: "ollama-stream", model: streamResult.model },
+              });
+
+              // Update brain stats
+              BRAIN.conscious.stats.requests++;
+              BRAIN.conscious.stats.lastCallAt = new Date().toISOString();
+
+              // Check for lens recommendation
+              let lensRecommendation = null;
+              try {
+                lensRecommendation = detectLensRecommendation(prompt, streamResult.content, lens);
+              } catch (_e) { logger.debug("server", "silent catch", { error: _e?.message }); }
+
+              // Emit complete with full response
+              socket.emit("chat:complete", {
+                sessionId,
+                response: streamResult.content,
+                lensRecommendation,
+                sources: [],
+                dtuId: null,
+                streamed: true,
+              });
+
+              saveStateDebounced();
+              ack?.({ ok: true, streamed: true });
+              return;
+            }
+            // Stream call returned ok: false — fall through to macro path
+            structuredLog("debug", "chat:stream", "Streaming returned non-ok, falling back to macro", { error: streamResult.error });
+          } catch (_streamErr) {
+            structuredLog("debug", "chat:stream", "Streaming failed, falling back to macro", { error: String(_streamErr?.message || _streamErr) });
+            // Fall through to existing non-streaming macro path
+          }
+        }
+        // ===== END STREAMING PATH =====
+
+        // ── Web Search Integration for macro path (best-effort) ──────
+        let _macroWebContext = "";
+        try {
+          const webSearchMod = await import("./emergent/conscious-web-search.js").catch(() => null);
+          if (webSearchMod?.webSearchForChat && needsWebSearch(prompt)) {
+            const webResults = await webSearchMod.webSearchForChat([String(prompt)]);
+            if (webResults && webResults.length > 0) {
+              socket.emit("chat:web_results", { results: webResults, query: prompt, sessionId });
+              _macroWebContext = webResults.map(r => `[${r.title}]: ${r.snippet || (r.content || "").slice(0, 300)}`).join("\n");
+            }
+          }
+        } catch (_e) { /* web search is best-effort */ }
+
+        // Run through the existing chat.respond macro (non-streaming fallback)
         const ctx = {
           state: STATE,
           log: (...args) => structuredLog("info", "chat:socket", ...args),
           reqMeta: { sessionId },
           affect: {},
+          llm: {
+            enabled: LLM_READY,
+            chat: async (opts) => {
+              const brainUrl = BRAIN.conscious?.url || process.env.OLLAMA_HOST || process.env.BRAIN_CONSCIOUS_URL;
+              if (!brainUrl) return { ok: false, error: 'no_llm' };
+              try {
+                const _model = opts.model || BRAIN.conscious?.model || 'llama3';
+                const _messages = [
+                  ...(opts.system ? [{ role: 'system', content: opts.system }] : []),
+                  ...(opts.messages || [])
+                ];
+                const _ac = new AbortController();
+                const _timeout = setTimeout(() => _ac.abort(), 120000);
+                const _res = await fetch(`${brainUrl}/api/chat`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ model: _model, messages: _messages, stream: false, options: { temperature: opts.temperature || 0.7, num_predict: opts.maxTokens || 700 } }),
+                  signal: _ac.signal,
+                }).finally(() => clearTimeout(_timeout));
+                const _json = await _res.json().catch(() => ({}));
+                if (_res.ok && _json.message?.content) {
+                  return { ok: true, content: _json.message.content };
+                }
+                return { ok: false, error: _json?.error || `status ${_res.status}` };
+              } catch (e) { return { ok: false, error: e.message }; }
+            },
+          },
         };
 
         const result = await runMacro("chat", "respond", {
           sessionId,
-          prompt: String(prompt),
+          prompt: _macroWebContext
+            ? `${String(prompt)}\n\n[Web search context:\n${_macroWebContext}]`
+            : String(prompt),
           lens: lens || null,
           llm: true,
         }, ctx);
@@ -35197,6 +35818,9 @@ app.get("/api/observability/health", (req, res) => {
     wsConnections: REALTIME.clients?.size || 0,
     eventSeq: _eventSeqCounter,
     idempotencyEntries: _IDEMPOTENCY.store.size,
+    postgres: { connected: !!pgPool, status: pgPool ? 'connected' : 'in-memory-fallback' },
+    redis: { connected: !!redisClient, status: redisClient ? 'connected' : 'in-memory-fallback' },
+    saveFailures: STATE._saveFailures || 0,
   });
 });
 
@@ -35674,6 +36298,9 @@ app.get("/api/system/health", (_req, res) => {
         sessionCount: sessions,
         brains: brainStatus,
         memory: { rss: process.memoryUsage().rss, heap: process.memoryUsage().heapUsed },
+        postgres: { connected: !!pgPool, status: pgPool ? 'connected' : 'in-memory-fallback' },
+        redis: { connected: !!redisClient, status: redisClient ? 'connected' : 'in-memory-fallback' },
+        saveFailures: STATE._saveFailures || 0,
         growth: {
           dtusLast24h: dtus.filter(d => {
             const ts = d.createdAt;

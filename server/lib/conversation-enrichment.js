@@ -22,6 +22,12 @@ import crypto from "crypto";
 /** Interval (in exchanges) for consolidation checks */
 const CONSOLIDATION_CHECK_INTERVAL = 10;
 
+/** Interval (in exchanges) for accelerated chat promotion checks */
+const ACCELERATED_PROMOTION_INTERVAL = 5;
+
+/** Minimum regular chat DTUs needed to trigger mega consolidation */
+const MEGA_CONSOLIDATION_THRESHOLD = 5;
+
 /** Max age (in days) for chat shadow DTUs before pruning */
 const MAX_SHADOW_AGE_DAYS = 7;
 
@@ -250,6 +256,155 @@ export function consolidationCheck(STATE, sessionId) {
   };
 }
 
+// ── Accelerated Chat DTU Promotion ──────────────────────────────────────────
+
+/**
+ * Check if an accelerated chat promotion check is due for a session.
+ * Fires every 5 exchanges (half the normal consolidation interval)
+ * so chat context promotes faster and Concord maintains conversation memory.
+ *
+ * @param {Object} sess - Session object
+ * @returns {boolean}
+ */
+export function isAcceleratedPromotionDue(sess) {
+  if (!sess || !sess.messages) return false;
+  const exchangeCount = Math.floor(sess.messages.length / 2);
+  const lastCheck = sess._lastAcceleratedPromotionCheck || 0;
+  return exchangeCount > 0 && exchangeCount >= lastCheck + ACCELERATED_PROMOTION_INTERVAL;
+}
+
+/**
+ * Accelerated promotion path for chat DTUs.
+ *
+ * Chat context needs to move from shadow → regular → mega faster than the
+ * normal 30-tick consolidation cycle so Concord can maintain unlimited context
+ * and actually remember conversations.
+ *
+ * Promotion criteria (any one triggers shadow → regular):
+ *   - 3+ working set refs (cross-referenced with existing substrate)
+ *   - confidence >= 0.7
+ *   - content length > 200 chars (substantive response)
+ *
+ * Mega consolidation triggers when 5+ promoted regulars exist for a session.
+ *
+ * @param {Object} STATE - Global server state
+ * @param {string} sessionId - Session identifier
+ * @returns {{ ok: boolean, promoted?: number, megaCreated?: boolean, megaId?: string }}
+ */
+export function acceleratedChatPromotion(STATE, sessionId) {
+  if (!STATE.shadowDtus || !STATE.dtus) {
+    return { ok: true, promoted: 0, megaCreated: false };
+  }
+
+  const sessionTag = `session:${sessionId}`;
+
+  // ── Phase 1: Promote high-value shadows to regular tier ──────────────────
+  const chatShadows = [];
+  for (const [id, dtu] of STATE.shadowDtus) {
+    if (dtu.tier !== "shadow") continue;
+    if (!dtu.tags?.includes(sessionTag)) continue;
+    if (dtu.machine?.kind !== "chat_output") continue;
+    chatShadows.push({ id, dtu });
+  }
+
+  let promoted = 0;
+  for (const { id, dtu } of chatShadows) {
+    // Promotion criteria: has working set refs OR confidence >= 0.7 OR content length > 200
+    const hasRefs = (dtu.machine?.workingSetDtuIds?.length || 0) >= 3;
+    const highConfidence = (dtu.machine?.confidence || 0) >= 0.7;
+    const substantive = (dtu.content?.length || 0) > 200;
+
+    if (hasRefs || highConfidence || substantive) {
+      dtu.tier = "regular";
+      dtu.meta = dtu.meta || {};
+      dtu.meta.promotedFrom = "shadow";
+      dtu.meta.promotedAt = new Date().toISOString();
+      dtu.meta.promotionReason = "chat_accelerated";
+
+      // Move from shadowDtus to dtus (the main substrate)
+      STATE.dtus.set(id, dtu);
+      STATE.shadowDtus.delete(id);
+      promoted++;
+    }
+  }
+
+  // ── Phase 2: Mega consolidation if enough regulars accumulated ───────────
+  const sessionRegulars = [];
+  for (const [id, dtu] of STATE.dtus) {
+    if (dtu.tier !== "regular") continue;
+    if (!dtu.tags?.includes(sessionTag)) continue;
+    if (dtu.meta?.promotedFrom === "shadow" && !dtu.meta?.consolidatedInto) {
+      sessionRegulars.push({ id, dtu });
+    }
+  }
+
+  let megaCreated = false;
+  let megaId = null;
+
+  if (sessionRegulars.length >= MEGA_CONSOLIDATION_THRESHOLD) {
+    megaId = `mega_chat_${sessionId}_${Date.now()}`;
+
+    // Collect all unique tags from source DTUs, excluding system-level tags
+    const collectedTags = new Set();
+    for (const { dtu } of sessionRegulars) {
+      for (const tag of (dtu.tags || [])) {
+        if (!tag.startsWith("shadow")) collectedTags.add(tag);
+      }
+    }
+
+    const firstContent = sessionRegulars[0]?.dtu;
+    const megaTitle = `Chat Context [${(firstContent?.content || firstContent?.human?.summary || firstContent?.title || "Conversation").slice(0, 50)}...]`;
+
+    const megaDtu = {
+      id: megaId,
+      title: megaTitle,
+      content: sessionRegulars.map(({ dtu }) => dtu.content || dtu.human?.summary || dtu.title).join("\n\n---\n\n"),
+      tier: "mega",
+      scope: "local",
+      tags: ["mega", "chat-context", sessionTag, ...collectedTags],
+      human: {
+        summary: `Consolidated context from ${sessionRegulars.length} conversation exchanges`,
+        bullets: [],
+      },
+      core: { definitions: [], invariants: [], claims: [], examples: [], nextActions: [] },
+      lineage: {
+        parents: sessionRegulars.map(({ id }) => id),
+        children: [],
+      },
+      source: "chat-enrichment",
+      machine: {
+        kind: "chat_mega",
+        sessionId,
+        sourceCount: sessionRegulars.length,
+        consolidatedAt: new Date().toISOString(),
+        styleVector: (STATE.styleVectors && STATE.styleVectors.get(sessionId)) || null,
+      },
+      meta: {
+        promotionReason: "chat_accelerated_mega",
+        status: "active",
+      },
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      authority: { model: "consolidated", score: 0.9 },
+      hash: crypto.createHash("sha256").update(megaId).digest("hex").slice(0, 16),
+    };
+
+    STATE.dtus.set(megaId, megaDtu);
+    megaCreated = true;
+
+    // Mark source DTUs as consolidated (don't delete, just mark)
+    for (const { id, dtu } of sessionRegulars) {
+      dtu.meta = dtu.meta || {};
+      dtu.meta.consolidatedInto = megaId;
+      dtu.lineage = dtu.lineage || { parents: [], children: [] };
+      dtu.lineage.children = dtu.lineage.children || [];
+      dtu.lineage.children.push(megaId);
+    }
+  }
+
+  return { ok: true, promoted, megaCreated, megaId };
+}
+
 /**
  * Check if a consolidation check is due for a session.
  *
@@ -359,6 +514,8 @@ export function forgeFromMessage(STATE, opts) {
 
 export const ENRICHMENT_CONSTANTS = Object.freeze({
   CONSOLIDATION_CHECK_INTERVAL,
+  ACCELERATED_PROMOTION_INTERVAL,
+  MEGA_CONSOLIDATION_THRESHOLD,
   MAX_SHADOW_AGE_DAYS,
   MIN_MESSAGE_LENGTH,
   MAX_DTU_CONTENT,

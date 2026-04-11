@@ -76,7 +76,7 @@ export default function MentalHealthLensPage() {
     try {
       const artifactId = moodItems[0]?.id || 'mental-health';
       const res = await runAction.mutateAsync({ id: artifactId, action });
-      setter((res.result as Record<string, unknown>) || null);
+      if (res.ok === false) { setter({ message: `Action failed: ${(res as Record<string, unknown>).error || 'Unknown error'}` } as Record<string, unknown>); } else { setter((res.result as Record<string, unknown>) || null); }
     } catch (e) {
       console.error(`Mental-health action ${action} failed:`, e);
     }
@@ -155,7 +155,7 @@ export default function MentalHealthLensPage() {
           </div>
         </div>
         <button
-          onClick={() => { runAction.mutate({ id: 'mental-health', action: 'wellnessScore' }); }}
+          onClick={() => { runAction.mutate({ id: 'mental-health', action: 'wellnessScore' }, { onError: (e) => { console.error('Action failed:', e); } }); }}
           className="px-3 py-1.5 text-xs bg-neon-purple/20 border border-neon-purple/30 rounded-lg hover:bg-neon-purple/30 flex items-center gap-1"
         >
           <Sparkles className="w-3 h-3" /> Insights

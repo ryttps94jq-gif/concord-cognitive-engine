@@ -183,6 +183,7 @@ import wallet from './wallet.js';
 import welding from './welding.js';
 import whiteboard from './whiteboard.js';
 import world from './world.js';
+import all from './all.js';
 
 export default [
   healthcare,
@@ -359,4 +360,5 @@ export default [
   welding,
   whiteboard,
   world,
+  all,
 ];

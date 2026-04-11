@@ -473,8 +473,8 @@ export default function MarketplaceLensPage() {
     setIsRunning(action);
     try {
       const res = await runAction.mutateAsync({ id: targetId, action });
-      setActionResult(res.result as Record<string, unknown>);
-    } catch (e) { console.error(`Action ${action} failed:`, e); }
+      if (res.ok === false) { setActionResult({ message: `Action failed: ${(res as Record<string, unknown>).error || 'Unknown error'}` }); } else { setActionResult(res.result as Record<string, unknown>); }
+    } catch (e) { console.error(`Action ${action} failed:`, e); setActionResult({ message: `Action failed: ${e instanceof Error ? e.message : 'Unknown error'}` }); }
     finally { setIsRunning(null); }
   };
 
@@ -506,7 +506,8 @@ export default function MarketplaceLensPage() {
           params: { category: category !== 'all' ? category : undefined, search: search || undefined },
         });
         return res.data;
-      } catch {
+      } catch (e) {
+        console.warn('Marketplace browse API unavailable, falling back to lens data:', e);
         // Fallback to lens data already fetched by useLensData hook
         return { ok: true, items: listingItems || [] };
       }
@@ -1345,8 +1346,9 @@ export default function MarketplaceLensPage() {
                       } else {
                         useUIStore.getState().addToast({ type: 'success', message: `${p.item.title} added to your library` });
                       }
-                    } catch {
-                      useUIStore.getState().addToast({ type: 'success', message: `${p.item.title} added to your library` });
+                    } catch (e) {
+                      console.error('Marketplace install failed:', e);
+                      useUIStore.getState().addToast({ type: 'error', message: `Failed to install ${p.item.title}` });
                     }
                   }} className="btn-neon small flex items-center gap-1 text-sm">
                     <Download className="w-3.5 h-3.5" /> Download

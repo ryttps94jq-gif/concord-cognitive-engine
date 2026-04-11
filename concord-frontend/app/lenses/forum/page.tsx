@@ -246,8 +246,8 @@ export default function ForumLensPage() {
     setForumRunning(action);
     try {
       const res = await runForumAction.mutateAsync({ id: targetId, action });
-      setForumActionResult({ _action: action, ...(res.result as Record<string, unknown>) });
-    } catch (e) { console.error(`Forum action ${action} failed:`, e); }
+      if (res.ok === false) { setForumActionResult({ _action: action, message: `Action failed: ${(res as Record<string, unknown>).error || 'Unknown error'}` }); } else { setForumActionResult({ _action: action, ...(res.result as Record<string, unknown>) }); }
+    } catch (e) { console.error(`Forum action ${action} failed:`, e); setForumActionResult({ message: `Action failed: ${e instanceof Error ? e.message : 'Unknown error'}` }); }
     setForumRunning(null);
   }, [postItems, runForumAction]);
 

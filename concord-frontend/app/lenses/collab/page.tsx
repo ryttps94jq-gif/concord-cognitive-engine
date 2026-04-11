@@ -111,6 +111,82 @@ interface HistoryEntry {
   endedAt: number;
 }
 
+interface ParticipantStat {
+  name: string;
+  sharePercent: number;
+}
+
+interface ContributionRanking {
+  name: string;
+  totalScore: number;
+  contributions: number;
+}
+
+interface DissentingEntry {
+  position: string;
+  count: number;
+  percent: number;
+}
+
+interface WorkloadMember {
+  name: string;
+  status: string;
+  utilization: number;
+  totalHours: number;
+  capacity: number;
+  assignedTasks: number;
+}
+
+interface ActionResultError {
+  error: string;
+}
+
+interface ActionResultMessage {
+  message: string;
+}
+
+interface SessionAnalyticsResult {
+  totalMessages: number;
+  totalParticipants: number;
+  messagesPerMinute: number;
+  balanceRating: string;
+  participationBalance: number;
+  participantStats: ParticipantStat[];
+}
+
+interface ContributionScoreResult {
+  rankings: ContributionRanking[];
+  topContributor: string;
+  totalContributions: number;
+}
+
+interface ConsensusResult {
+  consensusPercent: number;
+  hasSupermajority: boolean;
+  hasConsensus: boolean;
+  status: string;
+  totalVotes: number;
+  leadingPosition: string;
+  dissenting: DissentingEntry[];
+}
+
+interface WorkloadBalanceResult {
+  members: WorkloadMember[];
+  avgUtilization: number;
+  overloadedMembers: number;
+  unassignedTasks: number;
+  suggestions: string[];
+}
+
+type ActionResult =
+  | ActionResultError
+  | ActionResultMessage
+  | SessionAnalyticsResult
+  | ContributionScoreResult
+  | ConsensusResult
+  | WorkloadBalanceResult
+  | Record<string, unknown>;
+
 // ---------------------------------------------------------------------------
 // Demo data
 // ---------------------------------------------------------------------------
@@ -245,7 +321,7 @@ export default function CollabLensPage() {
 
   // --- Backend action wiring ---
   const runAction = useRunArtifact('collab');
-  const [actionResult, setActionResult] = useState<unknown>(null);
+  const [actionResult, setActionResult] = useState<ActionResult | null>(null);
   const [isRunning, setIsRunning] = useState(false);
 
   const targetId = sessionItems[0]?.id ?? 'default';
@@ -255,7 +331,11 @@ export default function CollabLensPage() {
     setActionResult(null);
     try {
       const res = await runAction.mutateAsync({ id: targetId, action });
-      setActionResult(res.result ?? res);
+      if (res.ok === false) {
+        setActionResult({ error: (res as Record<string, unknown>).error || 'Unknown error' } as ActionResult);
+      } else {
+        setActionResult((res.result ?? res) as ActionResult);
+      }
     } catch (err) {
       setActionResult({ error: err instanceof Error ? err.message : 'Action failed' });
     } finally {
@@ -604,41 +684,43 @@ export default function CollabLensPage() {
             </div>
             <div className="bg-lattice-surface p-3 rounded-lg text-xs space-y-3 max-h-72 overflow-y-auto">
               {/* Error */}
-              {(actionResult as any)?.error && (
-                <p className="text-red-400">{(actionResult as any).error}</p>
+              {'error' in actionResult && (
+                <p className="text-red-400">{(actionResult as ActionResultError).error}</p>
               )}
               {/* Message-only result */}
-              {(actionResult as any)?.message && !(actionResult as any)?.error && (
-                <p className="text-gray-300">{(actionResult as any).message}</p>
+              {'message' in actionResult && !('error' in actionResult) && (
+                <p className="text-gray-300">{(actionResult as ActionResultMessage).message}</p>
               )}
 
               {/* sessionAnalytics */}
-              {(actionResult as any)?.totalMessages !== undefined && (
+              {'totalMessages' in actionResult && (() => {
+                const sa = actionResult as SessionAnalyticsResult;
+                return (
                 <div className="space-y-2">
                   <div className="grid grid-cols-3 gap-2">
                     <div className="p-2 bg-lattice-bg rounded text-center">
-                      <p className="text-sm font-bold text-neon-blue">{(actionResult as any).totalMessages}</p>
+                      <p className="text-sm font-bold text-neon-blue">{sa.totalMessages}</p>
                       <p className="text-[10px] text-gray-500">Messages</p>
                     </div>
                     <div className="p-2 bg-lattice-bg rounded text-center">
-                      <p className="text-sm font-bold text-neon-blue">{(actionResult as any).totalParticipants}</p>
+                      <p className="text-sm font-bold text-neon-blue">{sa.totalParticipants}</p>
                       <p className="text-[10px] text-gray-500">Participants</p>
                     </div>
                     <div className="p-2 bg-lattice-bg rounded text-center">
-                      <p className="text-sm font-bold text-neon-blue">{(actionResult as any).messagesPerMinute}/m</p>
+                      <p className="text-sm font-bold text-neon-blue">{sa.messagesPerMinute}/m</p>
                       <p className="text-[10px] text-gray-500">Msg/Min</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-gray-500">Balance:</span>
-                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${(actionResult as any).balanceRating === 'well-balanced' ? 'bg-neon-green/20 text-neon-green' : (actionResult as any).balanceRating === 'slightly-uneven' ? 'bg-yellow-500/20 text-yellow-400' : 'bg-red-500/20 text-red-400'}`}>
-                      {(actionResult as any).balanceRating}
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${sa.balanceRating === 'well-balanced' ? 'bg-neon-green/20 text-neon-green' : sa.balanceRating === 'slightly-uneven' ? 'bg-yellow-500/20 text-yellow-400' : 'bg-red-500/20 text-red-400'}`}>
+                      {sa.balanceRating}
                     </span>
-                    <span className="text-gray-500 ml-auto">Gini: {(actionResult as any).participationBalance}</span>
+                    <span className="text-gray-500 ml-auto">Gini: {sa.participationBalance}</span>
                   </div>
-                  {((actionResult as any).participantStats || []).length > 0 && (
+                  {(sa.participantStats || []).length > 0 && (
                     <div className="space-y-1">
-                      {((actionResult as any).participantStats as any[]).map((p: any) => (
+                      {sa.participantStats.map((p: ParticipantStat) => (
                         <div key={p.name} className="flex items-center gap-2">
                           <span className="text-gray-300 w-24 truncate">{p.name}</span>
                           <div className="flex-1 bg-lattice-bg rounded-full h-1.5">
@@ -650,18 +732,21 @@ export default function CollabLensPage() {
                     </div>
                   )}
                 </div>
-              )}
+                );
+              })()}
 
               {/* contributionScore */}
-              {(actionResult as any)?.rankings !== undefined && (
+              {'rankings' in actionResult && (() => {
+                const cs = actionResult as ContributionScoreResult;
+                return (
                 <div className="space-y-2">
                   <div className="flex items-center gap-2 text-gray-400">
                     <span>Top contributor:</span>
-                    <span className="text-neon-green font-medium">{(actionResult as any).topContributor ?? '—'}</span>
-                    <span className="ml-auto text-gray-500">{(actionResult as any).totalContributions} total</span>
+                    <span className="text-neon-green font-medium">{cs.topContributor ?? '—'}</span>
+                    <span className="ml-auto text-gray-500">{cs.totalContributions} total</span>
                   </div>
                   <div className="space-y-1">
-                    {((actionResult as any).rankings as any[]).map((r: any, i: number) => (
+                    {cs.rankings.map((r: ContributionRanking, i: number) => (
                       <div key={r.name} className="flex items-center gap-2 p-1.5 bg-lattice-bg rounded">
                         <span className="text-gray-500 w-4">{i + 1}.</span>
                         <span className="text-gray-200 flex-1">{r.name}</span>
@@ -671,28 +756,31 @@ export default function CollabLensPage() {
                     ))}
                   </div>
                 </div>
-              )}
+                );
+              })()}
 
               {/* detectConsensus */}
-              {(actionResult as any)?.consensusPercent !== undefined && (
+              {'consensusPercent' in actionResult && (() => {
+                const cr = actionResult as ConsensusResult;
+                return (
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
-                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${(actionResult as any).hasSupermajority ? 'bg-neon-green/20 text-neon-green' : (actionResult as any).hasConsensus ? 'bg-yellow-500/20 text-yellow-400' : 'bg-red-500/20 text-red-400'}`}>
-                      {(actionResult as any).status}
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${cr.hasSupermajority ? 'bg-neon-green/20 text-neon-green' : cr.hasConsensus ? 'bg-yellow-500/20 text-yellow-400' : 'bg-red-500/20 text-red-400'}`}>
+                      {cr.status}
                     </span>
-                    <span className="text-gray-400 ml-auto">{(actionResult as any).totalVotes} votes</span>
+                    <span className="text-gray-400 ml-auto">{cr.totalVotes} votes</span>
                   </div>
                   <div className="p-2 bg-lattice-bg rounded text-center">
-                    <p className="text-xl font-bold text-neon-blue">{(actionResult as any).consensusPercent}%</p>
-                    <p className="text-[10px] text-gray-500">for "{(actionResult as any).leadingPosition}"</p>
+                    <p className="text-xl font-bold text-neon-blue">{cr.consensusPercent}%</p>
+                    <p className="text-[10px] text-gray-500">for &quot;{cr.leadingPosition}&quot;</p>
                   </div>
                   <div className="w-full bg-lattice-bg rounded-full h-2">
-                    <div className="bg-neon-blue h-2 rounded-full" style={{ width: `${(actionResult as any).consensusPercent}%` }} />
+                    <div className="bg-neon-blue h-2 rounded-full" style={{ width: `${cr.consensusPercent}%` }} />
                   </div>
-                  {((actionResult as any).dissenting || []).length > 0 && (
+                  {(cr.dissenting || []).length > 0 && (
                     <div className="space-y-1">
                       <p className="text-[10px] text-gray-500 uppercase">Dissenting</p>
-                      {((actionResult as any).dissenting as any[]).map((d: any) => (
+                      {cr.dissenting.map((d: DissentingEntry) => (
                         <div key={d.position} className="flex items-center justify-between text-gray-400">
                           <span>{d.position}</span>
                           <span>{d.count} ({d.percent}%)</span>
@@ -701,27 +789,30 @@ export default function CollabLensPage() {
                     </div>
                   )}
                 </div>
-              )}
+                );
+              })()}
 
               {/* balanceWorkload */}
-              {(actionResult as any)?.members !== undefined && (
+              {'members' in actionResult && (() => {
+                const wb = actionResult as WorkloadBalanceResult;
+                return (
                 <div className="space-y-2">
                   <div className="grid grid-cols-3 gap-2">
                     <div className="p-2 bg-lattice-bg rounded text-center">
-                      <p className="text-sm font-bold text-neon-blue">{(actionResult as any).avgUtilization}%</p>
+                      <p className="text-sm font-bold text-neon-blue">{wb.avgUtilization}%</p>
                       <p className="text-[10px] text-gray-500">Avg Load</p>
                     </div>
                     <div className="p-2 bg-lattice-bg rounded text-center">
-                      <p className="text-sm font-bold text-red-400">{(actionResult as any).overloadedMembers}</p>
+                      <p className="text-sm font-bold text-red-400">{wb.overloadedMembers}</p>
                       <p className="text-[10px] text-gray-500">Overloaded</p>
                     </div>
                     <div className="p-2 bg-lattice-bg rounded text-center">
-                      <p className="text-sm font-bold text-yellow-400">{(actionResult as any).unassignedTasks}</p>
+                      <p className="text-sm font-bold text-yellow-400">{wb.unassignedTasks}</p>
                       <p className="text-[10px] text-gray-500">Unassigned</p>
                     </div>
                   </div>
                   <div className="space-y-1">
-                    {((actionResult as any).members as any[]).map((m: any) => (
+                    {wb.members.map((m: WorkloadMember) => (
                       <div key={m.name} className="space-y-0.5">
                         <div className="flex items-center justify-between">
                           <span className="text-gray-300">{m.name}</span>
@@ -734,13 +825,14 @@ export default function CollabLensPage() {
                       </div>
                     ))}
                   </div>
-                  {((actionResult as any).suggestions || []).length > 0 && (
+                  {(wb.suggestions || []).length > 0 && (
                     <div className="p-2 bg-yellow-500/10 border border-yellow-500/20 rounded text-yellow-300 text-[11px]">
-                      {((actionResult as any).suggestions as string[]).join(' · ')}
+                      {wb.suggestions.join(' · ')}
                     </div>
                   )}
                 </div>
-              )}
+                );
+              })()}
             </div>
           </div>
         )}

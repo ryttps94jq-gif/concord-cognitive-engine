@@ -7,7 +7,7 @@
  * with automatic refetch on socket events.
  */
 
-import { useCallback } from 'react';
+import { useCallback, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api/client';
 import { useSocket } from './useSocket';
@@ -79,7 +79,12 @@ export function useCreativeRegistry(domain: string, contentType?: string) {
   );
 
   // Subscribe to creative registry updates
-  // Note: Effect-based subscription handled in component via on/off
+  useEffect(() => {
+    on('creative_registry:update', handleRegistryUpdate);
+    return () => {
+      off('creative_registry:update', handleRegistryUpdate);
+    };
+  }, [on, off, handleRegistryUpdate]);
 
   return {
     entries: data?.entries || [],
@@ -87,8 +92,5 @@ export function useCreativeRegistry(domain: string, contentType?: string) {
     hasMore: data?.hasMore || false,
     isLoading,
     refetch,
-    on,
-    off,
-    handleRegistryUpdate,
   };
 }

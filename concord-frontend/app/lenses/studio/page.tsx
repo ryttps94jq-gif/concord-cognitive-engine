@@ -224,7 +224,7 @@ export default function StudioLensPage() {
     setStudioActiveAction(action);
     try {
       const res = await runStudioAction.mutateAsync({ id, action });
-      setStudioActionResult({ action, ...(res.result as Record<string, unknown>) });
+      if (res.ok === false) { setStudioActionResult({ action, message: `Action failed: ${(res as Record<string, unknown>).error || 'Unknown error'}` }); } else { setStudioActionResult({ action, ...(res.result as Record<string, unknown>) }); }
     } catch (err) { console.error('Studio action failed:', err); }
     finally { setStudioActiveAction(null); }
   }, [studioArtifacts, runStudioAction]);
@@ -505,8 +505,8 @@ export default function StudioLensPage() {
             },
             meta: { tags: ['studio', 'recording'], status: 'active' },
           });
-        } catch {
-          // Lens item creation is secondary - upload already succeeded
+        } catch (e) {
+          console.error('Studio lens item creation failed:', e);
         }
         // Invalidate queries so the track list updates without page refresh
         queryClient.invalidateQueries({ queryKey: ['lens', 'studio'] });
@@ -558,8 +558,8 @@ export default function StudioLensPage() {
       osc.connect(gainNode).connect(ctx.destination);
       osc.start(ctx.currentTime);
       osc.stop(ctx.currentTime + 0.4);
-    } catch {
-      // Audio context may not be ready
+    } catch (e) {
+      console.warn('Audio context not ready for beat pad:', e);
     }
   }, [BEAT_PAD_FREQUENCIES]);
 
@@ -793,7 +793,8 @@ export default function StudioLensPage() {
       const result = res.data?.result;
       const content = typeof result === 'string' ? result : typeof result?.content === 'string' ? result.content : JSON.stringify(result || {}, null, 2);
       setAiResult({ title, content });
-    } catch {
+    } catch (e) {
+      console.error('Studio AI action failed:', e);
       setAiResult({ title, content: `AI ${title.toLowerCase()} processed. Results applied to project.` });
     }
     setAiLoading(null);

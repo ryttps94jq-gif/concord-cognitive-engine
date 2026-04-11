@@ -115,8 +115,8 @@ export default function BridgeLens() {
     setIsRunning(action);
     try {
       const res = await runAction.mutateAsync({ id: targetId, action });
-      setActionResult(res.result as Record<string, unknown>);
-    } catch (e) { console.error(`Action ${action} failed:`, e); }
+      if (res.ok === false) { setActionResult({ message: `Action failed: ${(res as Record<string, unknown>).error || 'Unknown error'}` }); } else { setActionResult(res.result as Record<string, unknown>); }
+    } catch (e) { console.error(`Action ${action} failed:`, e); setActionResult({ message: `Action failed: ${e instanceof Error ? e.message : 'Unknown error'}` }); }
     setIsRunning(null);
   };
 
@@ -127,7 +127,7 @@ export default function BridgeLens() {
         fetchOrganisms(), fetchBridgeLog(), fetchDebates(), fetchBirths(), fetchEmergents(),
       ]);
       setOrganisms(org); setLog(lg); setDebates(deb); setBirths(bir); setEmergents(em);
-    } catch { /* handled by empty state */ }
+    } catch (e) { console.error('Bridge data load failed:', e); }
     setLoading(false);
   }, []);
 

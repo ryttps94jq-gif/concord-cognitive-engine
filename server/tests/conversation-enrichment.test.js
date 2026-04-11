@@ -10,6 +10,8 @@ import {
   createOutputDTU,
   consolidationCheck,
   isConsolidationDue,
+  isAcceleratedPromotionDue,
+  acceleratedChatPromotion,
   pruneSessionDTUs,
   forgeFromMessage,
   ENRICHMENT_CONSTANTS,
@@ -469,11 +471,267 @@ describe('forgeFromMessage', () => {
   });
 });
 
+// ── isAcceleratedPromotionDue tests ─────────────────────────────────────────
+
+describe('isAcceleratedPromotionDue', () => {
+  it('returns false for null session', () => {
+    assert.strictEqual(isAcceleratedPromotionDue(null), false);
+  });
+
+  it('returns false for session with no messages', () => {
+    assert.strictEqual(isAcceleratedPromotionDue({}), false);
+  });
+
+  it('returns false for fewer than 10 messages (5 exchanges)', () => {
+    const sess = { messages: Array(8).fill({}) };
+    assert.strictEqual(isAcceleratedPromotionDue(sess), false);
+  });
+
+  it('returns true at 10 messages (5 exchanges)', () => {
+    const sess = { messages: Array(10).fill({}) };
+    assert.strictEqual(isAcceleratedPromotionDue(sess), true);
+  });
+
+  it('returns false when already checked at current interval', () => {
+    const sess = { messages: Array(10).fill({}), _lastAcceleratedPromotionCheck: 5 };
+    assert.strictEqual(isAcceleratedPromotionDue(sess), false);
+  });
+
+  it('returns true at next interval', () => {
+    const sess = { messages: Array(20).fill({}), _lastAcceleratedPromotionCheck: 5 };
+    assert.strictEqual(isAcceleratedPromotionDue(sess), true);
+  });
+});
+
+// ── acceleratedChatPromotion tests ──────────────────────────────────────────
+
+describe('acceleratedChatPromotion', () => {
+  it('returns zero promotions for empty state', () => {
+    const result = acceleratedChatPromotion({}, 's1');
+    assert.strictEqual(result.ok, true);
+    assert.strictEqual(result.promoted, 0);
+    assert.strictEqual(result.megaCreated, false);
+  });
+
+  it('promotes high-confidence chat_output shadows to regular', () => {
+    const STATE = makeState();
+    STATE.shadowDtus.set('out1', {
+      id: 'out1',
+      tier: 'shadow',
+      content: 'A response about quantum physics',
+      tags: ['shadow', 'chat-output', 'session:s1'],
+      machine: { kind: 'chat_output', sessionId: 's1', confidence: 0.85, workingSetDtuIds: [] },
+      meta: { hidden: true },
+    });
+    const result = acceleratedChatPromotion(STATE, 's1');
+    assert.strictEqual(result.promoted, 1);
+    // Should be moved to dtus, removed from shadowDtus
+    assert.ok(STATE.dtus.has('out1'));
+    assert.ok(!STATE.shadowDtus.has('out1'));
+    const dtu = STATE.dtus.get('out1');
+    assert.strictEqual(dtu.tier, 'regular');
+    assert.strictEqual(dtu.meta.promotedFrom, 'shadow');
+    assert.strictEqual(dtu.meta.promotionReason, 'chat_accelerated');
+    assert.ok(dtu.meta.promotedAt);
+  });
+
+  it('promotes shadows with 3+ working set refs', () => {
+    const STATE = makeState();
+    STATE.shadowDtus.set('out1', {
+      id: 'out1',
+      tier: 'shadow',
+      content: 'Short',
+      tags: ['shadow', 'chat-output', 'session:s1'],
+      machine: { kind: 'chat_output', sessionId: 's1', confidence: 0.3, workingSetDtuIds: ['a', 'b', 'c'] },
+      meta: {},
+    });
+    const result = acceleratedChatPromotion(STATE, 's1');
+    assert.strictEqual(result.promoted, 1);
+    assert.ok(STATE.dtus.has('out1'));
+  });
+
+  it('promotes shadows with substantive content (>200 chars)', () => {
+    const STATE = makeState();
+    STATE.shadowDtus.set('out1', {
+      id: 'out1',
+      tier: 'shadow',
+      content: 'x'.repeat(250),
+      tags: ['shadow', 'chat-output', 'session:s1'],
+      machine: { kind: 'chat_output', sessionId: 's1', confidence: 0.2, workingSetDtuIds: [] },
+      meta: {},
+    });
+    const result = acceleratedChatPromotion(STATE, 's1');
+    assert.strictEqual(result.promoted, 1);
+  });
+
+  it('does not promote low-value shadows', () => {
+    const STATE = makeState();
+    STATE.shadowDtus.set('out1', {
+      id: 'out1',
+      tier: 'shadow',
+      content: 'Short reply',
+      tags: ['shadow', 'chat-output', 'session:s1'],
+      machine: { kind: 'chat_output', sessionId: 's1', confidence: 0.3, workingSetDtuIds: [] },
+      meta: {},
+    });
+    const result = acceleratedChatPromotion(STATE, 's1');
+    assert.strictEqual(result.promoted, 0);
+    assert.ok(STATE.shadowDtus.has('out1'));
+    assert.ok(!STATE.dtus.has('out1'));
+  });
+
+  it('does not promote chat_input shadows (only chat_output)', () => {
+    const STATE = makeState();
+    STATE.shadowDtus.set('in1', {
+      id: 'in1',
+      tier: 'shadow',
+      content: 'x'.repeat(300),
+      tags: ['shadow', 'chat-input', 'session:s1'],
+      machine: { kind: 'chat_input', sessionId: 's1', confidence: 0.9 },
+      meta: {},
+    });
+    const result = acceleratedChatPromotion(STATE, 's1');
+    assert.strictEqual(result.promoted, 0);
+  });
+
+  it('ignores shadows from other sessions', () => {
+    const STATE = makeState();
+    STATE.shadowDtus.set('out1', {
+      id: 'out1',
+      tier: 'shadow',
+      content: 'x'.repeat(300),
+      tags: ['shadow', 'chat-output', 'session:other'],
+      machine: { kind: 'chat_output', sessionId: 'other', confidence: 0.9 },
+      meta: {},
+    });
+    const result = acceleratedChatPromotion(STATE, 's1');
+    assert.strictEqual(result.promoted, 0);
+  });
+
+  it('creates mega DTU when 5+ promoted regulars exist', () => {
+    const STATE = makeState();
+    // Pre-populate with 5 promoted regular DTUs for session s1
+    for (let i = 0; i < 5; i++) {
+      STATE.dtus.set(`reg_${i}`, {
+        id: `reg_${i}`,
+        tier: 'regular',
+        content: `Promoted content ${i} about physics and quantum mechanics`,
+        title: `AI: Response ${i}`,
+        tags: ['chat-output', 'session:s1', 'physics'],
+        machine: { kind: 'chat_output', sessionId: 's1' },
+        meta: { promotedFrom: 'shadow', promotionReason: 'chat_accelerated' },
+        human: { summary: `Response ${i}` },
+        lineage: { parents: [], children: [] },
+      });
+    }
+
+    const result = acceleratedChatPromotion(STATE, 's1');
+    assert.strictEqual(result.megaCreated, true);
+    assert.ok(result.megaId);
+    assert.ok(result.megaId.startsWith('mega_chat_s1_'));
+
+    // Verify mega DTU exists in state
+    const mega = STATE.dtus.get(result.megaId);
+    assert.strictEqual(mega.tier, 'mega');
+    assert.ok(mega.tags.includes('mega'));
+    assert.ok(mega.tags.includes('chat-context'));
+    assert.ok(mega.tags.includes('session:s1'));
+    assert.strictEqual(mega.machine.kind, 'chat_mega');
+    assert.strictEqual(mega.machine.sourceCount, 5);
+
+    // Verify source DTUs are marked as consolidated
+    for (let i = 0; i < 5; i++) {
+      const src = STATE.dtus.get(`reg_${i}`);
+      assert.strictEqual(src.meta.consolidatedInto, result.megaId);
+      assert.ok(src.lineage.children.includes(result.megaId));
+    }
+  });
+
+  it('does not create mega if fewer than 5 promoted regulars', () => {
+    const STATE = makeState();
+    for (let i = 0; i < 3; i++) {
+      STATE.dtus.set(`reg_${i}`, {
+        id: `reg_${i}`,
+        tier: 'regular',
+        content: `Content ${i}`,
+        tags: ['chat-output', 'session:s1'],
+        machine: { kind: 'chat_output', sessionId: 's1' },
+        meta: { promotedFrom: 'shadow' },
+        lineage: { parents: [], children: [] },
+      });
+    }
+    const result = acceleratedChatPromotion(STATE, 's1');
+    assert.strictEqual(result.megaCreated, false);
+    assert.strictEqual(result.megaId, null);
+  });
+
+  it('skips already-consolidated regulars for mega', () => {
+    const STATE = makeState();
+    // 5 regulars but 3 already consolidated
+    for (let i = 0; i < 5; i++) {
+      STATE.dtus.set(`reg_${i}`, {
+        id: `reg_${i}`,
+        tier: 'regular',
+        content: `Content ${i}`,
+        tags: ['chat-output', 'session:s1'],
+        machine: { kind: 'chat_output', sessionId: 's1' },
+        meta: {
+          promotedFrom: 'shadow',
+          consolidatedInto: i < 3 ? 'mega_old' : undefined,
+        },
+        lineage: { parents: [], children: [] },
+      });
+    }
+    const result = acceleratedChatPromotion(STATE, 's1');
+    // Only 2 unconsolidated regulars, not enough for mega
+    assert.strictEqual(result.megaCreated, false);
+  });
+
+  it('performs both promotion and mega creation in one call', () => {
+    const STATE = makeState();
+    // 4 already-promoted regulars
+    for (let i = 0; i < 4; i++) {
+      STATE.dtus.set(`reg_${i}`, {
+        id: `reg_${i}`,
+        tier: 'regular',
+        content: `Existing content ${i}`,
+        tags: ['chat-output', 'session:s1'],
+        machine: { kind: 'chat_output', sessionId: 's1' },
+        meta: { promotedFrom: 'shadow' },
+        human: { summary: `Summary ${i}` },
+        lineage: { parents: [], children: [] },
+      });
+    }
+    // 1 shadow that qualifies for promotion (will push to 5 regulars)
+    STATE.shadowDtus.set('out_new', {
+      id: 'out_new',
+      tier: 'shadow',
+      content: 'x'.repeat(300),
+      tags: ['shadow', 'chat-output', 'session:s1'],
+      machine: { kind: 'chat_output', sessionId: 's1', confidence: 0.9, workingSetDtuIds: [] },
+      meta: {},
+    });
+
+    const result = acceleratedChatPromotion(STATE, 's1');
+    assert.strictEqual(result.promoted, 1);
+    assert.strictEqual(result.megaCreated, true);
+    assert.ok(result.megaId);
+  });
+});
+
 // ── ENRICHMENT_CONSTANTS tests ──────────────────────────────────────────────
 
 describe('ENRICHMENT_CONSTANTS', () => {
   it('has correct consolidation interval', () => {
     assert.strictEqual(ENRICHMENT_CONSTANTS.CONSOLIDATION_CHECK_INTERVAL, 10);
+  });
+
+  it('has correct accelerated promotion interval', () => {
+    assert.strictEqual(ENRICHMENT_CONSTANTS.ACCELERATED_PROMOTION_INTERVAL, 5);
+  });
+
+  it('has correct mega consolidation threshold', () => {
+    assert.strictEqual(ENRICHMENT_CONSTANTS.MEGA_CONSOLIDATION_THRESHOLD, 5);
   });
 
   it('has correct max age', () => {

@@ -361,8 +361,8 @@ export default function FeedLensPage() {
     setFeedRunning(action);
     try {
       const res = await runFeedAction.mutateAsync({ id: targetId, action });
-      setFeedActionResult({ _action: action, ...(res.result as Record<string, unknown>) });
-    } catch (e) { console.error(`Feed action ${action} failed:`, e); }
+      if (res.ok === false) { setFeedActionResult({ _action: action, message: `Action failed: ${(res as Record<string, unknown>).error || 'Unknown error'}` }); } else { setFeedActionResult({ _action: action, ...(res.result as Record<string, unknown>) }); }
+    } catch (e) { console.error(`Feed action ${action} failed:`, e); setFeedActionResult({ message: `Action failed: ${e instanceof Error ? e.message : 'Unknown error'}` }); }
     setFeedRunning(null);
   };
 
@@ -558,7 +558,7 @@ export default function FeedLensPage() {
       // Refetch comments for this post
       api.get(`/api/social/comments/${postId}`).then(res => {
         setPostComments(prev => ({ ...prev, [postId]: res.data?.comments || [] }));
-      }).catch(() => {});
+      }).catch((e) => { console.warn('Failed to refetch comments:', e); });
     },
     onError: () => {
       useUIStore.getState().addToast({ type: 'error', message: 'Failed to add comment' });
@@ -586,7 +586,7 @@ export default function FeedLensPage() {
     // Fetch comments from backend
     api.get(`/api/social/comments/${postId}`).then(res => {
       setPostComments(prev => ({ ...prev, [postId]: res.data?.comments || [] }));
-    }).catch(() => {});
+    }).catch((e) => { console.warn('Failed to fetch comments:', e); });
   }, [expandedComments]);
 
   const handleComposeHint = useCallback((hint: string) => {

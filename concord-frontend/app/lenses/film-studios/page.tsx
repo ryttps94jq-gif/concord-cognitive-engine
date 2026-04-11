@@ -65,8 +65,8 @@ export default function FilmStudiosPage() {
     setFilmRunning(action);
     try {
       const res = await runFilmAction.mutateAsync({ id: targetId, action });
-      setFilmActionResult({ _action: action, ...(res.result as Record<string, unknown>) });
-    } catch (e) { console.error(`Film action ${action} failed:`, e); }
+      if (res.ok === false) { setFilmActionResult({ _action: action, message: `Action failed: ${(res as Record<string, unknown>).error || 'Unknown error'}` }); } else { setFilmActionResult({ _action: action, ...(res.result as Record<string, unknown>) }); }
+    } catch (e) { console.error(`Film action ${action} failed:`, e); setFilmActionResult({ message: `Action failed: ${e instanceof Error ? e.message : 'Unknown error'}` }); }
     setFilmRunning(null);
   }, [myFilmItems, runFilmAction]);
 
@@ -84,7 +84,7 @@ export default function FilmStudiosPage() {
   // Discover films
   const { data: discoveredFilms, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['film-studio', 'discover', searchQuery],
-    queryFn: () => apiHelpers.filmStudio.discover({ q: searchQuery || undefined }).then(r => r.data?.films || r.data?.items || r.data || []).catch(() => []),
+    queryFn: () => apiHelpers.filmStudio.discover({ q: searchQuery || undefined }).then(r => r.data?.films || r.data?.items || r.data || []).catch((e) => { console.warn('[FilmStudios] Query failed:', e?.message); return []; }),
     initialData: [],
   });
   const myFilms = useMemo(() => myFilmItems.map(i => ({ ...(i.data as unknown as FilmProject), id: i.id, title: i.title })), [myFilmItems]);

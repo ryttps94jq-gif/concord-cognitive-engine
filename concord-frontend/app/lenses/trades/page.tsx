@@ -426,6 +426,10 @@ export default function TradesLensPage() {
     if (!targetId) return;
     try {
       const result = await runAction.mutateAsync({ id: targetId, action });
+      if (result.ok === false) {
+        setActionResult({ message: `Action failed: ${(result as Record<string, unknown>).error || 'Unknown error'}` });
+        return;
+      }
       const actionData = result.result as Record<string, unknown>;
       setActionResult(actionData);
 

@@ -67,7 +67,7 @@ export default function PharmacyLensPage() {
     try {
       const artifactId = medItems[0]?.id || 'pharmacy';
       const res = await runAction.mutateAsync({ id: artifactId, action });
-      setter((res.result as Record<string, unknown>) || null);
+      if (res.ok === false) { setter({ message: `Action failed: ${(res as Record<string, unknown>).error || 'Unknown error'}` } as Record<string, unknown>); } else { setter((res.result as Record<string, unknown>) || null); }
     } catch (e) {
       console.error(`Pharmacy action ${action} failed:`, e);
     }
@@ -96,7 +96,7 @@ export default function PharmacyLensPage() {
     try {
       await runAction.mutateAsync({ id: medItems[0]?.id || 'pharmacy-default', action: 'drugInteractionCheck', params: { medications: activeNames } });
       refetch();
-    } catch { /* handled by UI */ }
+    } catch (e) { console.error('Drug interaction check failed:', e); }
   };
 
   if (isLoading) {

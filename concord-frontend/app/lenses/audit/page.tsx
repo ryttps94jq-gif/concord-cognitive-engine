@@ -51,8 +51,8 @@ export default function AuditLensPage() {
     setIsRunning(action);
     try {
       const res = await runAction.mutateAsync({ id: targetId, action });
-      setActionResult(res.result as Record<string, unknown>);
-    } catch (e) { console.error(`Action ${action} failed:`, e); }
+      if (res.ok === false) { setActionResult({ message: `Action failed: ${(res as Record<string, unknown>).error || 'Unknown error'}` }); } else { setActionResult(res.result as Record<string, unknown>); }
+    } catch (e) { console.error(`Action ${action} failed:`, e); setActionResult({ message: `Action failed: ${e instanceof Error ? e.message : 'Unknown error'}` }); }
     setIsRunning(null);
   };
 
@@ -467,34 +467,37 @@ export default function AuditLensPage() {
           </div>
 
           {/* Compliance Check Result */}
-          {actionResult.passed !== undefined && actionResult.score !== undefined && (
+          {actionResult.overallComplianceRate !== undefined && actionResult.totalViolations !== undefined && (
             <div className="space-y-3">
               <div className="flex items-center gap-4">
-                <div className={`flex items-center gap-2 text-lg font-bold ${actionResult.passed ? 'text-neon-green' : 'text-neon-pink'}`}>
-                  {actionResult.passed ? <ShieldCheck className="w-5 h-5" /> : <XCircle className="w-5 h-5" />}
-                  {actionResult.passed ? 'PASS' : 'FAIL'}
+                <div className={`flex items-center gap-2 text-lg font-bold ${(actionResult.overallComplianceRate as number) >= 80 ? 'text-neon-green' : 'text-neon-pink'}`}>
+                  {(actionResult.overallComplianceRate as number) >= 80 ? <ShieldCheck className="w-5 h-5" /> : <XCircle className="w-5 h-5" />}
+                  {(actionResult.overallComplianceRate as number) >= 80 ? 'PASS' : 'FAIL'}
                 </div>
-                <div className="text-3xl font-bold text-white">{actionResult.score as number}<span className="text-lg text-gray-400">/100</span></div>
+                <div className="text-3xl font-bold text-white">{actionResult.overallComplianceRate as number}<span className="text-lg text-gray-400">%</span></div>
               </div>
-              {(actionResult.violations as string[])?.length > 0 && (
+              {(actionResult.totalViolations as number) > 0 && actionResult.recordResults ? (
                 <div>
-                  <p className="text-xs text-gray-400 mb-1">Violations</p>
+                  <p className="text-xs text-gray-400 mb-1">Violations ({actionResult.totalViolations as number} total)</p>
                   <ul className="space-y-1">
-                    {(actionResult.violations as string[]).map((v, i) => (
-                      <li key={i} className="text-xs text-neon-pink flex items-center gap-1">
-                        <XCircle className="w-3 h-3 flex-shrink-0" /> {v}
-                      </li>
-                    ))}
+                    {(actionResult.recordResults as Array<{ recordId: string; violations: Array<{ detail: string }> }>)
+                      .flatMap(r => r.violations)
+                      .slice(0, 10)
+                      .map((v, i) => (
+                        <li key={i} className="text-xs text-neon-pink flex items-center gap-1">
+                          <XCircle className="w-3 h-3 flex-shrink-0" /> {v.detail}
+                        </li>
+                      ))}
                   </ul>
                 </div>
-              )}
-              {(actionResult.recommendations as string[])?.length > 0 && (
+              ) : null}
+              {(actionResult.fieldGaps as string[])?.length > 0 && (
                 <div>
-                  <p className="text-xs text-gray-400 mb-1">Recommendations</p>
+                  <p className="text-xs text-gray-400 mb-1">Field Gaps</p>
                   <ul className="space-y-1">
-                    {(actionResult.recommendations as string[]).map((r, i) => (
+                    {(actionResult.fieldGaps as string[]).map((g, i) => (
                       <li key={i} className="text-xs text-neon-green flex items-center gap-1">
-                        <Check className="w-3 h-3 flex-shrink-0" /> {r}
+                        <Check className="w-3 h-3 flex-shrink-0" /> {g}
                       </li>
                     ))}
                   </ul>
@@ -504,19 +507,17 @@ export default function AuditLensPage() {
           )}
 
           {/* Trail Analysis Result */}
-          {actionResult.entries !== undefined && !actionResult.score && (
+          {actionResult.totalEntries !== undefined && actionResult.issues !== undefined && (
             <div className="space-y-3">
               <div className="grid grid-cols-3 gap-3">
                 <div className="bg-lattice-deep rounded-lg p-3 text-center">
-                  <p className="text-2xl font-bold text-neon-cyan">{actionResult.totalEntries as number ?? (actionResult.entries as unknown[])?.length}</p>
+                  <p className="text-2xl font-bold text-neon-cyan">{actionResult.totalEntries as number}</p>
                   <p className="text-xs text-gray-400">Total Entries</p>
                 </div>
-                {actionResult.anomalies !== undefined && (
-                  <div className="bg-lattice-deep rounded-lg p-3 text-center">
-                    <p className="text-2xl font-bold text-yellow-400">{(actionResult.anomalies as unknown[])?.length ?? actionResult.anomalies as number}</p>
-                    <p className="text-xs text-gray-400">Anomalies</p>
-                  </div>
-                )}
+                <div className="bg-lattice-deep rounded-lg p-3 text-center">
+                  <p className="text-2xl font-bold text-yellow-400">{(actionResult.issues as unknown[])?.length ?? 0}</p>
+                  <p className="text-xs text-gray-400">Issues</p>
+                </div>
                 {actionResult.integrityScore !== undefined && (
                   <div className="bg-lattice-deep rounded-lg p-3 text-center">
                     <p className="text-2xl font-bold text-neon-green">{actionResult.integrityScore as number}%</p>
@@ -524,93 +525,93 @@ export default function AuditLensPage() {
                   </div>
                 )}
               </div>
-              {(actionResult.summary as string) && (
-                <p className="text-sm text-gray-300">{actionResult.summary as string}</p>
-              )}
+              {actionResult.issueSummary ? (
+                <div className="text-sm text-gray-300">
+                  <span className="text-red-400">Critical: {(actionResult.issueSummary as Record<string, number>).critical}</span>
+                  {' / '}
+                  <span className="text-yellow-400">High: {(actionResult.issueSummary as Record<string, number>).high}</span>
+                  {' / '}
+                  <span className="text-gray-400">Medium: {(actionResult.issueSummary as Record<string, number>).medium}</span>
+                </div>
+              ) : null}
             </div>
           )}
 
           {/* Risk Score Result */}
-          {actionResult.riskScore !== undefined && (
+          {actionResult.auditRisk !== undefined && (
             <div className="space-y-3">
               <div className="flex items-center gap-4">
                 <div className={`text-3xl font-bold ${
-                  (actionResult.riskScore as number) >= 75 ? 'text-neon-pink' :
-                  (actionResult.riskScore as number) >= 40 ? 'text-yellow-400' :
+                  (actionResult.auditRisk as number) >= 0.6 ? 'text-neon-pink' :
+                  (actionResult.auditRisk as number) >= 0.3 ? 'text-yellow-400' :
                   'text-neon-green'
                 }`}>
-                  {actionResult.riskScore as number}
+                  {((actionResult.auditRisk as number) * 100).toFixed(1)}%
                 </div>
                 {!!actionResult.riskLevel && (
-                  <span className={`text-sm font-medium px-2 py-0.5 rounded ${
-                    (actionResult.riskLevel as string) === 'HIGH' ? 'bg-red-500/20 text-red-400' :
-                    (actionResult.riskLevel as string) === 'MEDIUM' ? 'bg-yellow-500/20 text-yellow-400' :
+                  <span className={`text-sm font-medium px-2 py-0.5 rounded uppercase ${
+                    (actionResult.riskLevel as string) === 'high' ? 'bg-red-500/20 text-red-400' :
+                    (actionResult.riskLevel as string) === 'medium' ? 'bg-yellow-500/20 text-yellow-400' :
                     'bg-green-500/20 text-green-400'
                   }`}>
                     {actionResult.riskLevel as string}
                   </span>
                 )}
               </div>
-              {(actionResult.factors as Array<{ name: string; weight: number }>)?.map((f, i) => (
-                <div key={i}>
-                  <div className="flex justify-between text-xs mb-1">
-                    <span className="text-gray-400">{f.name}</span>
-                    <span className="text-white font-mono">{f.weight}</span>
-                  </div>
-                  <div className="h-1.5 bg-lattice-deep rounded-full overflow-hidden">
-                    <div className="h-full bg-yellow-400 rounded-full" style={{ width: `${Math.min(f.weight, 100)}%` }} />
-                  </div>
-                </div>
-              ))}
-              {(actionResult.mitigations as string[])?.length > 0 && (
-                <div>
-                  <p className="text-xs text-gray-400 mb-1">Mitigations</p>
-                  <ul className="space-y-1">
-                    {(actionResult.mitigations as string[]).map((m, i) => (
-                      <li key={i} className="text-xs text-neon-cyan">• {m}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+              {actionResult.components ? (
+                <>
+                  {Object.entries(actionResult.components as Record<string, number>).map(([name, value], i) => (
+                    <div key={i}>
+                      <div className="flex justify-between text-xs mb-1">
+                        <span className="text-gray-400 capitalize">{name.replace(/([A-Z])/g, ' $1')}</span>
+                        <span className="text-white font-mono">{(value * 100).toFixed(1)}%</span>
+                      </div>
+                      <div className="h-1.5 bg-lattice-deep rounded-full overflow-hidden">
+                        <div className="h-full bg-yellow-400 rounded-full" style={{ width: `${Math.min(value * 100, 100)}%` }} />
+                      </div>
+                    </div>
+                  ))}
+                </>
+              ) : null}
             </div>
           )}
 
           {/* Sampling Plan Result */}
-          {actionResult.sampleSize !== undefined && (
+          {actionResult.requiredSampleSize !== undefined && (
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div className="bg-lattice-deep rounded-lg p-3">
-                  <p className="text-2xl font-bold text-neon-purple">{actionResult.sampleSize as number}</p>
+                  <p className="text-2xl font-bold text-neon-purple">{actionResult.requiredSampleSize as number}</p>
                   <p className="text-xs text-gray-400">Sample Size</p>
                 </div>
-                {actionResult.confidence !== undefined && (
+                {(actionResult.parameters as Record<string, unknown>)?.confidenceLevel !== undefined && (
                   <div className="bg-lattice-deep rounded-lg p-3">
-                    <p className="text-2xl font-bold text-neon-cyan">{actionResult.confidence as number}%</p>
+                    <p className="text-2xl font-bold text-neon-cyan">{((actionResult.parameters as Record<string, unknown>).confidencePct as number)}%</p>
                     <p className="text-xs text-gray-400">Confidence</p>
                   </div>
                 )}
               </div>
-              {!!actionResult.method && (
-                <p className="text-xs text-gray-400">Method: <span className="text-white">{actionResult.method as string}</span></p>
+              {actionResult.samplingFraction !== undefined && (
+                <p className="text-xs text-gray-400">Sampling fraction: <span className="text-white">{actionResult.samplingFraction as number}%</span> of population ({actionResult.populationSize as number})</p>
               )}
-              {(actionResult.strata as Array<{ name: string; count: number }>)?.length > 0 && (
+              {(actionResult.stratifiedPlan as Record<string, unknown>) ? (
                 <div>
-                  <p className="text-xs text-gray-400 mb-1">Strata</p>
+                  <p className="text-xs text-gray-400 mb-1">Stratified Plan (Risk-Weighted)</p>
                   <div className="space-y-1">
-                    {(actionResult.strata as Array<{ name: string; count: number }>).map((s, i) => (
+                    {((actionResult.stratifiedPlan as Record<string, unknown>).riskWeightedAllocation as Array<{ stratum: string; allocatedSample: number; riskLevel: string }>)?.map((s, i) => (
                       <div key={i} className="flex justify-between text-xs">
-                        <span className="text-gray-300">{s.name}</span>
-                        <span className="font-mono text-neon-purple">{s.count}</span>
+                        <span className="text-gray-300">{s.stratum} <span className="text-gray-500">({s.riskLevel})</span></span>
+                        <span className="font-mono text-neon-purple">{s.allocatedSample}</span>
                       </div>
                     ))}
                   </div>
                 </div>
-              )}
+              ) : null}
             </div>
           )}
 
           {/* Fallback: generic message */}
-          {!!actionResult.message && actionResult.passed === undefined && actionResult.entries === undefined && actionResult.riskScore === undefined && actionResult.sampleSize === undefined && (
+          {!!actionResult.message && actionResult.overallComplianceRate === undefined && actionResult.totalEntries === undefined && actionResult.auditRisk === undefined && actionResult.requiredSampleSize === undefined && (
             <p className="text-sm text-gray-400">{actionResult.message as string}</p>
           )}
         </motion.div>

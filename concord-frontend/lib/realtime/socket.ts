@@ -143,7 +143,7 @@ export type SocketEvent =
   // MEGA SPEC: Chat streaming events
   | 'chat:status' | 'chat:token' | 'chat:web_results' | 'chat:complete'
   // MEGA SPEC: Artifact & quality lifecycle events
-  | 'artifact:rendered' | 'quality:approved' | 'quality:rejected'
+  | 'artifact:rendered' | 'quality:approved' | 'quality:shadowed'
   // MEGA SPEC: Entity & pipeline events
   | 'entity:production_mode' | 'pipeline:triggered'
   // 12 NEW CAPABILITIES events
@@ -189,7 +189,15 @@ export type SocketEvent =
   | 'feed:new-dtu'
   // City / World lens events
   | 'city:positions' | 'city:stream-started' | 'city:stream-ended'
-  | 'city:stream-dtu-created' | 'city:stream-sale';
+  | 'city:stream-dtu-created' | 'city:stream-sale'
+  // Comments
+  | 'comment:added'
+  // Activity feed
+  | 'activity:new'
+  // Collaborative editing (Yjs)
+  | 'yjs:update'
+  // Server health checks
+  | 'health:pulse';
 
 // ---- Enriched Event Payload (Category 2+5: Concurrency + Observability) ----
 interface EnrichedPayload {

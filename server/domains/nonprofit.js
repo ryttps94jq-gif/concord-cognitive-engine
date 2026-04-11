@@ -7,14 +7,14 @@ export default function registerNonprofitActions(registerLensAction) {
     const priorDonors = new Set(givingHistory.filter(g => new Date(g.date).getFullYear() === priorYear).map(g => g.donorId || g.name));
     const retained = [...priorDonors].filter(d => currentDonors.has(d)).length;
     const rate = priorDonors.size > 0 ? Math.round((retained / priorDonors.size) * 100) : 0;
-    return { ok: true, retentionRate: rate, retained, priorTotal: priorDonors.size, currentTotal: currentDonors.size, period: `${priorYear}-${currentYear}` };
+    return { ok: true, result: { retentionRate: rate, retained, priorTotal: priorDonors.size, currentTotal: currentDonors.size, period: `${priorYear}-${currentYear}` } };
   });
 
   registerLensAction("nonprofit", "grantReporting", (ctx, artifact, _params) => {
     const deliverables = artifact.data?.deliverables || [];
     const metrics = artifact.data?.impactMetrics || [];
     const completed = deliverables.filter(d => d.status === 'completed').length;
-    const report = {
+    const result = {
       grantId: artifact.id,
       grantName: artifact.title,
       funder: artifact.data?.funder || 'Unknown',
@@ -25,7 +25,7 @@ export default function registerNonprofitActions(registerLensAction) {
       impactSummary: metrics.map(m => ({ name: m.name, target: m.target, actual: m.actual, achieved: m.actual >= m.target })),
       generatedAt: new Date().toISOString(),
     };
-    return { ok: true, report };
+    return { ok: true, result };
   });
 
   registerLensAction("nonprofit", "volunteerMatch", (ctx, artifact, params) => {
@@ -39,7 +39,7 @@ export default function registerNonprofitActions(registerLensAction) {
       availabilityMatch: !need.schedule || availability.some(a => a === need.schedule),
     }));
     const matchScore = matches.length > 0 ? Math.round((matches.filter(m => m.matched && m.availabilityMatch).length / matches.length) * 100) : 0;
-    return { ok: true, volunteer: artifact.title, matches, matchScore };
+    return { ok: true, result: { volunteer: artifact.title, matches, matchScore } };
   });
 
   registerLensAction("nonprofit", "campaignProgress", (ctx, artifact, _params) => {
@@ -54,6 +54,6 @@ export default function registerNonprofitActions(registerLensAction) {
     const percentComplete = goal > 0 ? Math.round((raised / goal) * 100) : 0;
     const dailyRate = elapsedDays > 0 ? raised / elapsedDays : 0;
     const projected = Math.round(dailyRate * totalDays);
-    return { ok: true, campaign: artifact.title, goal, raised, percentComplete, donorCount, dailyRate: Math.round(dailyRate), projected, onTrack: projected >= goal };
+    return { ok: true, result: { campaign: artifact.title, goal, raised, percentComplete, donorCount, dailyRate: Math.round(dailyRate), projected, onTrack: projected >= goal } };
   });
 };

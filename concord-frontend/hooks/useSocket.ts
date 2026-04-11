@@ -13,6 +13,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Socket } from 'socket.io-client';
+import { useQueryClient, QueryClient } from '@tanstack/react-query';
 import { getSocket } from '@/lib/realtime/socket';
 import { emitEvent } from '@/lib/realtime/event-bus';
 import { useLatticeStore } from '@/store/lattice';
@@ -24,6 +25,10 @@ import type { DTU } from '@/lib/types/dtu';
 import type { SystemAlert, AttentionAllocation, FocusOverride, Dream, Promotion } from '@/lib/types/system';
 
 const _SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || process.env.NEXT_PUBLIC_API_URL || '';
+
+// Module-level flag: register FORWARDED_EVENTS handlers only once globally,
+// not per-component. Prevents N components x 90+ events = 630+ redundant handlers.
+let _globalListenersRegistered = false;
 
 // ── All events to forward to the event bus ─────────────────────
 const FORWARDED_EVENTS: SocketEvent[] = [
@@ -62,7 +67,7 @@ const FORWARDED_EVENTS: SocketEvent[] = [
   // MEGA SPEC: Chat streaming events
   'chat:status', 'chat:token', 'chat:web_results', 'chat:complete',
   // MEGA SPEC: Artifact & quality lifecycle events
-  'artifact:rendered', 'quality:approved', 'quality:rejected',
+  'artifact:rendered', 'quality:approved', 'quality:shadowed',
   // MEGA SPEC: Entity & pipeline events
   'entity:production_mode', 'pipeline:triggered',
   // 12 NEW CAPABILITIES events
@@ -111,6 +116,14 @@ const FORWARDED_EVENTS: SocketEvent[] = [
   // City / World lens events
   'city:positions', 'city:stream-started', 'city:stream-ended',
   'city:stream-dtu-created', 'city:stream-sale',
+  // Comments
+  'comment:added',
+  // Activity feed
+  'activity:new',
+  // Collaborative editing (Yjs)
+  'yjs:update',
+  // Server health checks
+  'health:pulse',
 ];
 
 interface UseSocketOptions {
@@ -142,6 +155,7 @@ export function useSocket(options: UseSocketOptions = {}): UseSocketReturn {
   const socketRef = useRef<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const listenersRef = useRef<Set<string>>(new Set());
+  const qc = useQueryClient();
 
   // Initialize socket — use singleton from lib/realtime/socket.ts to avoid duplicate connections
   useEffect(() => {
@@ -158,17 +172,17 @@ export function useSocket(options: UseSocketOptions = {}): UseSocketReturn {
     socket.on('disconnect', onDisconnect);
     socket.on('connect_error', onConnectError);
 
-    // ── Universal event forwarder ─────────────────────────────
-    const eventHandlers: Array<{ event: string; handler: (data: unknown) => void }> = [];
-    for (const event of FORWARDED_EVENTS) {
-      const handler = (data: unknown) => {
-        // 1. Forward to event bus (for component-level subscriptions)
-        emitEvent(event, data);
-        // 2. Push into Zustand stores for relevant events
-        routeToStores(event, data);
-      };
-      socket.on(event, handler);
-      eventHandlers.push({ event, handler });
+    // ── Universal event forwarder (registered ONCE globally) ───
+    if (!_globalListenersRegistered) {
+      _globalListenersRegistered = true;
+      for (const event of FORWARDED_EVENTS) {
+        socket.on(event, (data: unknown) => {
+          // 1. Forward to event bus (for component-level subscriptions)
+          emitEvent(event, data);
+          // 2. Push into Zustand stores for relevant events
+          routeToStores(event, data, qc);
+        });
+      }
     }
 
     socketRef.current = socket;
@@ -176,17 +190,17 @@ export function useSocket(options: UseSocketOptions = {}): UseSocketReturn {
     if (socket.connected) setIsConnected(true);
 
     // FE-011: Clean up on unmount — remove OUR listeners (don't disconnect shared socket)
+    // Note: FORWARDED_EVENTS handlers are global singletons and intentionally NOT cleaned up per-component.
     const listeners = listenersRef.current;
     return () => {
       socket.off('connect', onConnect);
       socket.off('disconnect', onDisconnect);
       socket.off('connect_error', onConnectError);
-      for (const { event, handler } of eventHandlers) socket.off(event, handler);
       socketRef.current = null;
       listeners.clear();
       setIsConnected(false);
     };
-  }, [autoConnect, reconnection, reconnectionAttempts, reconnectionDelay]);
+  }, [autoConnect, reconnection, reconnectionAttempts, reconnectionDelay, qc]);
 
   const connect = useCallback(() => {
     if (socketRef.current && !socketRef.current.connected) {
@@ -237,7 +251,7 @@ export function useSocket(options: UseSocketOptions = {}): UseSocketReturn {
 
 // ── Store routing ──────────────────────────────────────────────
 
-function routeToStores(event: SocketEvent, data: unknown) {
+function routeToStores(event: SocketEvent, data: unknown, qc: QueryClient) {
   if (!data || typeof data !== 'object') return;
   const d = data as Record<string, unknown>;
 
@@ -363,6 +377,26 @@ function routeToStores(event: SocketEvent, data: unknown) {
         });
       }
       break;
+
+    // comment:added → invalidate DTU and comments queries
+    case 'comment:added':
+      qc.invalidateQueries({ queryKey: ['dtu'] });
+      qc.invalidateQueries({ queryKey: ['comments'] });
+      break;
+
+    // activity:new → invalidate activity feed
+    case 'activity:new':
+      qc.invalidateQueries({ queryKey: ['activity'] });
+      qc.invalidateQueries({ queryKey: ['feed'] });
+      break;
+
+    // health:pulse → invalidate health/status queries
+    case 'health:pulse':
+      qc.invalidateQueries({ queryKey: ['health'] });
+      qc.invalidateQueries({ queryKey: ['status'] });
+      break;
+
+    // yjs:update — handled by collaborative editing components via event bus
   }
 }
 

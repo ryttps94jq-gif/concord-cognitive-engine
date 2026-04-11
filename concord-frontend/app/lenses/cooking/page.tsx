@@ -33,6 +33,66 @@ interface RecipeData {
   notes: string;
 }
 
+// ── Action result types ─────────────────────────────────────────
+interface ScaleRecipeResult {
+  message?: string;
+  scaleFactor: number;
+  baseServings: number;
+  targetServings: number;
+  recipe?: string;
+  ingredients: { name: string; original: string; scaled: string }[];
+}
+
+interface NutritionEstimateResult {
+  message?: string;
+  totalCalories: number;
+  perServing: number;
+  servings: number;
+  macros: Record<string, string>;
+  note?: string;
+}
+
+interface MealPlanResult {
+  message?: string;
+  weeklyBudget: number;
+  dailyBudget: number;
+  days: number;
+  mealsToFill: number;
+  dietaryNotes: string;
+  plan: { day: number; dayName: string; meals: string[] }[];
+}
+
+interface SubstitutionResult {
+  message?: string;
+  ingredient: string;
+  found: boolean;
+  substitutions: { sub: string; ratio: string; note?: string }[];
+}
+
+function isObjectResult(result: unknown): result is Record<string, unknown> {
+  return typeof result === 'object' && result !== null;
+}
+
+function isScaleRecipeResult(result: unknown): result is ScaleRecipeResult {
+  return isObjectResult(result) && 'scaleFactor' in result;
+}
+
+function isNutritionEstimateResult(result: unknown): result is NutritionEstimateResult {
+  return isObjectResult(result) && 'totalCalories' in result;
+}
+
+function isMealPlanResult(result: unknown): result is MealPlanResult {
+  return isObjectResult(result) && 'weeklyBudget' in result;
+}
+
+function isSubstitutionResult(result: unknown): result is SubstitutionResult {
+  return isObjectResult(result) && 'substitutions' in result;
+}
+
+function hasMessage(result: unknown): result is { message: string } {
+  return isObjectResult(result) && 'message' in result && typeof (result as Record<string, unknown>).message === 'string';
+}
+
 const DIFFICULTY_COLORS: Record<string, string> = {
   easy: 'text-neon-green bg-neon-green/10',
   medium: 'text-yellow-400 bg-yellow-400/10',
@@ -173,7 +233,11 @@ export default function CookingLensPage() {
     setActionResult(null);
     try {
       const res = await runAction.mutateAsync({ id: targetId, action });
-      setActionResult({ action, result: res.result });
+      if (res.ok === false) {
+        setActionResult({ action, result: { message: `Action failed: ${(res as Record<string, unknown>).error || 'Unknown error'}` } });
+      } else {
+        setActionResult({ action, result: res.result });
+      }
     } catch (err) {
       setActionResult({ action, result: `Error: ${err instanceof Error ? err.message : String(err)}` });
     } finally {
@@ -286,32 +350,32 @@ export default function CookingLensPage() {
               {typeof actionResult.result === 'string' && (
                 <p className="text-gray-300">{actionResult.result}</p>
               )}
-              {typeof actionResult.result === 'object' && (actionResult.result as any)?.message && (
-                <p className="text-gray-300">{(actionResult.result as any).message}</p>
+              {hasMessage(actionResult.result) && (
+                <p className="text-gray-300">{actionResult.result.message}</p>
               )}
 
               {/* scaleRecipe */}
-              {typeof actionResult.result === 'object' && (actionResult.result as any)?.scaleFactor !== undefined && (
+              {isScaleRecipeResult(actionResult.result) && (
                 <div className="space-y-2">
                   <div className="grid grid-cols-3 gap-2">
                     <div className="p-2 bg-lattice-bg rounded text-center">
-                      <p className="font-bold text-orange-400">{(actionResult.result as any).baseServings}</p>
+                      <p className="font-bold text-orange-400">{actionResult.result.baseServings}</p>
                       <p className="text-[10px] text-gray-500">Original</p>
                     </div>
                     <div className="p-2 bg-lattice-bg rounded text-center">
-                      <p className="font-bold text-neon-green">{(actionResult.result as any).targetServings}</p>
+                      <p className="font-bold text-neon-green">{actionResult.result.targetServings}</p>
                       <p className="text-[10px] text-gray-500">Target</p>
                     </div>
                     <div className="p-2 bg-lattice-bg rounded text-center">
-                      <p className="font-bold text-neon-cyan">{(actionResult.result as any).scaleFactor}×</p>
+                      <p className="font-bold text-neon-cyan">{actionResult.result.scaleFactor}×</p>
                       <p className="text-[10px] text-gray-500">Factor</p>
                     </div>
                   </div>
-                  {(actionResult.result as any).recipe && (
-                    <p className="text-gray-400">Recipe: <span className="text-gray-200">{(actionResult.result as any).recipe}</span></p>
+                  {actionResult.result.recipe && (
+                    <p className="text-gray-400">Recipe: <span className="text-gray-200">{actionResult.result.recipe}</span></p>
                   )}
                   <div className="space-y-1">
-                    {((actionResult.result as any).ingredients as any[]).map((ing: any) => (
+                    {actionResult.result.ingredients.map((ing) => (
                       <div key={ing.name} className="flex items-center justify-between text-gray-300 bg-lattice-bg px-2 py-1 rounded">
                         <span className="font-medium">{ing.name}</span>
                         <span className="text-gray-500">{ing.original} → <span className="text-orange-400">{ing.scaled}</span></span>
@@ -322,56 +386,56 @@ export default function CookingLensPage() {
               )}
 
               {/* nutritionEstimate */}
-              {typeof actionResult.result === 'object' && (actionResult.result as any)?.totalCalories !== undefined && (
+              {isNutritionEstimateResult(actionResult.result) && (
                 <div className="space-y-2">
                   <div className="grid grid-cols-2 gap-2">
                     <div className="p-2 bg-lattice-bg rounded text-center">
-                      <p className="text-lg font-bold text-orange-400">{(actionResult.result as any).totalCalories}</p>
+                      <p className="text-lg font-bold text-orange-400">{actionResult.result.totalCalories}</p>
                       <p className="text-[10px] text-gray-500">Total kcal</p>
                     </div>
                     <div className="p-2 bg-lattice-bg rounded text-center">
-                      <p className="text-lg font-bold text-neon-cyan">{(actionResult.result as any).perServing}</p>
-                      <p className="text-[10px] text-gray-500">Per serving ({(actionResult.result as any).servings})</p>
+                      <p className="text-lg font-bold text-neon-cyan">{actionResult.result.perServing}</p>
+                      <p className="text-[10px] text-gray-500">Per serving ({actionResult.result.servings})</p>
                     </div>
                   </div>
                   <div className="grid grid-cols-3 gap-2">
-                    {Object.entries((actionResult.result as any).macros || {}).map(([macro, val]) => (
+                    {Object.entries(actionResult.result.macros || {}).map(([macro, val]) => (
                       <div key={macro} className="p-1.5 bg-lattice-bg rounded text-center">
-                        <p className="font-bold text-neon-green">{val as string}</p>
+                        <p className="font-bold text-neon-green">{val}</p>
                         <p className="text-[10px] text-gray-500">{macro}</p>
                       </div>
                     ))}
                   </div>
-                  {(actionResult.result as any).note && (
-                    <p className="text-[10px] text-gray-500 italic">{(actionResult.result as any).note}</p>
+                  {actionResult.result.note && (
+                    <p className="text-[10px] text-gray-500 italic">{actionResult.result.note}</p>
                   )}
                 </div>
               )}
 
               {/* mealPlan */}
-              {typeof actionResult.result === 'object' && (actionResult.result as any)?.weeklyBudget !== undefined && (
+              {isMealPlanResult(actionResult.result) && (
                 <div className="space-y-2">
                   <div className="grid grid-cols-3 gap-2">
                     <div className="p-2 bg-lattice-bg rounded text-center">
-                      <p className="font-bold text-orange-400">{(actionResult.result as any).days}</p>
+                      <p className="font-bold text-orange-400">{actionResult.result.days}</p>
                       <p className="text-[10px] text-gray-500">Days</p>
                     </div>
                     <div className="p-2 bg-lattice-bg rounded text-center">
-                      <p className="font-bold text-neon-green">${(actionResult.result as any).dailyBudget}</p>
+                      <p className="font-bold text-neon-green">${actionResult.result.dailyBudget}</p>
                       <p className="text-[10px] text-gray-500">Daily Budget</p>
                     </div>
                     <div className="p-2 bg-lattice-bg rounded text-center">
-                      <p className="font-bold text-neon-cyan">${(actionResult.result as any).weeklyBudget}</p>
+                      <p className="font-bold text-neon-cyan">${actionResult.result.weeklyBudget}</p>
                       <p className="text-[10px] text-gray-500">Weekly Total</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2 text-gray-400">
                     <span>Meals to fill:</span>
-                    <span className="text-orange-300">{(actionResult.result as any).mealsToFill}</span>
-                    <span className="ml-auto text-[10px]">Diet: {(actionResult.result as any).dietaryNotes}</span>
+                    <span className="text-orange-300">{actionResult.result.mealsToFill}</span>
+                    <span className="ml-auto text-[10px]">Diet: {actionResult.result.dietaryNotes}</span>
                   </div>
                   <div className="grid grid-cols-7 gap-1">
-                    {((actionResult.result as any).plan as any[]).map((day: any) => (
+                    {actionResult.result.plan.map((day) => (
                       <div key={day.day} className="p-1 bg-lattice-bg rounded text-center">
                         <p className="text-[10px] font-medium text-orange-400">{day.dayName}</p>
                         <p className="text-[10px] text-gray-500">{day.meals.length}m</p>
@@ -382,17 +446,17 @@ export default function CookingLensPage() {
               )}
 
               {/* substitution */}
-              {typeof actionResult.result === 'object' && (actionResult.result as any)?.substitutions !== undefined && (
+              {isSubstitutionResult(actionResult.result) && (
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
                     <span className="text-gray-400">Replacing:</span>
-                    <span className="text-orange-300 font-medium capitalize">{(actionResult.result as any).ingredient || '—'}</span>
-                    <span className={`ml-auto px-2 py-0.5 rounded-full text-[10px] ${(actionResult.result as any).found ? 'bg-neon-green/20 text-neon-green' : 'bg-gray-500/20 text-gray-400'}`}>
-                      {(actionResult.result as any).found ? 'Found' : 'Not found'}
+                    <span className="text-orange-300 font-medium capitalize">{actionResult.result.ingredient || '—'}</span>
+                    <span className={`ml-auto px-2 py-0.5 rounded-full text-[10px] ${actionResult.result.found ? 'bg-neon-green/20 text-neon-green' : 'bg-gray-500/20 text-gray-400'}`}>
+                      {actionResult.result.found ? 'Found' : 'Not found'}
                     </span>
                   </div>
                   <div className="space-y-1">
-                    {((actionResult.result as any).substitutions as any[]).map((s: any, i: number) => (
+                    {actionResult.result.substitutions.map((s, i) => (
                       <div key={i} className="p-2 bg-lattice-bg rounded space-y-0.5">
                         <div className="flex items-center justify-between">
                           <span className="text-gray-200">{s.sub}</span>

@@ -46,8 +46,8 @@ export default function ArtistryLensPage() {
     setIsRunning(action);
     try {
       const res = await runAction.mutateAsync({ id: targetId, action });
-      setActionResult(res.result as Record<string, unknown>);
-    } catch (e) { console.error(`Action ${action} failed:`, e); }
+      if (res.ok === false) { setActionResult({ message: `Action failed: ${(res as Record<string, unknown>).error || 'Unknown error'}` }); } else { setActionResult(res.result as Record<string, unknown>); }
+    } catch (e) { console.error(`Action ${action} failed:`, e); setActionResult({ message: `Action failed: ${e instanceof Error ? e.message : 'Unknown error'}` }); }
     setIsRunning(null);
   };
 
@@ -65,28 +65,28 @@ export default function ArtistryLensPage() {
   // Assets from API
   const { data: assets, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['artistry', 'assets', searchQuery],
-    queryFn: () => apiHelpers.artistry.assets.list({ search: searchQuery || undefined }).then(r => r.data?.assets || []).catch(() => []),
+    queryFn: () => apiHelpers.artistry.assets.list({ search: searchQuery || undefined }).then(r => r.data?.assets || []).catch((e) => { console.warn('[Artistry] Query failed:', e?.message); return []; }),
     initialData: [],
   });
 
   // Styles / Mediums
   const { data: styles } = useQuery({
     queryKey: ['artistry', 'styles'],
-    queryFn: () => apiHelpers.artistry.genres().then(r => r.data?.genres || []).catch(() => []),
+    queryFn: () => apiHelpers.artistry.genres().then(r => r.data?.genres || []).catch((e) => { console.warn('[Artistry] Query failed:', e?.message); return []; }),
     initialData: [],
   });
 
   // Asset types
   const { data: assetTypes } = useQuery({
     queryKey: ['artistry', 'asset-types'],
-    queryFn: () => apiHelpers.artistry.assetTypes().then(r => r.data?.types || []).catch(() => []),
+    queryFn: () => apiHelpers.artistry.assetTypes().then(r => r.data?.types || []).catch((e) => { console.warn('[Artistry] Query failed:', e?.message); return []; }),
     initialData: [],
   });
 
   // Marketplace artworks
   const { data: marketplaceArt } = useQuery({
     queryKey: ['artistry', 'marketplace', 'art'],
-    queryFn: () => apiHelpers.artistry.marketplace.art.list().then(r => r.data?.art || r.data?.items || []).catch(() => []),
+    queryFn: () => apiHelpers.artistry.marketplace.art.list().then(r => r.data?.art || r.data?.items || []).catch((e) => { console.warn('[Artistry] Query failed:', e?.message); return []; }),
     initialData: [],
     enabled: tab === 'marketplace',
   });
@@ -94,7 +94,7 @@ export default function ArtistryLensPage() {
   // Studio projects
   const { data: studioProjects } = useQuery({
     queryKey: ['artistry', 'studio', 'projects'],
-    queryFn: () => apiHelpers.artistry.studio.projects.list().then(r => r.data?.projects || []).catch(() => []),
+    queryFn: () => apiHelpers.artistry.studio.projects.list().then(r => r.data?.projects || []).catch((e) => { console.warn('[Artistry] Query failed:', e?.message); return []; }),
     initialData: [],
     enabled: tab === 'studio',
   });
@@ -185,7 +185,7 @@ export default function ArtistryLensPage() {
                   <div className="grid grid-cols-3 gap-2">
                     <div className="p-2 bg-white/5 rounded text-center"><p className="text-sm font-bold text-neon-pink">{actionResult.harmonyScore as number}</p><p className="text-[10px] text-gray-500">Harmony</p></div>
                     <div className="p-2 bg-white/5 rounded text-center"><p className="text-sm font-bold text-neon-cyan capitalize">{actionResult.dominantHue as string}</p><p className="text-[10px] text-gray-500">Dominant</p></div>
-                    <div className="p-2 bg-white/5 rounded text-center"><p className="text-sm font-bold text-yellow-400">{actionResult.contrastRatio as number}</p><p className="text-[10px] text-gray-500">Contrast</p></div>
+                    <div className="p-2 bg-white/5 rounded text-center"><p className="text-sm font-bold text-yellow-400">{actionResult.contrastRange as number}</p><p className="text-[10px] text-gray-500">Contrast</p></div>
                   </div>
                   {(actionResult.colors as Array<{ hex: string }>)?.slice(0, 8).map((c, i) => (
                     <span key={i} className="inline-block w-6 h-6 rounded-sm border border-white/20 mr-1" style={{ backgroundColor: c.hex }} title={c.hex} />
@@ -201,12 +201,12 @@ export default function ArtistryLensPage() {
                 <div className="flex items-center gap-3"><span className="text-xl font-bold text-purple-400 capitalize">{actionResult.classification as string}</span>{!!actionResult.confidence && <span className="text-xs text-gray-400">{actionResult.confidence as number}%</span>}</div>
               )}
               {/* Media Inventory */}
-              {actionResult.totalItems !== undefined && actionResult.byType !== undefined && (
+              {actionResult.totalItems !== undefined && actionResult.categoryBreakdown !== undefined && (
                 <div className="space-y-2">
                   <div className="text-lg font-bold text-yellow-400">{actionResult.totalItems as number} items</div>
                   <div className="grid grid-cols-2 gap-2">
-                    {Object.entries(actionResult.byType as Record<string, number>).map(([type, count]) => (
-                      <div key={type} className="p-2 bg-white/5 rounded flex justify-between text-xs"><span className="text-white capitalize">{type}</span><span className="text-gray-400">{count}</span></div>
+                    {(actionResult.categoryBreakdown as Array<{ category: string; itemCount: number }>).map((entry) => (
+                      <div key={entry.category} className="p-2 bg-white/5 rounded flex justify-between text-xs"><span className="text-white capitalize">{entry.category}</span><span className="text-gray-400">{entry.itemCount}</span></div>
                     ))}
                   </div>
                 </div>

@@ -5,7 +5,6 @@
  * for a given domain. Displays in every creative lens.
  */
 
-import { useEffect } from 'react';
 import { useCreativeRegistry } from '@/hooks/useCreativeRegistry';
 import { Globe, RefreshCw, Music, Image as ImageIcon, Code, FileText, Layers } from 'lucide-react';
 
@@ -30,15 +29,7 @@ export function CreativeRegistryPanel({
   onUse,
   onRemix,
 }: CreativeRegistryPanelProps) {
-  const { entries, total, isLoading, on, off, handleRegistryUpdate } = useCreativeRegistry(domain, contentType);
-
-  // Subscribe to real-time updates
-  useEffect(() => {
-    on('creative_registry:update', handleRegistryUpdate);
-    return () => {
-      off('creative_registry:update', handleRegistryUpdate);
-    };
-  }, [on, off, handleRegistryUpdate]);
+  const { entries, total, isLoading, refetch } = useCreativeRegistry(domain, contentType);
 
   if (isLoading) {
     return (
@@ -76,7 +67,7 @@ export function CreativeRegistryPanel({
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => handleRegistryUpdate({})}
+            onClick={() => refetch()}
             className="p-1 rounded hover:bg-gray-700 text-gray-400 hover:text-white transition-colors"
             title="Refresh registry"
           >

@@ -48,7 +48,7 @@ export default function ReflectionLensPage() {
     setReflActiveAction(action);
     try {
       const res = await runReflectionAction.mutateAsync({ id, action });
-      setReflActionResult({ action, ...(res.result as Record<string, unknown>) });
+      if (res.ok === false) { setReflActionResult({ action, message: `Action failed: ${(res as Record<string, unknown>).error || 'Unknown error'}` }); } else { setReflActionResult({ action, ...(res.result as Record<string, unknown>) }); }
     } catch (err) { console.error('Reflection action failed:', err); }
     finally { setReflActiveAction(null); }
   };

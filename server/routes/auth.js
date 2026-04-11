@@ -7,6 +7,28 @@ import crypto from "crypto";
 import logger from '../logger.js';
 import { isEmailBanned, scanUsername as scanUsernameGuard } from "../lib/content-guard.js";
 
+// ── In-memory login rate limiter (defense-in-depth) ──────────────────────────
+const _loginAttempts = new Map(); // ip -> { count, resetAt }
+function checkLoginRateLimit(ip) {
+  const now = Date.now();
+  const entry = _loginAttempts.get(ip);
+  if (!entry || now > entry.resetAt) {
+    _loginAttempts.set(ip, { count: 1, resetAt: now + 900000 }); // 15 min window
+    return true;
+  }
+  entry.count++;
+  if (entry.count > 10) return false; // max 10 attempts per 15 min
+  return true;
+}
+// Cleanup stale login rate-limit entries every 30 minutes to prevent memory leak
+const _loginRateLimitCleanup = setInterval(() => {
+  const now = Date.now();
+  for (const [ip, entry] of _loginAttempts) {
+    if (now > entry.resetAt) _loginAttempts.delete(ip);
+  }
+}, 30 * 60 * 1000);
+_loginRateLimitCleanup.unref();
+
 export default function createAuthRouter({
   AuthDB,
   AuditDB,
@@ -171,6 +193,12 @@ export default function createAuthRouter({
   });
 
   router.post("/login", authRateLimitMiddleware, validate("userLogin"), (req, res) => {
+    // In-memory per-IP login rate limiting (defense-in-depth)
+    const ip = req.ip || req.connection.remoteAddress;
+    if (!checkLoginRateLimit(ip)) {
+      return res.status(429).json({ ok: false, error: "Too many login attempts. Try again in 15 minutes." });
+    }
+
     const { username, email, password } = req.validated || req.body;
 
     // Find user by username or email

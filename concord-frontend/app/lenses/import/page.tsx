@@ -116,7 +116,13 @@ export default function ImportLens() {
     if (!artifactId) return;
     runAction.mutate(
       { id: artifactId, action, params: {} },
-      { onSuccess: (res) => setImportActionResult({ action, data: res.result }) }
+      {
+        onSuccess: (res) => setImportActionResult({ action, data: res.result }),
+        onError: (e) => {
+          console.error(`Action failed:`, e);
+          setImportActionResult({ action, data: { error: `Action failed: ${e instanceof Error ? e.message : 'Unknown error'}` } });
+        },
+      }
     );
   }, [importJobItems, runAction]);
 
@@ -307,8 +313,9 @@ export default function ImportLens() {
         } as unknown as Partial<ImportJob>,
         meta: { tags: ['import', action], status: 'active' },
       });
-    } catch {
-      // Error handled silently -- job creation will reflect failure
+    } catch (e) {
+      console.error('Import job creation failed:', e);
+      useUIStore.getState().addToast({ type: 'error', message: 'Import job creation failed' });
     } finally {
       setImporting(false);
     }

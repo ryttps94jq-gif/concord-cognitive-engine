@@ -55,8 +55,8 @@ export default function OrganLensPage() {
     setIsRunning(action);
     try {
       const res = await runAction.mutateAsync({ id: targetId, action });
-      setActionResult(res.result as Record<string, unknown>);
-    } catch (e) { console.error(`Action ${action} failed:`, e); }
+      if (res.ok === false) { setActionResult({ message: `Action failed: ${(res as Record<string, unknown>).error || 'Unknown error'}` }); } else { setActionResult(res.result as Record<string, unknown>); }
+    } catch (e) { console.error(`Action ${action} failed:`, e); setActionResult({ message: `Action failed: ${e instanceof Error ? e.message : 'Unknown error'}` }); }
     finally { setIsRunning(null); }
   };
 
@@ -646,7 +646,7 @@ export default function OrganLensPage() {
                     <p className="text-xs text-neon-green font-semibold mb-1">Hubs</p>
                     <div className="flex flex-wrap gap-1">
                       {(actionResult.hubs as Array<Record<string, unknown>>).map((h, i) => (
-                        <span key={i} className="text-xs bg-neon-green/10 border border-neon-green/20 rounded px-2 py-0.5 text-neon-green">{String(h.name || h.id)}</span>
+                        <span key={i} className="text-xs bg-neon-green/10 border border-neon-green/20 rounded px-2 py-0.5 text-neon-green">{String(h.node || h.name || h.id)}</span>
                       ))}
                     </div>
                   </div>

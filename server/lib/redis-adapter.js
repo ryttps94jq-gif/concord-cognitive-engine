@@ -115,14 +115,20 @@ export async function revokeToken(tokenHash) {
     await _client.sadd("concord:revoked_tokens", tokenHash);
     await _client.expire("concord:revoked_tokens", 86400 * 7); // 7 day TTL
     return true;
-  } catch (err) { console.warn('[redis-adapter] revokeToken failed', err?.message); return false; }
+  } catch (err) {
+    console.error('[Redis] revokeToken failed, token may not be revoked:', err.message);
+    throw err; // fail-loud: callers must know revocation did not persist
+  }
 }
 
 export async function isTokenRevoked(tokenHash) {
   if (!_connected) return false; // Can't check, assume not revoked
   try {
     return await _client.sismember("concord:revoked_tokens", tokenHash) === 1;
-  } catch (err) { console.warn('[redis-adapter] isTokenRevoked check failed', err?.message); return false; }
+  } catch (err) {
+    console.error('[Redis] isTokenRevoked check failed, treating token as revoked (fail-closed):', err.message);
+    return true; // fail-closed: treat as revoked when we can't verify
+  }
 }
 
 // ── Pub/Sub ──
@@ -153,7 +159,10 @@ export async function lockAcquire(lockName, ttlMs = 30000) {
     const key = `concord:lock:${lockName}`;
     const result = await _client.set(key, process.pid.toString(), "PX", ttlMs, "NX");
     return result === "OK";
-  } catch (err) { console.warn('[redis-adapter] lockAcquire failed, failing open', { lockName, err: err?.message }); return true; } // Fail-open: allow operation if Redis errors
+  } catch (err) {
+    console.error('[Redis] lockAcquire failed, denying lock (fail-closed):', err.message);
+    return false; // fail-closed: deny lock when Redis errors
+  }
 }
 
 export async function lockRelease(lockName) {

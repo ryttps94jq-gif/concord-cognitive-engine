@@ -10,7 +10,7 @@ export default function registerCreativeActions(registerLensAction) {
     });
     artifact.data = { ...artifact.data, shotList: shots };
     artifact.updatedAt = new Date().toISOString();
-    return { ok: true, shots, count: shots.length };
+    return { ok: true, result: { shots, count: shots.length } };
   });
 
   registerLensAction("creative", "assetOrganize", (_ctx, artifact, _params) => {
@@ -22,7 +22,7 @@ export default function registerCreativeActions(registerLensAction) {
       organized[cat].push(asset);
     }
     const summary = Object.entries(organized).map(([type, items]) => ({ type, count: items.length }));
-    return { ok: true, categories: summary, totalAssets: assets.length };
+    return { ok: true, result: { categories: summary, totalAssets: assets.length } };
   });
 
   registerLensAction("creative", "budgetTrack", (_ctx, artifact, _params) => {
@@ -36,7 +36,7 @@ export default function registerCreativeActions(registerLensAction) {
       const cat = e.category || 'Other';
       byCategory[cat] = (byCategory[cat] || 0) + (e.amount || 0);
     });
-    return { ok: true, budget, totalSpent, remaining, percentUsed, byCategory, overBudget: remaining < 0 };
+    return { ok: true, result: { budget, totalSpent, remaining, percentUsed, byCategory, overBudget: remaining < 0 } };
   });
 
   registerLensAction("creative", "distributionChecklist", (ctx, artifact, params) => {
@@ -61,6 +61,6 @@ export default function registerCreativeActions(registerLensAction) {
         { platform: 'Social Media', status: 'pending' }, { platform: 'Website Gallery', status: 'pending' },
       ];
     }
-    return { ok: true, checklist, type, total: checklist.length };
+    return { ok: true, result: { checklist, type, total: checklist.length } };
   });
 };

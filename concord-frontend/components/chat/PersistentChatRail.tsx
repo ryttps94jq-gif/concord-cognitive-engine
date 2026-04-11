@@ -486,16 +486,29 @@ export function PersistentChatRail({
       }
     };
 
+    const handleToolResult = (data: unknown) => {
+      const d = data as { tool: string; result: string; ok: boolean; sessionId: string };
+      if (d.sessionId !== sessionId) return;
+      setMessages(prev => [...prev, {
+        id: `tool-${Date.now()}`,
+        role: 'system' as const,
+        content: `\u{1F527} ${d.tool}: ${d.ok ? d.result : `Error: ${d.result}`}`,
+        timestamp: new Date().toISOString(),
+      }]);
+    };
+
     on('chat:status', handleStatus);
     on('chat:token', handleToken);
     on('chat:web_results', handleWebResults);
     on('chat:complete', handleComplete);
+    on('chat:tool_result', handleToolResult);
 
     return () => {
       off('chat:status', handleStatus);
       off('chat:token', handleToken);
       off('chat:web_results', handleWebResults);
       off('chat:complete', handleComplete);
+      off('chat:tool_result', handleToolResult);
     };
   }, [on, off, sessionId, currentLens, memoryRefreshStats]);
 
@@ -950,6 +963,8 @@ export function PersistentChatRail({
                     'max-w-[85%] rounded-xl px-3.5 py-2.5 text-sm leading-relaxed',
                     msg.role === 'user'
                       ? 'bg-blue-600/25 text-zinc-100 border border-blue-500/25'
+                      : msg.role === 'system'
+                      ? 'bg-zinc-900/80 text-zinc-400 border border-zinc-700/30 font-mono text-xs'
                       : 'bg-gradient-to-br from-zinc-800/90 to-zinc-800/60 text-zinc-200 border border-zinc-700/40 shadow-sm shadow-blue-500/5'
                   )}
                 >

@@ -305,7 +305,7 @@ export default function AdminDashboardPage() {
         action: 'auditLog',
         params: { windowMinutes: 60, stdDevThreshold: 2 },
       });
-      setAuditLogResult(res.result as Record<string, unknown>);
+      if (res.ok === false) { setAuditLogResult({ message: `Action failed: ${(res as Record<string, unknown>).error || 'Unknown error'}` }); } else { setAuditLogResult(res.result as Record<string, unknown>); }
     } catch (e) {
       console.error('[Admin] Audit log action failed:', e);
       setAuditLogError(e instanceof Error ? e.message : 'Audit log analysis failed');
@@ -345,7 +345,7 @@ export default function AdminDashboardPage() {
         id: created.artifact.id,
         action: 'permissionMatrix',
       });
-      setPermMatrixResult(res.result as Record<string, unknown>);
+      if (res.ok === false) { setPermMatrixResult({ message: `Action failed: ${(res as Record<string, unknown>).error || 'Unknown error'}` }); } else { setPermMatrixResult(res.result as Record<string, unknown>); }
     } catch (e) {
       console.error('[Admin] Permission matrix action failed:', e);
       setPermMatrixError(e instanceof Error ? e.message : 'Permission matrix analysis failed');
@@ -382,7 +382,7 @@ export default function AdminDashboardPage() {
         id: created.artifact.id,
         action: 'systemHealth',
       });
-      setSysHealthResult(res.result as Record<string, unknown>);
+      if (res.ok === false) { setSysHealthResult({ message: `Action failed: ${(res as Record<string, unknown>).error || 'Unknown error'}` }); } else { setSysHealthResult(res.result as Record<string, unknown>); }
     } catch (e) {
       console.error('[Admin] System health action failed:', e);
       setSysHealthError(e instanceof Error ? e.message : 'System health analysis failed');

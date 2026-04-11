@@ -87,7 +87,7 @@ export default function SportsLensPage() {
     setSportsActiveAction(action);
     try {
       const res = await runSportsAction.mutateAsync({ id, action });
-      setSportsActionResult({ action, ...(res.result as Record<string, unknown>) });
+      if (res.ok === false) { setSportsActionResult({ action, message: `Action failed: ${(res as Record<string, unknown>).error || 'Unknown error'}` }); } else { setSportsActionResult({ action, ...(res.result as Record<string, unknown>) }); }
     } catch (err) { console.error('Sports action failed:', err); }
     finally { setSportsActiveAction(null); }
   }, [items, runSportsAction]);

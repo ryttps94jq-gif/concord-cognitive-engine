@@ -9,7 +9,7 @@ export default function registerCommandCenterActions(registerLensAction) {
    * Aggregate status, identify critical items, compute readiness score.
    * artifact.data.feeds = [{ source, status, items: [{ id, severity, description, timestamp?, resolved? }], metrics?: {} }]
    */
-  registerLensAction("commandcenter", "situationReport", (ctx, artifact, _params) => {
+  registerLensAction("command-center", "situationReport", (ctx, artifact, _params) => {
     const feeds = artifact.data?.feeds || [];
     if (feeds.length === 0) {
       return { ok: true, result: { message: "No data feeds provided." } };
@@ -143,7 +143,7 @@ export default function registerCommandCenterActions(registerLensAction) {
    * artifact.data.incidents = [{ id, source, timestamp, attributes: {}, severity?, description? }]
    * params.timeWindowMs (default 300000 = 5 min), params.minCorrelation (default 0.5)
    */
-  registerLensAction("commandcenter", "incidentCorrelation", (ctx, artifact, params) => {
+  registerLensAction("command-center", "incidentCorrelation", (ctx, artifact, params) => {
     const incidents = artifact.data?.incidents || [];
     if (incidents.length < 2) {
       return { ok: true, result: { message: "Need at least 2 incidents for correlation." } };
@@ -291,7 +291,7 @@ export default function registerCommandCenterActions(registerLensAction) {
    * artifact.data.incident = { id, severity, createdAt, description?, assignee?, slaMinutes?, acknowledged? }
    * artifact.data.escalationPolicy = [{ level, responders: [], slaMinutes, conditions? }]
    */
-  registerLensAction("commandcenter", "escalationEngine", (ctx, artifact, params) => {
+  registerLensAction("command-center", "escalationEngine", (ctx, artifact, params) => {
     const incident = artifact.data?.incident || {};
     const policy = artifact.data?.escalationPolicy || [];
     const now = params.currentTime ? new Date(params.currentTime).getTime() : Date.now();

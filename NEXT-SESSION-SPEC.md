@@ -1,99 +1,122 @@
-# NEXT SESSION SPEC — Lens Frontend Upgrade (COMPLETE)
+# NEXT SESSION SPEC — Premium Lens Engines + Full Lens Audit
 
-**Branch:** `claude/batch-one-lenses-7Z8Bn`
-**Status:** COMPLETE — All 166 lenses wired
-
----
-
-## What Was Done (Previous Sessions)
-
-### Domain Handlers & Identities (COMPLETE)
-- 174/174 domain handler files with real computational logic
-- 174/174 lens identities with unique visual signatures
-- All registered in `server/domains/index.js` and `ALL_LENS_DOMAINS`
-
-### Infrastructure (COMPLETE)
-- Periodic state backup (2h) + 5-min safety net saves
-- Startup script (`startup.sh`) with dev/recovery modes
-- Staggered autonomous intervals (7s offset each, no simultaneous fires)
-- Initiative engine proactive tick (Concord sends first, double-texts, follows up)
-
-### User Sovereignty (COMPLETE)
-- ownerId filtering on lens.get, lens.list, search
-- Default visibility: private
-- Consent enforcement on brain context + DTU lineage
-- Wallet payouts on marketplace sale (instant, idempotent)
-- Real DTU counts (excludes shadow/repair/system padding)
-- Scope hierarchy: local → regional → national → global
-
-### useQuery → useLensData Migration (COMPLETE)
-- 6 files migrated, 4 useLensNav fixes
+**Branch:** `claude/audit-lenses-fix-warnings-HdWQ4`
+**Status:** READY TO IMPLEMENT
 
 ---
 
-## What Was Done This Session — Lens Frontend Upgrade (COMPLETE)
+## Priority 1: Make 7 Core Lenses Best-in-Class
 
-### All 166 Lenses Wired (COMPLETE)
-- **98 UNWIRED lenses**: Added `useRunArtifact`, action handlers, dedicated trigger buttons per action, loading spinners, formatted result displays
-- **68 PARTIAL lenses**: Added action panel UI + replaced raw `JSON.stringify` with contextual formatted displays (stat grids, progress bars, badges, ranked lists)
-- **8 FULLY WIRED lenses**: Already complete (accounting, admin, creative, environment, events, government, paper, reasoning)
+### The Problem
+Most creative/media lenses have polished UI scaffolding but **missing engines**. Studio has a full DAW interface (piano roll, mixer, drum machine) but zero sound. Music has a player that doesn't play. Code uses a textarea. These 7 lenses are the revenue engines — they must work.
 
-### New Domain Handler Created
-- `server/domains/dtus.js` — 5 computational actions:
-  - `lineageAnalysis`: parent chain, child forks, depth, generation stats
-  - `qualityScore`: content/metadata/citation/freshness scoring (grades A-F)
-  - `citationNetwork`: in/out degree, h-index, influence scoring
-  - `tierRecommendation`: promote/demote/maintain based on usage metrics
-  - `duplicateDetection`: trigram similarity + tag overlap for dedup
-- Registered in `server/domains/index.js`
+### Phase 1: Chat + Code (Highest Impact, Lowest Risk)
 
-### Pre-existing Bugs Fixed
-1. `server/domains/plumbing.js` — syntax error (malformed escaped quotes in fixtureCount)
-2. `server/server.js:5236` — `trackedInterval` → `trackedSetInterval` (crash on boot)
-3. `server/server.js` — moderation router missing `asyncHandler` dependency (routes silently skipped)
-4. `server/server.js` — `LLM_READY` now recognizes Ollama from boot (was OpenAI-only)
-5. `server/server.js` — Removed `OPENAI_API_KEY` from `RECOMMENDED_ENV` (Ollama is primary)
-6. `server/server.js` — ~20 frontend→backend action name mismatches resolved via aliases + manifest entries
-7. `concord-frontend/app/lenses/studio/page.tsx` — duplicate `Zap`/`X` imports
-8. `concord-frontend/app/lenses/council/page.tsx` — `HandshakeIcon` → `HeartHandshake` (not in this lucide version)
+#### 1A. Chat — Markdown + Code Rendering
+- **Problem:** `app/lenses/chat/page.tsx` line 1257 renders messages as raw `<p>` text
+- **Fix:** Install `react-markdown`, `remark-gfm`, `rehype-highlight`
+- Create `components/chat/MessageRenderer.tsx` with syntax-highlighted code blocks, GFM tables, styled blockquotes, copy button
+- Replace raw `<p>` at line 1257 with `<MessageRenderer>`
 
-### TypeScript Errors
-- **229 → 0 errors** across all lens pages
-- `npx tsc --noEmit` passes clean
-- Bulk fix: `unknown → ReactNode` casting, missing imports, declaration ordering
+#### 1B. Code — Monaco Editor
+- **Problem:** `app/lenses/code/page.tsx` lines 877, 1241 use plain `<textarea>`
+- **Fix:** Install `@monaco-editor/react`, create `components/code/MonacoWrapper.tsx`
+- Lazy-load Monaco (2MB) with `next/dynamic ssr:false`
+- Custom "Concord Dark" theme matching lattice palette
+- Add `@xterm/xterm` terminal panel for run output
 
-### Field Accuracy Audit
-- 50 lenses audited for backend→frontend field name alignment
-- 4 lenses had mismatches (law, math, hypothesis, calendar) — all fixed
-- Remaining lenses confirmed clean
+### Phase 2: Studio + Music (Core Creative Value)
 
-### Quality Gates Enforced
-- Zero `JSON.stringify` in action result displays
-- Every `registerLensAction` has a dedicated trigger button
-- Loading spinners during execution
-- Formatted contextual result displays (not raw JSON)
-- Dismiss buttons on all result panels
-- ESLint: 0 errors (warnings = unused imports being cleaned)
+#### 2A. Studio — Wire Existing Engine to UI
+- **Key discovery:** `lib/daw/engine.ts` (987 lines) already has working Web Audio API:
+  - `TransportEngine` — lookahead scheduler, metronome, loop, beat tracking
+  - `SynthEngine` — polyphonic subtractive synth with oscillators, filters, ADSR
+  - `DrumMachineEngine` — synthesized kick/snare/hihat/clap
+  - `EffectsChainEngine` — EQ, compressor, reverb, delay, distortion, chorus
+  - `MixerEngine` — per-channel gain/pan + master bus
+  - 8 synth presets
+- **Fix:** Verify/complete wiring between engine and UI components
+  - PianoRoll click → `SynthEngine.noteOn/noteOff`
+  - DrumMachine pad → `DrumMachineEngine.triggerPad`
+  - Mixer faders → `MixerEngine` channel gains
+  - Add Web MIDI input (~80 lines)
+  - Add WAV export via `OfflineAudioContext` bounce
 
-### Verification
-- `next build` passes (all 166 lens pages compile)
-- `tsc --noEmit` returns 0 errors
-- Server boots clean: 175 domains, 5285 actions, 0 FATAL/ERROR
-- All 174 domain handlers load with 0 syntax errors, 653 registered actions
-- API endpoints respond: /health, /version, /lens/list all OK
+#### 2B. Music — Real Playback
+- **Key discovery:** `lib/music/player.ts` (251 lines) is complete HTML5 Audio player with Web Audio analyser and Media Session API
+- **Fix:** Wire UploadFlow to artifact API, wire track clicks to player, mount NowPlayingBar globally
+
+### Phase 3: Social + Artistry (Network Effects)
+
+#### 3A. Social — Infinite Scroll + DMs
+- Feed page (1,523 lines) + social components (5,663 lines) already exist
+- **Fix:** Add `useInfiniteQuery` + `react-virtuoso` (both already installed), build DM interface
+
+#### 3B. Artistry — Canvas Drawing
+- **Fix:** Install `@excalidraw/excalidraw` (single React component, dark mode built in)
+- Mount in Artistry "Studio" tab, export to DTU via artifact API
+
+### Phase 4: Film (Deepest Lift)
+
+#### 4A. Film — Video Upload + Player + Timeline
+- Wire video upload via artifact API, use existing UniversalPlayer
+- Build clip timeline, add server-side FFmpeg concat
+
+### New Dependencies
+| Package | Lens | Size | License |
+|---------|------|------|---------|
+| `react-markdown` | Chat | ~50KB | MIT |
+| `remark-gfm` | Chat | ~10KB | MIT |
+| `rehype-highlight` | Chat | ~20KB | MIT |
+| `@monaco-editor/react` | Code | ~2MB (lazy) | MIT |
+| `@xterm/xterm` | Code | ~400KB | MIT |
+| `@excalidraw/excalidraw` | Artistry | ~1.5MB (lazy) | MIT |
+| `fluent-ffmpeg` (server) | Film | ~50KB | MIT |
 
 ---
 
-## What's Next
+## Priority 2: Full Lens Engine Audit (After the 7)
 
-### Incremental Verification
-- [ ] Click through all lenses in browser — verify action buttons work end-to-end
-- [ ] Test socket/realtime: open two tabs, create DTU, verify live feed updates
-- [ ] Run `npm test` and fix any failing tests
+After fixing the 7 core lenses, audit ALL 175 lenses for the same "UI shell with no engine" pattern. Check every lens involving:
 
-### Architecture Notes
-- LLM routing: 4-brain Ollama architecture (conscious, subconscious, utility, repair)
-- Default pipeline mode: `local_first` (Ollama → OpenAI fallback)
-- Domain actions (653) are computational — work without any LLM
-- Universal actions (analyze, generate, suggest) require Ollama for AI features
-- Pod `.env` controls: `BRAIN_CONSCIOUS_URL`, `OLLAMA_HOST`, `JWT_SECRET`, `ADMIN_PASSWORD`
+- **Media creation** (animation, photography, podcast, voice, ar, fractal, game, sim)
+- **Real-time interaction** (collab, whiteboard, board, forum, debate)
+- **External integrations** (import, export, ingest, integrations)
+- **Data visualization** (graph, analytics, resonance, timeline)
+
+### Specific lenses to check:
+- `animation` — animates or just manages project data?
+- `podcast` — records/plays audio or just metadata?
+- `voice` — speech recognition or just voice notes?
+- `ar` — renders 3D (Three.js in deps) or just project data?
+- `game` — runs games or just design data?
+- `sim` — simulates or just manages parameters?
+- `whiteboard` — draws or just manages board data?
+- `collab` — real-time editing or just tracks changes?
+- `graph` — renders force graphs or just data?
+
+---
+
+## What Was Completed This Session
+
+### Code Quality
+- All 175 lenses field-audited, all mismatches fixed
+- 1958 tests passing, 0 TS errors, 0 eslint no-explicit-any
+- 42 new backend action handlers built across 14 domains
+- 9 manifest macro mismatches + 2 domain naming mismatches fixed
+
+### Chat System (5 root causes fixed)
+- WebSocket crash bug, missing DTU context, DTU-title dump fallback, tools disabled, LLM_READY false positive
+- Web search, token streaming, personality persistence, accelerated DTU promotion all wired
+
+### Real-time Pipeline
+- All 11 socket events wired (heartbeat, beacon, resonance, city streaming, etc.)
+- Web DTU pipeline connected, city streaming integrated, ThoughtStream fixed
+
+### Security & Ops
+- DTU/lens delete ownership validation, state mutation locking, auth rate limiting
+- Redis fail-closed, server false-ok fixes, health endpoint improvements
+- Ingest engine real URL fetching
+
+### Visual Design
+- WCAG AA text contrast, gradient buttons, card shadows, softer labels, faster transitions

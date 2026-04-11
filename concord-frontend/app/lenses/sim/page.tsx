@@ -482,12 +482,14 @@ export default function SimLensPage() {
       useUIStore.getState().addToast({ type: 'error', message: 'Mark at least one parameter as sensitive in the Parameter Space Explorer to run sensitivity analysis.' });
       return;
     }
-    await runArtifactAction.mutateAsync({
-      id: scenario.id,
-      action: 'sensitivityAnalysis',
-      params: { variables: sensitiveVars.map(v => v.name), iterations: scenario.iterations },
-    });
-    setActiveTab('results');
+    try {
+      await runArtifactAction.mutateAsync({
+        id: scenario.id,
+        action: 'sensitivityAnalysis',
+        params: { variables: sensitiveVars.map(v => v.name), iterations: scenario.iterations },
+      });
+      setActiveTab('results');
+    } catch (e) { console.error('Sensitivity analysis failed:', e); useUIStore.getState().addToast({ type: 'error', message: `Sensitivity analysis failed: ${e instanceof Error ? e.message : 'Unknown error'}` }); }
   }, [runArtifactAction]);
 
   const handleExportResults = useCallback((run: SimRun) => {
@@ -642,7 +644,7 @@ export default function SimLensPage() {
     try {
       const artifactId = scenarioArtifacts[0]?.id || 'sim';
       const res = await runArtifactAction.mutateAsync({ id: artifactId, action });
-      setter((res.result as Record<string, unknown>) || null);
+      if (res.ok === false) { setter({ message: `Action failed: ${(res as Record<string, unknown>).error || 'Unknown error'}` } as Record<string, unknown>); } else { setter((res.result as Record<string, unknown>) || null); }
     } catch (e) {
       console.error(`Sim action ${action} failed:`, e);
     }

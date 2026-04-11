@@ -9,13 +9,13 @@ export default function registerGovernmentActions(registerLensAction) {
     const permitType = artifact.data?.type || 'general';
     const benchmarks = { building: 30, electrical: 14, plumbing: 14, grading: 21, business: 10, general: 21 };
     const benchmark = benchmarks[permitType] || 21;
-    return { ok: true, permitId: artifact.id, permitType, processingDays, benchmark, onTime: processingDays !== null ? processingDays <= benchmark : null };
+    return { ok: true, result: { permitId: artifact.id, permitType, processingDays, benchmark, onTime: processingDays !== null ? processingDays <= benchmark : null } };
   });
 
   registerLensAction("government", "violationEscalation", (ctx, artifact, _params) => {
     const deadline = artifact.data?.complianceDeadline ? new Date(artifact.data.complianceDeadline) : null;
     const now = new Date();
-    if (!deadline) return { ok: true, escalated: false, message: "No compliance deadline set" };
+    if (!deadline) return { ok: true, result: { escalated: false, message: "No compliance deadline set" } };
     const pastDeadline = now > deadline;
     const daysPast = pastDeadline ? Math.ceil((now - deadline) / (1000 * 60 * 60 * 24)) : 0;
     if (pastDeadline && artifact.meta?.status !== 'escalated') {
@@ -23,7 +23,7 @@ export default function registerGovernmentActions(registerLensAction) {
       artifact.data = { ...artifact.data, escalatedAt: now.toISOString(), daysPastDeadline: daysPast };
       artifact.updatedAt = now.toISOString();
     }
-    return { ok: true, violationId: artifact.id, escalated: pastDeadline, daysPast, currentStatus: artifact.meta?.status };
+    return { ok: true, result: { violationId: artifact.id, escalated: pastDeadline, daysPast, currentStatus: artifact.meta?.status } };
   });
 
   registerLensAction("government", "resourceStaging", (ctx, artifact, params) => {
@@ -36,7 +36,7 @@ export default function registerGovernmentActions(registerLensAction) {
       }));
       return { zone: zone.name || zone.id, population: zone.population || 0, riskLevel: zone.riskLevel || 'medium', resources: assignedResources };
     });
-    return { ok: true, threatType, staging, totalZones: zones.length, totalResources: resources.length, activationLevel: artifact.data?.activationLevel || 'standby' };
+    return { ok: true, result: { threatType, staging, totalZones: zones.length, totalResources: resources.length, activationLevel: artifact.data?.activationLevel || 'standby' } };
   });
 
   registerLensAction("government", "retentionCheck", (ctx, artifact, _params) => {
@@ -48,13 +48,15 @@ export default function registerGovernmentActions(registerLensAction) {
     const classification = artifact.data?.classification || 'public';
     return {
       ok: true,
-      recordId: artifact.id,
-      retentionPeriod,
-      yearsHeld: Math.round(yearsHeld * 10) / 10,
-      pastRetention,
-      classification,
-      recommendation: pastRetention ? 'eligible_for_disposition' : 'retain',
-      yearsRemaining: Math.max(0, Math.round((retentionPeriod - yearsHeld) * 10) / 10),
+      result: {
+        recordId: artifact.id,
+        retentionPeriod,
+        yearsHeld: Math.round(yearsHeld * 10) / 10,
+        pastRetention,
+        classification,
+        recommendation: pastRetention ? 'eligible_for_disposition' : 'retain',
+        yearsRemaining: Math.max(0, Math.round((retentionPeriod - yearsHeld) * 10) / 10),
+      },
     };
   });
 };

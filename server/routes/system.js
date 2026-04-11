@@ -61,6 +61,7 @@ export default function registerSystemRoutes(app, {
   _auditLog,
   AUDIT_LOG,
   computeSubstrateStats,
+  getDbStatus,
 }) {
 
   // ---- Root ----
@@ -89,6 +90,10 @@ export default function registerSystemRoutes(app, {
       checks.memoryPressure = true;
       healthy = false;
     }
+    const dbStatus = typeof getDbStatus === 'function' ? getDbStatus() : {};
+    checks.postgres = { connected: !!dbStatus.pgPool, status: dbStatus.pgPool ? 'connected' : 'in-memory-fallback' };
+    checks.redis = { connected: !!dbStatus.redisClient, status: dbStatus.redisClient ? 'connected' : 'in-memory-fallback' };
+    checks.saveFailures = STATE._saveFailures || 0;
     res.status(healthy ? 200 : 503).json({
       status: healthy ? "healthy" : "degraded",
       version: VERSION,
@@ -468,6 +473,7 @@ export default function registerSystemRoutes(app, {
 
   // ---- Health API ----
   app.get("/api/health", (req, res) => {
+    const dbStatus = typeof getDbStatus === 'function' ? getDbStatus() : {};
     const health = {
       status: "healthy",
       version: VERSION,
@@ -480,7 +486,10 @@ export default function registerSystemRoutes(app, {
         llm: LLM_READY ? "ok" : "disabled",
         organs: (STATE.organs?.size || 0) > 0 ? "ok" : "warning",
         growth: STATE.growth ? "ok" : "warning"
-      }
+      },
+      postgres: { connected: !!dbStatus.pgPool, status: dbStatus.pgPool ? 'connected' : 'in-memory-fallback' },
+      redis: { connected: !!dbStatus.redisClient, status: dbStatus.redisClient ? 'connected' : 'in-memory-fallback' },
+      saveFailures: STATE._saveFailures || 0,
     };
     const hasErrors = Object.values(health.checks).some(v => v === "error");
     health.status = hasErrors ? "unhealthy" : "healthy";

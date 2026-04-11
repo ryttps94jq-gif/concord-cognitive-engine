@@ -840,7 +840,12 @@ export default function ReasoningLensPage() {
     if (!artifactId) return;
     runAction.mutate(
       { id: artifactId, action: 'validate_logic', params: { chainId: selectedChain } },
-      { onSuccess: () => queryClient.invalidateQueries({ queryKey: ['reasoning-chains'] }) }
+      {
+        onSuccess: () => queryClient.invalidateQueries({ queryKey: ['reasoning-chains'] }),
+        onError: (e) => {
+          console.error('Action failed:', e);
+        },
+      }
     );
   }, [selectedChain, chainArtifacts, runAction, queryClient]);
 
@@ -857,6 +862,9 @@ export default function ReasoningLensPage() {
             setFallacyFlags((prev) => [...prev, ...detected.fallacies!]);
           }
         },
+        onError: (e) => {
+          console.error('Action failed:', e);
+        },
       }
     );
   }, [selectedChain, chainArtifacts, runAction]);
@@ -865,7 +873,14 @@ export default function ReasoningLensPage() {
     if (!selectedChain) return;
     const artifactId = chainArtifacts[0]?.id;
     if (!artifactId) return;
-    runAction.mutate({ id: artifactId, action: 'assess_strength', params: { chainId: selectedChain } });
+    runAction.mutate(
+      { id: artifactId, action: 'assess_strength', params: { chainId: selectedChain } },
+      {
+        onError: (e) => {
+          console.error('Action failed:', e);
+        },
+      }
+    );
   }, [selectedChain, chainArtifacts, runAction]);
 
   const handleExportMap = useCallback(() => {

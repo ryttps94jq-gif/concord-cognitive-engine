@@ -398,7 +398,7 @@ export default function registerHelpersExtendedRoutes(app, {
     try {
       const allowed = globalThis._checkPermission?.(orgId || "default", userId, permission) ?? true;
       res.json({ ok: true, userId, permission, allowed });
-    } catch (e) { res.json({ ok: true, userId, permission, allowed: true }); }
+    } catch (e) { res.json({ ok: false, allowed: false, error: 'permission_check_error' }); }
   });
 
   // RBAC custom roles CRUD
@@ -440,7 +440,7 @@ export default function registerHelpersExtendedRoutes(app, {
     try {
       const role = globalThis._getUserRole?.("default", req.params.userId);
       res.json({ ok: true, userId: req.params.userId, roles: role ? [role] : ["guest"] });
-    } catch { res.json({ ok: true, userId: req.params.userId, roles: ["guest"] }); }
+    } catch { res.json({ ok: true, userId: req.params.userId, roles: ["guest"], warning: 'role_lookup_failed' }); }
   });
 
   // ── DTU Extended ───────────────────────────────────────────────────────

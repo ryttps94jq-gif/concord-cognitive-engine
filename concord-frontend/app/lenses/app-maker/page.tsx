@@ -42,8 +42,8 @@ export default function AppMakerLens() {
     setIsRunning(action);
     try {
       const res = await runAction.mutateAsync({ id: targetId, action });
-      setActionResult(res.result as Record<string, unknown>);
-    } catch (e) { console.error(`Action ${action} failed:`, e); }
+      if (res.ok === false) { setActionResult({ message: `Action failed: ${(res as Record<string, unknown>).error || 'Unknown error'}` }); } else { setActionResult(res.result as Record<string, unknown>); }
+    } catch (e) { console.error(`Action ${action} failed:`, e); setActionResult({ message: `Action failed: ${e instanceof Error ? e.message : 'Unknown error'}` }); }
     setIsRunning(null);
   };
 
@@ -64,7 +64,7 @@ export default function AppMakerLens() {
     try {
       const resp = await apiHelpers.apps.list();
       setApps(resp.data?.apps || []);
-    } catch (e) { console.error('[AppMaker] Failed to load apps:', e); }
+    } catch (e) { console.error('[AppMaker] Failed to load apps:', e); useUIStore.getState().addToast({ type: 'error', message: 'Failed to load apps' }); }
     setLoading(false);
   };
 

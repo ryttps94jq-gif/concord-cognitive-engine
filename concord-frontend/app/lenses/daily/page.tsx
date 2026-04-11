@@ -26,6 +26,7 @@ interface SessionLog { id: string; project: string; duration: number; category: 
 interface AudioClip { id: string; name: string; duration: number; waveform: number[]; recordedAt: string }
 interface Reminder { id: string; title: string; dueAt: string; completed: boolean }
 interface PracticeSession { id: string; skill: string; duration: number; completedAt: string }
+interface HabitEntry { habit: string; currentStreak: number; status: string }
 
 // -- Demo data --------------------------------------------------------------
 const QUOTES = [
@@ -777,67 +778,68 @@ export default function DailyLensPage() {
             </button>
             <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">Result</p>
             {(() => {
-              const r = (actionResult as any)?.result ?? actionResult;
+              const r = (actionResult?.['result'] as Record<string, unknown> | undefined) ?? actionResult;
+              const errorMsg = typeof actionResult?.['error'] === 'string' ? (actionResult['error'] as string) : null;
               if (!r) return null;
               return (
                 <div className="text-xs space-y-3 max-h-72 overflow-y-auto">
                   {/* Error */}
-                  {(actionResult as any)?.error && (
-                    <p className="text-red-400">{(actionResult as any).error}</p>
-                  )}
+                  {errorMsg != null ? (
+                    <p className="text-red-400">{String(errorMsg)}</p>
+                  ) : null}
                   {/* Message-only result */}
-                  {r?.message && !r?.error && (
-                    <p className="text-gray-300">{r.message}</p>
-                  )}
+                  {r?.message != null && !r?.error ? (
+                    <p className="text-gray-300">{String(r.message)}</p>
+                  ) : null}
 
                   {/* dailySummary */}
-                  {r?.productivityScore !== undefined && (
+                  {r?.productivityScore !== undefined ? (
                     <div className="space-y-2">
                       <div className="flex items-center gap-2">
                         <span className="text-gray-500">Date:</span>
-                        <span className="text-gray-200">{r.date}</span>
-                        <span className="ml-auto text-gray-500">Mood: <span className="text-neon-cyan">{r.mood}</span></span>
+                        <span className="text-gray-200">{String(r.date)}</span>
+                        <span className="ml-auto text-gray-500">Mood: <span className="text-neon-cyan">{String(r.mood)}</span></span>
                       </div>
                       <div className="grid grid-cols-2 gap-2">
                         <div className="p-2 bg-lattice-bg rounded text-center">
-                          <p className="text-lg font-bold text-neon-green">{r.productivityScore}</p>
+                          <p className="text-lg font-bold text-neon-green">{String(r.productivityScore)}</p>
                           <p className="text-[10px] text-gray-500">Productivity Score</p>
                         </div>
                         <div className="p-2 bg-lattice-bg rounded text-center">
-                          <p className="text-lg font-bold text-neon-cyan">{r.completionRate}%</p>
+                          <p className="text-lg font-bold text-neon-cyan">{String(r.completionRate)}%</p>
                           <p className="text-[10px] text-gray-500">Task Completion</p>
                         </div>
                       </div>
                       <div className="w-full bg-lattice-bg rounded-full h-2">
-                        <div className="bg-neon-green h-2 rounded-full" style={{ width: `${Math.min(r.completionRate as number, 100)}%` }} />
+                        <div className="bg-neon-green h-2 rounded-full" style={{ width: `${Math.min(Number(r.completionRate), 100)}%` }} />
                       </div>
                       <div className="grid grid-cols-3 gap-2">
                         <div className="p-2 bg-lattice-bg rounded text-center">
-                          <p className="font-bold text-neon-blue">{r.tasksCompleted}/{r.totalTasks}</p>
+                          <p className="font-bold text-neon-blue">{String(r.tasksCompleted)}/{String(r.totalTasks)}</p>
                           <p className="text-[10px] text-gray-500">Tasks</p>
                         </div>
                         <div className="p-2 bg-lattice-bg rounded text-center">
-                          <p className="font-bold text-neon-cyan">{r.totalFocusMinutes}m</p>
+                          <p className="font-bold text-neon-cyan">{String(r.totalFocusMinutes)}m</p>
                           <p className="text-[10px] text-gray-500">Focus</p>
                         </div>
                         <div className="p-2 bg-lattice-bg rounded text-center">
-                          <p className="font-bold text-gray-300">{r.entriesLogged}</p>
+                          <p className="font-bold text-gray-300">{String(r.entriesLogged)}</p>
                           <p className="text-[10px] text-gray-500">Entries</p>
                         </div>
                       </div>
                     </div>
-                  )}
+                  ) : null}
 
                   {/* habitStreak */}
-                  {r?.habits !== undefined && r?.totalHabits !== undefined && (
+                  {r?.habits !== undefined && r?.totalHabits !== undefined ? (
                     <div className="space-y-2">
                       <div className="flex items-center gap-2">
                         <span className="text-gray-500">Active habits:</span>
-                        <span className="text-neon-green font-bold">{r.activeHabits}</span>
-                        <span className="text-gray-500">/ {r.totalHabits}</span>
+                        <span className="text-neon-green font-bold">{String(r.activeHabits)}</span>
+                        <span className="text-gray-500">/ {String(r.totalHabits)}</span>
                       </div>
                       <div className="space-y-1">
-                        {((r.habits as any[]) || []).map((h: any) => (
+                        {((r.habits as HabitEntry[]) || []).map((h: HabitEntry) => (
                           <div key={h.habit} className="space-y-0.5">
                             <div className="flex items-center justify-between">
                               <span className="text-gray-200">{h.habit}</span>
@@ -855,36 +857,36 @@ export default function DailyLensPage() {
                         ))}
                       </div>
                     </div>
-                  )}
+                  ) : null}
 
                   {/* focusTimer */}
-                  {r?.pomodorosCompleted !== undefined && (
+                  {r?.pomodorosCompleted !== undefined ? (
                     <div className="space-y-2">
                       <div className="flex items-center gap-2">
                         <span className="text-gray-500">Date:</span>
-                        <span className="text-gray-200">{r.date}</span>
+                        <span className="text-gray-200">{String(r.date)}</span>
                       </div>
                       <div className="grid grid-cols-3 gap-2">
                         <div className="p-2 bg-lattice-bg rounded text-center">
-                          <p className="text-sm font-bold text-neon-green">{r.totalHours}h</p>
+                          <p className="text-sm font-bold text-neon-green">{String(r.totalHours)}h</p>
                           <p className="text-[10px] text-gray-500">Focus Today</p>
                         </div>
                         <div className="p-2 bg-lattice-bg rounded text-center">
-                          <p className="text-sm font-bold text-neon-cyan">{r.sessionsToday}</p>
+                          <p className="text-sm font-bold text-neon-cyan">{String(r.sessionsToday)}</p>
                           <p className="text-[10px] text-gray-500">Sessions</p>
                         </div>
                         <div className="p-2 bg-lattice-bg rounded text-center">
-                          <p className="text-sm font-bold text-yellow-400">{r.pomodorosCompleted}</p>
+                          <p className="text-sm font-bold text-yellow-400">{String(r.pomodorosCompleted)}</p>
                           <p className="text-[10px] text-gray-500">Pomodoros</p>
                         </div>
                       </div>
                       <div className="space-y-1">
                         <div className="flex items-center justify-between text-[10px] text-gray-500">
-                          <span>Daily target ({r.targetMinutes}m)</span>
-                          <span>{r.progress}%</span>
+                          <span>Daily target ({String(r.targetMinutes)}m)</span>
+                          <span>{String(r.progress)}%</span>
                         </div>
                         <div className="w-full bg-lattice-bg rounded-full h-2">
-                          <div className={`h-2 rounded-full ${(r.progress as number) >= 100 ? 'bg-neon-green' : 'bg-neon-cyan'}`} style={{ width: `${Math.min(r.progress as number, 100)}%` }} />
+                          <div className={`h-2 rounded-full ${Number(r.progress) >= 100 ? 'bg-neon-green' : 'bg-neon-cyan'}`} style={{ width: `${Math.min(Number(r.progress), 100)}%` }} />
                         </div>
                       </div>
                       {Object.keys(r.byCategory as Record<string, unknown> || {}).length > 0 && (
@@ -898,42 +900,42 @@ export default function DailyLensPage() {
                         </div>
                       )}
                     </div>
-                  )}
+                  ) : null}
 
                   {/* weeklyReview */}
-                  {r?.daysTracked !== undefined && r?.totalFocusHours !== undefined && (
+                  {r?.daysTracked !== undefined && r?.totalFocusHours !== undefined ? (
                     <div className="space-y-2">
                       <div className="grid grid-cols-2 gap-2">
                         <div className="p-2 bg-lattice-bg rounded text-center">
-                          <p className="text-sm font-bold text-neon-green">{r.totalTasksCompleted}</p>
+                          <p className="text-sm font-bold text-neon-green">{String(r.totalTasksCompleted)}</p>
                           <p className="text-[10px] text-gray-500">Tasks Done</p>
                         </div>
                         <div className="p-2 bg-lattice-bg rounded text-center">
-                          <p className="text-sm font-bold text-neon-cyan">{r.totalFocusHours}h</p>
+                          <p className="text-sm font-bold text-neon-cyan">{String(r.totalFocusHours)}h</p>
                           <p className="text-[10px] text-gray-500">Focus Hours</p>
                         </div>
                       </div>
                       <div className="grid grid-cols-3 gap-2">
                         <div className="p-2 bg-lattice-bg rounded text-center">
-                          <p className="font-bold text-gray-300">{r.daysTracked}</p>
+                          <p className="font-bold text-gray-300">{String(r.daysTracked)}</p>
                           <p className="text-[10px] text-gray-500">Days</p>
                         </div>
                         <div className="p-2 bg-lattice-bg rounded text-center">
-                          <p className="font-bold text-yellow-400">{r.avgTasksPerDay}</p>
+                          <p className="font-bold text-yellow-400">{String(r.avgTasksPerDay)}</p>
                           <p className="text-[10px] text-gray-500">Avg Tasks/Day</p>
                         </div>
                         <div className="p-2 bg-lattice-bg rounded text-center">
-                          <p className="font-bold text-neon-blue">{r.avgMood ?? '—'}</p>
+                          <p className="font-bold text-neon-blue">{String(r.avgMood ?? '—')}</p>
                           <p className="text-[10px] text-gray-500">Avg Mood</p>
                         </div>
                       </div>
                       <div className="flex items-center gap-2 text-gray-400">
                         <span>Best day:</span>
-                        <span className="text-neon-green">{r.bestDay}</span>
-                        <span className="ml-auto text-gray-500">{r.avgFocusPerDay}m avg focus</span>
+                        <span className="text-neon-green">{String(r.bestDay)}</span>
+                        <span className="ml-auto text-gray-500">{String(r.avgFocusPerDay)}m avg focus</span>
                       </div>
                     </div>
-                  )}
+                  ) : null}
                 </div>
               );
             })()}

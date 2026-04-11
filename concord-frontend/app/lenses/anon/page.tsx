@@ -60,8 +60,8 @@ export default function AnonLensPage() {
     setIsRunning(action);
     try {
       const res = await runAction.mutateAsync({ id: targetId, action });
-      setActionResult(res.result as Record<string, unknown>);
-    } catch (e) { console.error(`Action ${action} failed:`, e); }
+      if (res.ok === false) { setActionResult({ message: `Action failed: ${(res as Record<string, unknown>).error || 'Unknown error'}` }); } else { setActionResult(res.result as Record<string, unknown>); }
+    } catch (e) { console.error(`Action ${action} failed:`, e); setActionResult({ message: `Action failed: ${e instanceof Error ? e.message : 'Unknown error'}` }); }
     setIsRunning(null);
   };
   const identity = identityItems.length > 0 ? identityItems[0].data : null;
@@ -174,13 +174,13 @@ export default function AnonLensPage() {
             </div>
 
             {/* Anonymize Result */}
-            {actionResult.kLevel !== undefined && actionResult.generalizationLevel !== undefined && (
+            {actionResult.k !== undefined && actionResult.generalizationLevel !== undefined && (
               <div className="space-y-3">
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                  <div className="p-2 bg-lattice-surface rounded text-center"><p className="text-sm font-bold text-neon-green">{actionResult.kLevel as number}</p><p className="text-[10px] text-gray-500">K-Anonymity</p></div>
+                  <div className="p-2 bg-lattice-surface rounded text-center"><p className="text-sm font-bold text-neon-green">{actionResult.k as number}</p><p className="text-[10px] text-gray-500">K-Anonymity</p></div>
                   <div className="p-2 bg-lattice-surface rounded text-center"><p className="text-sm font-bold text-neon-cyan">{actionResult.generalizationLevel as number}</p><p className="text-[10px] text-gray-500">Gen Level</p></div>
                   <div className="p-2 bg-lattice-surface rounded text-center"><p className="text-sm font-bold text-neon-purple">{actionResult.equivalenceClasses as number}</p><p className="text-[10px] text-gray-500">Equiv Classes</p></div>
-                  <div className="p-2 bg-lattice-surface rounded text-center"><p className="text-sm font-bold text-white">{((actionResult.informationLoss as number) * 100).toFixed(1)}%</p><p className="text-[10px] text-gray-500">Info Loss</p></div>
+                  <div className="p-2 bg-lattice-surface rounded text-center"><p className="text-sm font-bold text-white">{(actionResult.informationLoss as number).toFixed(1)}%</p><p className="text-[10px] text-gray-500">Info Loss</p></div>
                 </div>
                 {(actionResult.quasiIdentifiers as string[])?.length > 0 && (
                   <div className="flex flex-wrap gap-1">
@@ -190,7 +190,7 @@ export default function AnonLensPage() {
                   </div>
                 )}
                 <div className="flex items-center gap-2 text-xs">
-                  {(actionResult.kSatisfied as boolean)
+                  {(actionResult.kAchieved as boolean)
                     ? <span className="flex items-center gap-1 text-neon-green"><CheckCircle className="w-3 h-3" /> K-anonymity satisfied</span>
                     : <span className="flex items-center gap-1 text-red-400"><AlertTriangle className="w-3 h-3" /> K-anonymity NOT satisfied</span>
                   }
@@ -199,22 +199,22 @@ export default function AnonLensPage() {
             )}
 
             {/* Privacy Risk Result */}
-            {actionResult.overallRisk !== undefined && actionResult.reidentificationRisk !== undefined && (
+            {actionResult.overallRiskLevel !== undefined && actionResult.attackModels !== undefined && (
               <div className="space-y-3">
                 <div className="flex items-center gap-3">
-                  <div className={`text-3xl font-bold ${(actionResult.riskLevel as string) === 'critical' || (actionResult.riskLevel as string) === 'high' ? 'text-red-400' : (actionResult.riskLevel as string) === 'moderate' ? 'text-yellow-400' : 'text-green-400'}`}>
-                    {((actionResult.overallRisk as number) * 100).toFixed(0)}%
+                  <div className={`text-3xl font-bold ${(actionResult.overallRiskLevel as string) === 'critical' || (actionResult.overallRiskLevel as string) === 'high' ? 'text-red-400' : (actionResult.overallRiskLevel as string) === 'moderate' ? 'text-yellow-400' : 'text-green-400'}`}>
+                    {(actionResult.attackModels as Record<string, Record<string, unknown>>)?.prosecutor?.risk as number}%
                   </div>
                   <div>
-                    <span className={`text-xs font-medium px-2 py-0.5 rounded uppercase ${(actionResult.riskLevel as string) === 'critical' || (actionResult.riskLevel as string) === 'high' ? 'bg-red-500/20 text-red-400' : (actionResult.riskLevel as string) === 'moderate' ? 'bg-yellow-500/20 text-yellow-400' : 'bg-green-500/20 text-green-400'}`}>
-                      {actionResult.riskLevel as string} risk
+                    <span className={`text-xs font-medium px-2 py-0.5 rounded uppercase ${(actionResult.overallRiskLevel as string) === 'critical' || (actionResult.overallRiskLevel as string) === 'high' ? 'bg-red-500/20 text-red-400' : (actionResult.overallRiskLevel as string) === 'moderate' ? 'bg-yellow-500/20 text-yellow-400' : 'bg-green-500/20 text-green-400'}`}>
+                      {actionResult.overallRiskLevel as string} risk
                     </span>
-                    <p className="text-xs text-gray-400 mt-1">Re-identification: {((actionResult.reidentificationRisk as number) * 100).toFixed(1)}%</p>
+                    <p className="text-xs text-gray-400 mt-1">Prosecutor risk: {(actionResult.attackModels as Record<string, Record<string, unknown>>)?.prosecutor?.risk as number}%</p>
                   </div>
                 </div>
-                {(actionResult.vulnerabilities as string[])?.length > 0 && (
+                {(actionResult.recommendations as string[])?.length > 0 && (
                   <div className="space-y-1">
-                    {(actionResult.vulnerabilities as string[]).map((v, i) => (
+                    {(actionResult.recommendations as string[]).map((v, i) => (
                       <div key={i} className="flex items-center gap-2 text-xs text-red-400 bg-red-500/10 p-1.5 rounded">
                         <AlertTriangle className="w-3 h-3 flex-shrink-0" /> {v}
                       </div>
@@ -225,22 +225,22 @@ export default function AnonLensPage() {
             )}
 
             {/* Differential Privacy Result */}
-            {actionResult.epsilon !== undefined && actionResult.mechanism !== undefined && (
+            {(actionResult.privacyParameters as Record<string, unknown>)?.epsilon !== undefined && (
               <div className="space-y-3">
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                  <div className="p-2 bg-lattice-surface rounded text-center"><p className="text-sm font-bold text-neon-purple">{actionResult.epsilon as number}</p><p className="text-[10px] text-gray-500">Epsilon (ε)</p></div>
-                  <div className="p-2 bg-lattice-surface rounded text-center"><p className="text-sm font-bold text-neon-cyan">{actionResult.mechanism as string}</p><p className="text-[10px] text-gray-500">Mechanism</p></div>
-                  <div className="p-2 bg-lattice-surface rounded text-center"><p className="text-sm font-bold text-neon-green">{actionResult.noiseScale as number}</p><p className="text-[10px] text-gray-500">Noise Scale</p></div>
-                  <div className="p-2 bg-lattice-surface rounded text-center"><p className="text-sm font-bold text-white">{actionResult.recordCount as number}</p><p className="text-[10px] text-gray-500">Records</p></div>
+                  <div className="p-2 bg-lattice-surface rounded text-center"><p className="text-sm font-bold text-neon-purple">{(actionResult.privacyParameters as Record<string, unknown>)?.epsilon as number}</p><p className="text-[10px] text-gray-500">Epsilon (ε)</p></div>
+                  <div className="p-2 bg-lattice-surface rounded text-center"><p className="text-sm font-bold text-neon-cyan">{(actionResult.privacyParameters as Record<string, unknown>)?.privacyLevel as string}</p><p className="text-[10px] text-gray-500">Privacy Level</p></div>
+                  <div className="p-2 bg-lattice-surface rounded text-center"><p className="text-sm font-bold text-neon-green">{(actionResult.budgetTracking as Record<string, unknown>)?.cumulative as number}</p><p className="text-[10px] text-gray-500">Budget Used</p></div>
+                  <div className="p-2 bg-lattice-surface rounded text-center"><p className="text-sm font-bold text-white">{(actionResult.privacyParameters as Record<string, unknown>)?.queriesProcessed as number}</p><p className="text-[10px] text-gray-500">Queries</p></div>
                 </div>
                 <div className="text-xs text-gray-400">
-                  Privacy guarantee: {(actionResult.privacyLevel as string) || 'standard'}
+                  Privacy guarantee: {((actionResult.privacyParameters as Record<string, unknown>)?.privacyLevel as string) || 'standard'}
                 </div>
               </div>
             )}
 
             {/* Fallback */}
-            {!!actionResult.message && !actionResult.kLevel && !actionResult.overallRisk && !actionResult.epsilon && (
+            {!!actionResult.message && !actionResult.k && !actionResult.overallRiskLevel && !(actionResult.privacyParameters as Record<string, unknown>)?.epsilon && (
               <p className="text-sm text-gray-400">{actionResult.message as string}</p>
             )}
           </motion.div>

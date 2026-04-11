@@ -111,7 +111,7 @@ export default function ProjectsLensPage() {
     try {
       const artifactId = items[0]?.id || 'projects';
       const res = await runAction.mutateAsync({ id: artifactId, action });
-      setter((res.result as Record<string, unknown>) || null);
+      if (res.ok === false) { setter({ message: `Action failed: ${(res as Record<string, unknown>).error || 'Unknown error'}` } as Record<string, unknown>); } else { setter((res.result as Record<string, unknown>) || null); }
     } catch (e) {
       console.error(`Projects action ${action} failed:`, e);
     }
@@ -214,7 +214,7 @@ export default function ProjectsLensPage() {
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center"><FolderKanban className="w-5 h-5 text-white" /></div>
           <div><div className="flex items-center gap-2"><h1 className={ds.heading1}>Projects</h1><LiveIndicator isLive={isLive} lastUpdated={lastUpdated} /></div><p className={ds.textMuted}>Projects, tasks, milestones, resources, timeline, and risk management</p></div>
         </div>
-        <div className="flex items-center gap-2"><DTUExportButton domain="projects" data={{}} compact /><button onClick={() => runAction.mutate({ id: items[0]?.id || 'projects', action: 'riskMatrix' })} className={ds.btnSecondary} title="Run risk analysis"><Zap className="w-4 h-4" /> Analyze</button><button onClick={() => setShowDashboard(!showDashboard)} className={cn(showDashboard ? ds.btnPrimary : ds.btnSecondary)}><BarChart3 className="w-4 h-4" /> Dashboard</button></div>
+        <div className="flex items-center gap-2"><DTUExportButton domain="projects" data={{}} compact /><button onClick={() => runAction.mutate({ id: items[0]?.id || 'projects', action: 'riskMatrix' }, { onError: (e) => { console.error('Action failed:', e); } })} className={ds.btnSecondary} title="Run risk analysis"><Zap className="w-4 h-4" /> Analyze</button><button onClick={() => setShowDashboard(!showDashboard)} className={cn(showDashboard ? ds.btnPrimary : ds.btnSecondary)}><BarChart3 className="w-4 h-4" /> Dashboard</button></div>
       </header>
       <RealtimeDataPanel domain="projects" data={realtimeData} isLive={isLive} lastUpdated={lastUpdated} insights={insights} compact />
 

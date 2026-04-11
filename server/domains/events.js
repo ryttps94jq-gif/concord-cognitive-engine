@@ -8,7 +8,7 @@ export default function registerEventsActions(registerLensAction) {
     const variance = projectedBudget - totalExpenses;
     const byCategory = {};
     expenses.forEach(e => { byCategory[e.category || 'Other'] = (byCategory[e.category || 'Other'] || 0) + (e.amount || 0); });
-    return { ok: true, event: artifact.title, projectedBudget, totalExpenses, totalRevenue, netProfit: totalRevenue - totalExpenses, variance, overBudget: variance < 0, byCategory };
+    return { ok: true, result: { event: artifact.title, projectedBudget, totalExpenses, totalRevenue, netProfit: totalRevenue - totalExpenses, variance, overBudget: variance < 0, byCategory } };
   });
 
   registerLensAction("events", "advanceSheet", (ctx, artifact, _params) => {
@@ -28,7 +28,7 @@ export default function registerEventsActions(registerLensAction) {
       hospitality: artifact.data?.hospitality || { catering: 'TBD', greenRoom: 'TBD', parking: 'TBD' },
       generatedAt: new Date().toISOString(),
     };
-    return { ok: true, advanceSheet: sheet };
+    return { ok: true, result: { advanceSheet: sheet } };
   });
 
   registerLensAction("events", "techRiderMatch", (ctx, artifact, params) => {
@@ -41,7 +41,7 @@ export default function registerEventsActions(registerLensAction) {
       return { requirement: req.name || req, quantity: req.quantity || 1, available, notes: available ? 'Provided by venue' : 'Must be rented' };
     });
     const fulfilled = matches.filter(m => m.available).length;
-    return { ok: true, performer: artifact.title, matches, fulfilled, total: matches.length, fulfillmentRate: matches.length > 0 ? Math.round((fulfilled / matches.length) * 100) : 0 };
+    return { ok: true, result: { performer: artifact.title, matches, fulfilled, total: matches.length, fulfillmentRate: matches.length > 0 ? Math.round((fulfilled / matches.length) * 100) : 0 } };
   });
 
   registerLensAction("events", "settlementCalc", (ctx, artifact, params) => {
@@ -53,6 +53,6 @@ export default function registerEventsActions(registerLensAction) {
     const artistDoorShare = grossDoor * (doorSplit / 100);
     const settlement = Math.max(guarantee, artistDoorShare);
     const method = artistDoorShare > guarantee ? 'door_split' : 'guarantee';
-    return { ok: true, performer: artifact.title, guarantee, doorSplit: `${doorSplit}%`, grossDoor, artistDoorShare, settlement, method, ticketsSold };
+    return { ok: true, result: { performer: artifact.title, guarantee, doorSplit: `${doorSplit}%`, grossDoor, artistDoorShare, settlement, method, ticketsSold } };
   });
 };

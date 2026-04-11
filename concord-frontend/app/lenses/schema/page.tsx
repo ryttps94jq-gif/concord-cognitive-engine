@@ -57,7 +57,7 @@ export default function SchemaLensPage() {
     setSchemaActiveAction(action);
     try {
       const res = await runSchemaAction.mutateAsync({ id, action });
-      setSchemaActionResult({ action, ...(res.result as Record<string, unknown>) });
+      if (res.ok === false) { setSchemaActionResult({ action, message: `Action failed: ${(res as Record<string, unknown>).error || 'Unknown error'}` }); } else { setSchemaActionResult({ action, ...(res.result as Record<string, unknown>) }); }
     } catch (err) { console.error('Schema action failed:', err); }
     finally { setSchemaActiveAction(null); }
   };

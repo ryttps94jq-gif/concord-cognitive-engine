@@ -10,7 +10,7 @@ export default function registerAppmakerActions(registerLensAction) {
    * artifact.data.spec = { pages: [{ name, path, components: [{ type, props?, children? }] }], auth?: bool }
    * params.framework = "react" | "vue" | "svelte" (default "react")
    */
-  registerLensAction("appmaker", "scaffoldApp", (ctx, artifact, params) => {
+  registerLensAction("app-maker", "scaffoldApp", (ctx, artifact, params) => {
     const spec = artifact.data?.spec || {};
     const pages = spec.pages || [];
     const framework = params.framework || "react";
@@ -134,7 +134,7 @@ export default function registerAppmakerActions(registerLensAction) {
    * and cognitive load estimation.
    * artifact.data.screens = [{ name, widgets: [{ type, interactive?, children? }] }]
    */
-  registerLensAction("appmaker", "uiComplexity", (ctx, artifact, params) => {
+  registerLensAction("app-maker", "uiComplexity", (ctx, artifact, params) => {
     const screens = artifact.data?.screens || [];
     if (screens.length === 0) return { ok: true, result: { message: "No screens to analyze." } };
 
@@ -228,7 +228,7 @@ export default function registerAppmakerActions(registerLensAction) {
    * dead-end screens, and assess action coverage.
    * artifact.data.wireframe = { screens: [{ name, links: [targetScreen], actions: [{ type, target? }] }] }
    */
-  registerLensAction("appmaker", "wireframeValidate", (ctx, artifact, params) => {
+  registerLensAction("app-maker", "wireframeValidate", (ctx, artifact, params) => {
     const wireframe = artifact.data?.wireframe || {};
     const screens = wireframe.screens || [];
     if (screens.length === 0) return { ok: true, result: { message: "No wireframe screens to validate." } };

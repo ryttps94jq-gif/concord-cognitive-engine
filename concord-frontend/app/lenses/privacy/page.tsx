@@ -404,7 +404,7 @@ export default function PrivacySharingPage() {
     setPrivacyActiveAction(action);
     try {
       const res = await runAction.mutateAsync({ id: firstArtifactId, action });
-      setPrivacyActionResult({ action, ...(res.result as Record<string, unknown>) });
+      if (res.ok === false) { setPrivacyActionResult({ action, message: `Action failed: ${(res as Record<string, unknown>).error || 'Unknown error'}` }); } else { setPrivacyActionResult({ action, ...(res.result as Record<string, unknown>) }); }
     } catch (err) { console.error('Privacy action failed:', err); }
     finally { setPrivacyActiveAction(null); }
   }, [firstArtifactId, runAction]);
