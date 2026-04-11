@@ -2220,7 +2220,79 @@ export default function LegalLensPage() {
             <h3 className={ds.heading3}>Action Result</h3>
             <button onClick={() => setActionResult(null)} className={ds.btnGhost}><X className="w-4 h-4" /></button>
           </div>
-          <pre className={cn(ds.textMono, 'text-xs overflow-auto max-h-48')}>{JSON.stringify(actionResult, null, 2)}</pre>
+          <div className="space-y-3">
+            {/* deadlineCheck */}
+            {actionResult.count !== undefined && Array.isArray(actionResult.upcoming) && (
+              <div className="space-y-2">
+                <div className="p-2 bg-lattice-surface rounded text-center">
+                  <p className={`text-sm font-bold ${Number(actionResult.count) > 0 ? 'text-amber-400' : 'text-green-400'}`}>{String(actionResult.count)}</p>
+                  <p className="text-[10px] text-gray-500">Upcoming Deadlines</p>
+                </div>
+                {(actionResult.upcoming as {title?:string;name?:string;daysUntil:number;deadline:string}[]).slice(0,5).map((item, i) => (
+                  <div key={i} className="flex items-center justify-between p-2 bg-lattice-surface rounded">
+                    <span className="text-xs text-gray-300">{item.title || item.name}</span>
+                    <span className={`text-xs font-semibold ${item.daysUntil <= 7 ? 'text-red-400' : item.daysUntil <= 14 ? 'text-amber-400' : 'text-neon-cyan'}`}>{item.daysUntil}d</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {/* contractRenewal */}
+            {actionResult.daysUntilExpiry !== undefined && (
+              <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className={`text-sm font-bold ${Number(actionResult.daysUntilExpiry) <= 14 ? 'text-red-400' : Number(actionResult.daysUntilExpiry) <= 30 ? 'text-amber-400' : 'text-neon-cyan'}`}>{String(actionResult.daysUntilExpiry)}d</p>
+                    <p className="text-[10px] text-gray-500">Until Expiry</p>
+                  </div>
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className={`text-sm font-bold capitalize ${actionResult.urgency === 'critical' ? 'text-red-400' : actionResult.urgency === 'high' ? 'text-orange-400' : actionResult.urgency === 'medium' ? 'text-amber-400' : 'text-green-400'}`}>{String(actionResult.urgency)}</p>
+                    <p className="text-[10px] text-gray-500">Urgency</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className={`px-2 py-0.5 rounded text-xs font-semibold ${actionResult.autoRenewal ? 'bg-green-500/20 text-green-400' : 'bg-amber-500/20 text-amber-400'}`}>{actionResult.autoRenewal ? 'Auto-Renews' : 'Manual Renewal'}</span>
+                  {actionResult.actionRequired && <span className="px-2 py-0.5 rounded text-xs font-semibold bg-red-500/20 text-red-400">Action Required</span>}
+                </div>
+              </div>
+            )}
+            {/* conflictCheck */}
+            {actionResult.hasConflict !== undefined && (
+              <div className="space-y-2">
+                <div className="p-2 bg-lattice-surface rounded text-center">
+                  <p className={`text-sm font-bold ${actionResult.hasConflict ? 'text-red-400' : 'text-green-400'}`}>{actionResult.hasConflict ? 'Conflict Found' : 'No Conflicts'}</p>
+                  <p className="text-[10px] text-gray-500">Conflict Check</p>
+                </div>
+                {Array.isArray(actionResult.conflicts) && (actionResult.conflicts as {name:string;conflictType:string}[]).map((c, i) => (
+                  <div key={i} className="p-2 bg-red-500/10 rounded">
+                    <p className="text-xs text-white">{c.name}</p>
+                    <p className="text-[10px] text-red-400">{c.conflictType.replace(/_/g, ' ')}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+            {/* complianceScore */}
+            {actionResult.score !== undefined && actionResult.total !== undefined && (
+              <div className="space-y-2">
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className={`text-sm font-bold ${Number(actionResult.score) >= 90 ? 'text-green-400' : Number(actionResult.score) >= 70 ? 'text-amber-400' : 'text-red-400'}`}>{String(actionResult.score)}%</p>
+                    <p className="text-[10px] text-gray-500">Score</p>
+                  </div>
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className="text-sm font-bold text-green-400">{String(actionResult.compliant)}</p>
+                    <p className="text-[10px] text-gray-500">Compliant</p>
+                  </div>
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className={`text-sm font-bold ${Number(actionResult.overdue) > 0 ? 'text-red-400' : 'text-green-400'}`}>{String(actionResult.overdue)}</p>
+                    <p className="text-[10px] text-gray-500">Overdue</p>
+                  </div>
+                </div>
+                <div className="h-2 bg-white/5 rounded-full overflow-hidden">
+                  <div className={`h-full rounded-full ${Number(actionResult.score) >= 90 ? 'bg-green-400' : Number(actionResult.score) >= 70 ? 'bg-amber-400' : 'bg-red-400'}`} style={{ width: `${Math.min(100, Number(actionResult.score))}%` }} />
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
 

@@ -1690,7 +1690,94 @@ export default function RetailLensPage() {
             <h3 className={ds.heading3}>Action Result</h3>
             <button onClick={() => setActionResult(null)} className={ds.btnGhost}><X className="w-4 h-4" /></button>
           </div>
-          <pre className={cn(ds.textMono, 'text-xs overflow-auto max-h-48')}>{JSON.stringify(actionResult, null, 2)}</pre>
+          <div className="space-y-3">
+            {/* reorderCheck */}
+            {actionResult.criticalCount !== undefined && (
+              <div className="space-y-2">
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className={`text-sm font-bold ${Number(actionResult.criticalCount) > 0 ? 'text-red-400' : 'text-green-400'}`}>{String(actionResult.criticalCount)}</p>
+                    <p className="text-[10px] text-gray-500">Critical</p>
+                  </div>
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className={`text-sm font-bold ${Number(actionResult.reorderCount) > 0 ? 'text-amber-400' : 'text-green-400'}`}>{String(actionResult.reorderCount)}</p>
+                    <p className="text-[10px] text-gray-500">Needs Reorder</p>
+                  </div>
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className="text-sm font-bold text-green-400">{String(actionResult.sufficientCount)}</p>
+                    <p className="text-[10px] text-gray-500">Sufficient</p>
+                  </div>
+                </div>
+                {Array.isArray(actionResult.critical) && (actionResult.critical as {name:string;onHand:number;status:string}[]).slice(0,3).map((item, i) => (
+                  <div key={i} className="flex items-center justify-between px-2 py-1 bg-red-500/10 rounded text-xs">
+                    <span className="text-gray-300">{item.name}</span>
+                    <span className="text-red-400">{item.onHand} on hand</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {/* pipelineValue */}
+            {actionResult.totalWeightedValue !== undefined && (
+              <div className="space-y-2">
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className="text-sm font-bold text-neon-cyan">{String(actionResult.dealCount)}</p>
+                    <p className="text-[10px] text-gray-500">Deals</p>
+                  </div>
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className="text-sm font-bold text-neon-cyan">${Number(actionResult.totalWeightedValue).toLocaleString()}</p>
+                    <p className="text-[10px] text-gray-500">Weighted Value</p>
+                  </div>
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className="text-sm font-bold text-neon-cyan">${Number(actionResult.avgDealSize).toLocaleString()}</p>
+                    <p className="text-[10px] text-gray-500">Avg Deal</p>
+                  </div>
+                </div>
+              </div>
+            )}
+            {/* customerLTV */}
+            {actionResult.avgProjectedLTV !== undefined && (
+              <div className="space-y-2">
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className="text-sm font-bold text-neon-cyan">${Number(actionResult.avgProjectedLTV).toLocaleString()}</p>
+                    <p className="text-[10px] text-gray-500">Avg LTV</p>
+                  </div>
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className="text-sm font-bold text-neon-cyan">{String(actionResult.customersAnalyzed)}</p>
+                    <p className="text-[10px] text-gray-500">Customers</p>
+                  </div>
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className={`text-sm font-bold ${Number(actionResult.atRiskCount) > 0 ? 'text-amber-400' : 'text-green-400'}`}>{String(actionResult.atRiskCount)}</p>
+                    <p className="text-[10px] text-gray-500">At Risk</p>
+                  </div>
+                </div>
+              </div>
+            )}
+            {/* slaStatus */}
+            {actionResult.slaComplianceRate !== undefined && (
+              <div className="space-y-2">
+                <div className="grid grid-cols-4 gap-2">
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className={`text-sm font-bold ${Number(actionResult.slaComplianceRate) >= 95 ? 'text-green-400' : Number(actionResult.slaComplianceRate) >= 80 ? 'text-amber-400' : 'text-red-400'}`}>{String(actionResult.slaComplianceRate)}%</p>
+                    <p className="text-[10px] text-gray-500">SLA Rate</p>
+                  </div>
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className={`text-sm font-bold ${Number(actionResult.breachedCount) > 0 ? 'text-red-400' : 'text-green-400'}`}>{String(actionResult.breachedCount)}</p>
+                    <p className="text-[10px] text-gray-500">Breached</p>
+                  </div>
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className={`text-sm font-bold ${Number(actionResult.atRiskCount) > 0 ? 'text-amber-400' : 'text-green-400'}`}>{String(actionResult.atRiskCount)}</p>
+                    <p className="text-[10px] text-gray-500">At Risk</p>
+                  </div>
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className="text-sm font-bold text-green-400">{String(actionResult.metCount)}</p>
+                    <p className="text-[10px] text-gray-500">Met</p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
 

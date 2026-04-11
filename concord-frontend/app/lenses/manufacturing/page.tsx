@@ -1569,7 +1569,83 @@ export default function ManufacturingLensPage() {
             <h3 className={ds.heading3}>Action Result</h3>
             <button onClick={() => setActionResult(null)} className={ds.btnGhost}><X className="w-4 h-4" /></button>
           </div>
-          <pre className={cn(ds.textMono, 'text-xs overflow-auto max-h-48')}>{JSON.stringify(actionResult, null, 2)}</pre>
+          <div className="space-y-3">
+            {/* scheduleOptimize */}
+            {actionResult.sequence !== undefined && Array.isArray(actionResult.sequence) && (
+              <div className="space-y-2">
+                <p className="text-xs text-gray-400">{String(actionResult.count)} work orders sequenced</p>
+                {(actionResult.sequence as {position:number;id:string;priority:number;dueDate?:string}[]).slice(0,5).map((wo, i) => (
+                  <div key={i} className="flex items-center gap-2 px-2 py-1 bg-lattice-surface rounded text-xs">
+                    <span className="w-5 h-5 rounded-full bg-neon-cyan/20 text-neon-cyan text-center leading-5 flex-shrink-0">{wo.position}</span>
+                    <span className="text-gray-300 flex-1">{wo.id}</span>
+                    <span className="text-gray-500">P{wo.priority}</span>
+                    {wo.dueDate && <span className="text-gray-500">{wo.dueDate}</span>}
+                  </div>
+                ))}
+              </div>
+            )}
+            {/* bomCost */}
+            {actionResult.totalCost !== undefined && actionResult.componentCount !== undefined && (
+              <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className="text-sm font-bold text-neon-cyan">${String(actionResult.totalCost)}</p>
+                    <p className="text-[10px] text-gray-500">Total Cost</p>
+                  </div>
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className="text-sm font-bold text-neon-cyan">{String(actionResult.componentCount)}</p>
+                    <p className="text-[10px] text-gray-500">Components</p>
+                  </div>
+                </div>
+                {Array.isArray(actionResult.components) && (actionResult.components as {part:string;quantity:number;lineCost:number}[]).slice(0,4).map((c, i) => (
+                  <div key={i} className="flex items-center justify-between px-2 py-1 bg-lattice-surface rounded text-xs">
+                    <span className="text-gray-300">{c.part}</span>
+                    <span className="text-neon-cyan">${c.lineCost}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {/* oeeCalculate */}
+            {actionResult.oee !== undefined && (
+              <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="p-2 bg-lattice-surface rounded text-center col-span-2">
+                    <p className={`text-lg font-bold ${Number(actionResult.oee) >= 85 ? 'text-green-400' : Number(actionResult.oee) >= 65 ? 'text-amber-400' : 'text-red-400'}`}>{String(actionResult.oee)}% OEE</p>
+                    <p className="text-[10px] text-gray-500 capitalize">{String(actionResult.rating).replace(/_/g, ' ')}</p>
+                  </div>
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className="text-sm font-bold text-neon-cyan">{String(actionResult.availability)}%</p>
+                    <p className="text-[10px] text-gray-500">Availability</p>
+                  </div>
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className="text-sm font-bold text-neon-cyan">{String(actionResult.performance)}%</p>
+                    <p className="text-[10px] text-gray-500">Performance</p>
+                  </div>
+                  <div className="p-2 bg-lattice-surface rounded text-center col-span-2">
+                    <p className="text-sm font-bold text-neon-cyan">{String(actionResult.quality)}%</p>
+                    <p className="text-[10px] text-gray-500">Quality</p>
+                  </div>
+                </div>
+              </div>
+            )}
+            {/* safetyRate */}
+            {actionResult.incidentRate !== undefined && (
+              <div className="grid grid-cols-3 gap-2">
+                <div className="p-2 bg-lattice-surface rounded text-center">
+                  <p className={`text-sm font-bold ${Number(actionResult.incidentRate) <= 3 ? 'text-green-400' : Number(actionResult.incidentRate) <= 5 ? 'text-amber-400' : 'text-red-400'}`}>{String(actionResult.incidentRate)}</p>
+                  <p className="text-[10px] text-gray-500">Incident Rate</p>
+                </div>
+                <div className="p-2 bg-lattice-surface rounded text-center">
+                  <p className="text-sm font-bold text-neon-cyan">{String(actionResult.recordableIncidents)}</p>
+                  <p className="text-[10px] text-gray-500">Recordable</p>
+                </div>
+                <div className="p-2 bg-lattice-surface rounded text-center">
+                  <p className="text-sm font-bold text-neon-cyan capitalize">{String(actionResult.benchmark).replace(/_/g, ' ')}</p>
+                  <p className="text-[10px] text-gray-500">Benchmark</p>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
 

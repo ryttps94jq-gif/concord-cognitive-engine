@@ -2337,7 +2337,87 @@ export default function TradesLensPage() {
             <h3 className={ds.heading3}>Action Result</h3>
             <button onClick={() => setActionResult(null)} className={ds.btnGhost}><X className="w-4 h-4" /></button>
           </div>
-          <pre className={`${ds.textMono} text-xs overflow-auto max-h-48`}>{JSON.stringify(actionResult, null, 2)}</pre>
+          <div className="space-y-3">
+            {/* calculateEstimate */}
+            {actionResult.grandTotal !== undefined && actionResult.subtotal !== undefined && (
+              <div className="space-y-2">
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className="text-sm font-bold text-gray-400">${Number(actionResult.subtotal).toLocaleString()}</p>
+                    <p className="text-[10px] text-gray-500">Subtotal</p>
+                  </div>
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className="text-sm font-bold text-amber-400">+${Number(actionResult.markupAmount).toLocaleString()} ({String(actionResult.markupPct)}%)</p>
+                    <p className="text-[10px] text-gray-500">Markup</p>
+                  </div>
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className="text-sm font-bold text-neon-cyan">${Number(actionResult.grandTotal).toLocaleString()}</p>
+                    <p className="text-[10px] text-gray-500">Grand Total</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className="text-sm font-bold text-gray-400">${Number(actionResult.taxAmount).toLocaleString()} ({Number(actionResult.taxRate) * 100}%)</p>
+                    <p className="text-[10px] text-gray-500">Tax</p>
+                  </div>
+                  {Number(actionResult.discountAmount) > 0 && (
+                    <div className="p-2 bg-lattice-surface rounded text-center">
+                      <p className="text-sm font-bold text-green-400">-${Number(actionResult.discountAmount).toLocaleString()}</p>
+                      <p className="text-[10px] text-gray-500">Discount</p>
+                    </div>
+                  )}
+                </div>
+                {Array.isArray(actionResult.lineItems) && (actionResult.lineItems as {description:string;lineTotal:number}[]).slice(0,4).map((li, i) => (
+                  <div key={i} className="flex items-center justify-between px-2 py-1 bg-lattice-surface rounded text-xs">
+                    <span className="text-gray-300">{li.description}</span>
+                    <span className="text-neon-cyan">${li.lineTotal}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {/* scheduleInspection */}
+            {actionResult.inspectionId !== undefined && (
+              <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className="text-sm font-bold text-neon-cyan">{String((actionResult as {status:string}).status)}</p>
+                    <p className="text-[10px] text-gray-500">Status</p>
+                  </div>
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className="text-sm font-bold text-neon-cyan">{String((actionResult as {requestedDate:string}).requestedDate)}</p>
+                    <p className="text-[10px] text-gray-500">Date</p>
+                  </div>
+                </div>
+                <p className="text-[10px] text-gray-500">Permit: {String((actionResult as {permitType:string}).permitType)} &bull; Stage: {String((actionResult as {stageName:string}).stageName)}</p>
+                <p className="text-[10px] text-gray-500 font-mono">{String(actionResult.inspectionId)}</p>
+              </div>
+            )}
+            {/* materialsCost */}
+            {actionResult.grandTotal !== undefined && actionResult.jobsIncluded !== undefined && (
+              <div className="space-y-2">
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className="text-sm font-bold text-neon-cyan">${Number(actionResult.grandTotal).toLocaleString()}</p>
+                    <p className="text-[10px] text-gray-500">Total Cost</p>
+                  </div>
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className="text-sm font-bold text-neon-cyan">{String(actionResult.jobsIncluded)}</p>
+                    <p className="text-[10px] text-gray-500">Jobs</p>
+                  </div>
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className="text-sm font-bold text-neon-cyan capitalize">{String(actionResult.statusFilter)}</p>
+                    <p className="text-[10px] text-gray-500">Filter</p>
+                  </div>
+                </div>
+                {actionResult.topMaterial && (
+                  <div className="px-2 py-1 bg-lattice-surface rounded text-xs">
+                    <span className="text-gray-400">Top material: </span>
+                    <span className="text-neon-cyan">{String((actionResult.topMaterial as {item:string}).item)} — ${String((actionResult.topMaterial as {totalCost:number}).totalCost)}</span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
