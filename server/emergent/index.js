@@ -663,6 +663,124 @@ import {
   init as initAttention, stop as stopAttention,
 } from "./attention-allocator.js";
 
+// ── Microbond Governance (Citizen-Driven Bond Voting) ──────────────────────
+
+import {
+  GOVERNANCE_SCOPES, VOTING_STATUSES,
+  createBond, getBond, listBonds, voteBond, simulateBond,
+  completeMilestone, checkQuorum, fundBond, pledgeToBond,
+  openBondForVoting, activateBond, completeBond, failBond,
+  getSpilloverFund, getAllSpilloverFunds, getBondMetrics,
+} from "./microbond-governance.js";
+
+// ── CRI System (Concord Research Institutes) ────────────────────────────────
+
+import {
+  CRI_ROLES,
+  createCRI, getCRI, listCRIs,
+  addMember, removeMember,
+  createProgram, getProgramStatus,
+  scheduleSummit, runSummit, completeSummit,
+  getCRIStatus, getCRIMetrics,
+} from "./cri-system.js";
+
+// ── C-NET Federation ────────────────────────────────────────────────────────
+
+import {
+  FEDERATION_EVENTS,
+  initFederation, getFederationStatus,
+  publishDTU, unpublishDTU, getPublishedDTUs,
+  subscribeDomain, unsubscribeDomain, getSubscriptions,
+  registerPeer as registerCNetPeer, getPeers, removePeer,
+  pollGlobal, enqueueGlobalDTU, getIncomingQueue,
+  acceptGlobalDTU, rejectGlobalDTU,
+  getFederationMetrics,
+} from "./cnet-federation.js";
+
+// ── Scenario Engine (What-If Simulation) ────────────────────────────────────
+
+import {
+  VARIABLE_TYPES, SCENARIO_STATES, CONFIDENCE_LEVELS,
+  createScenario, getScenario, listUserScenarios,
+  addBranch, removeBranch, runScenario,
+  compareBranches, getScenarioMetrics,
+} from "./scenario-engine.js";
+
+// ── State Migration (Cross-Environment Civilization Transfer) ───────────────
+
+import {
+  COMPATIBLE_VERSIONS,
+  computeChecksum, validatePackage,
+  exportFull, exportPartial,
+  createMigrationPlan, importFull, importPartial,
+  getMigrationHistory, getMigration, getMigrationMetrics,
+} from "./state-migration.js";
+
+// ── Spam Prevention ─────────────────────────────────────────────────────────
+
+import {
+  checkSpamLimit, adjustReputation as adjustSpamReputation,
+  getSpamMetrics, spamGuard,
+} from "./spam-prevention.js";
+
+// ── News Lens Hub ───────────────────────────────────────────────────────────
+
+import {
+  queryNewsLens, getNewsLensSummary, getNewsTrending,
+  compressNewsEvents, decompressNewsDTU,
+} from "./news-lens-hub.js";
+
+// ── Lens Learning ───────────────────────────────────────────────────────────
+
+import {
+  runLensLearningCycle, getLensLearningStatus, getLensPatterns,
+} from "./lens-learning.js";
+
+// ── Dream Capture Pipeline ──────────────────────────────────────────────────
+
+import {
+  captureDream, getDreamHistory,
+  getConvergences as getDreamConvergences,
+  getDreamQueue, countDreams, countConvergences as countDreamConvergences,
+  handleDreamCommand, init as initDreamCapture,
+} from "./dream-capture.js";
+
+// ── DTU Promotion Pipeline ──────────────────────────────────────────────────
+
+import {
+  requestPromotion, approvePromotion, rejectPromotion,
+  getQueue as getPromotionQueue,
+  getPromotionHistory as getPromoPipelineHistory,
+  getProposal as getPromotionProposal,
+  handlePromotionCommand, init as initPromotionPipeline,
+} from "./promotion-pipeline.js";
+
+// ── Cognitive Fingerprint (Cognitive Signatures) ────────────────────────────
+
+import {
+  COGNITIVE_BIASES, STYLE_DIMENSIONS,
+  getFingerprint, recordQuery as recordFingerprintQuery,
+  recordDTUCreation as recordFingerprintDTUCreation,
+  recordPrediction as recordFingerprintPrediction,
+  recordSession as recordFingerprintSession,
+  getFingerprintSummary, deleteFingerprint,
+} from "./cognitive-fingerprint.js";
+
+// ── Reality Explorer (Adjacent Reality Exploration) ─────────────────────────
+
+import {
+  exploreAdjacent, saveExploration, getExplorationHistory,
+  handleExploreCommand, init as initRealityExplorer,
+} from "./reality-explorer.js";
+
+// ── Conscious Web Search ────────────────────────────────────────────────────
+
+import {
+  requiresWebSearch, webSearchForChat, fetchPublicPage,
+  buildEvaluationPrompt, buildQueryGenerationPrompt, buildResponsePrompt,
+  extractUrls, recordChatWebMetrics, getChatWebMetrics,
+} from "./conscious-web-search.js";
+
 const EMERGENT_VERSION = "5.5.0";
 
 /**
