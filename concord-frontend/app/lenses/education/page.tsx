@@ -1461,7 +1461,89 @@ export default function EducationLensPage() {
               <div className="text-sm text-gray-300 whitespace-pre-wrap leading-relaxed">{String(actionResult.content)}</div>
             </div>
           ) : (
-            <pre className={cn(ds.textMono, 'text-xs overflow-auto max-h-48')}>{JSON.stringify(actionResult, null, 2)}</pre>
+            <div className="space-y-3">
+              {/* gradeCalculation */}
+              {typeof actionResult === 'object' && 'studentsGraded' in actionResult && actionResult.studentsGraded !== undefined && (
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className="text-sm font-bold text-neon-cyan">{String(actionResult.studentsGraded)}</p>
+                    <p className="text-[10px] text-gray-500">Students Graded</p>
+                  </div>
+                  {typeof actionResult.classStats === 'object' && actionResult.classStats !== null && (
+                    <>
+                      <div className="p-2 bg-lattice-surface rounded text-center">
+                        <p className="text-sm font-bold text-neon-cyan">{String((actionResult.classStats as {average:number}).average)}%</p>
+                        <p className="text-[10px] text-gray-500">Class Average</p>
+                      </div>
+                      <div className="p-2 bg-lattice-surface rounded text-center">
+                        <p className="text-sm font-bold text-green-400">{String((actionResult.classStats as {high:number}).high)}%</p>
+                        <p className="text-[10px] text-gray-500">Highest</p>
+                      </div>
+                      <div className="p-2 bg-lattice-surface rounded text-center">
+                        <p className="text-sm font-bold text-amber-400">{String((actionResult.classStats as {low:number}).low)}%</p>
+                        <p className="text-[10px] text-gray-500">Lowest</p>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+              {/* attendanceReport */}
+              {typeof actionResult === 'object' && 'overallAttendanceRate' in actionResult && (
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className="text-sm font-bold text-neon-cyan">{String(actionResult.overallAttendanceRate)}%</p>
+                    <p className="text-[10px] text-gray-500">Attendance Rate</p>
+                  </div>
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className="text-sm font-bold text-neon-cyan">{String(actionResult.totalStudents)}</p>
+                    <p className="text-[10px] text-gray-500">Total Students</p>
+                  </div>
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className={`text-sm font-bold ${Number(actionResult.atRiskCount) > 0 ? 'text-red-400' : 'text-green-400'}`}>{String(actionResult.atRiskCount)}</p>
+                    <p className="text-[10px] text-gray-500">At Risk</p>
+                  </div>
+                </div>
+              )}
+              {/* progressTrack */}
+              {typeof actionResult === 'object' && 'overallCompletionPct' in actionResult && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-gray-400">Overall Progress</span>
+                    <span className="text-sm font-bold text-neon-cyan">{String(actionResult.overallCompletionPct)}%</span>
+                  </div>
+                  <div className="h-2 bg-white/5 rounded-full overflow-hidden">
+                    <div className="h-full bg-neon-cyan rounded-full" style={{ width: `${Math.min(100, Number(actionResult.overallCompletionPct))}%` }} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="p-2 bg-lattice-surface rounded text-center">
+                      <p className="text-sm font-bold text-green-400">{String(actionResult.completedRequirements)}</p>
+                      <p className="text-[10px] text-gray-500">Completed</p>
+                    </div>
+                    <div className="p-2 bg-lattice-surface rounded text-center">
+                      <p className="text-sm font-bold text-amber-400">{String(actionResult.remainingRequirements)}</p>
+                      <p className="text-[10px] text-gray-500">Remaining</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+              {/* scheduleConflict */}
+              {typeof actionResult === 'object' && 'conflictsFound' in actionResult && (
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className={`text-sm font-bold ${Number(actionResult.conflictsFound) > 0 ? 'text-red-400' : 'text-green-400'}`}>{String(actionResult.conflictsFound)}</p>
+                    <p className="text-[10px] text-gray-500">Conflicts</p>
+                  </div>
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className="text-sm font-bold text-neon-cyan">{String(actionResult.totalEntries)}</p>
+                    <p className="text-[10px] text-gray-500">Total Entries</p>
+                  </div>
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className={`text-sm font-bold ${actionResult.conflictFree ? 'text-green-400' : 'text-red-400'}`}>{actionResult.conflictFree ? 'Clear' : 'Conflicts'}</p>
+                    <p className="text-[10px] text-gray-500">Status</p>
+                  </div>
+                </div>
+              )}
+            </div>
           )}
         </div>
       )}

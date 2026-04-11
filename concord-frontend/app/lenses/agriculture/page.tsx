@@ -831,7 +831,70 @@ export default function AgricultureLensPage() {
             <h3 className={ds.heading3}>Action Result</h3>
             <button onClick={() => setActionResult(null)} className={ds.btnGhost}><X className="w-4 h-4" /></button>
           </div>
-          <pre className={`${ds.textMono} text-xs overflow-auto max-h-48`}>{JSON.stringify(actionResult, null, 2)}</pre>
+          {/* rotationPlan */}
+          {actionResult.fields !== undefined && Array.isArray(actionResult.fields) && (actionResult.fields as {fieldName?:string;lastCrop?:string;suggestedNext?:string[]}[]).length > 0 && !(actionResult.totalAcreage !== undefined) && (
+            <div className="space-y-2">
+              {(actionResult.fields as {fieldName?:string;lastCrop?:string;suggestedNext?:string[];soilNote?:string}[]).map((f, i) => (
+                <div key={i} className="p-2 bg-lattice-surface rounded">
+                  <p className="text-xs font-semibold text-neon-cyan">{f.fieldName}</p>
+                  <p className="text-[10px] text-gray-400">Last crop: <span className="text-gray-200">{f.lastCrop}</span></p>
+                  <p className="text-[10px] text-gray-400">Suggested: <span className="text-green-400">{(f.suggestedNext || []).slice(0,3).join(', ') || 'none'}</span></p>
+                  {f.soilNote && <p className="text-[10px] text-amber-400 mt-0.5">{f.soilNote}</p>}
+                </div>
+              ))}
+            </div>
+          )}
+          {/* yieldAnalysis */}
+          {actionResult.fieldsAnalyzed !== undefined && (
+            <div className="grid grid-cols-2 gap-2 mb-3">
+              <div className="p-2 bg-lattice-surface rounded text-center">
+                <p className="text-sm font-bold text-neon-cyan">{String(actionResult.fieldsAnalyzed)}</p>
+                <p className="text-[10px] text-gray-500">Fields Analyzed</p>
+              </div>
+              <div className="p-2 bg-lattice-surface rounded text-center">
+                <p className="text-sm font-bold text-neon-cyan">{String(actionResult.totalAcreage)} ac</p>
+                <p className="text-[10px] text-gray-500">Total Acreage</p>
+              </div>
+              <div className="p-2 bg-lattice-surface rounded text-center">
+                <p className="text-sm font-bold text-neon-cyan">{String(actionResult.totalActualYield)}</p>
+                <p className="text-[10px] text-gray-500">Actual Yield</p>
+              </div>
+              <div className={`p-2 bg-lattice-surface rounded text-center`}>
+                <p className={`text-sm font-bold ${Number(actionResult.overallVariancePct) >= 0 ? 'text-green-400' : 'text-red-400'}`}>{String(actionResult.overallVariancePct)}%</p>
+                <p className="text-[10px] text-gray-500">Variance vs Expected</p>
+              </div>
+            </div>
+          )}
+          {/* equipmentDue */}
+          {actionResult.overdueCount !== undefined && actionResult.totalGallonsAllFields === undefined && (
+            <div className="grid grid-cols-3 gap-2">
+              <div className="p-2 bg-lattice-surface rounded text-center">
+                <p className="text-sm font-bold text-red-400">{String(actionResult.overdueCount)}</p>
+                <p className="text-[10px] text-gray-500">Overdue</p>
+              </div>
+              <div className="p-2 bg-lattice-surface rounded text-center">
+                <p className="text-sm font-bold text-amber-400">{String(actionResult.upcomingCount)}</p>
+                <p className="text-[10px] text-gray-500">Upcoming</p>
+              </div>
+              <div className="p-2 bg-lattice-surface rounded text-center">
+                <p className="text-sm font-bold text-neon-cyan">{String(actionResult.totalEquipment)}</p>
+                <p className="text-[10px] text-gray-500">Total Equipment</p>
+              </div>
+            </div>
+          )}
+          {/* waterSchedule */}
+          {actionResult.totalGallonsAllFields !== undefined && (
+            <div className="grid grid-cols-2 gap-2">
+              <div className="p-2 bg-lattice-surface rounded text-center">
+                <p className="text-sm font-bold text-neon-cyan">{Number(actionResult.totalGallonsAllFields).toLocaleString()}</p>
+                <p className="text-[10px] text-gray-500">Total Gallons</p>
+              </div>
+              <div className="p-2 bg-lattice-surface rounded text-center">
+                <p className="text-sm font-bold text-neon-cyan">{String(actionResult.daysAhead)}</p>
+                <p className="text-[10px] text-gray-500">Days Scheduled</p>
+              </div>
+            </div>
+          )}
 
         </div>
       )}

@@ -1340,7 +1340,81 @@ export default function FitnessLensPage() {
             <h3 className={ds.heading3}>Action Result</h3>
             <button onClick={() => setActionResult(null)} className={ds.btnGhost}><X className="w-4 h-4" /></button>
           </div>
-          <pre className={cn(ds.textMono, 'text-xs overflow-auto max-h-48')}>{JSON.stringify(actionResult, null, 2)}</pre>
+          <div className="space-y-3">
+            {/* progressionCalc */}
+            {actionResult.recommendations !== undefined && Array.isArray(actionResult.recommendations) && (
+              <div className="space-y-2">
+                {(actionResult.recommendations as {exercise:string;currentWeight:number;recommendedWeight:number;currentRPE:number;recommendation:string}[]).map((r, i) => (
+                  <div key={i} className="p-2 bg-lattice-surface rounded flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-semibold text-white">{r.exercise}</p>
+                      <p className="text-[10px] text-gray-500">RPE {r.currentRPE} &rarr; {r.recommendation.replace(/_/g, ' ')}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs text-gray-400 line-through">{r.currentWeight}kg</p>
+                      <p className="text-sm font-bold text-neon-cyan">{r.recommendedWeight}kg</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {/* classUtilization */}
+            {actionResult.utilization !== undefined && actionResult.className !== undefined && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-gray-400">{String(actionResult.className)}</span>
+                  <span className="text-sm font-bold text-neon-cyan">{String(actionResult.utilization)}% Full</span>
+                </div>
+                <div className="h-2 bg-white/5 rounded-full overflow-hidden">
+                  <div className="h-full bg-neon-cyan rounded-full" style={{ width: `${Math.min(100, Number(actionResult.utilization))}%` }} />
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className="text-sm font-bold text-neon-cyan">{String(actionResult.enrolled)}</p>
+                    <p className="text-[10px] text-gray-500">Enrolled</p>
+                  </div>
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className="text-sm font-bold text-neon-cyan">{String(actionResult.capacity)}</p>
+                    <p className="text-[10px] text-gray-500">Capacity</p>
+                  </div>
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className="text-sm font-bold text-neon-cyan">{String(actionResult.sessions)}</p>
+                    <p className="text-[10px] text-gray-500">Sessions</p>
+                  </div>
+                </div>
+              </div>
+            )}
+            {/* periodization */}
+            {actionResult.phases !== undefined && Array.isArray(actionResult.phases) && (
+              <div className="space-y-2">
+                <p className="text-xs text-gray-400">{String(actionResult.goal)} &bull; {String(actionResult.totalWeeks)} weeks</p>
+                {(actionResult.phases as {name:string;weeks:number;sets:string;reps:string;intensity:string}[]).map((p, i) => (
+                  <div key={i} className="p-2 bg-lattice-surface rounded flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-semibold text-neon-cyan">{p.name}</p>
+                      <p className="text-[10px] text-gray-500">{p.sets} sets &times; {p.reps} reps @ {p.intensity}</p>
+                    </div>
+                    <span className="text-xs text-gray-400">{p.weeks}w</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {/* recruitProfile */}
+            {actionResult.profile !== undefined && (
+              <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className="text-sm font-bold text-neon-cyan">{String((actionResult.profile as {sport:string}).sport)}</p>
+                    <p className="text-[10px] text-gray-500">Sport</p>
+                  </div>
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className="text-sm font-bold text-neon-cyan">{String((actionResult.profile as {recruitingStatus:string}).recruitingStatus)}</p>
+                    <p className="text-[10px] text-gray-500">Status</p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
 

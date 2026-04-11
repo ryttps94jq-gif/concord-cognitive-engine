@@ -13,6 +13,7 @@ import {
   Plus, Search, X, Trash2, BarChart3,
   AlertTriangle, Milestone,
   Layers, ChevronDown, Gauge, Activity, CircleDot, Zap,
+  Loader2, TrendingDown, TrendingUp, CheckCircle2,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -94,6 +95,28 @@ export default function ProjectsLensPage() {
     if (filterStatus !== 'all') result = result.filter(i => (i.data as unknown as ProjectArtifact).status === filterStatus);
     return result;
   }, [items, searchQuery, filterStatus]);
+
+  // --- Domain action state ---
+  const [projActionRunning, setProjActionRunning] = useState<string | null>(null);
+  const [ganttResult, setGanttResult] = useState<Record<string, unknown> | null>(null);
+  const [riskMatrixResult, setRiskMatrixResult] = useState<Record<string, unknown> | null>(null);
+  const [burndownResult, setBurndownResult] = useState<Record<string, unknown> | null>(null);
+  const [stakeholderMapResult, setStakeholderMapResult] = useState<Record<string, unknown> | null>(null);
+
+  const handleProjAction = async (
+    action: string,
+    setter: (val: Record<string, unknown> | null) => void
+  ) => {
+    setProjActionRunning(action);
+    try {
+      const artifactId = items[0]?.id || 'projects';
+      const res = await runAction.mutateAsync({ id: artifactId, action });
+      setter((res.result as Record<string, unknown>) || null);
+    } catch (e) {
+      console.error(`Projects action ${action} failed:`, e);
+    }
+    setProjActionRunning(null);
+  };
 
   const openCreate = () => { setEditingItem(null); setFormName(''); setFormDescription(''); setFormStatus('planned'); setFormNotes(''); setFormPriority('medium'); setFormAssignee(''); setFormStartDate(''); setFormEndDate(''); setFormBudget(''); setFormEstimatedHours(''); setFormMethodology('Agile'); setFormClient(''); setEditorOpen(true); };
   const openEdit = (item: LensItem<ProjectArtifact>) => { const d = item.data as unknown as ProjectArtifact; setEditingItem(item); setFormName(d.name || ''); setFormDescription(d.description || ''); setFormStatus(d.status || 'planned'); setFormNotes(d.notes || ''); setFormPriority(d.priority || 'medium'); setFormAssignee(d.assignee || ''); setFormStartDate(d.startDate || ''); setFormEndDate(d.endDate || ''); setFormBudget(d.budget?.toString() || ''); setFormEstimatedHours(d.estimatedHours?.toString() || ''); setFormMethodology(d.methodology || 'Agile'); setFormClient(d.client || ''); setEditorOpen(true); };

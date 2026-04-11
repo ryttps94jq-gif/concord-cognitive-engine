@@ -1825,7 +1825,92 @@ export default function FoodLensPage() {
               <h3 className={ds.heading3}>Action Result</h3>
               <button onClick={() => setActionResult(null)} className={ds.btnGhost}><X className="w-4 h-4" /></button>
             </div>
-            <pre className={`${ds.textMono} text-xs overflow-auto max-h-48`}>{JSON.stringify(actionResult, null, 2)}</pre>
+            <div className="space-y-3">
+              {/* scaleRecipe */}
+              {actionResult.scaleFactor !== undefined && (
+                <div className="space-y-2">
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="p-2 bg-lattice-surface rounded text-center">
+                      <p className="text-sm font-bold text-neon-cyan">{String(actionResult.targetYield)}</p>
+                      <p className="text-[10px] text-gray-500">Target Yield</p>
+                    </div>
+                    <div className="p-2 bg-lattice-surface rounded text-center">
+                      <p className="text-sm font-bold text-neon-cyan">{String(actionResult.scaleFactor)}x</p>
+                      <p className="text-[10px] text-gray-500">Scale Factor</p>
+                    </div>
+                    <div className="p-2 bg-lattice-surface rounded text-center">
+                      <p className="text-sm font-bold text-neon-cyan">{String(actionResult.yieldUnit)}</p>
+                      <p className="text-[10px] text-gray-500">Unit</p>
+                    </div>
+                  </div>
+                  {Array.isArray(actionResult.ingredients) && (actionResult.ingredients as {name:string;scaledQuantity:number;unit:string}[]).slice(0,6).map((ing, i) => (
+                    <div key={i} className="flex items-center justify-between text-xs px-2 py-1 bg-lattice-surface rounded">
+                      <span className="text-gray-300">{ing.name}</span>
+                      <span className="text-neon-cyan font-semibold">{ing.scaledQuantity} {ing.unit}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {/* costPlate */}
+              {actionResult.avgFoodCostPct !== undefined && Array.isArray(actionResult.items) && (
+                <div className="space-y-2">
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className="text-sm font-bold text-neon-cyan">{String(actionResult.avgFoodCostPct)}%</p>
+                    <p className="text-[10px] text-gray-500">Avg Food Cost %</p>
+                  </div>
+                  {(actionResult.items as {name:string;foodCostPct:number;menuPrice:number;status:string}[]).map((item, i) => (
+                    <div key={i} className="flex items-center justify-between p-2 bg-lattice-surface rounded">
+                      <div>
+                        <p className="text-xs font-semibold text-white">{item.name}</p>
+                        <p className="text-[10px] text-gray-500">${item.menuPrice} menu price</p>
+                      </div>
+                      <span className={`text-xs font-bold ${item.status === 'on-target' ? 'text-green-400' : 'text-red-400'}`}>{item.foodCostPct}%</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {/* spoilageCheck */}
+              {actionResult.expiredCount !== undefined && (
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className="text-sm font-bold text-red-400">{String(actionResult.expiredCount)}</p>
+                    <p className="text-[10px] text-gray-500">Expired</p>
+                  </div>
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className="text-sm font-bold text-amber-400">{String(actionResult.expiringSoonCount)}</p>
+                    <p className="text-[10px] text-gray-500">Expiring Soon</p>
+                  </div>
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className="text-sm font-bold text-green-400">{String(actionResult.okCount)}</p>
+                    <p className="text-[10px] text-gray-500">OK</p>
+                  </div>
+                  {Number(actionResult.estimatedSpoilageLoss) > 0 && (
+                    <div className="col-span-3 p-2 bg-lattice-surface rounded text-center">
+                      <p className="text-sm font-bold text-red-400">${String(actionResult.estimatedSpoilageLoss)}</p>
+                      <p className="text-[10px] text-gray-500">Estimated Loss</p>
+                    </div>
+                  )}
+                </div>
+              )}
+              {/* pourCost */}
+              {actionResult.avgPourCostPct !== undefined && Array.isArray(actionResult.items) && (
+                <div className="space-y-2">
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className="text-sm font-bold text-neon-cyan">{String(actionResult.avgPourCostPct)}%</p>
+                    <p className="text-[10px] text-gray-500">Avg Pour Cost %</p>
+                  </div>
+                  {(actionResult.items as {name:string;pourCostPct:number;profit:number;status:string}[]).map((item, i) => (
+                    <div key={i} className="flex items-center justify-between p-2 bg-lattice-surface rounded">
+                      <div>
+                        <p className="text-xs font-semibold text-white">{item.name}</p>
+                        <p className="text-[10px] text-gray-500">${item.profit} profit</p>
+                      </div>
+                      <span className={`text-xs font-bold ${item.status === 'on-target' ? 'text-green-400' : 'text-red-400'}`}>{item.pourCostPct}%</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
