@@ -878,8 +878,31 @@ function registerShutdownCallback(callback) {
   shutdownCallbacks.push(callback);
 }
 
-/** Track setInterval timers for cleanup on SIGTERM */
+/**
+ * Stagger registry — ensures no two autonomous processes fire at the same exact time.
+ * Each interval gets a unique initial delay offset (stagger window = 7 seconds apart).
+ * This prevents CPU spikes, database contention, and GC pressure from synchronized ticks.
+ */
+const _staggerRegistry = { count: 0, STAGGER_WINDOW_MS: 7000 };
+function _nextStaggerDelay() {
+  return ++_staggerRegistry.count * _staggerRegistry.STAGGER_WINDOW_MS;
+}
+
+/** Track setInterval timers for cleanup on SIGTERM — with stagger support */
 function trackedSetInterval(fn, ms) {
+  // Use stagger if available (post-init), otherwise direct
+  if (_staggerRegistry) {
+    const delay = _nextStaggerDelay();
+    const timerId = setTimeout(() => {
+      try { fn(); } catch (_e) { /* silent */ }
+      const id = setInterval(fn, ms);
+      if (id.unref) id.unref();
+      _activeTimers.add(id);
+    }, delay);
+    if (timerId.unref) timerId.unref();
+    _activeTimers.add(timerId);
+    return timerId;
+  }
   const id = setInterval(fn, ms);
   _activeTimers.add(id);
   return id;
@@ -892,8 +915,11 @@ function clearTrackedInterval(id) {
 
 /** Memory-aware setInterval: skips tick if heap exceeds threshold or memory ceiling paused */
 const _THROTTLE_HEAP_LIMIT = 3 * 1024 * 1024 * 1024;
+
 function throttledInterval(fn, ms, name) {
-  const id = setInterval(async () => {
+  const staggerDelay = _nextStaggerDelay();
+  // Initial fire is staggered; subsequent fires are at the regular interval
+  const wrappedFn = async () => {
     // Check RSS-based memory ceiling (native memory awareness)
     if (globalThis.__memoryPaused?.()) {
       structuredLog("warn", "task_skipped_rss", { name });
@@ -909,10 +935,18 @@ function throttledInterval(fn, ms, name) {
     } catch (err) {
       structuredLog("error", "task_error", { name, error: String(err?.message || err) });
     }
-  }, ms);
-  if (id.unref) id.unref();
-  _activeTimers.add(id);
-  return id;
+  };
+  // Staggered start: delay first tick, then run at regular interval
+  const timerId = setTimeout(() => {
+    wrappedFn(); // First tick (staggered)
+    const intervalId = setInterval(wrappedFn, ms);
+    if (intervalId.unref) intervalId.unref();
+    _activeTimers.add(intervalId);
+  }, staggerDelay);
+  if (timerId.unref) timerId.unref();
+  _activeTimers.add(timerId);
+  structuredLog("debug", "staggered_interval_registered", { name, staggerDelay, intervalMs: ms, slot: _staggerRegistry.count });
+  return timerId;
 }
 
 async function gracefulShutdown(signal) {
@@ -23957,7 +23991,91 @@ if (db) {
   app.use("/api/disputes", createDisputeRouter({ db, requireAuth, adminOnly: economyAdminOnly }));
   registerLegalRoutes(app, { db, requireAuth, requireRole, structuredLog, auditLog });
   registerRepairEnhancedRoutes(app, { db, requireRole, log: structuredLog });
-  registerInitiativeRoutes(app, { db });
+  registerInitiativeRoutes(app, { db, realtimeEmit });
+
+  // ── Initiative Engine Proactive Tick ────────────────────────────────
+  // Concord doesn't wait. It can send the first message, double-text if
+  // the user takes too long, and share ideas unprompted.
+  // Runs every 15 minutes, staggered with other autonomous processes.
+  if (app._initiativeEngine) {
+    const _initEngine = app._initiativeEngine;
+    throttledInterval(async () => {
+      try {
+        // Check all active users for proactive triggers
+        const activeUsers = new Set();
+        for (const [sessionId, sess] of STATE.sessions) {
+          const userId = sess.userId || sessionId;
+          if (userId && userId !== "default" && userId !== "anon") activeUsers.add(userId);
+        }
+
+        for (const userId of activeUsers) {
+          // Check each trigger type
+          for (const triggerType of ["check_in", "pending_work", "reflective_followup", "substrate_discovery"]) {
+            try {
+              const lastMsg = STATE.sessions.get(userId)?.messages?.slice(-1)[0];
+              const idleMinutes = lastMsg?.ts ? Math.round((Date.now() - new Date(lastMsg.ts).getTime()) / 60000) : 999;
+
+              // Only trigger if user has been idle long enough
+              if (triggerType === "check_in" && idleMinutes < 120) continue;        // 2h idle
+              if (triggerType === "reflective_followup" && idleMinutes < 30) continue; // 30min idle
+              if (triggerType === "pending_work" && idleMinutes < 60) continue;      // 1h idle
+
+              const evalResult = _initEngine.evaluateTrigger(userId, triggerType, {
+                idleMinutes,
+                priority: idleMinutes > 480 ? "low" : "normal",
+              });
+
+              if (evalResult.shouldFire) {
+                // Generate contextual message based on trigger type
+                let message;
+                if (triggerType === "check_in") {
+                  message = "Been a while. Anything on your mind, or want me to surface something interesting from your lattice?";
+                } else if (triggerType === "pending_work") {
+                  const pendingArtifacts = Array.from(STATE.lensArtifacts?.values() || [])
+                    .filter(a => a.ownerId === userId && a.meta?.status === "draft")
+                    .slice(0, 3);
+                  message = pendingArtifacts.length > 0
+                    ? `You have ${pendingArtifacts.length} draft${pendingArtifacts.length > 1 ? "s" : ""} waiting. Want to pick up where you left off?`
+                    : null;
+                } else if (triggerType === "reflective_followup") {
+                  const lastTopic = lastMsg?.content?.slice(0, 100);
+                  message = lastTopic
+                    ? `Had another thought about what we were discussing. Want to hear it?`
+                    : null;
+                } else if (triggerType === "substrate_discovery") {
+                  const recentDtus = Array.from(STATE.dtus.values())
+                    .filter(d => d.ownerId === userId && Date.now() - new Date(d.createdAt || 0).getTime() < 86400000)
+                    .length;
+                  message = recentDtus > 0
+                    ? `I noticed some connections between your recent DTUs. Want me to map them out?`
+                    : null;
+                }
+
+                if (message) {
+                  _initEngine.createInitiative(userId, triggerType, message, {
+                    priority: evalResult.suggestedPriority,
+                    channel: "inApp",
+                  });
+
+                  // Push to frontend via WebSocket
+                  if (typeof realtimeEmit === "function") {
+                    realtimeEmit("initiative:new", { userId, triggerType, message, score: evalResult.score });
+                  }
+                }
+              }
+            } catch (_e) {
+              // Per-user evaluation errors don't block other users
+            }
+          }
+        }
+      } catch (e) {
+        structuredLog("error", "initiative_tick_error", { error: e?.message });
+      }
+    }, 15 * 60 * 1000, "initiative_proactive_tick");
+
+    structuredLog("info", "initiative_engine_active", { message: "Proactive tick registered — Concord can initiate conversations" });
+  }
+
   app.use("/api", createTransparencyRouter({ db, adminOnly: economyAdminOnly }));
   const backupScheduler = createBackupScheduler(db, { dataDir: DATA_DIR });
   registerBackupRoutes(app, { requireRole, backupScheduler, db });
