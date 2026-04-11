@@ -4,6 +4,7 @@ import { useLensNav } from '@/hooks/useLensNav';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
+import { BarChart, Bar, PieChart, Pie, Cell, ResponsiveContainer, XAxis, YAxis, Tooltip } from 'recharts';
 import Link from 'next/link';
 import {
   BarChart3,
@@ -17,7 +18,7 @@ import {
   ArrowLeft,
   Star,
   Zap,
-  PieChart,
+  PieChart as PieChartIcon,
   Clock,
   Filter as FilterIcon,
   Layers,
@@ -281,7 +282,7 @@ export default function AnalyticsPage() {
                 className="p-5 rounded-xl bg-lattice-deep border border-lattice-border"
               >
                 <div className="flex items-center gap-2 mb-4">
-                  <PieChart className="w-4 h-4 text-neon-purple" />
+                  <PieChartIcon className="w-4 h-4 text-neon-purple" />
                   <h3 className="text-sm font-semibold text-white">DTU Distribution by Lens / Tag</h3>
                 </div>
                 <div className="space-y-3">
@@ -739,24 +740,31 @@ function RevenueBar({
   total: number;
   color: string;
 }) {
-  const pct = total > 0 ? (amount / total) * 100 : 0;
+  const barColor = color.includes('purple') ? '#8b5cf6' : color.includes('cyan') ? '#00e5ff' : '#3b82f6';
+  const data = [{ name: label, value: amount, total }];
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between text-sm">
         <span className="text-gray-300">{label}</span>
-        <span className="text-white font-medium">{formatNumber(amount)} CC ({pct.toFixed(0)}%)</span>
+        <span className="text-white font-medium">{formatNumber(amount)} CC ({total > 0 ? ((amount / total) * 100).toFixed(0) : 0}%)</span>
       </div>
-      <div className="h-3 bg-lattice-surface rounded-full overflow-hidden">
-        <motion.div
-          initial={{ width: 0 }}
-          animate={{ width: `${pct}%` }}
-          transition={{ duration: 0.8 }}
-          className={cn('h-full rounded-full', color)}
-        />
-      </div>
+      <ResponsiveContainer width="100%" height={28}>
+        <BarChart data={data} layout="vertical" margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
+          <XAxis type="number" hide domain={[0, total || 1]} />
+          <YAxis type="category" dataKey="name" hide />
+          <Bar dataKey="value" fill={barColor} radius={[4, 4, 4, 4]} background={{ fill: '#1e293b', radius: 4 }} />
+        </BarChart>
+      </ResponsiveContainer>
     </div>
   );
 }
+
+const TIER_PIE_COLORS: Record<string, string> = {
+  regular: '#3b82f6',
+  mega: '#8b5cf6',
+  hyper: '#ec4899',
+  shadow: '#6b7280',
+};
 
 function TierBreakdown({ dtus }: { dtus: DTUSummary[] }) {
   const tierCounts: Record<string, number> = {};
@@ -765,39 +773,37 @@ function TierBreakdown({ dtus }: { dtus: DTUSummary[] }) {
     tierCounts[tier] = (tierCounts[tier] || 0) + 1;
   }
 
-  const TIER_COLORS: Record<string, string> = {
-    regular: 'bg-neon-blue/60',
-    mega: 'bg-neon-purple/60',
-    hyper: 'bg-neon-pink/60',
-    shadow: 'bg-gray-400/60',
-  };
+  const pieData = Object.entries(tierCounts).map(([tier, count]) => ({
+    name: tier,
+    value: count,
+    color: TIER_PIE_COLORS[tier] || '#6b7280',
+  }));
 
-  const total = dtus.length || 1;
+  if (pieData.length === 0) {
+    return <p className="text-sm text-gray-500 text-center py-4">No DTU data available</p>;
+  }
 
   return (
-    <div data-lens-theme="analytics" className="space-y-3">
-      {Object.entries(tierCounts).map(([tier, count]) => {
-        const pct = (count / total) * 100;
-        return (
-          <div key={tier} className="space-y-1">
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-gray-300 capitalize">{tier}</span>
-              <span className="text-gray-500">{count} ({pct.toFixed(0)}%)</span>
-            </div>
-            <div className="h-2 bg-lattice-surface rounded-full overflow-hidden">
-              <motion.div
-                initial={{ width: 0 }}
-                animate={{ width: `${pct}%` }}
-                transition={{ duration: 0.6 }}
-                className={cn('h-full rounded-full', TIER_COLORS[tier] || 'bg-gray-400/60')}
-              />
-            </div>
+    <div data-lens-theme="analytics" className="flex items-center gap-4">
+      <ResponsiveContainer width={120} height={120}>
+        <PieChart>
+          <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={30} outerRadius={55} paddingAngle={2} strokeWidth={0}>
+            {pieData.map((entry, i) => (
+              <Cell key={i} fill={entry.color} />
+            ))}
+          </Pie>
+          <Tooltip contentStyle={{ backgroundColor: '#1a1a2e', border: '1px solid #2d2d44', borderRadius: 8, color: '#fff', fontSize: 12 }} />
+        </PieChart>
+      </ResponsiveContainer>
+      <div className="flex-1 space-y-1.5">
+        {pieData.map(({ name, value, color }) => (
+          <div key={name} className="flex items-center gap-2 text-sm">
+            <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
+            <span className="text-gray-300 capitalize flex-1">{name}</span>
+            <span className="text-gray-500">{value}</span>
           </div>
-        );
-      })}
-      {Object.keys(tierCounts).length === 0 && (
-        <p className="text-sm text-gray-500 text-center py-4">No DTU data available</p>
-      )}
+        ))}
+      </div>
     </div>
   );
 }

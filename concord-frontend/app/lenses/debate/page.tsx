@@ -132,24 +132,135 @@ function ProConScale({ proCount, conCount, proVotes, conVotes }:
 }
 
 /* ------------------------------------------------------------------ */
+/*  Debate Phase & Turn Types                                          */
+/* ------------------------------------------------------------------ */
+
+type DebatePhase = 'setup' | 'opening' | 'rebuttal' | 'closing' | 'voting' | 'finished';
+type DebateSide = 'pro' | 'con';
+
+const PHASE_CONFIG: Record<DebatePhase, { label: string; description: string; allowSubmit: boolean; hasTurns: boolean }> = {
+  setup:    { label: 'Setup',    description: 'Configure debate rules and timer',   allowSubmit: false, hasTurns: false },
+  opening:  { label: 'Opening',  description: 'Opening statements from each side',  allowSubmit: true,  hasTurns: true },
+  rebuttal: { label: 'Rebuttal', description: 'Rebuttals to opposing arguments',    allowSubmit: true,  hasTurns: true },
+  closing:  { label: 'Closing',  description: 'Closing statements from each side',  allowSubmit: true,  hasTurns: true },
+  voting:   { label: 'Voting',   description: 'Community votes on the winner',      allowSubmit: false, hasTurns: false },
+  finished: { label: 'Finished', description: 'Debate concluded',                   allowSubmit: false, hasTurns: false },
+};
+
+const PHASE_ORDER: DebatePhase[] = ['setup', 'opening', 'rebuttal', 'closing', 'voting', 'finished'];
+
+function getNextPhase(current: DebatePhase): DebatePhase {
+  const idx = PHASE_ORDER.indexOf(current);
+  return idx < PHASE_ORDER.length - 1 ? PHASE_ORDER[idx + 1] : 'finished';
+}
+
+/* ------------------------------------------------------------------ */
+/*  Current Speaker Indicator                                          */
+/* ------------------------------------------------------------------ */
+
+function CurrentSpeakerBanner({ phase, currentTurn, onSkipTurn }: { phase: DebatePhase; currentTurn: DebateSide; onSkipTurn: () => void }) {
+  const config = PHASE_CONFIG[phase];
+  if (!config.hasTurns) return null;
+
+  const isPro = currentTurn === 'pro';
+  return (
+    <div className={cn(
+      'rounded-lg px-4 py-3 flex items-center justify-between border',
+      isPro ? 'bg-neon-green/10 border-neon-green/30' : 'bg-red-400/10 border-red-400/30'
+    )}>
+      <div className="flex items-center gap-3">
+        <div className={cn('w-3 h-3 rounded-full animate-pulse', isPro ? 'bg-neon-green' : 'bg-red-400')} />
+        <div>
+          <p className={cn('text-sm font-bold', isPro ? 'text-neon-green' : 'text-red-400')}>
+            {isPro ? 'PRO' : 'CON'} side speaking
+          </p>
+          <p className="text-xs text-gray-400">{config.label} phase — {isPro ? 'Pro' : 'Con'} has the floor</p>
+        </div>
+      </div>
+      <button onClick={onSkipTurn}
+        className="px-3 py-1 rounded text-xs bg-white/5 border border-white/10 hover:bg-white/10 text-gray-300">
+        Skip Turn
+      </button>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Phase Progress Bar                                                 */
+/* ------------------------------------------------------------------ */
+
+function PhaseProgressBar({ phase, onPhaseSelect }: { phase: DebatePhase; onPhaseSelect: (p: DebatePhase) => void }) {
+  const currentIdx = PHASE_ORDER.indexOf(phase);
+  return (
+    <div className="flex items-center gap-1 w-full">
+      {PHASE_ORDER.map((p, i) => {
+        const isCurrent = p === phase;
+        const isPast = i < currentIdx;
+        return (
+          <button key={p} onClick={() => onPhaseSelect(p)}
+            className={cn(
+              'flex-1 py-1.5 text-[10px] font-semibold uppercase tracking-wider rounded transition-all text-center',
+              isCurrent ? 'bg-neon-purple/30 text-neon-purple border border-neon-purple/40' :
+              isPast ? 'bg-white/5 text-gray-500 border border-white/5' :
+              'bg-white/[0.02] text-gray-600 border border-white/5'
+            )}>
+            {PHASE_CONFIG[p].label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /*  Debate Round Timer                                                 */
 /* ------------------------------------------------------------------ */
 
-function DebateRoundTimer() {
+function DebateRoundTimer({ onTimeUp, turnKey, autoStart, phase, currentTurn }: {
+  onTimeUp?: () => void;
+  /** Changes whenever a new turn begins — triggers auto-reset + auto-start */
+  turnKey?: number;
+  autoStart?: boolean;
+  phase?: DebatePhase;
+  currentTurn?: DebateSide;
+}) {
   const [minutes, setMinutes] = useState(3);
   const [running, setRunning] = useState(false);
   const [remaining, setRemaining] = useState(3 * 60);
   const [round, setRound] = useState(1);
   const [finished, setFinished] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const onTimeUpRef = useRef(onTimeUp);
+  onTimeUpRef.current = onTimeUp;
+  const prevTurnKeyRef = useRef(turnKey);
 
   useEffect(() => { if (!running) setRemaining(minutes * 60); }, [minutes, running]);
+
+  // Auto-reset & auto-start when turnKey changes (turn/phase advanced)
+  useEffect(() => {
+    if (turnKey !== undefined && turnKey !== prevTurnKeyRef.current) {
+      prevTurnKeyRef.current = turnKey;
+      setFinished(false);
+      setRemaining(minutes * 60);
+      setRound(r => r + 1);
+      if (autoStart) {
+        setRunning(true);
+      } else {
+        setRunning(false);
+      }
+    }
+  }, [turnKey, autoStart, minutes]);
 
   useEffect(() => {
     if (running) {
       intervalRef.current = setInterval(() => {
         setRemaining(r => {
-          if (r <= 1) { setRunning(false); setFinished(true); return 0; }
+          if (r <= 1) {
+            setRunning(false);
+            setFinished(true);
+            onTimeUpRef.current?.();
+            return 0;
+          }
           return r - 1;
         });
       }, 1000);
@@ -169,13 +280,18 @@ function DebateRoundTimer() {
   const dash = (pct / 100) * circumference;
   const urgentColor = remaining <= 30 ? '#ef4444' : running ? '#a855f7' : '#6b7280';
 
+  const isActive = phase && phase !== 'setup' && phase !== 'finished';
+  const turnLabel = phase && currentTurn
+    ? `${PHASE_CONFIG[phase].label} — ${currentTurn === 'pro' ? 'Pro' : 'Con'}`
+    : `Round ${round}`;
+
   return (
     <div className="panel p-4 space-y-3">
       <div className="flex items-center justify-between">
         <h3 className="font-semibold text-sm flex items-center gap-2">
           <Timer className="w-4 h-4 text-neon-purple" /> Round Timer
         </h3>
-        <span className="text-xs text-gray-500">Round {round}</span>
+        <span className={cn('text-xs', isActive ? 'text-neon-cyan font-medium' : 'text-gray-500')}>{turnLabel}</span>
       </div>
       <div className="flex items-center gap-4">
         <div className="relative w-16 h-16 shrink-0">
@@ -220,7 +336,7 @@ function DebateRoundTimer() {
               </button>
             )}
           </div>
-          {finished && <p className="text-xs text-yellow-400 animate-bounce">Time's up! Round {round} complete.</p>}
+          {finished && <p className="text-xs text-yellow-400 animate-bounce">Time's up! {turnLabel} complete.</p>}
         </div>
       </div>
     </div>
@@ -279,6 +395,53 @@ export default function DebateLensPage() {
   const [newDebate, setNewDebate] = useState<{ topic: string; description: string; format: DebateData['format']; timeLimit: number }>({ topic: '', description: '', format: 'open', timeLimit: 30 });
   const [newArgument, setNewArgument] = useState('');
   const [argumentSide, setArgumentSide] = useState<'pro' | 'con'>('pro');
+
+  // --- Debate phase & turn management ---
+  const [debatePhase, setDebatePhase] = useState<DebatePhase>('setup');
+  const [currentTurn, setCurrentTurn] = useState<DebateSide>('pro');
+  const [turnCount, setTurnCount] = useState(0);
+
+  const phaseConfig = PHASE_CONFIG[debatePhase];
+
+  const advanceTurn = useCallback(() => {
+    const config = PHASE_CONFIG[debatePhase];
+    if (config.hasTurns) {
+      // Each phase has 2 turns (pro then con). After both, advance phase.
+      if (currentTurn === 'pro') {
+        setCurrentTurn('con');
+        setArgumentSide('con');
+        setTurnCount(c => c + 1);
+      } else {
+        // Both sides spoke — advance to next phase
+        const next = getNextPhase(debatePhase);
+        setCurrentTurn('pro');
+        setArgumentSide('pro');
+        setTurnCount(c => c + 1);
+        setDebatePhase(next);
+      }
+    } else {
+      // Non-turn phases auto-advance on timer
+      setTurnCount(c => c + 1);
+      setDebatePhase(getNextPhase(debatePhase));
+    }
+  }, [debatePhase, currentTurn]);
+
+  const handleTimerExpired = useCallback(() => {
+    if (debatePhase !== 'setup' && debatePhase !== 'finished') {
+      advanceTurn();
+    }
+  }, [debatePhase, advanceTurn]);
+
+  const handleSelectDebate = useCallback((id: string) => {
+    setSelectedDebate(id);
+    // Reset state machine for the newly selected debate
+    setDebatePhase('setup');
+    setCurrentTurn('pro');
+    setArgumentSide('pro');
+    setTurnCount(0);
+  }, []);
+
+  const canSubmitArgument = phaseConfig.allowSubmit && (!phaseConfig.hasTurns || argumentSide === currentTurn);
 
   // Wire to social groups API for community features
   const { data: trendingTopics } = useQuery({
@@ -590,6 +753,31 @@ export default function DebateLensPage() {
         <div className="lens-card"><Users className="w-5 h-5 text-yellow-400 mb-2" /><p className="text-2xl font-bold">{stats.totalVotes}</p><p className="text-sm text-gray-400">Votes Cast</p></div>
       </div>
 
+      {/* ========== Phase Progress & Speaker ========== */}
+      {selectedDebateData && (
+        <div className="space-y-3">
+          <PhaseProgressBar phase={debatePhase} onPhaseSelect={setDebatePhase} />
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-gray-500">
+              Phase: <span className="text-white font-medium">{phaseConfig.label}</span> — {phaseConfig.description}
+            </p>
+            {debatePhase === 'setup' && (
+              <button onClick={() => { setDebatePhase('opening'); setCurrentTurn('pro'); setTurnCount(c => c + 1); setShowDebateTools(true); }}
+                className="px-3 py-1 rounded text-xs bg-neon-green/20 text-neon-green border border-neon-green/30 font-medium">
+                Start Debate
+              </button>
+            )}
+            {debatePhase !== 'setup' && debatePhase !== 'finished' && (
+              <button onClick={() => { setDebatePhase(getNextPhase(debatePhase)); setCurrentTurn('pro'); setArgumentSide('pro'); setTurnCount(c => c + 1); }}
+                className="px-3 py-1 rounded text-xs bg-white/5 border border-white/10 hover:bg-white/10 text-gray-300">
+                Skip to {PHASE_CONFIG[getNextPhase(debatePhase)].label}
+              </button>
+            )}
+          </div>
+          <CurrentSpeakerBanner phase={debatePhase} currentTurn={currentTurn} onSkipTurn={advanceTurn} />
+        </div>
+      )}
+
       {/* ========== Debate Tools Panel ========== */}
       <AnimatePresence>
         {showDebateTools && (
@@ -600,7 +788,13 @@ export default function DebateLensPage() {
             className="overflow-hidden"
           >
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-              <DebateRoundTimer />
+              <DebateRoundTimer
+                onTimeUp={handleTimerExpired}
+                turnKey={turnCount}
+                autoStart={debatePhase !== 'setup' && debatePhase !== 'finished'}
+                phase={debatePhase}
+                currentTurn={currentTurn}
+              />
               {selectedDebateData ? (
                 <div className="space-y-4">
                   <ProConScale
@@ -656,7 +850,7 @@ export default function DebateLensPage() {
               <p className="text-gray-400 text-center py-4">No debates yet.</p>
             ) : debates.map(d => (
               <div key={d.id} className={cn('w-full text-left lens-card transition-all', selectedDebate === d.id && 'border-neon-purple ring-1 ring-neon-purple')}>
-                <button onClick={() => setSelectedDebate(d.id)} className="w-full text-left">
+                <button onClick={() => handleSelectDebate(d.id)} className="w-full text-left">
                   <div className="flex items-center justify-between mb-1">
                     <h3 className="font-semibold text-sm truncate">{d.topic}</h3>
                     <span className={cn('text-xs px-2 py-0.5 rounded', STATUS_COLORS[d.status || 'open'])}>{d.status}</span>
@@ -714,17 +908,46 @@ export default function DebateLensPage() {
               </div>
 
               {/* Add argument */}
-              <div className="panel p-4">
-                <h3 className="font-semibold mb-3">Add Argument</h3>
+              <div className={cn('panel p-4', !phaseConfig.allowSubmit && 'opacity-60')}>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-semibold">Add Argument</h3>
+                  {!phaseConfig.allowSubmit && (
+                    <span className="text-xs text-yellow-400 bg-yellow-400/10 px-2 py-0.5 rounded">
+                      Submissions closed during {phaseConfig.label} phase
+                    </span>
+                  )}
+                  {phaseConfig.allowSubmit && phaseConfig.hasTurns && (
+                    <span className={cn('text-xs px-2 py-0.5 rounded',
+                      currentTurn === 'pro' ? 'text-neon-green bg-neon-green/10' : 'text-red-400 bg-red-400/10'
+                    )}>
+                      Only {currentTurn === 'pro' ? 'Pro' : 'Con'} may submit
+                    </span>
+                  )}
+                </div>
                 <div className="flex gap-2 mb-3">
-                  <button onClick={() => setArgumentSide('pro')} className={cn('px-3 py-1 rounded text-sm', argumentSide === 'pro' ? 'bg-neon-green/20 text-neon-green' : 'bg-lattice-elevated text-gray-400')}>Pro</button>
-                  <button onClick={() => setArgumentSide('con')} className={cn('px-3 py-1 rounded text-sm', argumentSide === 'con' ? 'bg-red-400/20 text-red-400' : 'bg-lattice-elevated text-gray-400')}>Con</button>
+                  <button onClick={() => setArgumentSide('pro')}
+                    disabled={phaseConfig.hasTurns && currentTurn !== 'pro'}
+                    className={cn('px-3 py-1 rounded text-sm',
+                      argumentSide === 'pro' ? 'bg-neon-green/20 text-neon-green' : 'bg-lattice-elevated text-gray-400',
+                      phaseConfig.hasTurns && currentTurn !== 'pro' && 'opacity-40 cursor-not-allowed'
+                    )}>Pro</button>
+                  <button onClick={() => setArgumentSide('con')}
+                    disabled={phaseConfig.hasTurns && currentTurn !== 'con'}
+                    className={cn('px-3 py-1 rounded text-sm',
+                      argumentSide === 'con' ? 'bg-red-400/20 text-red-400' : 'bg-lattice-elevated text-gray-400',
+                      phaseConfig.hasTurns && currentTurn !== 'con' && 'opacity-40 cursor-not-allowed'
+                    )}>Con</button>
                 </div>
                 <div className="flex gap-2">
-                  <input value={newArgument} onChange={e => setNewArgument(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleAddArgument(); }} placeholder="Your argument..." className="input-lattice flex-1" />
-                  <button onClick={handleAddArgument} disabled={!newArgument.trim()} className="btn-neon"><Send className="w-4 h-4" /></button>
+                  <input value={newArgument} onChange={e => setNewArgument(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter' && canSubmitArgument) handleAddArgument(); }}
+                    placeholder={canSubmitArgument ? 'Your argument...' : phaseConfig.hasTurns ? `Waiting for ${currentTurn === 'pro' ? 'Pro' : 'Con'} side...` : 'Submissions closed this phase'}
+                    disabled={!canSubmitArgument}
+                    className="input-lattice flex-1 disabled:opacity-50 disabled:cursor-not-allowed" />
+                  <button onClick={handleAddArgument} disabled={!newArgument.trim() || !canSubmitArgument}
+                    className="btn-neon disabled:opacity-50"><Send className="w-4 h-4" /></button>
                 </div>
-                {newArgument.trim() && (
+                {newArgument.trim() && canSubmitArgument && (
                   <div className="mt-3">
                     <ArgumentStrengthMeter text={newArgument} />
                   </div>

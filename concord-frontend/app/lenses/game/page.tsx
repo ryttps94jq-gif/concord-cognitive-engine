@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { api } from '@/lib/api/client';
@@ -28,7 +28,7 @@ import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 // Types
 // ---------------------------------------------------------------------------
 
-type MainTab = 'dashboard' | 'skills' | 'quests' | 'achievements' | 'leaderboard' | 'shop' | 'history';
+type MainTab = 'dashboard' | 'skills' | 'quests' | 'achievements' | 'leaderboard' | 'shop' | 'history' | 'minigame';
 type LeaderboardPeriod = 'weekly' | 'monthly' | 'alltime';
 type QuestStatus = 'available' | 'accepted' | 'completed';
 type SkillBranch = 'production' | 'theory' | 'engineering' | 'performance';
@@ -262,6 +262,457 @@ export default function GameLensPage() {
   const [unlockAnim, setUnlockAnim] = useState<string | null>(null);
   const [questFilter, setQuestFilter] = useState<'all' | 'daily' | 'weekly' | 'challenge'>('all');
 
+  // ---------------------------------------------------------------------------
+  // Mini-Game Engine State
+  // ---------------------------------------------------------------------------
+  // All simulation state lives in refs to avoid 60fps re-renders.
+  // React state is synced periodically (every ~150ms) for HUD display only.
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const animFrameRef = useRef<number>(0);
+  const gameLoopRef = useRef<boolean>(false);
+
+  interface MiniGameTarget {
+    id: number;
+    x: number;
+    y: number;
+    radius: number;
+    life: number;      // frames remaining
+    maxLife: number;
+    points: number;
+    color: string;
+    spawned: number;    // frame it appeared
+    vx: number;         // horizontal drift velocity
+    vy: number;         // vertical drift velocity
+  }
+
+  interface HitParticle {
+    x: number;
+    y: number;
+    vx: number;
+    vy: number;
+    life: number;
+    color: string;
+    size: number;
+  }
+
+  interface FloatingText {
+    x: number;
+    y: number;
+    text: string;
+    life: number;
+    color: string;
+  }
+
+  // React state -- updated periodically from refs, drives HUD display
+  const [mgState, setMgState] = useState<'idle' | 'playing' | 'ended'>('idle');
+  const [mgScore, setMgScore] = useState(0);
+  const [mgTimeLeft, setMgTimeLeft] = useState(30);
+  const [mgHits, setMgHits] = useState(0);
+  const [mgMisses, setMgMisses] = useState(0);
+  const [mgCombo, setMgCombo] = useState(0);
+  const [mgBestCombo, setMgBestCombo] = useState(0);
+  const [mgXpAwarded, setMgXpAwarded] = useState(0);
+
+  // Simulation refs -- mutated directly inside requestAnimationFrame
+  const simRef = useRef({
+    score: 0,
+    timeLeft: 30,
+    hits: 0,
+    misses: 0,
+    combo: 0,
+    bestCombo: 0,
+    targets: [] as MiniGameTarget[],
+    particles: [] as HitParticle[],
+    floatingTexts: [] as FloatingText[],
+    screenShake: 0,
+    spawnInterval: 900,     // ms, decreases over time for difficulty ramp
+    nextId: 1,
+  });
+
+  const TARGET_COLORS = ['#a855f7', '#06b6d4', '#22c55e', '#eab308', '#ec4899', '#3b82f6'];
+
+  // Sync simulation refs to React state for HUD (called every ~150ms from game loop)
+  const syncStateFromSim = useCallback(() => {
+    const s = simRef.current;
+    setMgScore(s.score);
+    setMgTimeLeft(s.timeLeft);
+    setMgHits(s.hits);
+    setMgMisses(s.misses);
+    setMgCombo(s.combo);
+    setMgBestCombo(s.bestCombo);
+  }, []);
+
+  const startMiniGame = useCallback(() => {
+    // Reset React state
+    setMgScore(0);
+    setMgTimeLeft(30);
+    setMgHits(0);
+    setMgMisses(0);
+    setMgCombo(0);
+    setMgBestCombo(0);
+    setMgXpAwarded(0);
+    // Reset simulation refs
+    simRef.current = {
+      score: 0, timeLeft: 30, hits: 0, misses: 0, combo: 0, bestCombo: 0,
+      targets: [], particles: [], floatingTexts: [], screenShake: 0,
+      spawnInterval: 900, nextId: 1,
+    };
+    setMgState('playing');
+    gameLoopRef.current = true;
+  }, []);
+
+  const endMiniGame = useCallback(() => {
+    gameLoopRef.current = false;
+    if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+    // Final sync
+    const s = simRef.current;
+    setMgScore(s.score);
+    setMgHits(s.hits);
+    setMgMisses(s.misses);
+    setMgBestCombo(s.bestCombo);
+    setMgCombo(0);
+    setMgTimeLeft(0);
+    setMgState('ended');
+    // Award XP: 1 XP per 10 points scored, minimum 5 if any hits
+    const xpEarned = Math.max(s.hits > 0 ? 5 : 0, Math.floor(s.score / 10));
+    setMgXpAwarded(xpEarned);
+    if (xpEarned > 0) {
+      setPlayerXp((prev) => prev + xpEarned);
+    }
+  }, []);
+
+  // Main game loop -- pure canvas rendering, no React setState per frame
+  useEffect(() => {
+    if (mgState !== 'playing') return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    let frameCount = 0;
+    let lastTimestamp = performance.now();
+    let secondAccumulator = 0;
+    let spawnAccumulator = 0;
+    let syncAccumulator = 0;
+    const SYNC_INTERVAL = 150; // ms between React state syncs
+
+    const spawnTarget = (): MiniGameTarget => {
+      const s = simRef.current;
+      // Difficulty ramp: targets get smaller and faster over time
+      const elapsed = 30 - s.timeLeft;
+      const difficultyScale = 1 + elapsed / 30; // 1.0 -> 2.0 over 30s
+      const baseRadius = 18 + Math.random() * 18;
+      const radius = Math.max(12, baseRadius / (1 + difficultyScale * 0.15));
+      const points = Math.round((40 - radius) + 5 * difficultyScale);
+      const life = Math.max(40, (80 + Math.floor(Math.random() * 50)) - elapsed);
+      const speed = 0.15 + Math.random() * 0.3 * difficultyScale;
+      const angle = Math.random() * Math.PI * 2;
+      return {
+        id: s.nextId++,
+        x: radius + Math.random() * (canvas.width - radius * 2),
+        y: 40 + radius + Math.random() * (canvas.height - radius * 2 - 40),
+        radius,
+        life,
+        maxLife: life,
+        points,
+        color: TARGET_COLORS[Math.floor(Math.random() * TARGET_COLORS.length)],
+        spawned: frameCount,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+      };
+    };
+
+    const spawnParticles = (x: number, y: number, color: string, count: number) => {
+      const s = simRef.current;
+      for (let i = 0; i < count; i++) {
+        const angle = (Math.PI * 2 * i) / count + (Math.random() - 0.5) * 0.5;
+        const speed = 1.5 + Math.random() * 3;
+        s.particles.push({
+          x, y,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
+          life: 20 + Math.random() * 15,
+          color,
+          size: 2 + Math.random() * 3,
+        });
+      }
+    };
+
+    const addFloatingText = (x: number, y: number, text: string, color: string) => {
+      simRef.current.floatingTexts.push({ x, y, text, life: 40, color });
+    };
+
+    const loop = (timestamp: number) => {
+      if (!gameLoopRef.current) return;
+
+      const dt = timestamp - lastTimestamp;
+      lastTimestamp = timestamp;
+      frameCount++;
+      const s = simRef.current;
+
+      // Timer countdown
+      secondAccumulator += dt;
+      if (secondAccumulator >= 1000) {
+        secondAccumulator -= 1000;
+        s.timeLeft = Math.max(0, s.timeLeft - 1);
+        // Ramp difficulty: spawn faster over time
+        s.spawnInterval = Math.max(350, 900 - (30 - s.timeLeft) * 20);
+        if (s.timeLeft <= 0) {
+          setTimeout(() => endMiniGame(), 0);
+          return;
+        }
+      }
+
+      // Spawn targets
+      spawnAccumulator += dt;
+      if (spawnAccumulator >= s.spawnInterval) {
+        spawnAccumulator -= s.spawnInterval;
+        s.targets.push(spawnTarget());
+      }
+
+      // Age targets, apply drift, remove expired
+      const alive: MiniGameTarget[] = [];
+      let missed = 0;
+      for (const t of s.targets) {
+        t.life--;
+        // Drift movement -- bounce off walls
+        t.x += t.vx;
+        t.y += t.vy;
+        if (t.x - t.radius < 0 || t.x + t.radius > canvas.width) t.vx *= -1;
+        if (t.y - t.radius < 40 || t.y + t.radius > canvas.height) t.vy *= -1;
+        t.x = Math.max(t.radius, Math.min(canvas.width - t.radius, t.x));
+        t.y = Math.max(40 + t.radius, Math.min(canvas.height - t.radius, t.y));
+        if (t.life > 0) {
+          alive.push(t);
+        } else {
+          missed++;
+        }
+      }
+      if (missed > 0) {
+        s.misses += missed;
+        s.combo = 0;
+      }
+      s.targets = alive;
+
+      // Update particles
+      s.particles = s.particles.filter((p) => {
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += 0.08; // gravity
+        p.life--;
+        p.vx *= 0.98;
+        return p.life > 0;
+      });
+
+      // Update floating texts
+      s.floatingTexts = s.floatingTexts.filter((ft) => {
+        ft.y -= 0.8;
+        ft.life--;
+        return ft.life > 0;
+      });
+
+      // Decay screen shake
+      s.screenShake *= 0.85;
+      if (s.screenShake < 0.5) s.screenShake = 0;
+
+      // Sync to React periodically
+      syncAccumulator += dt;
+      if (syncAccumulator >= SYNC_INTERVAL) {
+        syncAccumulator -= SYNC_INTERVAL;
+        syncStateFromSim();
+      }
+
+      // --- DRAW ---
+      ctx.save();
+      // Apply screen shake
+      if (s.screenShake > 0) {
+        const sx = (Math.random() - 0.5) * s.screenShake;
+        const sy = (Math.random() - 0.5) * s.screenShake;
+        ctx.translate(sx, sy);
+      }
+
+      ctx.clearRect(-5, -5, canvas.width + 10, canvas.height + 10);
+
+      // Background grid with subtle pulse
+      const gridAlpha = 0.06 + Math.sin(frameCount * 0.02) * 0.02;
+      ctx.strokeStyle = `rgba(139, 92, 246, ${gridAlpha})`;
+      ctx.lineWidth = 1;
+      for (let x = 0; x < canvas.width; x += 40) {
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+      }
+      for (let y = 0; y < canvas.height; y += 40) {
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+      }
+
+      // Draw particles
+      for (const p of s.particles) {
+        ctx.save();
+        ctx.globalAlpha = Math.min(1, p.life / 10);
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size * (p.life / 30), 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+
+      // Draw targets
+      for (const t of s.targets) {
+        const lifeRatio = t.life / t.maxLife;
+        const pulse = 1 + Math.sin(frameCount * 0.15 + t.id) * 0.06;
+        const r = t.radius * pulse;
+
+        // Outer glow
+        ctx.save();
+        ctx.globalAlpha = lifeRatio * 0.25;
+        ctx.beginPath();
+        ctx.arc(t.x, t.y, r + 10, 0, Math.PI * 2);
+        ctx.fillStyle = t.color;
+        ctx.fill();
+        ctx.restore();
+
+        // Main circle
+        ctx.save();
+        ctx.globalAlpha = 0.2 + lifeRatio * 0.8;
+        ctx.beginPath();
+        ctx.arc(t.x, t.y, r, 0, Math.PI * 2);
+        ctx.fillStyle = t.color;
+        ctx.fill();
+
+        // Life ring (shrinks as life drains)
+        ctx.beginPath();
+        ctx.arc(t.x, t.y, r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * lifeRatio);
+        ctx.strokeStyle = lifeRatio < 0.3 ? '#ef4444' : '#ffffff';
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+
+        // Crosshair lines
+        ctx.beginPath();
+        ctx.moveTo(t.x - r * 0.4, t.y);
+        ctx.lineTo(t.x + r * 0.4, t.y);
+        ctx.moveTo(t.x, t.y - r * 0.4);
+        ctx.lineTo(t.x, t.y + r * 0.4);
+        ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        // Points label
+        ctx.fillStyle = '#ffffff';
+        ctx.font = `bold ${Math.max(9, Math.round(r * 0.55))}px monospace`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(`${t.points}`, t.x, t.y);
+        ctx.restore();
+      }
+
+      // Draw floating texts (score popups)
+      for (const ft of s.floatingTexts) {
+        ctx.save();
+        ctx.globalAlpha = Math.min(1, ft.life / 15);
+        ctx.fillStyle = ft.color;
+        ctx.font = 'bold 16px monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(ft.text, ft.x, ft.y);
+        ctx.restore();
+      }
+
+      // HUD bar background
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      ctx.fillRect(0, 0, canvas.width, 36);
+
+      // HUD text
+      ctx.save();
+      ctx.fillStyle = 'rgba(255,255,255,0.9)';
+      ctx.font = 'bold 14px monospace';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(`Score: ${s.score}`, 12, 18);
+      ctx.textAlign = 'right';
+      // Timer color shifts red when low
+      ctx.fillStyle = s.timeLeft <= 5 ? '#ef4444' : s.timeLeft <= 10 ? '#eab308' : 'rgba(255,255,255,0.9)';
+      ctx.fillText(`Time: ${s.timeLeft}s`, canvas.width - 12, 18);
+      // Combo
+      if (s.combo > 1) {
+        ctx.fillStyle = '#eab308';
+        ctx.font = 'bold 15px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(`COMBO x${s.combo}`, canvas.width / 2, 18);
+      }
+      // Accuracy
+      const totalShots = s.hits + s.misses;
+      if (totalShots > 0) {
+        ctx.fillStyle = 'rgba(255,255,255,0.5)';
+        ctx.font = '11px monospace';
+        ctx.textAlign = 'left';
+        ctx.fillText(`Acc: ${Math.round((s.hits / totalShots) * 100)}%`, 160, 18);
+      }
+      ctx.restore();
+
+      ctx.restore(); // pop screen shake
+
+      animFrameRef.current = requestAnimationFrame(loop);
+    };
+
+    // Handle canvas clicks within the loop scope via a ref-based approach
+    const clickHandler = (e: MouseEvent) => {
+      if (!gameLoopRef.current) return;
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      const mx = (e.clientX - rect.left) * scaleX;
+      const my = (e.clientY - rect.top) * scaleY;
+      const s = simRef.current;
+
+      // Find the topmost target that was clicked
+      let hitIndex = -1;
+      for (let i = s.targets.length - 1; i >= 0; i--) {
+        const t = s.targets[i];
+        const dx = mx - t.x;
+        const dy = my - t.y;
+        if (dx * dx + dy * dy <= t.radius * t.radius) {
+          hitIndex = i;
+          break;
+        }
+      }
+
+      if (hitIndex >= 0) {
+        const target = s.targets[hitIndex];
+        s.combo++;
+        s.hits++;
+        if (s.combo > s.bestCombo) s.bestCombo = s.combo;
+        const comboMultiplier = 1 + (s.combo - 1) * 0.25;
+        const points = Math.round(target.points * comboMultiplier);
+        s.score += points;
+        // Visual effects
+        spawnParticles(target.x, target.y, target.color, 10 + s.combo * 2);
+        addFloatingText(target.x, target.y - target.radius - 8,
+          s.combo > 1 ? `+${points} x${s.combo}` : `+${points}`,
+          s.combo > 3 ? '#eab308' : '#ffffff');
+        s.screenShake = Math.min(8, 2 + s.combo);
+        // Remove the target
+        s.targets.splice(hitIndex, 1);
+      } else {
+        // Clicked empty space -- break combo
+        s.combo = 0;
+      }
+    };
+
+    canvas.addEventListener('click', clickHandler);
+    animFrameRef.current = requestAnimationFrame(loop);
+
+    return () => {
+      canvas.removeEventListener('click', clickHandler);
+      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mgState, endMiniGame, syncStateFromSim]);
+
+  // Canvas click handler -- only used when NOT playing (idle/ended states use React onClick)
+  const handleCanvasClick = useCallback((_e: React.MouseEvent<HTMLCanvasElement>) => {
+    // Click handling during gameplay is done via native event listener in the game loop effect.
+    // This React handler is a no-op; it exists so the onClick prop is always defined.
+  }, []);
+
   // Fetch achievements from /api/game/achievements
   const { data: achievementsResp, isLoading, isError: isError, error: error, refetch: refetch } = useQuery({
     queryKey: ['game', 'achievements'],
@@ -418,6 +869,7 @@ export default function GameLensPage() {
     { id: 'leaderboard', label: 'Leaderboard', icon: Users },
     { id: 'shop', label: 'Shop', icon: ShoppingBag },
     { id: 'history', label: 'XP History', icon: TrendingUp },
+    { id: 'minigame', label: 'Mini-Game', icon: Gamepad2 },
   ];
 
   // ---------------------------------------------------------------------------
@@ -965,6 +1417,153 @@ export default function GameLensPage() {
                   <span className={cn('font-mono text-xs shrink-0', entry.color)}>{entry.xp}</span>
                 </div>
               ))}
+            </div>
+          </div>
+        </motion.div>
+      )}
+
+      {/* ================================================================= */}
+      {/* MINI-GAME TAB                                                      */}
+      {/* ================================================================= */}
+      {activeTab === 'minigame' && (
+        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                <Target className="w-5 h-5 text-neon-purple" />
+                Target Blitz
+              </h3>
+              <p className="text-sm text-gray-400">Click targets before they fade! Chain hits for combo multipliers. Earn XP based on your score.</p>
+            </div>
+            <div className="flex items-center gap-3">
+              {mgState === 'idle' && (
+                <button onClick={startMiniGame} className="btn-neon py-2 px-6 flex items-center gap-2">
+                  <Gamepad2 className="w-4 h-4" /> Start Game
+                </button>
+              )}
+              {mgState === 'playing' && (
+                <button onClick={endMiniGame} className="text-sm text-gray-400 hover:text-white border border-gray-600 rounded px-4 py-2 transition-colors">
+                  End Early
+                </button>
+              )}
+              {mgState === 'ended' && (
+                <button onClick={startMiniGame} className="btn-neon py-2 px-6 flex items-center gap-2">
+                  <Gamepad2 className="w-4 h-4" /> Play Again
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Stats bar */}
+          <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
+            {[
+              { label: 'Score', value: mgScore, color: 'text-neon-yellow' },
+              { label: 'Time', value: mgState === 'playing' ? `${mgTimeLeft}s` : mgState === 'ended' ? '0s' : '30s', color: mgTimeLeft <= 5 && mgState === 'playing' ? 'text-red-400' : 'text-white' },
+              { label: 'Hits', value: mgHits, color: 'text-neon-green' },
+              { label: 'Misses', value: mgMisses, color: 'text-red-400' },
+              { label: 'Combo', value: mgCombo > 1 ? `x${mgCombo}` : '--', color: 'text-neon-cyan' },
+              { label: 'Accuracy', value: (mgHits + mgMisses) > 0 ? `${Math.round((mgHits / (mgHits + mgMisses)) * 100)}%` : '--', color: 'text-neon-blue' },
+            ].map((s) => (
+              <div key={s.label} className="lens-card text-center py-2">
+                <p className={cn('text-lg font-bold font-mono', s.color)}>{s.value}</p>
+                <p className="text-[10px] text-gray-400">{s.label}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Canvas */}
+          <div className="panel p-2 relative overflow-hidden" style={{ background: 'rgba(0,0,0,0.4)' }}>
+            {mgState === 'idle' && (
+              <div className="absolute inset-0 flex items-center justify-center z-10">
+                <div className="text-center space-y-3">
+                  <Target className="w-16 h-16 text-neon-purple/50 mx-auto" />
+                  <p className="text-gray-400 text-sm">Press <span className="text-white font-semibold">Start Game</span> to begin</p>
+                  <p className="text-gray-500 text-xs">30 seconds &middot; Click targets &middot; Build combos &middot; Earn XP</p>
+                </div>
+              </div>
+            )}
+            {mgState === 'ended' && (
+              <div className="absolute inset-0 flex items-center justify-center z-10 bg-black/60 backdrop-blur-sm">
+                <motion.div
+                  initial={{ scale: 0.8, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  className="text-center space-y-4 p-8"
+                >
+                  <motion.div
+                    animate={{ rotate: [0, -8, 8, -4, 4, 0], scale: [1, 1.15, 1] }}
+                    transition={{ duration: 0.8 }}
+                  >
+                    <Trophy className="w-14 h-14 text-neon-yellow mx-auto" />
+                  </motion.div>
+                  <h4 className="text-2xl font-bold text-white">Game Over!</h4>
+                  <div className="grid grid-cols-4 gap-4 text-center">
+                    <div>
+                      <p className="text-2xl font-bold font-mono text-neon-yellow">{mgScore}</p>
+                      <p className="text-xs text-gray-400">Score</p>
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold font-mono text-neon-green">{mgHits}</p>
+                      <p className="text-xs text-gray-400">Hits</p>
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold font-mono text-neon-blue">
+                        {(mgHits + mgMisses) > 0 ? `${Math.round((mgHits / (mgHits + mgMisses)) * 100)}%` : '--'}
+                      </p>
+                      <p className="text-xs text-gray-400">Accuracy</p>
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold font-mono text-neon-purple">{mgBestCombo > 1 ? `x${mgBestCombo}` : '--'}</p>
+                      <p className="text-xs text-gray-400">Best Combo</p>
+                    </div>
+                  </div>
+                  {mgXpAwarded > 0 && (
+                    <motion.div
+                      initial={{ y: 10, opacity: 0 }}
+                      animate={{ y: 0, opacity: 1 }}
+                      transition={{ delay: 0.3 }}
+                      className="flex items-center justify-center gap-2 text-neon-yellow bg-neon-yellow/10 border border-neon-yellow/30 rounded-lg py-2 px-4"
+                    >
+                      <Zap className="w-5 h-5" />
+                      <span className="font-bold">+{mgXpAwarded} XP earned!</span>
+                    </motion.div>
+                  )}
+                  <p className="text-xs text-gray-500">XP has been added to your profile</p>
+                </motion.div>
+              </div>
+            )}
+            <canvas
+              ref={canvasRef}
+              width={800}
+              height={450}
+              onClick={handleCanvasClick}
+              className={cn(
+                'w-full rounded-lg',
+                mgState === 'playing' ? 'cursor-crosshair' : 'cursor-default',
+              )}
+              style={{ aspectRatio: '16/9', imageRendering: 'auto' }}
+            />
+          </div>
+
+          {/* How to play */}
+          <div className="panel p-4">
+            <h4 className="text-sm font-semibold text-gray-300 mb-2">How to Play</h4>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-xs text-gray-400">
+              <div className="flex items-start gap-2">
+                <Target className="w-4 h-4 text-neon-purple shrink-0 mt-0.5" />
+                <span>Targets drift across the canvas. Click them before the ring timer runs out. Smaller targets are worth more points.</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <Flame className="w-4 h-4 text-neon-yellow shrink-0 mt-0.5" />
+                <span>Hit consecutive targets to build combos. Each combo level adds +25% to your points. Clicking empty space breaks the chain.</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <TrendingUp className="w-4 h-4 text-neon-pink shrink-0 mt-0.5" />
+                <span>Difficulty ramps up over time: targets spawn faster, shrink, and move quicker as the clock ticks down.</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <Zap className="w-4 h-4 text-neon-green shrink-0 mt-0.5" />
+                <span>Your final score converts to XP (1 XP per 10 points, minimum 5 XP). XP is added to your Game Lens profile.</span>
+              </div>
             </div>
           </div>
         </motion.div>

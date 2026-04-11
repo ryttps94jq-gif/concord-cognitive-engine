@@ -21,7 +21,12 @@ import MarketplacePalette from '@/components/world-lens/MarketplacePalette';
 import ConcordiaHub from '@/components/world-lens/ConcordiaHub';
 import OnboardingTutorial from '@/components/world-lens/OnboardingTutorial';
 
+import dynamic from 'next/dynamic';
 import { DEMO_DISTRICT } from '@/lib/world-lens/district-seed';
+
+const ConcordiaScene = dynamic(() => import('@/components/world-lens/ConcordiaScene'), { ssr: false });
+const AvatarSystem3D = dynamic(() => import('@/components/world-lens/AvatarSystem3D'), { ssr: false });
+const CameraControls = dynamic(() => import('@/components/world-lens/CameraControls'), { ssr: false });
 import { SEED_MATERIALS } from '@/lib/world-lens/material-seed';
 import { cacheMaterials } from '@/lib/world-lens/validation-engine';
 import type {
@@ -481,7 +486,7 @@ function CityStreamingSection() {
 
 // ── View Modes ──────────────────────────────────────────────────────
 
-type ViewMode = 'concordia' | 'district' | 'streams';
+type ViewMode = 'concordia' | 'district' | 'streams' | 'explore';
 
 // ── Component ───────────────────────────────────────────────────────
 
@@ -497,6 +502,26 @@ export default function WorldLensPage() {
   const [creationMode, setCreationMode] = useState<CreationMode | null>(null);
   const [zoom, setZoom] = useState(1);
   const [rotation, setRotation] = useState<0 | 1 | 2 | 3>(0);
+
+  // 3D Explore mode state
+  const [cameraMode, setCameraMode] = useState<'isometric' | 'follow' | 'free' | 'interior' | 'cinematic'>('follow');
+  const [playerAvatar] = useState({
+    id: 'player-1',
+    name: 'You',
+    appearance: {
+      skinColor: '#c8956c',
+      hairColor: '#3d2314',
+      hairStyle: 'short' as const,
+      bodyType: 'average' as const,
+      clothing: {
+        top: { color: '#1a5276', type: 'shirt' as const },
+        bottom: { color: '#2c3e50', type: 'pants' as const },
+      },
+    },
+    position: { x: 0, y: 0, z: 0 },
+    rotation: 0,
+    currentAnimation: 'idle' as const,
+  });
   const [visibleLayers, setVisibleLayers] = useState(new Set(['water', 'power', 'drainage', 'road', 'data']));
   const [showValidation, setShowValidation] = useState(false);
   const [showWeather, setShowWeather] = useState(false);
@@ -689,6 +714,13 @@ export default function WorldLensPage() {
               District
             </button>
             <button
+              onClick={() => setViewMode('explore')}
+              className={`px-3 py-1.5 text-xs ${viewMode === 'explore' ? 'bg-emerald-500/20 text-emerald-300' : 'text-gray-400 hover:text-white'}`}
+            >
+              <Users className="w-3.5 h-3.5 inline mr-1" />
+              Explore 3D
+            </button>
+            <button
               onClick={() => setViewMode('streams')}
               className={`px-3 py-1.5 text-xs ${viewMode === 'streams' ? 'bg-cyan-500/20 text-cyan-300' : 'text-gray-400 hover:text-white'}`}
             >
@@ -707,6 +739,55 @@ export default function WorldLensPage() {
             onDistrictSelect={handleConcordiaDistrictSelect}
             onNavigateToLens={(lens) => router.push(`/lenses/${lens}`)}
           />
+        </div>
+      ) : viewMode === 'explore' ? (
+        /* ── 3D Explore Mode ── */
+        <div className="flex-1 relative min-h-0">
+          <ConcordiaScene
+            districtId={activeDistrict.id}
+            quality="medium"
+            onBuildingClick={(id) => {
+              const b = activeDistrict.buildings.find(b => b.id === id);
+              if (b) setSelectedBuilding(b);
+            }}
+            onTerrainClick={() => {}}
+            width="100%"
+            height="100%"
+          />
+          <div className="absolute inset-0 pointer-events-none">
+            <AvatarSystem3D
+              playerAvatar={playerAvatar}
+              otherPlayers={[]}
+              npcs={[]}
+              onMove={(pos) => { void pos; }}
+              onEmote={(emote) => { void emote; }}
+            />
+          </div>
+          {/* Camera mode controls */}
+          <div className="absolute top-4 right-4 z-20">
+            <CameraControls
+              cameraState={{ mode: cameraMode, zoom: 15, rotation: 'NE', followTarget: 'avatar', cinematicPlaying: false, cinematicTime: 0, cinematicDuration: 0, transitioning: false }}
+              onModeChange={(mode) => setCameraMode(mode as typeof cameraMode)}
+              onZoom={() => {}}
+              onRotate={() => {}}
+              onTransition={() => {}}
+            />
+          </div>
+          {/* HUD overlay */}
+          <div className="absolute bottom-4 left-4 z-20 bg-black/60 border border-white/10 rounded-lg px-3 py-2 pointer-events-auto">
+            <div className="flex items-center gap-3 text-xs">
+              <div className="flex items-center gap-1.5">
+                <Users className="w-3.5 h-3.5 text-emerald-400" />
+                <span className="text-emerald-300 font-medium">{playerAvatar.name}</span>
+              </div>
+              <span className="text-gray-500">|</span>
+              <span className="text-gray-400">WASD to move</span>
+              <span className="text-gray-500">|</span>
+              <span className="text-gray-400">Mouse to look</span>
+              <span className="text-gray-500">|</span>
+              <span className="text-cyan-400">{activeDistrict.name}</span>
+            </div>
+          </div>
         </div>
       ) : viewMode === 'streams' ? (
         <CityStreamingSection />

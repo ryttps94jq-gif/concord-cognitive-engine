@@ -453,6 +453,238 @@ function ResonanceFieldCanvas({
 }
 
 // ============================================================================
+// Resonance Spectrum Canvas — Animated frequency spectrum visualization
+// ============================================================================
+
+function ResonanceSpectrumCanvas({
+  signal,
+  gradient,
+  coherence,
+  classification,
+  topResonance,
+  pairsFound,
+  scanning,
+}: {
+  signal: number;
+  gradient: number;
+  coherence: number;
+  classification: string;
+  topResonance: number;
+  pairsFound: number;
+  scanning: boolean;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const timeRef = useRef(0);
+  const binsRef = useRef<number[]>([]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    let animId: number;
+    const BAR_COUNT = 64;
+
+    // Initialize frequency bins if needed
+    if (binsRef.current.length !== BAR_COUNT) {
+      binsRef.current = new Array(BAR_COUNT).fill(0);
+    }
+
+    const resize = () => {
+      canvas.width = canvas.offsetWidth * 2;
+      canvas.height = canvas.offsetHeight * 2;
+      ctx.scale(2, 2);
+    };
+    resize();
+    window.addEventListener('resize', resize);
+
+    const draw = () => {
+      const w = canvas.offsetWidth;
+      const h = canvas.offsetHeight;
+      const t = timeRef.current;
+
+      ctx.clearRect(0, 0, w, h);
+
+      // Dark background
+      ctx.fillStyle = 'rgba(5, 5, 16, 1)';
+      ctx.fillRect(0, 0, w, h);
+
+      const meta = CLASSIFICATION_META[classification] || CLASSIFICATION_META.noise_floor;
+
+      // Subtle grid lines
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.03)';
+      ctx.lineWidth = 1;
+      for (let i = 1; i < 4; i++) {
+        const y = (h / 4) * i;
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(w, y);
+        ctx.stroke();
+      }
+
+      // Generate target spectrum from data values
+      const bins = binsRef.current;
+      for (let i = 0; i < BAR_COUNT; i++) {
+        const norm = i / BAR_COUNT;
+
+        // Base shape: combination of resonance data parameters
+        // Low frequencies driven by signal strength, mid by gradient, high by coherence
+        const lowBand = Math.exp(-norm * 3) * signal;
+        const midBand = Math.exp(-Math.pow((norm - 0.35) * 4, 2)) * gradient;
+        const hiBand = Math.exp(-Math.pow((norm - 0.7) * 5, 2)) * coherence;
+        const pairsPeak = Math.exp(-Math.pow((norm - 0.5) * 3, 2)) * Math.min(1, pairsFound / 20);
+
+        // Composite target value
+        let target = (lowBand + midBand * 0.8 + hiBand * 0.6 + pairsPeak * 0.4) * 0.7;
+
+        // Add animated oscillation per-bin
+        target += Math.sin(t * 0.03 + i * 0.4) * 0.08 * signal;
+        target += Math.sin(t * 0.017 + i * 0.7) * 0.05 * gradient;
+        target += Math.cos(t * 0.023 + i * 0.3) * 0.04 * coherence;
+
+        // Extra energy during scanning
+        if (scanning) {
+          const scanWave = Math.sin(t * 0.08 - i * 0.15);
+          target += Math.max(0, scanWave) * 0.25;
+        }
+
+        target = Math.max(0.02, Math.min(1, target));
+
+        // Smooth interpolation toward target
+        bins[i] += (target - bins[i]) * 0.12;
+      }
+
+      // Draw frequency bars
+      const barWidth = (w - (BAR_COUNT - 1) * 1.5) / BAR_COUNT;
+      const maxBarHeight = h * 0.85;
+
+      for (let i = 0; i < BAR_COUNT; i++) {
+        const x = i * (barWidth + 1.5);
+        const barH = bins[i] * maxBarHeight;
+        const y = h - barH;
+        const norm = i / BAR_COUNT;
+
+        // Color: cyan -> purple -> green across the spectrum
+        let r: number, g: number, b: number;
+        if (norm < 0.4) {
+          // Cyan to purple
+          const t2 = norm / 0.4;
+          r = Math.round(0 + t2 * 168);
+          g = Math.round(255 - t2 * 170);
+          b = Math.round(200 + t2 * 47);
+        } else {
+          // Purple to green
+          const t2 = (norm - 0.4) / 0.6;
+          r = Math.round(168 - t2 * 128);
+          g = Math.round(85 + t2 * 170);
+          b = Math.round(247 - t2 * 147);
+        }
+
+        // Intensity based on bar height
+        const intensity = 0.5 + bins[i] * 0.5;
+
+        // Bar gradient (bottom bright, top fades)
+        const barGrad = ctx.createLinearGradient(x, h, x, y);
+        barGrad.addColorStop(0, `rgba(${r}, ${g}, ${b}, ${intensity})`);
+        barGrad.addColorStop(0.6, `rgba(${r}, ${g}, ${b}, ${intensity * 0.7})`);
+        barGrad.addColorStop(1, `rgba(${r}, ${g}, ${b}, ${intensity * 0.3})`);
+
+        ctx.fillStyle = barGrad;
+        ctx.fillRect(x, y, barWidth, barH);
+
+        // Glow cap on top of each bar
+        if (bins[i] > 0.1) {
+          const capGrad = ctx.createRadialGradient(
+            x + barWidth / 2, y, 0,
+            x + barWidth / 2, y, barWidth * 1.5
+          );
+          capGrad.addColorStop(0, `rgba(${r}, ${g}, ${b}, ${0.4 * bins[i]})`);
+          capGrad.addColorStop(1, `rgba(${r}, ${g}, ${b}, 0)`);
+          ctx.fillStyle = capGrad;
+          ctx.fillRect(x - barWidth * 0.5, y - barWidth, barWidth * 2, barWidth * 2);
+        }
+      }
+
+      // Mirror reflection (subtle)
+      ctx.save();
+      ctx.globalAlpha = 0.08;
+      ctx.scale(1, -1);
+      ctx.translate(0, -h * 2);
+      for (let i = 0; i < BAR_COUNT; i++) {
+        const x = i * (barWidth + 1.5);
+        const barH = bins[i] * maxBarHeight * 0.3;
+        const norm = i / BAR_COUNT;
+
+        let r2: number, g2: number, b2: number;
+        if (norm < 0.4) {
+          const t2 = norm / 0.4;
+          r2 = Math.round(0 + t2 * 168);
+          g2 = Math.round(255 - t2 * 170);
+          b2 = Math.round(200 + t2 * 47);
+        } else {
+          const t2 = (norm - 0.4) / 0.6;
+          r2 = Math.round(168 - t2 * 128);
+          g2 = Math.round(85 + t2 * 170);
+          b2 = Math.round(247 - t2 * 147);
+        }
+
+        ctx.fillStyle = `rgba(${r2}, ${g2}, ${b2}, 0.5)`;
+        ctx.fillRect(x, h, barWidth, barH);
+      }
+      ctx.restore();
+
+      // Waveform overlay line connecting bar peaks
+      ctx.beginPath();
+      for (let i = 0; i < BAR_COUNT; i++) {
+        const x = i * (barWidth + 1.5) + barWidth / 2;
+        const y = h - bins[i] * maxBarHeight;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.strokeStyle = meta.color;
+      ctx.globalAlpha = 0.35;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+
+      // Frequency band labels
+      ctx.font = '9px monospace';
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+      ctx.textAlign = 'center';
+      const labels = ['SIG', 'INV', 'TOK', 'COH', 'RES'];
+      labels.forEach((lbl, idx) => {
+        const lx = ((idx + 0.5) / labels.length) * w;
+        ctx.fillText(lbl, lx, h - 3);
+      });
+
+      // Top-right resonance value
+      ctx.textAlign = 'right';
+      ctx.font = '10px monospace';
+      ctx.fillStyle = meta.color;
+      ctx.globalAlpha = 0.6;
+      ctx.fillText(`peak: ${(topResonance * 100).toFixed(1)}%`, w - 6, 14);
+      ctx.globalAlpha = 1;
+
+      timeRef.current += 1;
+      animId = requestAnimationFrame(draw);
+    };
+
+    draw();
+    return () => {
+      cancelAnimationFrame(animId);
+      window.removeEventListener('resize', resize);
+    };
+  }, [signal, gradient, coherence, classification, topResonance, pairsFound, scanning]);
+
+  return (
+    <div className="relative w-full h-full">
+      <canvas ref={canvasRef} className="w-full h-full" />
+    </div>
+  );
+}
+
+// ============================================================================
 // Signal Meter — Vertical bar showing current resonance strength
 // ============================================================================
 
@@ -920,6 +1152,22 @@ export default function ResonanceBoundaryPage() {
                   <span>Gradient: <span className="text-white">{((scan?.gradient ?? 0) * 100).toFixed(1)}%</span></span>
                   <span>Pairs: <span className="text-white">{scan?.crossDomainAlignment?.pairsFound ?? 0}</span></span>
                   <span>Domains: <span className="text-white">{scan?.crossDomainAlignment?.domainsScanned ?? 0}</span></span>
+                </div>
+              </div>
+
+              {/* Audio / frequency spectrum visualization */}
+              <div className="h-36 border-b border-white/5 relative flex-shrink-0">
+                <ResonanceSpectrumCanvas
+                  signal={signal}
+                  gradient={scan?.gradient ?? 0}
+                  coherence={scan?.coherenceDirection ?? 0}
+                  classification={classification}
+                  topResonance={scan?.crossDomainAlignment?.topResonance ?? 0}
+                  pairsFound={scan?.crossDomainAlignment?.pairsFound ?? 0}
+                  scanning={isScanning}
+                />
+                <div className="absolute top-2 left-3 text-[9px] font-mono text-gray-600 uppercase tracking-widest pointer-events-none">
+                  Resonance Frequency Spectrum
                 </div>
               </div>
 

@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useMemo } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
@@ -31,7 +31,9 @@ import {
   CalendarDays,
   Flag,
   Zap,
-  X
+  X,
+  LayoutList,
+  GitBranch
 } from 'lucide-react';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { useLensData } from '@/lib/hooks/use-lens-data';
@@ -102,6 +104,10 @@ export default function TimelineLensPage() {
   const [limit, setLimit] = useState(30);
   const [showPostModal, setShowPostModal] = useState(false);
   const [postContent, setPostContent] = useState('');
+  const [viewMode, setViewMode] = useState<'timeline' | 'feed'>('timeline');
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
+  const [hoveredEventId, setHoveredEventId] = useState<string | null>(null);
+  const timelineContainerRef = useRef<HTMLDivElement>(null);
 
   const { items: timelineItems } = useLensData<Record<string, unknown>>('timeline', 'event');
   const runTimelineAction = useRunArtifact('timeline');
@@ -255,6 +261,58 @@ export default function TimelineLensPage() {
       .slice(0, 3)
       .map(([type]) => REACTIONS.find(r => r.id === type));
   };
+
+  // --- Timeline visualization helpers ---
+  const EVENT_TYPE_COLORS: Record<string, { bg: string; border: string; text: string; dot: string; hex: string }> = {
+    public: { bg: 'bg-blue-500/20', border: 'border-blue-500', text: 'text-blue-400', dot: 'bg-blue-500', hex: '#3b82f6' },
+    friends: { bg: 'bg-green-500/20', border: 'border-green-500', text: 'text-green-400', dot: 'bg-green-500', hex: '#22c55e' },
+    private: { bg: 'bg-purple-500/20', border: 'border-purple-500', text: 'text-purple-400', dot: 'bg-purple-500', hex: '#a855f7' },
+  };
+
+  const getEventColor = (privacy: string) => EVENT_TYPE_COLORS[privacy] || EVENT_TYPE_COLORS.public;
+
+  const sortedEvents = useMemo(() => {
+    if (!posts || posts.length === 0) return [];
+    return [...posts]
+      .filter((p: Post) => p.createdAt)
+      .sort((a: Post, b: Post) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  }, [posts]);
+
+  const timelineBounds = useMemo(() => {
+    if (sortedEvents.length === 0) return { min: Date.now(), max: Date.now(), range: 1 };
+    const times = sortedEvents.map((e: Post) => new Date(e.createdAt).getTime());
+    const min = Math.min(...times);
+    const max = Math.max(...times);
+    const range = max - min || 1; // avoid division by zero
+    return { min, max, range };
+  }, [sortedEvents]);
+
+  const getEventPosition = (dateStr: string) => {
+    const t = new Date(dateStr).getTime();
+    return ((t - timelineBounds.min) / timelineBounds.range) * 100;
+  };
+
+  const formatDateLabel = (dateStr: string) => {
+    const d = new Date(dateStr);
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  };
+
+  const formatDateTimeFull = (dateStr: string) => {
+    const d = new Date(dateStr);
+    return d.toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  };
+
+  // Generate evenly-spaced date tick marks for the axis
+  const timelineTicks = useMemo(() => {
+    const TICK_COUNT = 8;
+    const ticks: { label: string; pct: number }[] = [];
+    for (let i = 0; i <= TICK_COUNT; i++) {
+      const pct = (i / TICK_COUNT) * 100;
+      const time = timelineBounds.min + (i / TICK_COUNT) * timelineBounds.range;
+      ticks.push({ label: formatDateLabel(new Date(time).toISOString()), pct });
+    }
+    return ticks;
+  }, [timelineBounds]);
 
 
   if (isLoading) {
@@ -418,23 +476,290 @@ export default function TimelineLensPage() {
             </div>
           </div>
 
-          {/* Posts */}
-          {isLoading ? (
-            <div className="space-y-4">
-              {[1, 2, 3].map(i => (
-                <div key={i} className="bg-[#242526] rounded-lg p-4 animate-pulse">
-                  <div className="flex gap-3 mb-3">
-                    <div className="w-10 h-10 rounded-full bg-[#3a3b3c]" />
-                    <div className="space-y-2">
-                      <div className="h-4 bg-[#3a3b3c] rounded w-32" />
-                      <div className="h-3 bg-[#3a3b3c] rounded w-20" />
-                    </div>
-                  </div>
-                  <div className="h-20 bg-[#3a3b3c] rounded" />
-                </div>
-              ))}
+          {/* View Toggle */}
+          <div className="bg-[#242526] rounded-lg p-3 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setViewMode('timeline')}
+                className={cn(
+                  'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors',
+                  viewMode === 'timeline' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:bg-[#3a3b3c]'
+                )}
+              >
+                <GitBranch className="w-4 h-4" />
+                Timeline
+              </button>
+              <button
+                onClick={() => setViewMode('feed')}
+                className={cn(
+                  'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors',
+                  viewMode === 'feed' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:bg-[#3a3b3c]'
+                )}
+              >
+                <LayoutList className="w-4 h-4" />
+                Feed
+              </button>
             </div>
-          ) : (
+            <div className="flex items-center gap-2">
+              {viewMode === 'timeline' && (
+                <span className="text-xs text-gray-500">{sortedEvents.length} events</span>
+              )}
+              <div className="flex gap-2">
+                {Object.entries(EVENT_TYPE_COLORS).map(([key, c]) => (
+                  <span key={key} className="flex items-center gap-1 text-xs text-gray-400">
+                    <span className={cn('w-2 h-2 rounded-full', c.dot)} />
+                    {key}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Interactive Timeline Visualization */}
+          {viewMode === 'timeline' && sortedEvents.length > 0 && (
+            <div className="bg-[#242526] rounded-lg p-4 space-y-2">
+              <div className="flex items-center justify-between mb-1">
+                <h3 className="text-sm font-semibold text-gray-300 flex items-center gap-2">
+                  <GitBranch className="w-4 h-4 text-cyan-400" />
+                  Interactive Timeline
+                </h3>
+                <span className="text-[10px] text-gray-500 italic">Scroll horizontally to explore</span>
+              </div>
+
+              {/* Scrollable timeline container */}
+              <div
+                ref={timelineContainerRef}
+                className="relative overflow-x-auto pb-2 scrollbar-thin"
+                style={{ minHeight: 320 }}
+              >
+                {/* Left/right fade overlays for scroll hint */}
+                <div className="pointer-events-none absolute left-0 top-0 bottom-0 w-8 z-10 bg-gradient-to-r from-[#242526] to-transparent" />
+                <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-8 z-10 bg-gradient-to-l from-[#242526] to-transparent" />
+
+                <div className="relative" style={{ minWidth: Math.max(900, sortedEvents.length * 120), height: 300 }}>
+                  {/* Background grid lines */}
+                  {timelineTicks.map((tick, i) => (
+                    <div
+                      key={`grid-${i}`}
+                      className="absolute top-0 bottom-0 w-[1px] bg-gray-700/30"
+                      style={{ left: `${tick.pct}%` }}
+                    />
+                  ))}
+
+                  {/* Main horizontal axis line with gradient */}
+                  <div
+                    className="absolute left-0 right-0 h-[3px] rounded-full"
+                    style={{
+                      top: 148,
+                      background: 'linear-gradient(90deg, #3b82f6, #06b6d4, #8b5cf6)',
+                      opacity: 0.6,
+                    }}
+                  />
+                  {/* Axis start/end caps */}
+                  <div className="absolute w-3 h-3 rounded-full bg-blue-500 border-2 border-[#242526]" style={{ left: -2, top: 144 }} />
+                  <div className="absolute w-3 h-3 rounded-full bg-purple-500 border-2 border-[#242526]" style={{ right: -2, top: 144 }} />
+
+                  {/* Tick marks and date labels */}
+                  {timelineTicks.map((tick, i) => (
+                    <div
+                      key={`tick-${i}`}
+                      className="absolute flex flex-col items-center"
+                      style={{ left: `${tick.pct}%`, top: 138, transform: 'translateX(-50%)' }}
+                    >
+                      <div className="w-[1px] h-[24px] bg-gray-500/60" />
+                      <span className="text-[10px] text-gray-400 mt-1 whitespace-nowrap font-mono">{tick.label}</span>
+                    </div>
+                  ))}
+
+                  {/* Connector lines between consecutive events along the axis */}
+                  {sortedEvents.map((event: Post, i: number) => {
+                    if (i === 0) return null;
+                    const prevPct = getEventPosition(sortedEvents[i - 1].createdAt);
+                    const curPct = getEventPosition(event.createdAt);
+                    return (
+                      <div
+                        key={`connector-${event.id}`}
+                        className="absolute h-[3px] rounded-full"
+                        style={{
+                          left: `${prevPct}%`,
+                          width: `${curPct - prevPct}%`,
+                          top: 148,
+                          background: 'linear-gradient(90deg, rgba(59,130,246,0.7), rgba(6,182,212,0.7))',
+                        }}
+                      />
+                    );
+                  })}
+
+                  {/* Event nodes */}
+                  {sortedEvents.map((event: Post, i: number) => {
+                    const pct = getEventPosition(event.createdAt);
+                    const color = getEventColor(event.privacy);
+                    const isSelected = selectedEventId === event.id;
+                    const isHovered = hoveredEventId === event.id;
+                    const isActive = isSelected || isHovered;
+                    // Stagger above/below with varying distances to reduce overlap
+                    const isAbove = i % 2 === 0;
+                    // Use 3 lane depths to spread cards out
+                    const lane = i % 3;
+                    const cardOffset = isAbove
+                      ? 4 + lane * 34
+                      : 170 + lane * 34;
+                    const stemLength = isAbove
+                      ? 148 - cardOffset - 60
+                      : cardOffset - 150;
+
+                    return (
+                      <div
+                        key={event.id}
+                        className="absolute"
+                        style={{
+                          left: `${pct}%`,
+                          top: 0,
+                          transform: 'translateX(-50%)',
+                          zIndex: isActive ? 30 : 10,
+                          width: 0,
+                        }}
+                      >
+                        {/* Vertical stem connecting card to axis dot */}
+                        <div
+                          className="absolute left-1/2"
+                          style={{
+                            width: 1,
+                            transform: 'translateX(-0.5px)',
+                            top: isAbove ? cardOffset + 60 : 150,
+                            height: Math.max(stemLength, 0),
+                            borderLeft: `1px dashed ${isActive ? color.hex : 'rgba(107,114,128,0.3)'}`,
+                            transition: 'border-color 0.2s',
+                          }}
+                        />
+
+                        {/* Dot on the axis */}
+                        <div
+                          className="absolute left-1/2"
+                          style={{ top: 143, transform: 'translateX(-50%)' }}
+                        >
+                          <div
+                            className={cn(
+                              'w-[14px] h-[14px] rounded-full border-[2.5px] cursor-pointer transition-all duration-200',
+                              color.dot,
+                              color.border,
+                              isActive && 'scale-150 shadow-lg',
+                              isSelected && 'ring-2 ring-cyan-400/60 ring-offset-1 ring-offset-[#242526]',
+                              isHovered && !isSelected && 'ring-2 ring-white/30 ring-offset-1 ring-offset-[#242526]'
+                            )}
+                            style={{
+                              boxShadow: isActive ? `0 0 10px ${color.hex}80` : undefined,
+                            }}
+                            onClick={() => setSelectedEventId(isSelected ? null : event.id)}
+                            onMouseEnter={() => setHoveredEventId(event.id)}
+                            onMouseLeave={() => setHoveredEventId(null)}
+                          />
+                        </div>
+
+                        {/* Event card */}
+                        <div
+                          className="absolute left-1/2"
+                          style={{
+                            top: isAbove ? cardOffset : cardOffset,
+                            transform: 'translateX(-50%)',
+                          }}
+                        >
+                          <div
+                            className={cn(
+                              'w-[140px] rounded-lg p-2.5 cursor-pointer border transition-all duration-200',
+                              color.bg,
+                              color.border,
+                              isActive
+                                ? 'shadow-xl shadow-black/40 scale-110 opacity-100'
+                                : 'opacity-70 hover:opacity-90'
+                            )}
+                            onClick={() => setSelectedEventId(isSelected ? null : event.id)}
+                            onMouseEnter={() => setHoveredEventId(event.id)}
+                            onMouseLeave={() => setHoveredEventId(null)}
+                          >
+                            <div className="flex items-center gap-1 mb-1">
+                              <Clock className={cn('w-3 h-3 flex-shrink-0', color.text)} />
+                              <p className={cn('text-[10px] font-semibold', color.text)}>
+                                {formatDateLabel(event.createdAt)}
+                              </p>
+                            </div>
+                            <p className="text-xs text-white font-medium truncate">{event.author.name}</p>
+                            <p className="text-[10px] text-gray-400 truncate mt-0.5">{String(event.content).slice(0, 50)}</p>
+                            {isActive && (
+                              <div className="flex items-center gap-2 mt-1.5 pt-1 border-t border-white/10 text-[9px] text-gray-500">
+                                <span>{getTotalReactions(event.reactions)} reactions</span>
+                                <span>{event.comments} comments</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Expanded detail for selected event */}
+              <AnimatePresence>
+                {selectedEventId && (() => {
+                  const event = sortedEvents.find((e: Post) => e.id === selectedEventId);
+                  if (!event) return null;
+                  const color = getEventColor(event.privacy);
+                  return (
+                    <motion.div
+                      key={selectedEventId}
+                      initial={{ opacity: 0, y: -8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -8 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      <div className={cn('rounded-lg p-4 border mt-2', color.bg, color.border)}>
+                        <div className="flex items-start justify-between mb-2">
+                          <div>
+                            <h4 className="text-white font-semibold text-base">{event.author.name}</h4>
+                            <p className="text-xs text-gray-400 mt-0.5">{formatDateTimeFull(event.createdAt)}</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className={cn('text-xs px-2 py-0.5 rounded-full', color.bg, color.text, 'border', color.border)}>
+                              {event.privacy}
+                            </span>
+                            <button
+                              onClick={() => setSelectedEventId(null)}
+                              className="p-1 rounded hover:bg-white/10 text-gray-400 transition-colors"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                        <p className="text-sm text-gray-200 whitespace-pre-wrap mb-3 leading-relaxed">{event.content}</p>
+                        <div className="flex items-center gap-4 text-xs text-gray-400 pt-2 border-t border-white/10">
+                          <span className="flex items-center gap-1">
+                            <ThumbsUp className="w-3 h-3" /> {getTotalReactions(event.reactions)} reactions
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <MessageCircle className="w-3 h-3" /> {event.comments} comments
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <Share2 className="w-3 h-3" /> {event.shares} shares
+                          </span>
+                        </div>
+                      </div>
+                    </motion.div>
+                  );
+                })()}
+              </AnimatePresence>
+            </div>
+          )}
+
+          {viewMode === 'timeline' && sortedEvents.length === 0 && !isLoading && (
+            <div className="bg-[#242526] rounded-lg p-8 text-center text-gray-500">
+              <GitBranch className="w-10 h-10 mx-auto mb-3 opacity-40" />
+              <p className="text-sm">No timeline events to display.</p>
+            </div>
+          )}
+
+          {/* Posts Feed (shown only in feed mode) */}
+          {viewMode === 'feed' && (
             <>
               <div className="bg-[#242526] rounded-lg p-3 flex items-center justify-between text-xs text-gray-400">
                 <span>Showing {posts.length} of {postsData?.total || posts.length} timeline DTUs</span>

@@ -11,7 +11,7 @@ import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Camera, Search, Upload, Grid, Image as ImageIcon,
-  Heart, Eye, X,
+  Heart, Eye, X, Download,
   Aperture, Sliders, BarChart3,
   Layers, ChevronLeft, ChevronRight, Focus, Play, Loader2,
 } from 'lucide-react';
@@ -82,6 +82,22 @@ export default function PhotographyPage() {
   const [showUpload, setShowUpload] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
+
+  // Image editing state
+  const [editMode, setEditMode] = useState(false);
+  const [filterBrightness, setFilterBrightness] = useState(100);
+  const [filterContrast, setFilterContrast] = useState(100);
+  const [filterSaturate, setFilterSaturate] = useState(100);
+  const [filterBlur, setFilterBlur] = useState(0);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const editImgRef = useRef<HTMLImageElement | null>(null);
+
+  const resetFilters = useCallback(() => {
+    setFilterBrightness(100);
+    setFilterContrast(100);
+    setFilterSaturate(100);
+    setFilterBlur(0);
+  }, []);
 
   // Upload form
   const [uploadTitle, setUploadTitle] = useState('');
@@ -206,6 +222,65 @@ export default function PhotographyPage() {
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [lightboxIndex, closeLightbox, prevPhoto, nextPhoto]);
+
+  // Build CSS filter string from current slider values
+  const cssFilterString = useMemo(
+    () =>
+      `brightness(${filterBrightness}%) contrast(${filterContrast}%) saturate(${filterSaturate}%) blur(${filterBlur}px)`,
+    [filterBrightness, filterContrast, filterSaturate, filterBlur],
+  );
+
+  // Load image into an off-screen HTMLImageElement when edit mode opens / photo changes
+  useEffect(() => {
+    if (!editMode || !lightboxPhoto?.mediaId) return;
+    const img = new window.Image();
+    img.crossOrigin = 'anonymous';
+    img.src = `/api/media/stream/${lightboxPhoto.mediaId}`;
+    img.onload = () => {
+      editImgRef.current = img;
+      // Trigger an initial draw
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      ctx.filter = cssFilterString;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editMode, lightboxPhoto?.mediaId]);
+
+  // Re-draw canvas whenever filter sliders change
+  useEffect(() => {
+    if (!editMode) return;
+    const canvas = canvasRef.current;
+    const img = editImgRef.current;
+    if (!canvas || !img) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.filter = cssFilterString;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0);
+  }, [editMode, cssFilterString]);
+
+  // Export the filtered canvas as a downloadable PNG
+  const handleDownloadEdited = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${lightboxPhoto?.title ?? 'edited-photo'}.png`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 'image/png');
+  }, [lightboxPhoto?.title]);
 
   const TABS: { id: PhotoTab; label: string; icon: typeof Camera }[] = [
     { id: 'gallery', label: 'Gallery', icon: Grid },
@@ -546,9 +621,15 @@ export default function PhotographyPage() {
                 className="flex flex-col lg:flex-row items-center gap-6 max-w-5xl w-full mx-4 max-h-[90vh]"
                 onClick={(e) => e.stopPropagation()}
               >
-                {/* Photo display */}
+                {/* Photo display / Canvas editor */}
                 <div className="flex-1 flex items-center justify-center min-h-0 max-h-[70vh] lg:max-h-[80vh]">
-                  {lightboxPhoto.mediaId ? (
+                  {editMode ? (
+                    <canvas
+                      ref={canvasRef}
+                      className="max-w-full max-h-[70vh] lg:max-h-[80vh] object-contain rounded-lg shadow-2xl"
+                      style={{ width: 'auto', height: 'auto' }}
+                    />
+                  ) : lightboxPhoto.mediaId ? (
                     <Image
                       src={`/api/media/stream/${lightboxPhoto.mediaId}`}
                       alt={lightboxPhoto.title}
@@ -563,8 +644,68 @@ export default function PhotographyPage() {
                   )}
                 </div>
 
-                {/* EXIF / info panel */}
-                <div className="lg:w-72 w-full bg-white/5 border border-white/10 rounded-lg p-5 backdrop-blur-sm flex-shrink-0">
+                {/* EXIF / info panel + edit controls */}
+                <div className="lg:w-72 w-full bg-white/5 border border-white/10 rounded-lg p-5 backdrop-blur-sm flex-shrink-0 overflow-y-auto max-h-[80vh]">
+                  {/* Edit mode toggle */}
+                  {lightboxPhoto.mediaId && (
+                    <button
+                      onClick={() => { setEditMode(prev => !prev); if (editMode) resetFilters(); }}
+                      className={cn(
+                        'w-full mb-4 py-1.5 text-xs rounded-lg border flex items-center justify-center gap-1.5 transition-colors',
+                        editMode
+                          ? 'bg-sky-500/20 border-sky-500/30 text-sky-400'
+                          : 'bg-white/5 border-white/10 text-gray-400 hover:text-white hover:bg-white/10'
+                      )}
+                    >
+                      <Sliders className="w-3.5 h-3.5" />
+                      {editMode ? 'Close Editor' : 'Edit Photo'}
+                    </button>
+                  )}
+
+                  {/* Filter controls (visible in edit mode) */}
+                  {editMode && (
+                    <div className="mb-4 space-y-3 pb-4 border-b border-white/10">
+                      <h4 className="text-[10px] uppercase tracking-wider text-gray-500 flex items-center gap-1">
+                        <Sliders className="w-3 h-3" /> Image Filters
+                      </h4>
+                      {[
+                        { label: 'Brightness', value: filterBrightness, set: setFilterBrightness, min: 0, max: 200, unit: '%' },
+                        { label: 'Contrast', value: filterContrast, set: setFilterContrast, min: 0, max: 200, unit: '%' },
+                        { label: 'Saturation', value: filterSaturate, set: setFilterSaturate, min: 0, max: 200, unit: '%' },
+                        { label: 'Blur', value: filterBlur, set: setFilterBlur, min: 0, max: 20, unit: 'px' },
+                      ].map(f => (
+                        <div key={f.label}>
+                          <div className="flex justify-between text-[10px] mb-1">
+                            <span className="text-gray-400">{f.label}</span>
+                            <span className="text-gray-500">{f.value}{f.unit}</span>
+                          </div>
+                          <input
+                            type="range"
+                            min={f.min}
+                            max={f.max}
+                            step={f.label === 'Blur' ? 0.5 : 1}
+                            value={f.value}
+                            onChange={e => f.set(Number(e.target.value))}
+                            className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer accent-sky-500"
+                          />
+                        </div>
+                      ))}
+                      <div className="flex gap-2 pt-1">
+                        <button
+                          onClick={resetFilters}
+                          className="flex-1 py-1.5 text-[10px] bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 text-gray-400"
+                        >
+                          Reset
+                        </button>
+                        <button
+                          onClick={handleDownloadEdited}
+                          className="flex-1 py-1.5 text-[10px] bg-sky-500/20 border border-sky-500/30 rounded-lg hover:bg-sky-500/30 text-sky-400 flex items-center justify-center gap-1"
+                        >
+                          <Download className="w-3 h-3" /> Download Edited
+                        </button>
+                      </div>
+                    </div>
+                  )}
                   <h3 className="text-sm font-semibold mb-1 truncate">{lightboxPhoto.title}</h3>
                   {lightboxPhoto.description && (
                     <p className="text-xs text-gray-400 mb-4 line-clamp-3">{lightboxPhoto.description}</p>

@@ -979,6 +979,73 @@ function ActiveSessionView({ session, onLeave }: { session: CollabSession; onLea
   const chatEndRef = useRef<HTMLDivElement>(null);
   const [elapsed, setElapsed] = useState(Date.now() - session.startedAt);
 
+  // --- Shared notes persistence ---
+  const { items: notesItems, create: createNote, update: updateNote } = useLensData('collab', 'shared-notes', {
+    seed: [{ title: 'session-notes', data: { text: '- Target: Q2 delivery\n- Primary focus on user onboarding flow improvements\n- Action items: finalize wireframes, collect stakeholder feedback\n- Accessibility review pending for all new components\n- Reference: competitor analysis doc' } }],
+  });
+  const notesItem = notesItems[0];
+  const [notesText, setNotesText] = useState('');
+  const [notesSaving, setNotesSaving] = useState(false);
+  const notesSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Sync notes from backend on load
+  useEffect(() => {
+    if (notesItem?.data) {
+      setNotesText((notesItem.data as Record<string, unknown>).text as string || '');
+    }
+  }, [notesItem]);
+
+  // Auto-save notes with debounce
+  const handleNotesChange = useCallback((value: string) => {
+    setNotesText(value);
+    if (notesSaveTimer.current) clearTimeout(notesSaveTimer.current);
+    notesSaveTimer.current = setTimeout(async () => {
+      setNotesSaving(true);
+      try {
+        if (notesItem) {
+          await updateNote(notesItem.id, { data: { text: value } });
+        } else {
+          await createNote({ title: 'session-notes', data: { text: value } });
+        }
+      } catch (err) {
+        console.error('[Collab] Failed to save notes:', err);
+      } finally {
+        setNotesSaving(false);
+      }
+    }, 800);
+  }, [notesItem, updateNote, createNote]);
+
+  // --- File upload state ---
+  const { items: fileItems, create: createFileEntry } = useLensData('collab', 'shared-file', { noSeed: true });
+  const sharedFiles = fileItems.map(i => i.data as unknown as { name: string; size: string; by: string; uploadedAt: number });
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileUpload = useCallback(async (file: File) => {
+    setIsUploading(true);
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const base64Data = btoa(new Uint8Array(arrayBuffer).reduce((d, byte) => d + String.fromCharCode(byte), ''));
+      await apiHelpers.artistry.blobs.upload({ data: base64Data, mimeType: file.type, filename: file.name });
+      const sizeStr = file.size < 1024 ? `${file.size} B`
+        : file.size < 1024 * 1024 ? `${(file.size / 1024).toFixed(1)} KB`
+        : `${(file.size / (1024 * 1024)).toFixed(1)} MB`;
+      await createFileEntry({
+        title: file.name,
+        data: { name: file.name, size: sizeStr, by: 'You', uploadedAt: Date.now() },
+      });
+      useUIStore.getState().addToast({ type: 'success', message: `Uploaded "${file.name}"` });
+    } catch (err) {
+      console.error('[Collab] File upload failed:', err);
+      useUIStore.getState().addToast({ type: 'error', message: `Upload failed: ${err instanceof Error ? err.message : 'Unknown error'}` });
+    } finally {
+      setIsUploading(false);
+    }
+  }, [createFileEntry]);
+
+  // --- Screen sharing state ---
+  const [screenShareInfo, setScreenShareInfo] = useState(false);
+
   useEffect(() => {
     const t = setInterval(() => setElapsed(Date.now() - session.startedAt), 1000);
     return () => clearInterval(t);
@@ -1084,50 +1151,91 @@ function ActiveSessionView({ session, onLeave }: { session: CollabSession; onLea
               </div>
             </div>
 
-            {/* Shared notes */}
+            {/* Shared notes — persisted via lens data API */}
             <div className="panel p-4">
-              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Shared Notes</h3>
-              <div className="bg-lattice-surface rounded-lg p-3 text-sm text-gray-300 space-y-2 min-h-[80px]">
-                <p>- Target: Q2 delivery</p>
-                <p>- Primary focus on user onboarding flow improvements</p>
-                <p>- Action items: finalize wireframes, collect stakeholder feedback</p>
-                <p>- Accessibility review pending for all new components</p>
-                <p>- Reference: competitor analysis doc</p>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Shared Notes</h3>
+                {notesSaving && (
+                  <span className="flex items-center gap-1 text-[10px] text-neon-cyan">
+                    <Loader2 className="w-3 h-3 animate-spin" /> Saving...
+                  </span>
+                )}
+                {!notesSaving && notesItem && (
+                  <span className="text-[10px] text-gray-600">Auto-saved</span>
+                )}
               </div>
+              <textarea
+                value={notesText}
+                onChange={e => handleNotesChange(e.target.value)}
+                placeholder="Add shared notes for this session..."
+                rows={6}
+                className="w-full bg-lattice-surface rounded-lg p-3 text-sm text-gray-300 min-h-[80px] border border-lattice-border focus:outline-none focus:border-neon-blue/50 resize-y leading-relaxed"
+              />
             </div>
 
             {/* Shared files */}
             <div className="panel p-4">
-              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Shared Files</h3>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Shared Files</h3>
+                <span className="text-[10px] text-gray-600">{sharedFiles.length} uploaded</span>
+              </div>
               <div className="space-y-1.5">
-                {[
-                  { name: 'design_mockup_v2.fig', size: '12 KB', by: 'JordanDev' },
-                  { name: 'requirements_spec.pdf', size: '2.4 MB', by: 'AlexDesigner' },
-                  { name: 'assets_bundle.zip', size: '18 MB', by: 'JordanDev' },
-                  { name: 'project_brief_v1.docx', size: '8.1 MB', by: 'AlexDesigner' },
-                ].map(f => (
-                  <div key={f.name} className="flex items-center justify-between py-1.5 px-2 rounded-md hover:bg-lattice-surface transition-colors">
-                    <div className="flex items-center gap-2">
-                      <Paperclip className="w-3.5 h-3.5 text-neon-cyan" />
-                      <span className="text-xs font-medium">{f.name}</span>
+                {sharedFiles.length === 0 ? (
+                  <p className="text-xs text-gray-600 text-center py-3">No files uploaded yet. Use the Upload File button below.</p>
+                ) : (
+                  sharedFiles.map(f => (
+                    <div key={`${f.name}-${f.uploadedAt}`} className="flex items-center justify-between py-1.5 px-2 rounded-md hover:bg-lattice-surface transition-colors">
+                      <div className="flex items-center gap-2">
+                        <Paperclip className="w-3.5 h-3.5 text-neon-cyan" />
+                        <span className="text-xs font-medium">{f.name}</span>
+                      </div>
+                      <div className="flex items-center gap-3 text-[11px] text-gray-500">
+                        <span>{f.size}</span>
+                        <span>{f.by}</span>
+                        {f.uploadedAt && <span>{formatTimeAgo(f.uploadedAt)}</span>}
+                      </div>
                     </div>
-                    <div className="flex items-center gap-3 text-[11px] text-gray-500">
-                      <span>{f.size}</span>
-                      <span>{f.by}</span>
-                    </div>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             </div>
           </div>
 
           {/* Bottom action bar */}
           <div className="flex items-center gap-2 px-5 py-3 border-t border-lattice-border bg-lattice-surface/50">
-            <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Screen sharing initiated' })} className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md bg-lattice-surface border border-lattice-border text-gray-300 hover:border-neon-blue/40 transition-colors">
+            <button
+              onClick={() => setScreenShareInfo(prev => !prev)}
+              className={cn(
+                'flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md border transition-colors',
+                screenShareInfo
+                  ? 'bg-amber-500/10 border-amber-500/30 text-amber-400'
+                  : 'bg-lattice-surface border-lattice-border text-gray-300 hover:border-neon-blue/40'
+              )}
+            >
               <Monitor className="w-3.5 h-3.5" /> Share Screen
             </button>
-            <button onClick={() => { const input = document.createElement('input'); input.type = 'file'; input.click(); }} className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md bg-lattice-surface border border-lattice-border text-gray-300 hover:border-neon-blue/40 transition-colors">
-              <Upload className="w-3.5 h-3.5" /> Upload File
+            {screenShareInfo && (
+              <span className="text-[10px] text-amber-400/80 px-2 py-1 bg-amber-500/10 rounded-md border border-amber-500/20">
+                Screen sharing requires a WebRTC connection &mdash; coming soon
+              </span>
+            )}
+            <input
+              ref={fileInputRef}
+              type="file"
+              className="hidden"
+              onChange={e => {
+                const file = e.target.files?.[0];
+                if (file) handleFileUpload(file);
+                e.target.value = '';
+              }}
+            />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isUploading}
+              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md bg-lattice-surface border border-lattice-border text-gray-300 hover:border-neon-blue/40 transition-colors disabled:opacity-50"
+            >
+              {isUploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+              {isUploading ? 'Uploading...' : 'Upload File'}
             </button>
             <button onClick={() => useUIStore.getState().addToast({ type: 'info', message: 'Invite link copied to clipboard' })} className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md bg-lattice-surface border border-lattice-border text-gray-300 hover:border-neon-blue/40 transition-colors">
               <UserPlus className="w-3.5 h-3.5" /> Invite
@@ -1170,7 +1278,7 @@ function ActiveSessionView({ session, onLeave }: { session: CollabSession; onLea
           </div>
           <div className="p-2 border-t border-lattice-border">
             <div className="flex items-center gap-1.5">
-              <button onClick={() => { const input = document.createElement('input'); input.type = 'file'; input.click(); }} className="p-1.5 text-gray-500 hover:text-gray-300 transition-colors">
+              <button onClick={() => fileInputRef.current?.click()} className="p-1.5 text-gray-500 hover:text-gray-300 transition-colors" title="Attach file">
                 <Paperclip className="w-3.5 h-3.5" />
               </button>
               <input
