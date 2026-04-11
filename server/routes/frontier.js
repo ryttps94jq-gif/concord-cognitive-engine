@@ -13,10 +13,15 @@
  */
 
 import { Router } from 'express';
+import { createRequire } from 'module';
 import createFrontierRoutesPart1 from './frontier-part1.js';
 import createFrontierRoutesPart2 from './frontier-part2.js';
 import createFrontierRoutesPart3 from './frontier-part3.js';
 import createFrontierRoutesPart4 from './frontier-part4.js';
+
+// Load CommonJS frontier config via createRequire (config is CJS)
+const require = createRequire(import.meta.url);
+const frontierConfig = require('../config/frontier.js');
 
 /**
  * @param {object} [opts]
@@ -25,6 +30,12 @@ import createFrontierRoutesPart4 from './frontier-part4.js';
  */
 export default function createFrontierRoutes({ requireAuth } = {}) {
   const router = Router();
+
+  // Expose frontier config to all route handlers via req.frontierConfig
+  router.use((_req, _res, next) => {
+    _req.frontierConfig = frontierConfig;
+    next();
+  });
 
   // Mount each feature group
   router.use('/', createFrontierRoutesPart1({ requireAuth }));
@@ -47,6 +58,15 @@ export default function createFrontierRoutes({ requireAuth } = {}) {
       featureCount: 16,
       status: 'operational',
       uptime: process.uptime(),
+    });
+  });
+
+  // Expose frontier feature configuration
+  router.get('/config', (_req, res) => {
+    res.json({
+      ok: true,
+      config: frontierConfig,
+      featureCount: Object.keys(frontierConfig).length,
     });
   });
 

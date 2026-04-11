@@ -83,6 +83,9 @@ import { startAllIntervals, stopAllIntervals, getIntervalStatus } from "./lib/in
 import { getMemoryPressureLevel, initMemoryWatchdog } from "./lib/memory-pressure.js";
 import { initStateSync, getSyncStatus, stopSync } from "./lib/state-sync.js";
 import * as cityStreaming from "./lib/city-streaming.js";
+import { createRequire } from "module";
+const _require = createRequire(import.meta.url);
+const infrastructureConfig = _require("./config/infrastructure.js");
 
 // ---- Route modules (ESM) ----
 import registerSystemRoutes from "./routes/system.js";
