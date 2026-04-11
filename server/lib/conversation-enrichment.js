@@ -377,6 +377,7 @@ export function acceleratedChatPromotion(STATE, sessionId) {
         sessionId,
         sourceCount: sessionRegulars.length,
         consolidatedAt: new Date().toISOString(),
+        styleVector: (STATE.styleVectors && STATE.styleVectors.get(sessionId)) || null,
       },
       meta: {
         promotionReason: "chat_accelerated_mega",

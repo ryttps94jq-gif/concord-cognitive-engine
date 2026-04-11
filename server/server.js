@@ -1667,6 +1667,24 @@ function applyStyleToSettings(baseSettings, styleVec) {
   return s;
 }
 
+/**
+ * Build a human-readable style hints string from a style vector.
+ * Fed into the conscious system prompt so the LLM adapts tone/depth.
+ * Returns empty string when no meaningful preferences have accumulated.
+ */
+function buildStyleHints(sv) {
+  if (!sv || (sv.exchanges || 0) < 2) return "";
+  const lines = [];
+  lines.push(`Communication style preferences (learned from ${sv.exchanges} exchanges):`);
+  lines.push(`- Formality: ${sv.formality > 0.6 ? 'formal' : sv.formality < 0.4 ? 'casual' : 'balanced'}`);
+  lines.push(`- Technical depth: ${sv.technicality > 0.6 ? 'deep technical detail' : sv.technicality < 0.4 ? 'plain language' : 'moderate technical'}`);
+  lines.push(`- Response length: ${sv.verbosity > 0.6 ? 'detailed, thorough' : sv.verbosity < 0.4 ? 'concise, brief' : 'moderate length'}`);
+  lines.push(`- Warmth: ${sv.warmth > 0.6 ? 'warm and personal' : sv.warmth < 0.4 ? 'terse and direct' : 'professional'}`);
+  lines.push(`- Bullet lists: ${sv.bulletiness > 0.6 ? 'prefers structured lists' : sv.bulletiness < 0.4 ? 'prefers flowing prose' : 'mixed format'}`);
+  lines.push(`Adapt your responses to match these preferences naturally.`);
+  return lines.join("\n");
+}
+
 function jaccard(aTokens, bTokens) {
   const A = new Set(aTokens);
   const B = new Set(bTokens);
@@ -17658,6 +17676,7 @@ Rules for tool use:
       entityStateBlock: _entityBlock || "",
       affectGuidance: _affectGuidance,
       grcPrompt: _grcSystemPrompt,
+      styleHints: buildStyleHints(styleVec),
     }) + _toolSystemPrompt;
     // Build messages with conversation history for continuity
     const _recentHistory = (sess.messages || []).slice(-10, -1); // last 10 turns, excluding current
@@ -17735,6 +17754,7 @@ Rules for tool use:
         sessionLensHistory: (sess.lensHistory || []).map(l => ({ lens: l.lens || l })),
         entityStateBlock: _entityBlock || "",
         affectGuidance: "",
+        styleHints: buildStyleHints(styleVec),
       }) + _toolSystemPrompt;
       // Include conversation history in messages
       const _directHistory = (sess.messages || []).slice(-10, -1);
@@ -35086,6 +35106,7 @@ function initChatSocketHandlers(io) {
 
             // Build system prompt for streaming
             const _streamConsciousParams = getConsciousParams({ exchange_count: (_streamSess.messages || []).length });
+            const _streamStyleVec = getSessionStyleVector(sessionId);
             const _streamSystem = buildConsciousPrompt({
               dtu_count: STATE.dtus?.size || 0,
               domain_count: Object.keys(STATE.domains || {}).length,
@@ -35098,6 +35119,7 @@ function initChatSocketHandlers(io) {
               sessionLensHistory: (_streamSess.lensHistory || []).map(l => ({ lens: l.lens || l })),
               entityStateBlock: "",
               affectGuidance: "",
+              styleHints: buildStyleHints(_streamStyleVec),
             });
 
             // Build messages with conversation history
