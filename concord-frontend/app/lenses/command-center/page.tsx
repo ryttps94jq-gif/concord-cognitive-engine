@@ -6,7 +6,6 @@ import { apiHelpers, api } from '@/lib/api/client';
 import { useUIStore } from '@/store/ui';
 import { useState, useEffect, useCallback } from 'react';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
-import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useLensBridge } from '@/lib/hooks/use-lens-bridge';
 import { useRouter } from 'next/navigation';
 import {
@@ -1743,6 +1742,9 @@ const TABS = [
   { id: 'foundation', label: 'Foundation', icon: Globe },
   { id: 'predictions', label: 'Predictions', icon: Puzzle },
   { id: 'logs', label: 'Logs', icon: FileText },
+  { id: 'activity', label: 'Activity', icon: Radio },
+  { id: 'undo', label: 'Undo', icon: Undo2 },
+  { id: 'guide', label: 'Guide', icon: Compass },
 ] as const;
 
 type TabId = typeof TABS[number]['id'];
@@ -1755,6 +1757,7 @@ export default function CommandCenterPage() {
   const router = useRouter();
   const [showFeatures, setShowFeatures] = useState(true);
   const [activeTab, setActiveTab] = useState<TabId>('vitals');
+  const [actionPreview, setActionPreview] = useState<{ action: string; entityType: string; entityId: string; onConfirm: () => void } | null>(null);
 
   // --- Backend action wiring ---
   const runAction = useRunArtifact('commandcenter');
@@ -1775,8 +1778,6 @@ export default function CommandCenterPage() {
       bridge.sync(mainHealth as Record<string, unknown>, 'Command Center Health Snapshot');
     }
   }, [mainHealth, bridge]);
-
-  const ccTargetId = bridge.selectedId ?? 'default';
 
   const handleAction = useCallback(async (action: string) => {
     if (!bridge.selectedId) {
@@ -1842,6 +1843,9 @@ export default function CommandCenterPage() {
       case 'foundation': return <FoundationPanel />;
       case 'logs': return <LogsPanel />;
       case 'predictions': return <PredictionMarketPanel />;
+      case 'activity': return <ActivityFeed />;
+      case 'undo': return <UndoTimeline />;
+      case 'guide': return <SystemGuidePanel />;
     }
   };
 
@@ -1969,6 +1973,17 @@ export default function CommandCenterPage() {
           </div>
         )}
       </div>
+
+      {/* Action Preview Modal — dry-run preview for destructive operations */}
+      {actionPreview && (
+        <ActionPreviewModal
+          action={actionPreview.action}
+          entityType={actionPreview.entityType}
+          entityId={actionPreview.entityId}
+          onConfirm={() => { actionPreview.onConfirm(); setActionPreview(null); }}
+          onCancel={() => setActionPreview(null)}
+        />
+      )}
     </div>
   );
 }
