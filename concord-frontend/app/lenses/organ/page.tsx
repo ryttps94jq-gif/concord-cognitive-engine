@@ -646,7 +646,7 @@ export default function OrganLensPage() {
                     <p className="text-xs text-neon-green font-semibold mb-1">Hubs</p>
                     <div className="flex flex-wrap gap-1">
                       {(actionResult.hubs as Array<Record<string, unknown>>).map((h, i) => (
-                        <span key={i} className="text-xs bg-neon-green/10 border border-neon-green/20 rounded px-2 py-0.5 text-neon-green">{String(h.name || h.id)}</span>
+                        <span key={i} className="text-xs bg-neon-green/10 border border-neon-green/20 rounded px-2 py-0.5 text-neon-green">{String(h.node || h.name || h.id)}</span>
                       ))}
                     </div>
                   </div>

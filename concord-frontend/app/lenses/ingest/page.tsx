@@ -27,7 +27,7 @@ interface ParseDocumentResult {
   sentenceCount: number;
   wordCount: number;
   sectionCount: number;
-  sections: { title: string; wordCount: number }[];
+  sections: string[];
   avgWordsPerSentence: number;
   avgWordsPerParagraph: number;
 }
@@ -622,9 +622,8 @@ export default function IngestLensPage() {
                 {(d.sections || []).length > 0 && (
                   <div className="space-y-1 max-h-32 overflow-y-auto">
                     {d.sections.slice(0, 5).map((s, i) => (
-                      <div key={i} className="flex items-center justify-between text-xs">
-                        <span className="text-gray-300 truncate flex-1 mr-2">{s.title}</span>
-                        <span className="text-gray-500">{s.wordCount} words</span>
+                      <div key={i} className="flex items-center text-xs">
+                        <span className="text-gray-300 truncate flex-1">{s}</span>
                       </div>
                     ))}
                   </div>
