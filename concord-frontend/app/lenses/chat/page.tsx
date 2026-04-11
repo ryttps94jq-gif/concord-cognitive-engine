@@ -77,6 +77,15 @@ import { ContextOverlay } from '@/components/chat/ContextOverlay';
 import ForgeCard from '@/components/chat/ForgeCard';
 import FoundationCard from '@/components/chat/FoundationCard';
 import { SessionSidebar } from '@/components/chat/SessionSidebar';
+import {
+  recommendLenses,
+  createSessionContext,
+  createSessionTelemetry,
+  recordLensOpened,
+  type LensRecommendation,
+  type SessionContext,
+  type SessionTelemetry,
+} from '@/lib/lenses/chat-lens-recommender';
 
 // ──────────────────────────────────────────────
 // Types
@@ -401,6 +410,30 @@ export default function ChatLensPage() {
   const [threadSummarizeResult, setThreadSummarizeResult] = useState<Record<string, unknown> | null>(null);
   const [participantAnalysisResult, setParticipantAnalysisResult] = useState<Record<string, unknown> | null>(null);
   const [topicDetectionResult, setTopicDetectionResult] = useState<Record<string, unknown> | null>(null);
+
+  // ── Lens Recommender state ──
+  const [lensRecommendations, setLensRecommendations] = useState<LensRecommendation[]>([]);
+  const lensSessionCtx = useRef<SessionContext>(createSessionContext());
+  const lensTelemetry = useRef<SessionTelemetry>(createSessionTelemetry());
+
+  // Compute lens recommendations whenever messages change
+  const lastUserMessage = useMemo(() => {
+    const userMessages = localMessages.filter(m => m.role === 'user');
+    return userMessages.length > 0 ? userMessages[userMessages.length - 1].content : '';
+  }, [localMessages]);
+
+  useEffect(() => {
+    if (!lastUserMessage) {
+      setLensRecommendations([]);
+      return;
+    }
+    try {
+      const result = recommendLenses(lastUserMessage, lensSessionCtx.current);
+      setLensRecommendations(result.recs.slice(0, 3));
+    } catch {
+      setLensRecommendations([]);
+    }
+  }, [lastUserMessage]);
 
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -2391,6 +2424,31 @@ export default function ChatLensPage() {
         {showFeatures && (
           <div className="px-4 pb-4 space-y-4">
             <LensFeaturePanel lensId="chat" />
+            {/* Lens Recommender — suggest relevant lenses based on chat context */}
+            {lensRecommendations.length > 0 && (
+              <div className="p-3 rounded-lg border border-neon-purple/20 bg-neon-purple/5 space-y-2">
+                <p className="text-xs font-semibold text-neon-purple flex items-center gap-1.5">
+                  <Layers className="w-3.5 h-3.5" />
+                  Suggested Lenses
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {lensRecommendations.map((rec) => (
+                    <button
+                      key={rec.lensId}
+                      onClick={() => {
+                        recordLensOpened(lensTelemetry.current, rec.lensId, lensSessionCtx.current.currentTurn);
+                        window.location.href = `/lenses/${rec.lensId}`;
+                      }}
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-lattice-surface border border-lattice-border hover:border-neon-purple/50 transition-colors text-left group"
+                    >
+                      <span className="text-xs font-medium text-white group-hover:text-neon-purple transition-colors">{rec.name}</span>
+                      <span className="text-[10px] text-gray-500">{Math.round(rec.score * 100)}%</span>
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[10px] text-gray-500">Based on your current conversation context</p>
+              </div>
+            )}
             {/* Atlas Viewer — spatial/material data overview */}
             <AtlasViewer type="overview" />
           </div>

@@ -3474,6 +3474,9 @@ const STATE = {
     },
     history: []
   },
+
+  // ---- Infrastructure Configuration (services, messaging, caching, security, analytics, ML ops, auto-scaling) ----
+  infrastructureConfig,
 };
 
 // Expose STATE for modules that use globalThis (e.g. repair-cortex.js)
