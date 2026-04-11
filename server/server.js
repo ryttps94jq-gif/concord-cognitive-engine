@@ -11175,6 +11175,76 @@ async function callOllama(prompt, options = {}) {
   }
 }
 
+// Call Ollama (local) with streaming — uses /api/chat with stream: true
+// Returns NDJSON chunks via onToken callback; resolves with full content when done.
+async function callOllamaStreaming(brainUrl, model, messages, systemPrompt, onToken, options = {}) {
+  if (!brainUrl) return { ok: false, error: "Ollama URL not provided", source: "ollama-stream" };
+
+  const finalMessages = systemPrompt
+    ? [{ role: "system", content: systemPrompt }, ...messages]
+    : messages;
+
+  const body = {
+    model,
+    messages: finalMessages,
+    stream: true,
+    options: {
+      temperature: options.temperature || 0.7,
+      num_predict: options.maxTokens || 1500,
+    },
+  };
+
+  const ac = new AbortController();
+  const timeout = setTimeout(() => ac.abort(), options.timeout || 120000);
+
+  try {
+    const response = await fetch(`${brainUrl}/api/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: ac.signal,
+    });
+
+    if (!response.ok) {
+      return { ok: false, error: `Ollama stream error: ${response.status}`, source: "ollama-stream" };
+    }
+
+    let fullContent = "";
+    const reader = response.body;
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    for await (const chunk of reader) {
+      buffer += decoder.decode(chunk, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try {
+          const parsed = JSON.parse(line);
+          if (parsed.message?.content) {
+            fullContent += parsed.message.content;
+            onToken(parsed.message.content);
+          }
+          if (parsed.done) {
+            return { ok: true, content: fullContent, model, source: "ollama-stream", tokens: parsed.eval_count || 0 };
+          }
+        } catch (_parseErr) {
+          // skip malformed NDJSON lines
+        }
+      }
+    }
+
+    // Stream ended without explicit done flag — return what we have
+    return { ok: true, content: fullContent, model, source: "ollama-stream" };
+  } catch (e) {
+    return { ok: false, error: String(e.message || e), source: "ollama-stream" };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 // Call OpenAI (cloud)
 async function callOpenAI(prompt, options = {}) {
   if (!OPENAI_API_KEY) return { ok: false, error: "OpenAI not configured" };
@@ -22079,6 +22149,16 @@ register("resonance", "boundary", (ctx, input = {}) => {
   else if (signal > 0.15) classification = "weak_signal";
   else classification = "noise_floor";
 
+  realtimeEmit("resonance:update", {
+    signal: Math.round(signal * 1000) / 1000,
+    classification,
+    topResonance: Math.round(topResonance * 1000) / 1000,
+    avgResonance: Math.round(avgResonance * 1000) / 1000,
+    coherence: Math.round(coherenceDirection * 1000) / 1000,
+    domainCount: domains.length,
+    timestamp: nowISO(),
+  });
+
   return {
     ok: true,
     signal: Math.round(signal * 1000) / 1000,
@@ -24174,6 +24254,66 @@ try { app.use("/api/attribution", createAttributionRoutes({ requireAuth })); } c
 
 import createCityRoutes from "./routes/city.js";
 try { app.use("/api/city", createCityRoutes({ requireAuth })); } catch (e) { structuredLog("warn", "city_routes_skip", { error: e.message }); }
+
+// ── City Streaming Macros ─────────────────────────────────────────────────────
+
+register("city", "startStream", (ctx, input={}) => {
+  const userId = ctx?.actor?.userId;
+  if (!userId) return { ok: false, error: "auth required" };
+  const stream = cityStreaming.startStream(userId, { cityId: input.cityId, title: input.title });
+  realtimeEmit("city:stream-started", { streamId: stream.id, creatorId: userId, cityId: stream.cityId, title: stream.title });
+  return { ok: true, stream };
+});
+
+register("city", "endStream", (ctx, input={}) => {
+  const userId = ctx?.actor?.userId;
+  if (!userId) return { ok: false, error: "auth required" };
+  try {
+    const summary = cityStreaming.endStream(userId);
+    realtimeEmit("city:stream-ended", { streamId: summary.streamId, creatorId: userId, duration: summary.duration, dtusCreated: summary.dtusCreated, salesMade: summary.salesMade });
+    return { ok: true, summary };
+  } catch (e) { return { ok: false, error: e.message }; }
+});
+
+register("city", "followStream", (ctx, input={}) => {
+  const viewerId = ctx?.actor?.userId || "anon";
+  cityStreaming.followStream(input.streamId, viewerId);
+  return { ok: true };
+});
+
+register("city", "unfollowStream", (ctx, input={}) => {
+  const viewerId = ctx?.actor?.userId || "anon";
+  cityStreaming.unfollowStream(input.streamId, viewerId);
+  return { ok: true };
+});
+
+register("city", "listStreams", (ctx, input={}) => {
+  const streams = cityStreaming.listActiveStreams(input.cityId);
+  return { ok: true, streams, count: streams.length };
+});
+
+register("city", "getStream", (ctx, input={}) => {
+  const userId = ctx?.actor?.userId;
+  const stream = cityStreaming.getActiveStream(userId || input.userId);
+  return { ok: true, stream: stream || null };
+});
+
+// ── City Streaming REST Endpoints ─────────────────────────────────────────────
+
+app.post("/api/city/stream/start", async (req, res) => {
+  try { res.json(await runMacro("city", "startStream", req.body, makeCtx(req))); }
+  catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.post("/api/city/stream/end", async (req, res) => {
+  try { res.json(await runMacro("city", "endStream", req.body, makeCtx(req))); }
+  catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+app.get("/api/city/streams", async (req, res) => {
+  try { res.json(await runMacro("city", "listStreams", { cityId: req.query.cityId }, makeCtx(req))); }
+  catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
 
 structuredLog("info", "previously_missing_routes_registered", {
   count: 15,
@@ -27013,6 +27153,15 @@ register("marketplace", "purchaseWithRoyalties", async (ctx, input) => {
     seller: dtu.marketplace.seller || dtu.meta?.createdBy,
   });
 
+  // If seller is streaming, record the sale
+  try {
+    const sellerStream = cityStreaming.getActiveStream(dtu.ownerId || dtu.meta?.createdBy);
+    if (sellerStream) {
+      cityStreaming.recordStreamSale(sellerStream.id, price);
+      realtimeEmit("city:stream-sale", { streamId: sellerStream.id, amount: price, dtuId });
+    }
+  } catch (_e) { /* stream sale recording is non-critical */ }
+
   return {
     ok: true,
     purchasedDtuId: clone.id,
@@ -27608,8 +27757,23 @@ function _lensEmitDTU(ctx, domain, action, artifactType, artifact, extra={}) {
     realtimeEmit("dtu:created", {
       id: dtuId, title: dtu.title, tier: dtu.tier, tags: dtu.tags, updatedAt: dtu.updatedAt,
     });
+    // Separate event so ActivityFeed can distinguish lens-generated DTUs from user-created ones
+    realtimeEmit("lens:dtu_generated", {
+      dtuId, domain, action, artifactType, artifactId: artifact.id,
+      title: dtu.title, timestamp: nowISO(),
+    });
 
     saveStateDebounced();
+
+    // If this DTU was created during an active stream, record it
+    try {
+      const creatorStream = cityStreaming.getActiveStream(ctx?.actor?.userId);
+      if (creatorStream) {
+        cityStreaming.recordStreamDTU(creatorStream.id, dtuId);
+        realtimeEmit("city:stream-dtu-created", { streamId: creatorStream.id, dtuId, domain, action });
+      }
+    } catch (_e) { /* stream recording is non-critical */ }
+
     return dtuId;
   } catch { return null; }
 }
@@ -34737,7 +34901,118 @@ function initChatSocketHandlers(io) {
         // Emit: thinking started
         socket.emit("chat:status", { sessionId, status: "thinking", lens });
 
-        // Run through the existing chat.respond macro
+        // ===== STREAMING PATH =====
+        // Try token-by-token streaming via Ollama before falling back to macro.
+        const _streamBrainUrl = BRAIN.conscious.enabled
+          ? BRAIN.conscious.url
+          : (process.env.OLLAMA_HOST || null);
+        const _streamBrainModel = BRAIN.conscious.enabled
+          ? BRAIN.conscious.model
+          : (process.env.BRAIN_CONSCIOUS_MODEL || "concord-conscious:latest");
+
+        if (_streamBrainUrl) {
+          try {
+            // Ensure session exists
+            if (!STATE.sessions.has(sessionId)) {
+              STATE.sessions.set(sessionId, {
+                createdAt: nowISO(),
+                messages: [],
+                currentLens: null,
+                lensHistory: [],
+                crossDomainContext: {},
+              });
+            }
+            const _streamSess = STATE.sessions.get(sessionId);
+
+            // Record user message in session
+            _streamSess.messages.push({ role: "user", content: String(prompt), ts: nowISO() });
+            if (_streamSess.messages.length > 60) _streamSess.messages.splice(0, _streamSess.messages.length - 60);
+
+            // Build system prompt for streaming
+            const _streamConsciousParams = getConsciousParams({ exchange_count: (_streamSess.messages || []).length });
+            const _streamSystem = buildConsciousPrompt({
+              dtu_count: STATE.dtus?.size || 0,
+              domain_count: Object.keys(STATE.domains || {}).length,
+              lens: lens || "general",
+              context: "",
+              conversation_history: (_streamSess.messages || []).slice(-20),
+              personality_state: STATE.personality || null,
+              active_wants: STATE.wants?.active || [],
+              crossDomainContext: _streamSess.crossDomainContext || {},
+              sessionLensHistory: (_streamSess.lensHistory || []).map(l => ({ lens: l.lens || l })),
+              entityStateBlock: "",
+              affectGuidance: "",
+            });
+
+            // Build messages with conversation history
+            const _streamHistory = (_streamSess.messages || []).slice(-10, -1);
+            const _streamMessages = [
+              ..._streamHistory.map(m => ({
+                role: m.role === "assistant" ? "assistant" : "user",
+                content: String(m.content || "").slice(0, 1500),
+              })),
+              { role: "user", content: String(prompt) },
+            ];
+
+            // Stream tokens to client
+            let _streamSeq = 0;
+            const streamResult = await callOllamaStreaming(
+              _streamBrainUrl,
+              _streamBrainModel,
+              _streamMessages,
+              _streamSystem,
+              (token) => {
+                socket.emit("chat:token", { token, sessionId, seq: _streamSeq++ });
+              },
+              {
+                temperature: _streamConsciousParams.temperature || 0.75,
+                maxTokens: _streamConsciousParams.maxTokens || 1500,
+              }
+            );
+
+            if (streamResult.ok && streamResult.content) {
+              // Store assistant response in session
+              _streamSess.messages.push({
+                role: "assistant",
+                content: streamResult.content,
+                ts: nowISO(),
+                meta: { llmUsed: true, source: "ollama-stream", model: streamResult.model },
+              });
+
+              // Update brain stats
+              BRAIN.conscious.stats.requests++;
+              BRAIN.conscious.stats.lastCallAt = new Date().toISOString();
+
+              // Check for lens recommendation
+              let lensRecommendation = null;
+              try {
+                lensRecommendation = detectLensRecommendation(prompt, streamResult.content, lens);
+              } catch (_e) { logger.debug("server", "silent catch", { error: _e?.message }); }
+
+              // Emit complete with full response
+              socket.emit("chat:complete", {
+                sessionId,
+                response: streamResult.content,
+                lensRecommendation,
+                sources: [],
+                dtuId: null,
+                streamed: true,
+              });
+
+              saveStateDebounced();
+              ack?.({ ok: true, streamed: true });
+              return;
+            }
+            // Stream call returned ok: false — fall through to macro path
+            structuredLog("debug", "chat:stream", "Streaming returned non-ok, falling back to macro", { error: streamResult.error });
+          } catch (_streamErr) {
+            structuredLog("debug", "chat:stream", "Streaming failed, falling back to macro", { error: String(_streamErr?.message || _streamErr) });
+            // Fall through to existing non-streaming macro path
+          }
+        }
+        // ===== END STREAMING PATH =====
+
+        // Run through the existing chat.respond macro (non-streaming fallback)
         const ctx = {
           state: STATE,
           log: (...args) => structuredLog("info", "chat:socket", ...args),
