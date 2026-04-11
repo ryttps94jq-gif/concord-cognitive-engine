@@ -7,8 +7,9 @@ import {
   Coins, TrendingUp, Lock, RefreshCw, ArrowRightLeft,
   Wallet, Loader2, Plus, Send, ArrowDownLeft, ArrowUpRight,
   Eye, EyeOff, Copy, Check, X, Settings, BarChart3, Layers, ChevronDown,
-  ShieldCheck, TrendingDown, ArrowUp, ArrowDown
+  ShieldCheck, TrendingDown, ArrowUp, ArrowDown, XCircle
 } from 'lucide-react';
+import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { apiHelpers } from '@/lib/api/client';
@@ -65,6 +66,25 @@ export default function CryptoLensPage() {
   const [showAddWallet, setShowAddWallet] = useState(false);
   const [showAddChain, setShowAddChain] = useState(false);
   const [showFeatures, setShowFeatures] = useState(true);
+
+  // ── Backend action state ───────────────────────────────────────────────────
+  const runAction = useRunArtifact('crypto');
+  const [actionResult, setActionResult] = useState<Record<string, unknown> | null>(null);
+  const [isRunningAction, setIsRunningAction] = useState(false);
+
+  const handleRunAction = async (action: string) => {
+    const targetId = chainItems[0]?.id ?? 'crypto-default';
+    setIsRunningAction(true);
+    setActionResult(null);
+    try {
+      const result = await runAction.mutateAsync({ id: targetId, action });
+      setActionResult(result as Record<string, unknown>);
+    } catch (err) {
+      setActionResult({ error: err instanceof Error ? err.message : 'Action failed' });
+    } finally {
+      setIsRunningAction(false);
+    }
+  };
 
   // Send form
   const [sendAmount, setSendAmount] = useState('');
@@ -1057,6 +1077,47 @@ export default function CryptoLensPage() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Backend Actions Panel */}
+      <div className="panel p-4 space-y-4">
+        <h3 className="font-semibold flex items-center gap-2 text-sm text-gray-300 uppercase tracking-wider">
+          <BarChart3 className="w-4 h-4 text-neon-green" />
+          Crypto Actions
+        </h3>
+        <div className="flex flex-wrap gap-2">
+          {[
+            { action: 'portfolioAnalysis', label: 'Analyze Portfolio' },
+            { action: 'verifyTransaction', label: 'Verify Transaction' },
+            { action: 'estimateGas', label: 'Estimate Gas Fees' },
+            { action: 'detectPatterns', label: 'Detect Patterns' },
+          ].map(({ action, label }) => (
+            <button
+              key={action}
+              onClick={() => handleRunAction(action)}
+              disabled={isRunningAction}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm bg-neon-green/10 text-neon-green border border-neon-green/30 hover:bg-neon-green/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {isRunningAction ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <TrendingUp className="w-3.5 h-3.5" />}
+              {label}
+            </button>
+          ))}
+        </div>
+        {actionResult && (
+          <div className="relative rounded-lg bg-lattice-deep border border-lattice-border p-4">
+            <button
+              onClick={() => setActionResult(null)}
+              className="absolute top-2 right-2 text-gray-500 hover:text-white transition-colors"
+              aria-label="Dismiss result"
+            >
+              <XCircle className="w-4 h-4" />
+            </button>
+            <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">Result</p>
+            <pre className="text-sm font-mono text-neon-green whitespace-pre-wrap break-all">
+              {JSON.stringify(actionResult, null, 2)}
+            </pre>
+          </div>
+        )}
+      </div>
 
       {/* Lens Features */}
       <div className="border-t border-white/10">

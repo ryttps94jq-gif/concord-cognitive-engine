@@ -10,8 +10,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Bell, Plus, Sparkles, CheckCircle2, Clock, Play, Pause, Square, RotateCcw,
   Coffee, CheckSquare, BookOpen, Target, TrendingUp, Flame, ChevronLeft,
-  ChevronRight, FileText, ListChecks,
+  ChevronRight, FileText, ListChecks, Loader2, XCircle,
 } from 'lucide-react';
+import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { ErrorState } from '@/components/common/EmptyState';
 import { showToast } from '@/components/common/Toasts';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -129,6 +130,11 @@ export default function DailyLensPage() {
     const d = new Date(); return { year: d.getFullYear(), month: d.getMonth() };
   });
 
+  // ── Backend action state ───────────────────────────────────────────────────
+  const runAction = useRunArtifact('daily');
+  const [actionResult, setActionResult] = useState<Record<string, unknown> | null>(null);
+  const [isRunningAction, setIsRunningAction] = useState(false);
+
   const { isLoading, isError: isError, error: error, refetch: refetch, items: entryItems, create: createEntry } = useLensData('daily', 'entry', {
     seed: INITIAL_ENTRIES.map(e => ({ title: e.date, data: e as unknown as Record<string, unknown> })),
   });
@@ -202,6 +208,20 @@ export default function DailyLensPage() {
   const startTimer = useCallback(() => setTimerRunning(true), []);
   const stopTimer = useCallback(() => setTimerRunning(false), []);
   const resetTimer = useCallback(() => { setTimerRunning(false); setTimeLeft(timerDuration); }, [timerDuration]);
+
+  const handleRunAction = useCallback(async (action: string) => {
+    const targetId = entryItems[0]?.id ?? 'daily-default';
+    setIsRunningAction(true);
+    setActionResult(null);
+    try {
+      const result = await runAction.mutateAsync({ id: targetId, action });
+      setActionResult(result as Record<string, unknown>);
+    } catch (err) {
+      setActionResult({ error: err instanceof Error ? err.message : 'Action failed' });
+    } finally {
+      setIsRunningAction(false);
+    }
+  }, [runAction, entryItems]);
 
   // -- Audio recording via MediaRecorder API --------------------------------
   const handleRecordToggle = useCallback(async () => {
@@ -721,6 +741,47 @@ export default function DailyLensPage() {
           compact
         />
       )}
+
+      {/* Backend Actions Panel */}
+      <div className="panel p-4 space-y-4">
+        <h3 className="font-semibold flex items-center gap-2 text-sm text-gray-300 uppercase tracking-wider">
+          <Sparkles className="w-4 h-4 text-neon-cyan" />
+          Daily Actions
+        </h3>
+        <div className="flex flex-wrap gap-2">
+          {[
+            { action: 'dailySummary', label: 'Daily Summary' },
+            { action: 'habitStreak', label: 'Habit Streak' },
+            { action: 'focusTimer', label: 'Focus Timer' },
+            { action: 'weeklyReview', label: 'Weekly Review' },
+          ].map(({ action, label }) => (
+            <button
+              key={action}
+              onClick={() => handleRunAction(action)}
+              disabled={isRunningAction}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm bg-neon-cyan/10 text-neon-cyan border border-neon-cyan/30 hover:bg-neon-cyan/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {isRunningAction ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Flame className="w-3.5 h-3.5" />}
+              {label}
+            </button>
+          ))}
+        </div>
+        {actionResult && (
+          <div className="relative rounded-lg bg-lattice-deep border border-lattice-border p-4">
+            <button
+              onClick={() => setActionResult(null)}
+              className="absolute top-2 right-2 text-gray-500 hover:text-white transition-colors"
+              aria-label="Dismiss result"
+            >
+              <XCircle className="w-4 h-4" />
+            </button>
+            <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">Result</p>
+            <pre className="text-sm font-mono text-neon-cyan whitespace-pre-wrap break-all">
+              {JSON.stringify(actionResult, null, 2)}
+            </pre>
+          </div>
+        )}
+      </div>
         </div>
       </main>
     </div>

@@ -4,12 +4,14 @@ import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiHelpers, api } from '@/lib/api/client';
 import { useUIStore } from '@/store/ui';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
+import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useRouter } from 'next/navigation';
 import {
   Shield, Activity, Brain, Layers, Puzzle, Cpu, Users, Settings,
   AlertTriangle, Moon, FileText, Pause, Play,
-  Save, Trash2, XCircle, Clock, ArrowUp,
+  Save, Trash2, XCircle, Loader2, Clock, ArrowUp,
   Zap, Send, MapPin, Focus, ShieldAlert, ChevronDown,
   Lightbulb, GitBranch, Globe,
 } from 'lucide-react';
@@ -1749,6 +1751,27 @@ export default function CommandCenterPage() {
   const [showFeatures, setShowFeatures] = useState(true);
   const [activeTab, setActiveTab] = useState<TabId>('vitals');
 
+  // --- Backend action wiring ---
+  const runAction = useRunArtifact('commandcenter');
+  const { items: ccItems } = useLensData('commandcenter', 'event', {});
+  const [actionResult, setActionResult] = useState<unknown>(null);
+  const [isRunning, setIsRunning] = useState(false);
+
+  const ccTargetId = ccItems[0]?.id ?? 'default';
+
+  const handleAction = useCallback(async (action: string) => {
+    setIsRunning(true);
+    setActionResult(null);
+    try {
+      const res = await runAction.mutateAsync({ id: ccTargetId, action });
+      setActionResult(res.result ?? res);
+    } catch (err) {
+      setActionResult({ error: err instanceof Error ? err.message : 'Action failed' });
+    } finally {
+      setIsRunning(false);
+    }
+  }, [runAction, ccTargetId]);
+
   // Auth check — any authenticated user can access command center
   const { data: me, isLoading: authLoading } = useQuery({
     queryKey: ['cc-auth'],
@@ -1858,6 +1881,47 @@ export default function CommandCenterPage() {
           compact
         />
       )}
+      </div>
+
+      {/* Backend Action Panel */}
+      <div className="mx-4 mb-4 p-4 space-y-3 rounded-xl border border-cyan-900/30 bg-[#0d1219]">
+        <h3 className="text-sm font-semibold flex items-center gap-2 text-cyan-300">
+          <Brain className="w-4 h-4 text-cyan-400" />
+          Command Center Actions
+        </h3>
+        <div className="flex flex-wrap gap-2">
+          {[
+            { action: 'situationReport', label: 'Generate Sitrep' },
+            { action: 'incidentCorrelation', label: 'Correlate Incidents' },
+            { action: 'escalationEngine', label: 'Escalation Analysis' },
+          ].map(({ action, label }) => (
+            <button
+              key={action}
+              onClick={() => handleAction(action)}
+              disabled={isRunning}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 hover:bg-cyan-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {isRunning ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+              {label}
+            </button>
+          ))}
+        </div>
+        {actionResult !== null && (
+          <div className="mt-2 space-y-1">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-gray-400">Result</span>
+              <button
+                onClick={() => setActionResult(null)}
+                className="text-gray-500 hover:text-white transition-colors"
+              >
+                <XCircle className="w-3.5 h-3.5" />
+              </button>
+            </div>
+            <pre className="bg-[#070b10] p-3 rounded-lg whitespace-pre-wrap text-xs text-gray-300 font-mono max-h-48 overflow-y-auto border border-cyan-900/20">
+              {typeof actionResult === 'string' ? actionResult : JSON.stringify(actionResult, null, 2)}
+            </pre>
+          </div>
+        )}
       </div>
 
       {/* Lens Features */}

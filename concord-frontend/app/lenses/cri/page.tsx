@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
+import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api/client';
 import { motion } from 'framer-motion';
-import { BarChart3, TrendingUp, AlertTriangle, Star, ArrowUpDown, Layers, ChevronDown, Search, FileText } from 'lucide-react';
+import { BarChart3, TrendingUp, AlertTriangle, Star, ArrowUpDown, Layers, ChevronDown, Search, FileText, Loader2, XCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -50,6 +51,25 @@ export default function CRILensPage() {
   const [selectedDtu, setSelectedDtu] = useState<DTUWithCRETI | null>(null);
   const [thresholdFilter, setThresholdFilter] = useState(0);
   const [showFeatures, setShowFeatures] = useState(true);
+
+  const runAction = useRunArtifact('cri');
+  const [actionResult, setActionResult] = useState<{ action: string; result: unknown } | null>(null);
+  const [isRunning, setIsRunning] = useState(false);
+
+  const handleAction = useCallback(async (action: string) => {
+    const targetId = selectedDtu?.id ?? null;
+    if (!targetId) return;
+    setIsRunning(true);
+    setActionResult(null);
+    try {
+      const res = await runAction.mutateAsync({ id: targetId, action });
+      setActionResult({ action, result: res.result });
+    } catch (err) {
+      setActionResult({ action, result: `Error: ${err instanceof Error ? err.message : String(err)}` });
+    } finally {
+      setIsRunning(false);
+    }
+  }, [selectedDtu, runAction]);
 
   const { data: dtusData, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['cri-dtus'],
@@ -455,6 +475,54 @@ export default function CRILensPage() {
           )}
         </>
       )}
+
+      {/* ── CRI Backend Actions ── */}
+      <div className="panel p-4 space-y-3">
+        <h3 className="text-sm font-semibold flex items-center gap-2">
+          <BarChart3 className="w-4 h-4 text-neon-cyan" /> CRI Actions
+          {!selectedDtu && <span className="text-[11px] text-gray-500 font-normal ml-1">(select a DTU above to enable)</span>}
+        </h3>
+        <div className="flex flex-wrap gap-2">
+          {[
+            { action: 'severityAssessment', label: 'Severity Assessment' },
+            { action: 'responseTimeline', label: 'Response Timeline' },
+            { action: 'stakeholderImpact', label: 'Stakeholder Impact' },
+          ].map(({ action, label }) => (
+            <button
+              key={action}
+              onClick={() => handleAction(action)}
+              disabled={isRunning || !selectedDtu}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-neon-cyan/10 border border-neon-cyan/20 text-neon-cyan hover:bg-neon-cyan/20 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              {isRunning && actionResult === null ? (
+                <Loader2 className="w-3 h-3 animate-spin" />
+              ) : null}
+              {label}
+            </button>
+          ))}
+        </div>
+        {isRunning && (
+          <div className="flex items-center gap-2 text-xs text-gray-400">
+            <Loader2 className="w-3 h-3 animate-spin text-neon-cyan" />
+            Running action…
+          </div>
+        )}
+        {actionResult && !isRunning && (
+          <div className="relative rounded-lg bg-lattice-deep border border-neon-cyan/20 p-3 text-xs space-y-1">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-neon-cyan font-medium capitalize">{actionResult.action}</span>
+              <button onClick={() => setActionResult(null)} className="text-gray-500 hover:text-gray-300">
+                <XCircle className="w-3.5 h-3.5" />
+              </button>
+            </div>
+            <pre className="whitespace-pre-wrap text-gray-300 font-mono text-[11px] max-h-48 overflow-y-auto">
+              {typeof actionResult.result === 'string'
+                ? actionResult.result
+                : JSON.stringify(actionResult.result, null, 2)}
+            </pre>
+          </div>
+        )}
+      </div>
 
       {/* Lens Features */}
       <div className="border-t border-white/10">

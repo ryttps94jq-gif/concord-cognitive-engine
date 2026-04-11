@@ -4,11 +4,12 @@ import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData } from '@/lib/hooks/use-lens-data';
+import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import {
   ChefHat, Plus, Search, Trash2, Clock, Users, Flame,
   Star, UtensilsCrossed, Layers, ChevronDown, Timer,
-  CheckSquare, Square, Loader2,
+  CheckSquare, Square, Loader2, XCircle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ErrorState } from '@/components/common/EmptyState';
@@ -161,6 +162,25 @@ export default function CookingLensPage() {
     create, createMut, remove, deleteMut,
   } = useLensData<RecipeData>('cooking', 'recipe', { seed: [] });
 
+  const runAction = useRunArtifact('cooking');
+  const [actionResult, setActionResult] = useState<{ action: string; result: unknown } | null>(null);
+  const [isRunning, setIsRunning] = useState(false);
+
+  const handleAction = useCallback(async (action: string) => {
+    const targetId = items[0]?.id;
+    if (!targetId) return;
+    setIsRunning(true);
+    setActionResult(null);
+    try {
+      const res = await runAction.mutateAsync({ id: targetId, action });
+      setActionResult({ action, result: res.result });
+    } catch (err) {
+      setActionResult({ action, result: `Error: ${err instanceof Error ? err.message : String(err)}` });
+    } finally {
+      setIsRunning(false);
+    }
+  }, [items, runAction]);
+
   const recipes = useMemo(() =>
     items.map(item => ({ id: item.id, ...item.data, name: item.title || item.data?.name || 'Untitled Recipe' }))
       .filter(r => !search || r.name?.toLowerCase().includes(search.toLowerCase()) || r.cuisine?.toLowerCase().includes(search.toLowerCase())),
@@ -221,6 +241,54 @@ export default function CookingLensPage() {
       </AnimatePresence>
 
       <UniversalActions domain="cooking" artifactId={items[0]?.id} compact />
+
+      {/* ── Cooking Backend Actions ── */}
+      <div className="panel p-4 space-y-3">
+        <h3 className="font-semibold text-sm flex items-center gap-2">
+          <ChefHat className="w-4 h-4 text-orange-400" /> Recipe Actions
+        </h3>
+        <div className="flex flex-wrap gap-2">
+          {[
+            { action: 'scaleRecipe', label: 'Scale Recipe' },
+            { action: 'nutritionEstimate', label: 'Nutrition Estimate' },
+            { action: 'mealPlan', label: 'Meal Plan' },
+            { action: 'substitution', label: 'Substitutions' },
+          ].map(({ action, label }) => (
+            <button
+              key={action}
+              onClick={() => handleAction(action)}
+              disabled={isRunning || !items[0]?.id}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-orange-500/10 border border-orange-500/20 text-orange-300 hover:bg-orange-500/20 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              {isRunning && actionResult === null ? (
+                <Loader2 className="w-3 h-3 animate-spin" />
+              ) : null}
+              {label}
+            </button>
+          ))}
+        </div>
+        {isRunning && (
+          <div className="flex items-center gap-2 text-xs text-gray-400">
+            <Loader2 className="w-3 h-3 animate-spin text-orange-400" />
+            Running action…
+          </div>
+        )}
+        {actionResult && !isRunning && (
+          <div className="relative rounded-lg bg-lattice-deep border border-orange-500/20 p-3 text-xs space-y-1">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-orange-300 font-medium capitalize">{actionResult.action}</span>
+              <button onClick={() => setActionResult(null)} className="text-gray-500 hover:text-gray-300">
+                <XCircle className="w-3.5 h-3.5" />
+              </button>
+            </div>
+            <pre className="whitespace-pre-wrap text-gray-300 font-mono text-[11px] max-h-48 overflow-y-auto">
+              {typeof actionResult.result === 'string'
+                ? actionResult.result
+                : JSON.stringify(actionResult.result, null, 2)}
+            </pre>
+          </div>
+        )}
+      </div>
 
       {showCreate && (
         <div className="panel p-4 space-y-3">

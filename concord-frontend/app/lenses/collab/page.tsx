@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLensData } from '@/lib/hooks/use-lens-data';
+import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { apiHelpers, api } from '@/lib/api/client';
 import { useUIStore } from '@/store/ui';
 import { cn } from '@/lib/utils';
@@ -29,6 +30,7 @@ import {
   MessageSquare,
   Check,
   XCircle,
+  Loader2,
   Crown,
   Hash,
   Paperclip,
@@ -240,6 +242,26 @@ export default function CollabLensPage() {
   const [activeSession, setActiveSession] = useState<CollabSession | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [showFeatures, setShowFeatures] = useState(true);
+
+  // --- Backend action wiring ---
+  const runAction = useRunArtifact('collab');
+  const [actionResult, setActionResult] = useState<unknown>(null);
+  const [isRunning, setIsRunning] = useState(false);
+
+  const targetId = sessionItems[0]?.id ?? 'default';
+
+  const handleAction = useCallback(async (action: string) => {
+    setIsRunning(true);
+    setActionResult(null);
+    try {
+      const res = await runAction.mutateAsync({ id: targetId, action });
+      setActionResult(res.result ?? res);
+    } catch (err) {
+      setActionResult({ error: err instanceof Error ? err.message : 'Action failed' });
+    } finally {
+      setIsRunning(false);
+    }
+  }, [runAction, targetId]);
 
   const sessions: CollabSession[] = sessionItems.map(i => i.data as unknown as CollabSession);
   const invitations: Invitation[] = invitationItems.map(i => i.data as unknown as Invitation);
@@ -544,6 +566,48 @@ export default function CollabLensPage() {
 
       <RealtimeDataPanel data={realtimeInsights} />
       <UniversalActions domain="collab" artifactId={null} compact />
+
+      {/* Backend Action Panel */}
+      <div className="panel p-4 space-y-3 border border-neon-blue/20">
+        <h3 className="text-sm font-semibold flex items-center gap-2">
+          <Handshake className="w-4 h-4 text-neon-blue" />
+          Collab Actions
+        </h3>
+        <div className="flex flex-wrap gap-2">
+          {[
+            { action: 'sessionAnalytics', label: 'Session Analytics' },
+            { action: 'contributionScore', label: 'Contribution Scoring' },
+            { action: 'detectConsensus', label: 'Consensus Detection' },
+            { action: 'balanceWorkload', label: 'Workload Balancing' },
+          ].map(({ action, label }) => (
+            <button
+              key={action}
+              onClick={() => handleAction(action)}
+              disabled={isRunning}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-neon-blue/10 text-neon-blue border border-neon-blue/20 hover:bg-neon-blue/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {isRunning ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+              {label}
+            </button>
+          ))}
+        </div>
+        {actionResult !== null && (
+          <div className="mt-2 space-y-1">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-gray-400">Result</span>
+              <button
+                onClick={() => setActionResult(null)}
+                className="text-gray-500 hover:text-white transition-colors"
+              >
+                <XCircle className="w-3.5 h-3.5" />
+              </button>
+            </div>
+            <pre className="bg-lattice-surface p-3 rounded-lg whitespace-pre-wrap text-xs text-gray-300 font-mono max-h-48 overflow-y-auto">
+              {typeof actionResult === 'string' ? actionResult : JSON.stringify(actionResult, null, 2)}
+            </pre>
+          </div>
+        )}
+      </div>
 
       {/* Lens Features */}
       <div className="border-t border-white/10">

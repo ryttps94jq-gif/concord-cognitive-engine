@@ -3,6 +3,7 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData } from '@/lib/hooks/use-lens-data';
+import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { useLensDTUs } from '@/hooks/useLensDTUs';
 import { useUIStore } from '@/store/ui';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -10,7 +11,7 @@ import {
   BookOpen, Plus, Search, FileText, Edit2, Trash2,
   Clock, Sparkles, Save, BarChart3, Globe,
   AlignLeft, PenTool, Check, Zap, Users, Star,
-  Maximize2, Minimize2, Shuffle,
+  Maximize2, Minimize2, Shuffle, Loader2, XCircle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { UniversalActions } from '@/components/lens/UniversalActions';
@@ -81,6 +82,25 @@ export default function CreativeWritingPage() {
     if (promptItems.length > 0) return promptItems.map(i => ({ text: i.data.text || i.title, genres: (i.data.genres || []) as WritingGenre[] }));
     return FALLBACK_PROMPTS;
   }, [promptItems]);
+
+  const runAction = useRunArtifact('creative-writing');
+  const [actionResult, setActionResult] = useState<{ action: string; result: unknown } | null>(null);
+  const [isRunning, setIsRunning] = useState(false);
+
+  const handleAction = useCallback(async (action: string) => {
+    const targetId = workItems[0]?.id ?? null;
+    if (!targetId) return;
+    setIsRunning(true);
+    setActionResult(null);
+    try {
+      const res = await runAction.mutateAsync({ id: targetId, action });
+      setActionResult({ action, result: res.result });
+    } catch (err) {
+      setActionResult({ action, result: `Error: ${err instanceof Error ? err.message : String(err)}` });
+    } finally {
+      setIsRunning(false);
+    }
+  }, [workItems, runAction]);
 
   const [tab, setTab] = useState<WritingTab>('works');
   const [searchQuery, setSearchQuery] = useState('');
@@ -269,6 +289,54 @@ export default function CreativeWritingPage() {
             {showFeatures && <LensFeaturePanel lensId="creative-writing" />}
             <RealtimeDataPanel data={realtimeData} insights={realtimeInsights} />
       <UniversalActions domain="creative-writing" artifactId={null} compact />
+
+            {/* ── Creative Writing Backend Actions ── */}
+            <div className="bg-white/5 border border-white/10 rounded-lg p-4 space-y-3">
+              <h3 className="text-sm font-semibold flex items-center gap-2">
+                <BookOpen className="w-4 h-4 text-amber-400" /> Manuscript Actions
+              </h3>
+              <div className="flex flex-wrap gap-2">
+                {[
+                  { action: 'manuscriptAnalysis', label: 'Analyze Manuscript' },
+                  { action: 'characterProfile', label: 'Character Profile' },
+                  { action: 'plotStructure', label: 'Plot Structure' },
+                  { action: 'dialogueCheck', label: 'Dialogue Check' },
+                ].map(({ action, label }) => (
+                  <button
+                    key={action}
+                    onClick={() => handleAction(action)}
+                    disabled={isRunning || !workItems[0]?.id}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-300 hover:bg-amber-500/20 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {isRunning && actionResult === null ? (
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                    ) : null}
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {isRunning && (
+                <div className="flex items-center gap-2 text-xs text-gray-400">
+                  <Loader2 className="w-3 h-3 animate-spin text-amber-400" />
+                  Running action…
+                </div>
+              )}
+              {actionResult && !isRunning && (
+                <div className="relative rounded-lg bg-black/30 border border-amber-500/20 p-3 text-xs space-y-1">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-amber-300 font-medium capitalize">{actionResult.action}</span>
+                    <button onClick={() => setActionResult(null)} className="text-gray-500 hover:text-gray-300">
+                      <XCircle className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                  <pre className="whitespace-pre-wrap text-gray-300 font-mono text-[11px] max-h-48 overflow-y-auto">
+                    {typeof actionResult.result === 'string'
+                      ? actionResult.result
+                      : JSON.stringify(actionResult.result, null, 2)}
+                  </pre>
+                </div>
+              )}
+            </div>
 
             {/* Tabs */}
             <div className="flex gap-1 bg-white/5 p-1 rounded-lg border border-white/10">

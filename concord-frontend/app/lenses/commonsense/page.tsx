@@ -6,10 +6,11 @@ import { apiHelpers } from '@/lib/api/client';
 import { useUIStore } from '@/store/ui';
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useLensBridge } from '@/lib/hooks/use-lens-bridge';
+import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import {
   Lightbulb, Plus, Search, Database, ArrowRight, Brain,
-  X, RefreshCw, ChevronDown,
+  X, RefreshCw, ChevronDown, Loader2, XCircle,
   Tag, Copy, BarChart3, Network, Eye, Layers, CheckCircle2, Shield,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -65,6 +66,11 @@ export default function CommonsenseLensPage() {
   // --- Lens Bridge ---
   const bridge = useLensBridge('commonsense', 'fact');
 
+  // --- Backend action wiring ---
+  const runAction = useRunArtifact('commonsense');
+  const [actionResult, setActionResult] = useState<unknown>(null);
+  const [isRunning, setIsRunning] = useState(false);
+
   const { data: factsData, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['commonsense-facts'],
     queryFn: () => apiHelpers.commonsense.facts().then((r) => r.data),
@@ -103,6 +109,21 @@ export default function CommonsenseLensPage() {
   }, [factsData]);
 
   const statusInfo = useMemo(() => status?.status || status || {}, [status]);
+
+  const actionTargetId = rawFacts[0]?.id ?? 'default';
+
+  const handleAction = useCallback(async (action: string) => {
+    setIsRunning(true);
+    setActionResult(null);
+    try {
+      const res = await runAction.mutateAsync({ id: actionTargetId, action });
+      setActionResult((res as { result?: unknown }).result ?? res);
+    } catch (err) {
+      setActionResult({ error: err instanceof Error ? err.message : 'Action failed' });
+    } finally {
+      setIsRunning(false);
+    }
+  }, [runAction, actionTargetId]);
 
   // Filtered and sorted facts
   const filteredFacts = useMemo(() => {
@@ -695,6 +716,47 @@ export default function CommonsenseLensPage() {
           compact
         />
       )}
+      </div>
+
+      {/* Backend Action Panel */}
+      <div className="panel p-4 space-y-3 border border-neon-yellow/20">
+        <h3 className="text-sm font-semibold flex items-center gap-2">
+          <Brain className="w-4 h-4 text-neon-yellow" />
+          Commonsense Actions
+        </h3>
+        <div className="flex flex-wrap gap-2">
+          {[
+            { action: 'plausibilityCheck', label: 'Check Plausibility' },
+            { action: 'analogyMapping', label: 'Map Analogies' },
+            { action: 'defaultReasoning', label: 'Default Reasoning' },
+          ].map(({ action, label }) => (
+            <button
+              key={action}
+              onClick={() => handleAction(action)}
+              disabled={isRunning}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-neon-yellow/10 text-neon-yellow border border-neon-yellow/20 hover:bg-neon-yellow/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {isRunning ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+              {label}
+            </button>
+          ))}
+        </div>
+        {actionResult !== null && (
+          <div className="mt-2 space-y-1">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-gray-400">Result</span>
+              <button
+                onClick={() => setActionResult(null)}
+                className="text-gray-500 hover:text-white transition-colors"
+              >
+                <XCircle className="w-3.5 h-3.5" />
+              </button>
+            </div>
+            <pre className="bg-lattice-surface p-3 rounded-lg whitespace-pre-wrap text-xs text-gray-300 font-mono max-h-48 overflow-y-auto">
+              {typeof actionResult === 'string' ? actionResult : JSON.stringify(actionResult, null, 2)}
+            </pre>
+          </div>
+        )}
       </div>
 
       {/* Lens Features */}
