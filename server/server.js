@@ -48,7 +48,16 @@ import { BRAIN_CONFIG as _BRAIN_CONFIG_SPEC, SYSTEM_TO_BRAIN, BRAIN_PRIORITY, ge
 import { preloadBrains, getBrainPriority, resolveBrain } from "./lib/brain-router.js";
 import { createBreakerRegistry } from "./lib/circuit-breaker.js";
 import { traceMiddleware, startSpan, storeTrace, getRecentTraces, getTraceMetrics } from "./lib/request-trace.js";
-import { loadPluginsFromDisk, fireHook, tickPlugins } from "./plugins/loader.js";
+import {
+  loadPluginsFromDisk, fireHook, tickPlugins,
+  registerPlugin as loaderRegisterPlugin,
+  validatePlugin as loaderValidatePlugin,
+  compileEmergentPlugin, activateApprovedPlugin,
+  unloadPlugin as loaderUnloadPlugin,
+  getPluginMetrics, listPlugins as loaderListPlugins,
+  getPlugin as loaderGetPlugin, getPendingGovernance,
+  hotReload as loaderHotReload, buildSandboxedContext,
+} from "./plugins/loader.js";
 import { initDTUStore, createDTUStore } from "./lib/dtu-store.js";
 import { renderAndAttach, hasRenderer as _hasRenderer } from "./lib/render-engine.js";
 import { registerAllRenderers } from "./lib/render-registry.js";
