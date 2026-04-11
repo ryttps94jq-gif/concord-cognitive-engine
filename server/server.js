@@ -24119,7 +24119,7 @@ import createMediaRouter from "./routes/media.js";
 try { app.use("/api/media", createMediaRouter({ STATE })); } catch (e) { structuredLog("warn", "media_routes_skip", { error: e.message }); }
 
 import { createModerationRouter } from "./routes/moderation.js";
-try { app.use("/api/moderation", createModerationRouter({ db, requireAuth, requireRole, structuredLog })); } catch (e) { structuredLog("warn", "moderation_routes_skip", { error: e.message }); }
+try { app.use("/api/moderation", createModerationRouter({ db, requireAuth, requireRole, structuredLog, asyncHandler })); } catch (e) { structuredLog("warn", "moderation_routes_skip", { error: e.message }); }
 
 import createSocialGroupRoutes from "./routes/social-groups.js";
 try { app.use("/api/social", createSocialGroupRoutes({ db, requireAuth })); } catch (e) { structuredLog("warn", "social_groups_routes_skip", { error: e.message }); }
