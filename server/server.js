@@ -5074,7 +5074,13 @@ function metricsMiddleware(req, res, next) {
 
 // Update gauges periodically (30s — no need to update faster, these are scraped on demand)
 setInterval(() => {
-  if (METRICS.gauges.dtuCount) METRICS.gauges.dtuCount.set(STATE.dtus.size);
+  // Report real DTU count (excluding shadow/repair/system DTUs) to Prometheus
+  if (METRICS.gauges.dtuCount) {
+    const EXCLUDED_KINDS = new Set(["shadow", "pattern_shadow", "repair_record", "royalty_record", "session_context", "linguistic_map", "audit_trail", "system_metric", "repair_dtu"]);
+    let _realCount = 0;
+    for (const d of STATE.dtus.values()) { if (!EXCLUDED_KINDS.has(d.machine?.kind) && d.tier !== "shadow") _realCount++; }
+    METRICS.gauges.dtuCount.set(_realCount);
+  }
   if (METRICS.gauges.activeConnections) METRICS.gauges.activeConnections.set(REALTIME.clients?.size || 0);
 }, 30_000);
 
@@ -15933,6 +15939,34 @@ register("dtu", "create", async (ctx, input) => {
   const meta = input.meta && typeof input.meta === "object" ? input.meta : {};
   const allowRewrite = input.allowRewrite !== false;
 
+  // ── Usage Rights Enforcement: check parent DTU consent ─────────────
+  // If this DTU derives from another user's DTU, verify they allow citations.
+  // Can't have people stealing work — consent must be explicit.
+  const _creatorId = ctx?.actor?.userId || ctx?.actor?.id || input.authorId || "anon";
+  const _lineageViolations = [];
+  for (const parentRef of lineage) {
+    const parentId = typeof parentRef === "string" ? parentRef : parentRef?.id;
+    if (!parentId) continue;
+    const parentDtu = STATE.dtus.get(parentId);
+    if (!parentDtu) continue;
+    // Own DTUs and system DTUs: no restriction
+    if (!parentDtu.ownerId || parentDtu.ownerId === _creatorId || parentDtu.ownerId === "anon" || parentDtu.ownerId === "system" || parentDtu.ownerId === "founder") continue;
+    if (parentDtu.creatorType === "system") continue;
+    // Check consent
+    const consent = parentDtu.consent || parentDtu.meta?.consent || {};
+    const vis = parentDtu.meta?.visibility || parentDtu.visibility;
+    // Published/public with no explicit denial: implied license for citation
+    if (vis === "published" || vis === "public") continue;
+    // Private DTU from another user: must have allowCitations
+    if (!consent.allowCitations) {
+      _lineageViolations.push({ parentId, parentTitle: parentDtu.title, owner: parentDtu.ownerId, reason: "citations_not_allowed" });
+    }
+  }
+  if (_lineageViolations.length > 0) {
+    structuredLog("warn", "dtu_lineage_consent_denied", { creator: _creatorId, violations: _lineageViolations });
+    return { ok: false, error: "usage_rights_denied", message: "Cannot derive from these DTUs without citation consent from their creators", violations: _lineageViolations };
+  }
+
   const coreIn = (input.core && typeof input.core === "object") ? input.core : {};
   const humanIn = (input.human && typeof input.human === "object") ? input.human : {};
   const machineIn = (input.machine && typeof input.machine === "object") ? input.machine : {};
@@ -16159,22 +16193,47 @@ register("dtu", "list", (ctx, input) => {
   const scopeFilter = input.scope || null; // "local", "global", or null (default: user's view)
   const userId = ctx?.actor?.id || ctx?.actor?.odId || null;
 
-  // Filter out shadow DTUs - they are internal and should not appear in user-facing lists
-  let items = userVisibleDTUs().filter(d => !isShadowDTU(d));
+  // Filter out shadow/repair/system DTUs - internal, not real user content
+  const INTERNAL_KINDS = new Set(["shadow", "pattern_shadow", "repair_record", "royalty_record", "session_context", "linguistic_map", "audit_trail", "system_metric", "repair_dtu"]);
+  let items = userVisibleDTUs().filter(d => !isShadowDTU(d) && !INTERNAL_KINDS.has(d.machine?.kind) && d.tier !== "shadow");
 
-  // Scope-aware filtering:
-  // - scope="global" → only global DTUs (visible to everyone)
-  // - scope="local"  → only this user's local DTUs
-  // - no scope (default) → user's local DTUs + all global DTUs (the user's complete view)
-  if (scopeFilter === "global") {
-    items = items.filter(d => d.scope === "global");
-  } else if (scopeFilter === "local") {
-    items = items.filter(d => d.scope !== "global" && (!userId || !d.ownerId || d.ownerId === userId));
-  } else if (userId) {
-    // Default view: show user's own local DTUs + all global DTUs + published/public DTUs
+  // ── Scope Hierarchy Enforcement ──────────────────────────────────
+  // Scopes: local → regional → national → global (strict containment)
+  // - local:    only owner can see
+  // - regional: owner + same region users
+  // - national: owner + same country users
+  // - global:   everyone (published/public only for non-owners)
+  const SCOPE_LEVELS = { local: 0, regional: 1, national: 2, global: 3 };
+
+  if (scopeFilter && SCOPE_LEVELS[scopeFilter] !== undefined) {
+    const requestedLevel = SCOPE_LEVELS[scopeFilter];
     items = items.filter(d => {
-      if (d.scope === "global") return true;
+      const dtuScope = d.scope || "local";
+      const dtuLevel = SCOPE_LEVELS[dtuScope] ?? 0;
+
+      // Exact scope match
+      if (scopeFilter === "global") return dtuLevel === 3;
+      if (scopeFilter === "national") return dtuLevel >= 2;
+      if (scopeFilter === "regional") return dtuLevel >= 1 && dtuLevel <= 2;
+      if (scopeFilter === "local") {
+        if (dtuLevel > 0) return false; // local means local only
+        return !userId || !d.ownerId || d.ownerId === userId;
+      }
+      return true;
+    });
+    // Non-owners can only see published/public content at higher scopes
+    if (scopeFilter !== "local") {
+      items = items.filter(d => {
+        if (!d.ownerId || d.ownerId === userId) return true; // own content always visible
+        const vis = d.meta?.visibility || d.visibility;
+        return vis === "published" || vis === "public";
+      });
+    }
+  } else if (userId) {
+    // Default view: user's own DTUs (any scope) + published/public DTUs at any scope
+    items = items.filter(d => {
       if (!d.ownerId || d.ownerId === userId) return true;
+      if (d.scope === "global") return true;
       const vis = d.meta?.visibility || d.visibility;
       if (vis === "published" || vis === "public") return true;
       return false;
@@ -16902,7 +16961,26 @@ const expandTokensFromTokens = (tokens=[]) => {
   return Array.from(out).slice(0, 256);
 };
 
-const scored = all.map(d => {
+// ── Usage Rights Enforcement ─────────────────────────────────────
+// Before using someone else's DTU as brain context, check consent.
+// Own DTUs and system DTUs are always usable. Other users' DTUs
+// require allowCitations or allowAiTraining consent.
+const _consentFiltered = all.filter(d => {
+  if (!d) return false;
+  // Own DTUs: always usable
+  if (!d.ownerId || d.ownerId === _universeUserId || d.ownerId === "anon" || d.ownerId === "system" || d.ownerId === "founder") return true;
+  // System-generated DTUs: usable
+  if (d.creatorType === "system") return true;
+  // Other users' DTUs: check consent
+  const consent = d.consent || d.meta?.consent || {};
+  if (consent.allowCitations || consent.allowAiTraining) return true;
+  // Published/public DTUs with no explicit consent denial: allow (implied license)
+  const vis = d.meta?.visibility || d.visibility;
+  if (vis === "published" || vis === "public") return true;
+  return false;
+});
+
+const scored = _consentFiltered.map(d => {
   const dText = [
     d?.title || "",
     Array.isArray(d?.tags) ? d.tags.join(" ") : "",
@@ -19037,11 +19115,29 @@ register("quality", "preview", (_ctx, input) => {
 // ===================== System Status =====================
 // Returns live system metrics consumed by dashboard, header bar, and status cards
 register("system", "status", (_ctx, _input) => {
+  // Real DTU count: exclude shadow, repair, system-internal, and audit DTUs
+  // Users should see how much REAL content exists, not number-padded counts
+  const EXCLUDED_KINDS = new Set(["shadow", "pattern_shadow", "repair_record", "royalty_record", "session_context", "linguistic_map", "audit_trail", "system_metric", "repair_dtu"]);
+  const EXCLUDED_SOURCES = new Set(["repair-cortex", "shadow-promoter", "ghost-fleet"]);
+  let realDtuCount = 0;
+  for (const dtu of STATE.dtus.values()) {
+    const kind = dtu.machine?.kind;
+    const source = dtu.source;
+    const tags = dtu.tags || [];
+    if (EXCLUDED_KINDS.has(kind)) continue;
+    if (EXCLUDED_SOURCES.has(source)) continue;
+    if (tags.includes("shadow") || tags.includes("repair") || tags.includes("audit")) continue;
+    if (dtu.tier === "shadow") continue;
+    realDtuCount++;
+  }
+
   return {
     ok: true,
     version: "5.1.0",
     counts: {
-      dtus: STATE.dtus.size,
+      dtus: realDtuCount,
+      dtusRaw: STATE.dtus.size,  // raw count for debug/admin
+      shadowDtus: STATE.shadowDtus?.size || 0,
       events: AUDIT_LOG?.length || 0,
       emergents: STATE.__emergent?.emergents?.size || 0,
     },
@@ -26706,6 +26802,38 @@ register("marketplace", "purchaseWithRoyalties", async (ctx, input) => {
 
   // Platform fee
   payments.push({ recipient: "platform", amount: Math.round(platformFee * 100) / 100, type: "platform_fee" });
+
+  // ── ACTUALLY CREDIT WALLETS ──────────────────────────────────────
+  // Every payment computed above MUST hit the wallet immediately.
+  // No deferred settlement — creators get paid the instant a sale happens.
+  for (const payment of payments) {
+    if (payment.recipient && payment.recipient !== "platform" && payment.amount > 0) {
+      try {
+        creditWallet(
+          payment.recipient,
+          payment.amount,
+          `${payment.type === "royalty" ? "Royalty" : "Sale"}: ${dtu.title || dtuId} (${payment.type})`,
+          `purchase:${dtuId}:${clone.id}:${payment.recipient}`  // idempotency key
+        );
+      } catch (_e) {
+        structuredLog("error", "wallet_credit_failed", { recipient: payment.recipient, amount: payment.amount, error: _e?.message });
+      }
+    }
+  }
+  // Debit buyer
+  try {
+    const buyerId = ctx?.actor?.userId;
+    if (buyerId && price > 0) {
+      const buyerWallet = getWallet(buyerId);
+      buyerWallet.balance -= price;
+      buyerWallet.tokensSpent = (buyerWallet.tokensSpent || 0) + price;
+      buyerWallet.updatedAt = Date.now();
+      logTransaction({ type: 'debit', odId: buyerId, amount: price, reason: `Purchase: ${dtu.title || dtuId}`, balance: buyerWallet.balance });
+    }
+  } catch (_e) {
+    structuredLog("error", "buyer_debit_failed", { error: _e?.message });
+  }
+  saveStateDebounced();
 
   // Clone DTU to buyer
   const clone = JSON.parse(JSON.stringify(dtu));
