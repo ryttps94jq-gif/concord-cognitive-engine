@@ -39,7 +39,11 @@ import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { NervousSystem } from '@/components/nervous/NervousSystem';
 import { MonitoringPanel } from '@/components/admin/MonitoringPanel';
-import { Download, Globe, DollarSign, PieChart, BarChart3, Search, Power, Key, Building, Shield } from 'lucide-react';
+import { BackupHealth } from '@/components/admin/BackupHealth';
+import { CDNStatus } from '@/components/admin/CDNStatus';
+import { CodeEngineStatus } from '@/components/admin/CodeEngineStatus';
+import { RepairDashboard } from '@/components/admin/RepairDashboard';
+import { Download, Globe, DollarSign, PieChart, BarChart3, Search, Power, Key, Building, Shield, Code2, Wrench } from 'lucide-react';
 
 interface DashboardData {
   ok: boolean;
@@ -242,6 +246,10 @@ export default function AdminDashboardPage() {
   const [showAuditLog, setShowAuditLog] = useState(false);
   const [showPermMatrix, setShowPermMatrix] = useState(false);
   const [showSysHealth, setShowSysHealth] = useState(false);
+  const [showBackupHealth, setShowBackupHealth] = useState(false);
+  const [showCDNStatus, setShowCDNStatus] = useState(false);
+  const [showCodeEngine, setShowCodeEngine] = useState(false);
+  const [showRepairDashboard, setShowRepairDashboard] = useState(false);
 
   // Backend action hooks
   const runAction = useRunArtifact('admin');
@@ -831,6 +839,82 @@ export default function AdminDashboardPage() {
 
       {/* Nervous System — live brain/circuit/event/trace/integrity monitoring */}
       <NervousSystem />
+
+      {/* Backup Health */}
+      <div className="border-t border-white/10">
+        <button
+          onClick={() => setShowBackupHealth(!showBackupHealth)}
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
+        >
+          <span className="flex items-center gap-2">
+            <HardDrive className="w-4 h-4" />
+            Backup Health
+          </span>
+          <ChevronDown className={`w-4 h-4 transition-transform ${showBackupHealth ? 'rotate-180' : ''}`} />
+        </button>
+        {showBackupHealth && (
+          <div className="px-4 pb-4">
+            <BackupHealth />
+          </div>
+        )}
+      </div>
+
+      {/* CDN Status */}
+      <div className="border-t border-white/10">
+        <button
+          onClick={() => setShowCDNStatus(!showCDNStatus)}
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
+        >
+          <span className="flex items-center gap-2">
+            <Globe className="w-4 h-4" />
+            CDN Status
+          </span>
+          <ChevronDown className={`w-4 h-4 transition-transform ${showCDNStatus ? 'rotate-180' : ''}`} />
+        </button>
+        {showCDNStatus && (
+          <div className="px-4 pb-4">
+            <CDNStatus />
+          </div>
+        )}
+      </div>
+
+      {/* Code Engine Status */}
+      <div className="border-t border-white/10">
+        <button
+          onClick={() => setShowCodeEngine(!showCodeEngine)}
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
+        >
+          <span className="flex items-center gap-2">
+            <Code2 className="w-4 h-4" />
+            Code Engine Status
+          </span>
+          <ChevronDown className={`w-4 h-4 transition-transform ${showCodeEngine ? 'rotate-180' : ''}`} />
+        </button>
+        {showCodeEngine && (
+          <div className="px-4 pb-4">
+            <CodeEngineStatus />
+          </div>
+        )}
+      </div>
+
+      {/* Repair Dashboard */}
+      <div className="border-t border-white/10">
+        <button
+          onClick={() => setShowRepairDashboard(!showRepairDashboard)}
+          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
+        >
+          <span className="flex items-center gap-2">
+            <Wrench className="w-4 h-4" />
+            Repair Dashboard
+          </span>
+          <ChevronDown className={`w-4 h-4 transition-transform ${showRepairDashboard ? 'rotate-180' : ''}`} />
+        </button>
+        {showRepairDashboard && (
+          <div className="px-4 pb-4">
+            <RepairDashboard />
+          </div>
+        )}
+      </div>
 
       {/* Browser Extension */}
       <div className="panel p-6">

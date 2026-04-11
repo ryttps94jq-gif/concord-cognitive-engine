@@ -29,13 +29,15 @@ import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 import { ProvenanceBadge } from '@/components/dtu/ProvenanceBadge';
 import { useLatticeStore } from '@/store/lattice';
+import { InteractiveGraph } from '@/components/graphs/InteractiveGraphCore';
+import { KnowledgeSpace3D } from '@/components/graphs/KnowledgeSpace3D';
 
 // --- Types ---
 
 type NodeType = 'regular' | 'mega' | 'hyper' | 'shadow' | 'track' | 'artist' | 'sample' | 'release';
 type EdgeType = 'parent' | 'sibling' | 'semantic' | 'temporal' | 'sampled_from' | 'remixed_by' | 'collaborated_with' | 'released_on';
 type LayoutMode = 'force' | 'radial' | 'hierarchical';
-type ViewMode = 'default' | 'heatmap' | 'cluster' | 'sample_tree' | 'collab_network';
+type ViewMode = 'default' | 'heatmap' | 'cluster' | 'sample_tree' | 'collab_network' | 'interactive' | '3d';
 
 interface GraphNode {
   id: string;
@@ -1143,15 +1145,60 @@ export default function GraphLensPage() {
         tabIndex={0}
         onKeyDown={handleGraphKeyDown}
       >
-        <canvas
-          ref={canvasRef}
-          className={cn('w-full h-full', connectMode ? 'cursor-crosshair' : 'cursor-grab active:cursor-grabbing')}
-          style={{ width: dimensions.width, height: dimensions.height }}
-          aria-hidden="true"
-          onMouseDown={handleMouseDown} onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp}
-          onWheel={handleWheel} onContextMenu={handleContextMenu}
-        />
+        {viewMode === 'interactive' ? (
+          <InteractiveGraph
+            nodes={graphData.nodes.map(n => ({
+              id: n.id,
+              label: n.label,
+              tier: (['regular', 'mega', 'hyper', 'shadow'].includes(n.tier) ? n.tier : 'regular') as 'regular' | 'mega' | 'hyper' | 'shadow',
+              tags: n.tags,
+              resonance: n.connections > 0 ? Math.min(n.connections / 10, 1) : 0,
+              createdAt: n.createdAt,
+            }))}
+            edges={graphData.edges.map(e => ({
+              source: e.source,
+              target: e.target,
+              weight: e.weight,
+              type: e.type,
+            }))}
+            onNodeClick={(node) => {
+              const full = graphData.nodes.find(n => n.id === node.id);
+              if (full) setSelectedNode(full);
+            }}
+            selectedNodeId={selectedNode?.id}
+            className="absolute inset-0"
+            showControls={false}
+          />
+        ) : viewMode === '3d' ? (
+          <KnowledgeSpace3D
+            nodes={graphData.nodes.map(n => ({
+              id: n.id,
+              label: n.label,
+              tier: (['regular', 'mega', 'hyper', 'shadow'].includes(n.tier) ? n.tier : 'regular') as 'regular' | 'mega' | 'hyper' | 'shadow',
+              position: [n.x - dimensions.width / 2, n.y - dimensions.height / 2, (n.connections || 0) * 2] as [number, number, number],
+              connections: graphData.edges
+                .filter(e => e.source === n.id || e.target === n.id)
+                .map(e => e.source === n.id ? e.target : e.source),
+              resonance: n.connections > 0 ? Math.min(n.connections / 10, 1) : 0,
+            }))}
+            onNodeClick={(node) => {
+              const full = graphData.nodes.find(n => n.id === node.id);
+              if (full) setSelectedNode(full);
+            }}
+            selectedNodeId={selectedNode?.id}
+            className="absolute inset-0"
+          />
+        ) : (
+          <canvas
+            ref={canvasRef}
+            className={cn('w-full h-full', connectMode ? 'cursor-crosshair' : 'cursor-grab active:cursor-grabbing')}
+            style={{ width: dimensions.width, height: dimensions.height }}
+            aria-hidden="true"
+            onMouseDown={handleMouseDown} onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp}
+            onWheel={handleWheel} onContextMenu={handleContextMenu}
+          />
+        )}
 
         {/* Screen reader announcement for focused node */}
         <div className="sr-only" aria-live="polite" aria-atomic="true">
@@ -1239,6 +1286,8 @@ export default function GraphLensPage() {
               <option value="default">Default</option>
               <option value="heatmap">Heatmap</option>
               <option value="cluster">Clusters</option>
+              <option value="interactive">Interactive (Cytoscape)</option>
+              <option value="3d">3D Space</option>
               {hasMusicDomain && <option value="sample_tree">Sample Tree</option>}
               {hasMusicDomain && <option value="collab_network">Collab Network</option>}
             </select>

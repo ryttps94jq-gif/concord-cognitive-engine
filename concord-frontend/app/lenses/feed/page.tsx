@@ -61,6 +61,11 @@ import { ReportButton } from '@/components/common/ReportButton';
 import { StoriesBar } from '@/components/social/StoriesBar';
 import { SuggestedFollows } from '@/components/social/SuggestedFollows';
 import { SocialCommerceTag } from '@/components/social/SocialCommerceTag';
+import { CrossPostExternal } from '@/components/social/CrossPostExternal';
+import { Discovery } from '@/components/social/Discovery';
+import { PostScheduler } from '@/components/social/PostScheduler';
+import { TrendingTopics } from '@/components/social/TrendingTopics';
+import { UserProfile } from '@/components/social/UserProfile';
 import { PullToSubstrate } from '@/components/lens/PullToSubstrate';
 import { FeedBanner } from '@/components/lens/FeedBanner';
 import { ShoppingBag, Tag } from 'lucide-react';
@@ -370,6 +375,7 @@ export default function FeedLensPage() {
   const [newPost, setNewPost] = useState('');
   const [activeTab, setActiveTab] = useState<FeedTab>('for-you');
   const [searchQuery, setSearchQuery] = useState('');
+  const [showProfile, setShowProfile] = useState(false);
   const composeRef = useRef<HTMLTextAreaElement>(null);
 
   // Product tagging state for compose
@@ -667,7 +673,7 @@ export default function FeedLensPage() {
     { icon: Bell, label: 'Notifications', active: activeTab === 'notifications' as string, action: () => setActiveTab('for-you' as FeedTab) },
     { icon: Mail, label: 'Messages', active: false, action: () => { window.location.href = '/messages'; } },
     { icon: Bookmark, label: 'Bookmarks', active: activeTab === 'bookmarks' as string, action: () => setActiveTab('following' as FeedTab) },
-    { icon: User, label: 'Profile', active: false, action: () => { apiHelpers.social.getProfile('me').then(() => useUIStore.getState().addToast({ type: 'success', message: 'Profile loaded' })).catch(() => useUIStore.getState().addToast({ type: 'info', message: 'No profile yet. Create DTUs to build your profile.' })); } },
+    { icon: User, label: 'Profile', active: showProfile, action: () => setShowProfile(prev => !prev) },
     { icon: Rss, label: 'Media', active: activeTab === 'releases', action: () => setActiveTab('releases') },
   ];
 
@@ -902,6 +908,28 @@ export default function FeedLensPage() {
             </div>
           </div>
         </div>
+
+        {/* User Profile Panel (toggled from sidebar) */}
+        {showProfile && (
+          <div className="border-b border-lattice-border">
+            <UserProfile
+              userId="current-user"
+              currentUserId="current-user"
+              onNavigateToUser={(uid) => { setSearchQuery(uid); setShowProfile(false); }}
+            />
+          </div>
+        )}
+
+        {/* Discovery Panel (shown on Trending / Explore tab) */}
+        {activeTab === 'trending' && (
+          <div className="p-4 border-b border-lattice-border">
+            <Discovery
+              currentUserId="current-user"
+              onNavigateToUser={(uid) => setSearchQuery(uid)}
+              onNavigateToContent={(cid) => setSearchQuery(cid)}
+            />
+          </div>
+        )}
 
         {/* Post Feed */}
         <div>
@@ -1138,6 +1166,13 @@ export default function FeedLensPage() {
                           >
                             <Share className="w-4 h-4" />
                           </button>
+                          <CrossPostExternal
+                            postId={post.id}
+                            title={post.content.slice(0, 80)}
+                            content={post.content}
+                            tags={post.tags}
+                            authorName={post.author.name}
+                          />
                           <ReportButton contentId={post.id} contentType="post" compact />
                         </div>
                       </div>
@@ -1271,12 +1306,24 @@ export default function FeedLensPage() {
           </button>
         </div>
 
+        {/* Trending Topics — live animated widget */}
+        <div className="bg-lattice-surface rounded-xl border border-lattice-border overflow-hidden p-4">
+          <TrendingTopics
+            onTopicClick={(tag) => setSearchQuery(tag)}
+          />
+        </div>
+
         {/* Rising Creators */}
         <RisingCreatorsSidebar />
 
         {/* Who to Follow — wired to real discovery data */}
         <div className="bg-lattice-surface rounded-xl border border-lattice-border overflow-hidden p-4">
           <SuggestedFollows currentUserId="current-user" />
+        </div>
+
+        {/* Post Scheduler */}
+        <div className="bg-lattice-surface rounded-xl border border-lattice-border overflow-hidden p-4">
+          <PostScheduler userId="current-user" />
         </div>
 
         {/* New Releases Mini */}

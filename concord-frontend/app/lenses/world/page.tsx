@@ -27,6 +27,14 @@ import { DEMO_DISTRICT } from '@/lib/world-lens/district-seed';
 const ConcordiaScene = dynamic(() => import('@/components/world-lens/ConcordiaScene'), { ssr: false });
 const AvatarSystem3D = dynamic(() => import('@/components/world-lens/AvatarSystem3D'), { ssr: false });
 const CameraControls = dynamic(() => import('@/components/world-lens/CameraControls'), { ssr: false });
+const HUDOverlay = dynamic(() => import('@/components/world-lens/HUDOverlay'), { ssr: false });
+const ChatSystem = dynamic(() => import('@/components/world-lens/ChatSystem'), { ssr: false });
+const InventoryPanel = dynamic(() => import('@/components/world-lens/InventoryPanel'), { ssr: false });
+const QuestPanel = dynamic(() => import('@/components/world-lens/QuestPanel'), { ssr: false });
+const PlayerPresence = dynamic(() => import('@/components/world-lens/PlayerPresence'), { ssr: false });
+const MapNavigation = dynamic(() => import('@/components/world-lens/MapNavigation'), { ssr: false });
+const PlayerProfile = dynamic(() => import('@/components/world-lens/PlayerProfile'), { ssr: false });
+const CraftingPanel = dynamic(() => import('@/components/world-lens/CraftingPanel'), { ssr: false });
 import { SEED_MATERIALS } from '@/lib/world-lens/material-seed';
 import { cacheMaterials } from '@/lib/world-lens/validation-engine';
 import type {
@@ -505,6 +513,7 @@ export default function WorldLensPage() {
 
   // 3D Explore mode state
   const [cameraMode, setCameraMode] = useState<'isometric' | 'follow' | 'free' | 'interior' | 'cinematic'>('follow');
+  const [showPanel, setShowPanel] = useState<'none' | 'inventory' | 'quests' | 'chat' | 'map' | 'crafting' | 'players' | 'profile'>('none');
   const [playerAvatar] = useState({
     id: 'player-1',
     name: 'You',
@@ -774,20 +783,87 @@ export default function WorldLensPage() {
             />
           </div>
           {/* HUD overlay */}
-          <div className="absolute bottom-4 left-4 z-20 bg-black/60 border border-white/10 rounded-lg px-3 py-2 pointer-events-auto">
-            <div className="flex items-center gap-3 text-xs">
-              <div className="flex items-center gap-1.5">
-                <Users className="w-3.5 h-3.5 text-emerald-400" />
-                <span className="text-emerald-300 font-medium">{playerAvatar.name}</span>
-              </div>
-              <span className="text-gray-500">|</span>
-              <span className="text-gray-400">WASD to move</span>
-              <span className="text-gray-500">|</span>
-              <span className="text-gray-400">Mouse to look</span>
-              <span className="text-gray-500">|</span>
-              <span className="text-cyan-400">{activeDistrict.name}</span>
-            </div>
+          <HUDOverlay
+            mode="explore"
+            district={activeDistrict.name}
+            timeOfDay="day"
+            weather="clear"
+            playerCount={1}
+            currency={{ concordCoin: 0, pendingRoyalties: 0 }}
+            professionBadge=""
+            reputationLevel={1}
+            notifications={[]}
+            unreadCount={0}
+            tools={[]}
+            onToolSelect={() => {}}
+            onMenuOpen={() => {}}
+          />
+          {/* Gameplay toolbar */}
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1 bg-black/70 border border-white/10 rounded-xl px-2 py-1.5 pointer-events-auto">
+            {([
+              { key: 'inventory', label: 'Inventory', icon: Layers },
+              { key: 'quests', label: 'Quests', icon: Zap },
+              { key: 'chat', label: 'Chat', icon: Users },
+              { key: 'map', label: 'Map', icon: MapIcon },
+              { key: 'crafting', label: 'Craft', icon: Layers },
+              { key: 'players', label: 'Players', icon: Users },
+              { key: 'profile', label: 'Profile', icon: Eye },
+            ] as const).map(({ key, label, icon: Icon }) => (
+              <button
+                key={key}
+                onClick={() => setShowPanel(showPanel === key ? 'none' : key)}
+                className={`flex flex-col items-center gap-0.5 px-2.5 py-1 rounded-lg text-[10px] transition-colors ${showPanel === key ? 'bg-emerald-500/20 text-emerald-300' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}
+              >
+                <Icon className="w-4 h-4" />
+                {label}
+              </button>
+            ))}
           </div>
+          {/* Side panels */}
+          {showPanel === 'inventory' && (
+            <div className="absolute top-4 left-4 z-20 w-80 max-h-[70vh] overflow-auto pointer-events-auto">
+              <InventoryPanel onClose={() => setShowPanel('none')} />
+            </div>
+          )}
+          {showPanel === 'quests' && (
+            <div className="absolute top-4 left-4 z-20 w-80 max-h-[70vh] overflow-auto pointer-events-auto">
+              <QuestPanel onClose={() => setShowPanel('none')} />
+            </div>
+          )}
+          {showPanel === 'chat' && (
+            <div className="absolute top-4 left-4 z-20 w-96 max-h-[70vh] overflow-auto pointer-events-auto">
+              <ChatSystem />
+            </div>
+          )}
+          {showPanel === 'map' && (
+            <div className="absolute top-4 left-4 z-20 w-80 max-h-[70vh] overflow-auto pointer-events-auto">
+              <MapNavigation
+                playerPosition={{ x: 0, y: 0 }}
+                district={activeDistrict.name}
+                buildings={[]}
+                npcs={[]}
+                players={[]}
+                waypoints={[]}
+                onWaypointPlace={() => {}}
+                mapMode="district"
+              />
+            </div>
+          )}
+          {showPanel === 'crafting' && (
+            <div className="absolute top-4 left-4 z-20 w-96 max-h-[70vh] overflow-auto pointer-events-auto">
+              <CraftingPanel onClose={() => setShowPanel('none')} />
+            </div>
+          )}
+          {showPanel === 'players' && (
+            <div className="absolute top-4 left-4 z-20 w-80 max-h-[70vh] overflow-auto pointer-events-auto">
+              <PlayerPresence />
+            </div>
+          )}
+          {showPanel === 'profile' && (
+            <div className="absolute top-4 left-4 z-20 w-96 max-h-[70vh] overflow-auto pointer-events-auto">
+              <PlayerProfile isOwnProfile />
+            </div>
+          )}
         </div>
       ) : viewMode === 'streams' ? (
         <CityStreamingSection />
