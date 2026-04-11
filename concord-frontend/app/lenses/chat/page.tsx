@@ -48,6 +48,9 @@ import {
   Check,
   ExternalLink,
   Layers,
+  Loader2,
+  XCircle,
+  BarChart3,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { UniversalActions } from '@/components/lens/UniversalActions';
@@ -63,6 +66,8 @@ import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 import { DTUDetailView } from '@/components/dtu/DTUDetailView';
+import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
+import { useLensData } from '@/lib/hooks/use-lens-data';
 
 // ──────────────────────────────────────────────
 // Types
@@ -370,6 +375,14 @@ export default function ChatLensPage() {
   const [domainContext, setDomainContext] = useState<string>('');
   const [inspectingDtuId, setInspectingDtuId] = useState<string | null>(null);
 
+  // ── Chat backend action state ──
+  const runChatAction = useRunArtifact('chat');
+  const { items: chatArtifacts } = useLensData<Record<string, unknown>>('chat', 'conversation', { seed: [] });
+  const [chatActionRunning, setChatActionRunning] = useState<string | null>(null);
+  const [threadSummarizeResult, setThreadSummarizeResult] = useState<Record<string, unknown> | null>(null);
+  const [participantAnalysisResult, setParticipantAnalysisResult] = useState<Record<string, unknown> | null>(null);
+  const [topicDetectionResult, setTopicDetectionResult] = useState<Record<string, unknown> | null>(null);
+
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   // ──────────────────────────────────────────────
@@ -542,6 +555,26 @@ export default function ChatLensPage() {
     setSlashFilter('');
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages, domainContext]);
+
+  // ──────────────────────────────────────────────
+  // Chat backend action handler
+  // ──────────────────────────────────────────────
+
+  const handleChatAction = async (action: 'threadSummarize' | 'participantAnalysis' | 'topicDetection') => {
+    const targetId = chatArtifacts[0]?.id;
+    if (!targetId) return;
+    setChatActionRunning(action);
+    try {
+      const res = await runChatAction.mutateAsync({ id: targetId, action });
+      const result = res.result as Record<string, unknown>;
+      if (action === 'threadSummarize') setThreadSummarizeResult(result);
+      else if (action === 'participantAnalysis') setParticipantAnalysisResult(result);
+      else if (action === 'topicDetection') setTopicDetectionResult(result);
+    } catch (e) {
+      console.error(`Chat action ${action} failed:`, e);
+    }
+    setChatActionRunning(null);
+  };
 
   // ──────────────────────────────────────────────
   // Mutations

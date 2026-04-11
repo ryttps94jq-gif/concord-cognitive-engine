@@ -8,7 +8,7 @@ import {
   Network, ArrowLeftRight, Shield, MessageSquare, Skull,
   Baby, Eye, CheckCircle2, XCircle,
   RefreshCw, ChevronDown, ChevronRight, Loader2, Search,
-  Users, Zap, Activity, Layers, Radio, GitMerge,
+  Users, Zap, Activity, Layers, Radio, GitMerge, BarChart3,
 } from 'lucide-react';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
@@ -16,6 +16,8 @@ import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 import { DTUDetailView } from '@/components/dtu/DTUDetailView';
+import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
+import { useLensData } from '@/lib/hooks/use-lens-data';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -101,6 +103,22 @@ export default function BridgeLens() {
   const [loading, setLoading] = useState(true);
   const [expandedDebate, setExpandedDebate] = useState<string | null>(null);
   const [selectedDtuId, setSelectedDtuId] = useState<string | null>(null);
+  const [isRunning, setIsRunning] = useState<string | null>(null);
+  const [actionResult, setActionResult] = useState<Record<string, unknown> | null>(null);
+
+  const { items: bridgeItems } = useLensData('bridge', 'connection', { noSeed: true });
+  const runAction = useRunArtifact('bridge');
+
+  const handleBridgeAction = async (action: string) => {
+    const targetId = bridgeItems[0]?.id;
+    if (!targetId) return;
+    setIsRunning(action);
+    try {
+      const res = await runAction.mutateAsync({ id: targetId, action });
+      setActionResult(res.result as Record<string, unknown>);
+    } catch (e) { console.error(`Action ${action} failed:`, e); }
+    setIsRunning(null);
+  };
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -238,6 +256,56 @@ export default function BridgeLens() {
           {tab === 'emergents' && <EmergentsTab emergents={emergents} />}
         </>
       )}
+
+      {/* Bridge Action Panel */}
+      <div className="mt-6 p-4 bg-zinc-900 rounded-lg border border-zinc-800">
+        <h2 className="text-sm font-semibold text-zinc-300 mb-3 flex items-center gap-2">
+          <Zap className="w-4 h-4 text-purple-400" />
+          Bridge Actions
+        </h2>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
+          {[
+            { action: 'connectionHealth', label: 'Connection Health', icon: <Activity className="w-4 h-4" /> },
+            { action: 'dataMapping',      label: 'Data Mapping',      icon: <GitMerge className="w-4 h-4" /> },
+            { action: 'syncStatus',       label: 'Sync Status',       icon: <RefreshCw className="w-4 h-4" /> },
+            { action: 'throughputAnalysis', label: 'Throughput Analysis', icon: <BarChart3 className="w-4 h-4" /> },
+          ].map(({ action, label, icon }) => (
+            <button
+              key={action}
+              onClick={() => handleBridgeAction(action)}
+              disabled={isRunning !== null || bridgeItems.length === 0}
+              className="flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-sm text-zinc-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {isRunning === action
+                ? <Loader2 className="w-4 h-4 animate-spin text-purple-400" />
+                : icon}
+              <span className="truncate">{label}</span>
+            </button>
+          ))}
+        </div>
+        {bridgeItems.length === 0 && (
+          <p className="text-xs text-zinc-600 text-center py-1">No bridge connection artifact found — actions are unavailable.</p>
+        )}
+        {actionResult && (
+          <motion.div
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.25 }}
+            className="relative p-3 bg-zinc-800 rounded-lg border border-purple-500/30"
+          >
+            <button
+              onClick={() => setActionResult(null)}
+              className="absolute top-2 right-2 text-zinc-500 hover:text-zinc-300 transition-colors"
+              title="Dismiss"
+            >
+              <XCircle className="w-4 h-4" />
+            </button>
+            <pre className="text-xs text-zinc-300 overflow-auto max-h-48 pr-6 whitespace-pre-wrap">
+              {JSON.stringify(actionResult, null, 2)}
+            </pre>
+          </motion.div>
+        )}
+      </div>
 
       <RealtimeDataPanel data={realtimeInsights} />
 
