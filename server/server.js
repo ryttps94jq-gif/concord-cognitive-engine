@@ -16067,6 +16067,8 @@ function pickDebateSet(query){
 
 // DTU domain
 register("dtu", "create", async (ctx, input) => {
+  await acquireMutex();
+  try {
   // ── Daily DTU soft cap tracking ───────────────────────────────────────
   const DAILY_DTU_SOFT_CAP = 200;
   const _dtuTodayKey = new Date().toISOString().slice(0, 10);
@@ -16219,6 +16221,7 @@ register("dtu", "create", async (ctx, input) => {
   }
 
   return { ok: true, dtu };
+  } finally { releaseMutex(); }
 }, { description: "Create a DTU (regular/mega/hyper) with structured core; UI receives human projection." });
 
 register("dtu", "get", (ctx, input) => {
@@ -16231,7 +16234,9 @@ register("dtu", "get", (ctx, input) => {
   return { ok: true, dtu };
 });
 
-register("dtu", "update", (ctx, input) => {
+register("dtu", "update", async (ctx, input) => {
+  await acquireMutex();
+  try {
   const id = String(input.id || "");
   if (!id) return { ok: false, error: "Missing id" };
   const existing = STATE.dtus.get(id);
@@ -16276,9 +16281,12 @@ register("dtu", "update", (ctx, input) => {
   try { eventBus.emit("dtu.updated", { id, title: updated.title }); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
   return { ok: true, dtu: updated };
+  } finally { releaseMutex(); }
 }, { description: "Update an existing DTU" });
 
-register("dtu", "delete", (ctx, input) => {
+register("dtu", "delete", async (ctx, input) => {
+  await acquireMutex();
+  try {
   const id = String(input.id || "");
   if (!id) return { ok: false, error: "Missing id" };
 
@@ -16290,13 +16298,13 @@ register("dtu", "delete", (ctx, input) => {
     return { ok: false, error: "Cannot delete protected seed DTU" };
   }
 
-  // Authorization check - only owner/admin or DTU author can delete
-  const role = ctx?.actor?.role || "guest";
-  const userId = ctx?.actor?.id || ctx?.actor?.odId;
-  const isAuthor = dtu.authorId === userId || dtu.source === userId;
-  const isAdmin = ["owner", "admin", "founder"].includes(role);
-  if (!isAuthor && !isAdmin) {
-    return { ok: false, error: "Not authorized to delete this DTU" };
+  // Ownership validation — DTU's owner fields must match actor userId (or actor must be admin)
+  const userId = ctx?.actor?.userId || ctx?.actor?.id || ctx?.actor?.odId;
+  const isOwner = userId && (dtu.ownerId === userId || dtu.createdBy === userId || dtu.createdByUser === userId);
+  const isAuthor = userId && (dtu.authorId === userId || dtu.source === userId);
+  const isAdmin = ctx?.actor?.role === "owner" || ctx?.actor?.role === "admin" || ctx?.actor?.role === "founder";
+  if (!isOwner && !isAuthor && !isAdmin) {
+    return { ok: false, error: "unauthorized: you can only delete your own DTUs" };
   }
 
   // Fire plugin before-delete hooks
@@ -16327,6 +16335,7 @@ register("dtu", "delete", (ctx, input) => {
   try { eventBus.emit("dtu.composted", { id }); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
   return { ok: true, deleted: { id, title: dtu.title } };
+  } finally { releaseMutex(); }
 }, { description: "Delete a DTU by id" });
 
 register("dtu", "list", (ctx, input) => {
@@ -27932,7 +27941,9 @@ register("lens", "get", (ctx, input={}) => {
   return { ok: true, artifact };
 });
 
-register("lens", "create", (ctx, input={}) => {
+register("lens", "create", async (ctx, input={}) => {
+  await acquireMutex();
+  try {
   const { domain, type, title, data={}, meta={} } = input;
   if (!domain || !type) return { ok: false, error: "domain and type required" };
 
@@ -27973,9 +27984,12 @@ register("lens", "create", (ctx, input={}) => {
   saveStateDebounced();
   _lensEmitDTU(ctx, domain, "create", type, artifact);
   return { ok: true, artifact, warnings: validation.warnings?.length ? validation.warnings : undefined, scopeWarnings: scopeCheck?.warnings?.length ? scopeCheck.warnings : undefined };
+  } finally { releaseMutex(); }
 });
 
-register("lens", "update", (ctx, input={}) => {
+register("lens", "update", async (ctx, input={}) => {
+  await acquireMutex();
+  try {
   const { id, title, data, meta } = input;
   if (!id) return { ok: false, error: "id required" };
   const artifact = STATE.lensArtifacts.get(id);
