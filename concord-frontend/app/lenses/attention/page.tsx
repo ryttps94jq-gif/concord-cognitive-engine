@@ -25,7 +25,7 @@ import { AttentionPanel as EmergentAttentionPanel } from '@/components/emergent/
 import { DreamPanel } from '@/components/emergent/DreamPanel';
 import { ForgettingPanel } from '@/components/emergent/ForgettingPanel';
 import { RepairPanel } from '@/components/emergent/RepairPanel';
-import { EmergentCard } from '@/components/emergent/EmergentCard';
+import { EmergentCard, type EmergentEntity } from '@/components/emergent/EmergentCard';
 import { EmergentPanel } from '@/components/emergent/EmergentPanel';
 import { EntityGrowthDashboard } from '@/components/emergent/EntityGrowthDashboard';
 
@@ -870,6 +870,15 @@ export default function AttentionLensPage() {
             <Brain className="w-4 h-4 text-neon-purple" /> Emergent Entities
           </h2>
           <EmergentPanel />
+          {/* Individual entity cards for active threads with emergent roles */}
+          {threadList.filter(t => t.status === 'active').length > 0 && (
+            <div className="mt-3 space-y-2">
+              <p className="text-xs text-gray-500 uppercase tracking-wider">Active Thread Entities</p>
+              {threadList.filter(t => t.status === 'active').map(t => (
+                <EmergentCard key={t.id} emergent={{ id: t.id, role: t.type === 'creative' ? 'builder' : t.type === 'analysis' ? 'critic' : 'synthesizer', name: `${t.type}: ${t.description}`, active: true, state: 'active' } as EmergentEntity} />
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Dream Journal */}
