@@ -35,6 +35,26 @@ const PlayerPresence = dynamic(() => import('@/components/world-lens/PlayerPrese
 const MapNavigation = dynamic(() => import('@/components/world-lens/MapNavigation'), { ssr: false });
 const PlayerProfile = dynamic(() => import('@/components/world-lens/PlayerProfile'), { ssr: false });
 const CraftingPanel = dynamic(() => import('@/components/world-lens/CraftingPanel'), { ssr: false });
+const CollaborationTools = dynamic(() => import('@/components/world-lens/CollaborationTools'), { ssr: false });
+const LiveCollaboration = dynamic(() => import('@/components/world-lens/LiveCollaboration'), { ssr: false });
+const EventsGatherings = dynamic(() => import('@/components/world-lens/EventsGatherings'), { ssr: false });
+const SocialProofFeed = dynamic(() => import('@/components/world-lens/SocialProofFeed'), { ssr: false });
+const NotificationFeed = dynamic(() => import('@/components/world-lens/NotificationFeed'), { ssr: false });
+const SmartNotifications = dynamic(() => import('@/components/world-lens/SmartNotifications'), { ssr: false });
+const ModerationPanel = dynamic(() => import('@/components/world-lens/ModerationPanel'), { ssr: false });
+const OwnershipProfile = dynamic(() => import('@/components/world-lens/OwnershipProfile'), { ssr: false });
+const FederationPanel = dynamic(() => import('@/components/world-lens/FederationPanel'), { ssr: false });
+const VoiceInterface = dynamic(() => import('@/components/world-lens/VoiceInterface'), { ssr: false });
+const VoiceAssistant = dynamic(() => import('@/components/world-lens/VoiceAssistant'), { ssr: false });
+const BuildingRenderer3D = dynamic(() => import('@/components/world-lens/BuildingRenderer3D'), { ssr: false });
+const TerrainRenderer = dynamic(() => import('@/components/world-lens/TerrainRenderer'), { ssr: false });
+const SkyWeatherRenderer = dynamic(() => import('@/components/world-lens/SkyWeatherRenderer'), { ssr: false });
+const WaterRenderer = dynamic(() => import('@/components/world-lens/WaterRenderer'), { ssr: false });
+const ParticleEffectsComponent = dynamic(() => import('@/components/world-lens/ParticleEffects'), { ssr: false });
+const SoundscapeEngine = dynamic(() => import('@/components/world-lens/SoundscapeEngine'), { ssr: false });
+const AnimationManager = dynamic(() => import('@/components/world-lens/AnimationManager'), { ssr: false });
+const GameJuice = dynamic(() => import('@/components/world-lens/GameJuice'), { ssr: false });
+const LoadingTransitions = dynamic(() => import('@/components/world-lens/LoadingTransitions'), { ssr: false });
 import { SEED_MATERIALS } from '@/lib/world-lens/material-seed';
 import { cacheMaterials } from '@/lib/world-lens/validation-engine';
 import type {
@@ -46,6 +66,8 @@ import type { ConcordiaDistrict } from '@/components/world-lens/ConcordiaHub';
 import {
   Globe, ChevronDown, Layers, Map as MapIcon, Zap, X,
   Radio, Eye, Play, Square, Users, Clock, Coins,
+  Handshake, CalendarDays, Bell, Mic, MessageSquare,
+  ThumbsUp, BellRing, Shield, Fingerprint, Network, AudioLines,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '@/lib/api/client';
@@ -513,7 +535,7 @@ export default function WorldLensPage() {
 
   // 3D Explore mode state
   const [cameraMode, setCameraMode] = useState<'isometric' | 'follow' | 'free' | 'interior' | 'cinematic'>('follow');
-  const [showPanel, setShowPanel] = useState<'none' | 'inventory' | 'quests' | 'chat' | 'map' | 'crafting' | 'players' | 'profile'>('none');
+  const [showPanel, setShowPanel] = useState<'none' | 'inventory' | 'quests' | 'chat' | 'map' | 'crafting' | 'players' | 'profile' | 'collaboration' | 'livecollab' | 'events' | 'socialproof' | 'notifications' | 'smartnotify' | 'moderation' | 'ownership' | 'federation' | 'voice' | 'voiceassist'>('none');
   const [playerAvatar] = useState({
     id: 'player-1',
     name: 'You',
@@ -763,6 +785,16 @@ export default function WorldLensPage() {
             width="100%"
             height="100%"
           />
+          {/* 3D scene rendering layers */}
+          <TerrainRenderer />
+          <BuildingRenderer3D />
+          <SkyWeatherRenderer />
+          <WaterRenderer />
+          <ParticleEffectsComponent />
+          <SoundscapeEngine />
+          <AnimationManager />
+          <GameJuice />
+          <LoadingTransitions />
           <div className="absolute inset-0 pointer-events-none">
             <AvatarSystem3D
               playerAvatar={playerAvatar}
@@ -803,11 +835,22 @@ export default function WorldLensPage() {
             {([
               { key: 'inventory', label: 'Inventory', icon: Layers },
               { key: 'quests', label: 'Quests', icon: Zap },
-              { key: 'chat', label: 'Chat', icon: Users },
+              { key: 'chat', label: 'Chat', icon: MessageSquare },
               { key: 'map', label: 'Map', icon: MapIcon },
               { key: 'crafting', label: 'Craft', icon: Layers },
               { key: 'players', label: 'Players', icon: Users },
               { key: 'profile', label: 'Profile', icon: Eye },
+              { key: 'collaboration', label: 'Collab', icon: Handshake },
+              { key: 'livecollab', label: 'Live Co-op', icon: Radio },
+              { key: 'events', label: 'Events', icon: CalendarDays },
+              { key: 'socialproof', label: 'Social', icon: ThumbsUp },
+              { key: 'notifications', label: 'Notifs', icon: Bell },
+              { key: 'smartnotify', label: 'Smart', icon: BellRing },
+              { key: 'moderation', label: 'Mod', icon: Shield },
+              { key: 'ownership', label: 'Own', icon: Fingerprint },
+              { key: 'federation', label: 'Fed', icon: Network },
+              { key: 'voice', label: 'Voice', icon: Mic },
+              { key: 'voiceassist', label: 'Assist', icon: AudioLines },
             ] as const).map(({ key, label, icon: Icon }) => (
               <button
                 key={key}
@@ -862,6 +905,61 @@ export default function WorldLensPage() {
           {showPanel === 'profile' && (
             <div className="absolute top-4 left-4 z-20 w-96 max-h-[70vh] overflow-auto pointer-events-auto">
               <PlayerProfile isOwnProfile />
+            </div>
+          )}
+          {showPanel === 'collaboration' && (
+            <div className="absolute top-4 left-4 z-20 w-96 max-h-[70vh] overflow-auto pointer-events-auto">
+              <CollaborationTools />
+            </div>
+          )}
+          {showPanel === 'livecollab' && (
+            <div className="absolute top-4 left-4 z-20 w-96 max-h-[70vh] overflow-auto pointer-events-auto">
+              <LiveCollaboration />
+            </div>
+          )}
+          {showPanel === 'events' && (
+            <div className="absolute top-4 left-4 z-20 w-96 max-h-[70vh] overflow-auto pointer-events-auto">
+              <EventsGatherings />
+            </div>
+          )}
+          {showPanel === 'socialproof' && (
+            <div className="absolute top-4 left-4 z-20 w-80 max-h-[70vh] overflow-auto pointer-events-auto">
+              <SocialProofFeed />
+            </div>
+          )}
+          {showPanel === 'notifications' && (
+            <div className="absolute top-4 left-4 z-20 w-80 max-h-[70vh] overflow-auto pointer-events-auto">
+              <NotificationFeed />
+            </div>
+          )}
+          {showPanel === 'smartnotify' && (
+            <div className="absolute top-4 left-4 z-20 w-80 max-h-[70vh] overflow-auto pointer-events-auto">
+              <SmartNotifications />
+            </div>
+          )}
+          {showPanel === 'moderation' && (
+            <div className="absolute top-4 left-4 z-20 w-96 max-h-[70vh] overflow-auto pointer-events-auto">
+              <ModerationPanel />
+            </div>
+          )}
+          {showPanel === 'ownership' && (
+            <div className="absolute top-4 left-4 z-20 w-96 max-h-[70vh] overflow-auto pointer-events-auto">
+              <OwnershipProfile />
+            </div>
+          )}
+          {showPanel === 'federation' && (
+            <div className="absolute top-4 left-4 z-20 w-96 max-h-[70vh] overflow-auto pointer-events-auto">
+              <FederationPanel />
+            </div>
+          )}
+          {showPanel === 'voice' && (
+            <div className="absolute top-4 left-4 z-20 w-80 max-h-[70vh] overflow-auto pointer-events-auto">
+              <VoiceInterface />
+            </div>
+          )}
+          {showPanel === 'voiceassist' && (
+            <div className="absolute top-4 left-4 z-20 w-80 max-h-[70vh] overflow-auto pointer-events-auto">
+              <VoiceAssistant />
             </div>
           )}
         </div>
