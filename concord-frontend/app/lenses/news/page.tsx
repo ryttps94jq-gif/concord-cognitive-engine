@@ -719,7 +719,7 @@ export default function NewsLensPage() {
                   <span className="text-gray-400 text-xs">Bias Score: <span className="text-neon-cyan font-bold">{String(actionResult.overallBiasScore)}</span></span>
                   <span className={`text-xs px-2 py-0.5 rounded ${
                     actionResult.biasLevel === 'high' ? 'bg-red-400/20 text-red-400' :
-                    actionResult.biasLevel === 'medium' ? 'bg-yellow-400/20 text-yellow-400' : 'bg-neon-green/20 text-neon-green'
+                    actionResult.biasLevel === 'moderate' ? 'bg-yellow-400/20 text-yellow-400' : 'bg-neon-green/20 text-neon-green'
                   }`}>{String(actionResult.biasLevel)}</span>
                 </div>
                 {'sourceBiasProfiles' in actionResult && Array.isArray(actionResult.sourceBiasProfiles) && actionResult.sourceBiasProfiles.length > 0 && (
@@ -728,7 +728,7 @@ export default function NewsLensPage() {
                     {(actionResult.sourceBiasProfiles as Array<Record<string, unknown>>).slice(0, 4).map((s, i) => (
                       <div key={i} className="flex justify-between text-xs bg-lattice-surface rounded px-2 py-1">
                         <span className="text-gray-300">{String(s.source)}</span>
-                        <span className="text-yellow-400">{String(s.bias || s.score || 0)}</span>
+                        <span className="text-yellow-400">{String(s.avgBiasScore ?? 0)}</span>
                       </div>
                     ))}
                   </div>

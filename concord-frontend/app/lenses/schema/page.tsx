@@ -263,11 +263,11 @@ export default function SchemaLensPage() {
               <div className="space-y-1">
                 <div className="flex gap-4 flex-wrap">
                   <span className={`font-semibold ${schemaActionResult.valid ? 'text-green-400' : 'text-red-400'}`}>{schemaActionResult.valid ? '✓ Valid schema' : '✗ Invalid schema'}</span>
-                  <span className="text-gray-400">Errors: <span className="text-red-400 font-mono">{String(schemaActionResult.errorCount ?? 0)}</span></span>
-                  <span className="text-gray-400">Warnings: <span className="text-yellow-400 font-mono">{String(schemaActionResult.warningCount ?? 0)}</span></span>
+                  <span className="text-gray-400">Invalid: <span className="text-red-400 font-mono">{String((schemaActionResult.summary as Record<string,unknown>)?.invalidRecords ?? 0)}</span></span>
+                  <span className="text-gray-400">Rate: <span className="text-neon-blue font-mono">{String((schemaActionResult.summary as Record<string,unknown>)?.validationRate ?? 0)}%</span></span>
                 </div>
-                {Array.isArray(schemaActionResult.errors) && schemaActionResult.errors.length > 0 && (
-                  <div className="space-y-0.5">{(schemaActionResult.errors as {field:string;message:string}[]).map((e, i) => <p key={i} className="text-red-300">✗ {e.field}: {e.message}</p>)}</div>
+                {Array.isArray(schemaActionResult.topErrors) && (schemaActionResult.topErrors as unknown[]).length > 0 && (
+                  <div className="space-y-0.5">{(schemaActionResult.topErrors as {issue:string;occurrences:number}[]).slice(0,3).map((e, i) => <p key={i} className="text-red-300">✗ {e.issue} ({e.occurrences}×)</p>)}</div>
                 )}
                 {!!schemaActionResult.message && <p className="text-gray-400 italic">{String(schemaActionResult.message)}</p>}
               </div>
@@ -275,10 +275,10 @@ export default function SchemaLensPage() {
             {schemaActionResult.action === 'schemaDiff' && (
               <div className="space-y-1">
                 <div className="flex gap-4 flex-wrap">
-                  <span className="text-gray-400">Added: <span className="text-green-400 font-mono">{String(schemaActionResult.addedFields ?? 0)}</span></span>
-                  <span className="text-gray-400">Removed: <span className="text-red-400 font-mono">{String(schemaActionResult.removedFields ?? 0)}</span></span>
-                  <span className="text-gray-400">Modified: <span className="text-yellow-400 font-mono">{String(schemaActionResult.modifiedFields ?? 0)}</span></span>
-                  <span className={`${schemaActionResult.breakingChanges ? 'text-red-400' : 'text-green-400'}`}>{schemaActionResult.breakingChanges ? 'Breaking changes' : 'Non-breaking'}</span>
+                  <span className="text-gray-400">Added: <span className="text-green-400 font-mono">{String((schemaActionResult.summary as Record<string,unknown>)?.added ?? 0)}</span></span>
+                  <span className="text-gray-400">Removed: <span className="text-red-400 font-mono">{String((schemaActionResult.summary as Record<string,unknown>)?.removed ?? 0)}</span></span>
+                  <span className="text-gray-400">Modified: <span className="text-yellow-400 font-mono">{String((schemaActionResult.summary as Record<string,unknown>)?.modified ?? 0)}</span></span>
+                  <span className={`${!(schemaActionResult.summary as Record<string,unknown>)?.backwardCompatible ? 'text-red-400' : 'text-green-400'}`}>{!(schemaActionResult.summary as Record<string,unknown>)?.backwardCompatible ? 'Breaking changes' : 'Non-breaking'}</span>
                 </div>
                 {!!schemaActionResult.message && <p className="text-gray-400 italic">{String(schemaActionResult.message)}</p>}
               </div>
@@ -286,11 +286,12 @@ export default function SchemaLensPage() {
             {schemaActionResult.action === 'schemaEvolution' && (
               <div className="space-y-1">
                 <div className="flex gap-4 flex-wrap">
-                  <span className="text-gray-400">Version: <span className="text-neon-blue font-mono">{String(schemaActionResult.version ?? '')}</span></span>
-                  <span className="text-gray-400">Strategy: <span className="text-white capitalize">{String(schemaActionResult.migrationStrategy ?? '')}</span></span>
+                  <span className="text-gray-400">Latest version: <span className="text-neon-blue font-mono">{String((schemaActionResult.summary as Record<string,unknown>)?.latestVersion ?? '')}</span></span>
+                  <span className="text-gray-400">Versions: <span className="text-white capitalize">{String((schemaActionResult.summary as Record<string,unknown>)?.totalVersions ?? '')}</span></span>
+                  <span className="text-gray-400">Breaking: <span className="text-red-400 font-mono">{String((schemaActionResult.summary as Record<string,unknown>)?.breakingTransitions ?? 0)}</span></span>
                 </div>
-                {Array.isArray(schemaActionResult.steps) && schemaActionResult.steps.length > 0 && (
-                  <div className="space-y-0.5">{(schemaActionResult.steps as string[]).map((s, i) => <p key={i} className="text-gray-300">→ {s}</p>)}</div>
+                {Array.isArray(schemaActionResult.transitions) && (schemaActionResult.transitions as unknown[]).length > 0 && (
+                  <div className="space-y-0.5">{(schemaActionResult.transitions as Array<{from:string;to:string;backwardCompatible:boolean}>).slice(0,3).map((t, i) => <p key={i} className="text-gray-300">→ v{t.from} to v{t.to} {t.backwardCompatible ? <span className="text-green-400">✓</span> : <span className="text-red-400">⚠</span>}</p>)}</div>
                 )}
                 {!!schemaActionResult.message && <p className="text-gray-400 italic">{String(schemaActionResult.message)}</p>}
               </div>
