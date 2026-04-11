@@ -10,8 +10,10 @@ import { UniversalActions } from '@/components/lens/UniversalActions';
 import {
   TrendingUp, AlertTriangle, CheckCircle2,
   Brain, Eye, Shield, BarChart3, Layers, ChevronDown,
-  BookOpen, Target, ThumbsUp, ThumbsDown, Clock, ArrowRight, Lightbulb, Flame, CalendarDays,
+  BookOpen, Target, ThumbsUp, ThumbsDown, Clock, ArrowRight, Lightbulb, Flame, CalendarDays, Zap, X,
 } from 'lucide-react';
+import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
+import { useLensData } from '@/lib/hooks/use-lens-data';
 import { ConnectiveTissueBar } from '@/components/lens/ConnectiveTissueBar';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -35,6 +37,21 @@ interface Reflection {
 export default function ReflectionLensPage() {
   useLensNav('reflection');
   const [showFeatures, setShowFeatures] = useState(true);
+  const { items: reflectionArtifacts } = useLensData('reflection', 'entry', { seed: [] });
+  const runReflectionAction = useRunArtifact('reflection');
+  const [reflActionResult, setReflActionResult] = useState<Record<string, unknown> | null>(null);
+  const [reflActiveAction, setReflActiveAction] = useState<string | null>(null);
+
+  const handleReflectionAction = async (action: string) => {
+    const id = reflectionArtifacts[0]?.id;
+    if (!id) return;
+    setReflActiveAction(action);
+    try {
+      const res = await runReflectionAction.mutateAsync({ id, action });
+      setReflActionResult({ action, ...(res.result as Record<string, unknown>) });
+    } catch (err) { console.error('Reflection action failed:', err); }
+    finally { setReflActiveAction(null); }
+  };
   const { latestData: realtimeData, alerts: realtimeAlerts, insights: realtimeInsights, isLive, lastUpdated } = useRealtimeLens('reflection');
 
   // --- Lens Bridge ---
@@ -420,6 +437,60 @@ export default function ReflectionLensPage() {
             <p className="text-xs text-gray-500">Pending</p>
           </div>
         </div>
+      </div>
+
+      {/* Reflection Domain Actions */}
+      <div className="panel p-4 space-y-3">
+        <h3 className="text-sm font-semibold text-neon-blue flex items-center gap-2"><Brain className="w-4 h-4" /> Reflection Analysis</h3>
+        <div className="flex flex-wrap gap-2">
+          {[
+            { action: 'insightExtraction', label: 'Extract Insights' },
+            { action: 'growthMetrics', label: 'Growth Metrics' },
+            { action: 'habitTracking', label: 'Habit Tracking' },
+          ].map(({ action, label }) => (
+            <button key={action} onClick={() => handleReflectionAction(action)} disabled={reflActiveAction === action || !reflectionArtifacts[0]?.id}
+              className="px-3 py-1.5 text-xs bg-neon-blue/10 border border-neon-blue/20 rounded-lg hover:bg-neon-blue/20 disabled:opacity-50 flex items-center gap-1.5">
+              {reflActiveAction === action ? <div className="w-3 h-3 border border-neon-blue border-t-transparent rounded-full animate-spin" /> : <Zap className="w-3 h-3 text-neon-blue" />}
+              {label}
+            </button>
+          ))}
+        </div>
+        {reflActionResult && (
+          <div className="p-3 bg-black/40 rounded-lg border border-neon-blue/20 text-xs space-y-2">
+            {reflActionResult.action === 'insightExtraction' && (
+              <div className="space-y-1">
+                <div className="flex gap-4 flex-wrap">
+                  <span className="text-gray-400">Entries: <span className="text-white font-mono">{String(reflActionResult.entriesAnalyzed ?? '')}</span></span>
+                  <span className="text-gray-400">Themes: <span className="text-neon-blue font-mono">{Array.isArray(reflActionResult.themes) ? (reflActionResult.themes as unknown[]).length : ''}</span></span>
+                </div>
+                {Array.isArray(reflActionResult.themes) && (
+                  <div className="flex flex-wrap gap-1">{(reflActionResult.themes as {theme:string;prevalence:number}[]).slice(0,8).map(({theme,prevalence}) => <span key={theme} className="px-2 py-0.5 bg-neon-blue/10 text-neon-blue rounded font-mono">{theme} <span className="text-gray-500">{Math.round(prevalence*100)}%</span></span>)}</div>
+                )}
+              </div>
+            )}
+            {reflActionResult.action === 'growthMetrics' && (
+              <div className="space-y-1">
+                <div className="flex gap-4 flex-wrap">
+                  <span className="text-gray-400">Sentiment trend: <span className={`font-mono ${(reflActionResult.sentiment as Record<string,unknown>)?.trend === 'improving' ? 'text-green-400' : (reflActionResult.sentiment as Record<string,unknown>)?.trend === 'declining' ? 'text-red-400' : 'text-yellow-400'}`}>{String((reflActionResult.sentiment as Record<string,unknown>)?.trend ?? '')}</span></span>
+                  <span className="text-gray-400">Depth: <span className="text-neon-blue font-mono">{String((reflActionResult.entryDepth as Record<string,unknown>)?.trend ?? '')}</span></span>
+                </div>
+                {!!(reflActionResult.sentiment as Record<string,unknown>)?.overall && <p className="text-gray-300">Avg sentiment: {String((reflActionResult.sentiment as Record<string,unknown>)?.overall ?? '')}</p>}
+              </div>
+            )}
+            {reflActionResult.action === 'habitTracking' && (
+              <div className="space-y-1">
+                <div className="flex gap-4 flex-wrap">
+                  <span className="text-gray-400">Habits tracked: <span className="text-white font-mono">{String(reflActionResult.totalHabits ?? '')}</span></span>
+                  <span className="text-gray-400">Consistency: <span className="text-neon-green font-mono">{String(Math.round(((reflActionResult.overallConsistency as number) ?? 0) * 100))}%</span></span>
+                </div>
+                {Array.isArray(reflActionResult.habitProfiles) && (
+                  <div className="space-y-0.5">{(reflActionResult.habitProfiles as {name:string;currentStreak:number;consistency:number}[]).slice(0,5).map(h => <div key={h.name} className="flex gap-3"><span className="text-gray-300">{h.name}</span><span className="text-neon-green font-mono">🔥{h.currentStreak}d</span><span className="text-gray-500">{Math.round(h.consistency*100)}%</span></div>)}</div>
+                )}
+              </div>
+            )}
+            <button onClick={() => setReflActionResult(null)} className="text-gray-600 hover:text-gray-400 text-xs flex items-center gap-1"><X className="w-3 h-3" /> Dismiss</button>
+          </div>
+        )}
       </div>
 
       {/* ConnectiveTissueBar */}

@@ -9,9 +9,9 @@ import { ds } from '@/lib/design-system';
 import { cn } from '@/lib/utils';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import {
-  Brain, Network, Activity, Layers, Plus, Search, Trash2, X,
-  BarChart3, Zap, ChevronDown, Cpu, GitBranch, Target,
-  Play, Settings2, Database, TrendingUp, AlertTriangle, CheckCircle2,
+  Brain, Network, Layers, Plus, Search, Trash2, X,
+  BarChart3, Zap, ChevronDown, GitBranch, Target,
+  Play, Database, TrendingUp,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';

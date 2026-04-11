@@ -30,7 +30,11 @@ import {
   ChevronUp,
   RefreshCw,
   Layers,
+  Play,
+  Loader2,
 } from 'lucide-react';
+import { useLensData } from '@/lib/hooks/use-lens-data';
+import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
@@ -102,6 +106,21 @@ export default function MetacognitionLensPage() {
   const [introspectFocus, setIntrospectFocus] = useState('');
   const [expandedPrediction, setExpandedPrediction] = useState<string | null>(null);
   const [showFeatures, setShowFeatures] = useState(true);
+
+  const { items: metaItems } = useLensData('metacognition', 'snapshot', { noSeed: true });
+  const runAction = useRunArtifact('metacognition');
+  const [actionResult, setActionResult] = useState<Record<string, unknown> | null>(null);
+  const [isRunning, setIsRunning] = useState<string | null>(null);
+  const handleAction = async (action: string) => {
+    const targetId = metaItems[0]?.id;
+    if (!targetId) { setActionResult({ message: 'No metacognition snapshots found. Create a prediction first.' }); return; }
+    setIsRunning(action);
+    try {
+      const res = await runAction.mutateAsync({ id: targetId, action });
+      setActionResult(res.result as Record<string, unknown>);
+    } catch (e) { console.error(`Action ${action} failed:`, e); }
+    finally { setIsRunning(null); }
+  };
 
   // --- Lens Bridge ---
   const bridge = useLensBridge('metacognition', 'snapshot');
@@ -1322,6 +1341,85 @@ export default function MetacognitionLensPage() {
       )}
         </div>
       )}
+
+      {/* Backend Action Panel */}
+      <div className="panel p-4 space-y-3">
+        <h2 className="font-semibold flex items-center gap-2">
+          <Brain className="w-4 h-4 text-neon-purple" />
+          Metacognition Analysis
+        </h2>
+        <div className="flex flex-wrap gap-2">
+          {[
+            { action: 'confidenceCalibration', label: 'Confidence Calibration' },
+            { action: 'learningCurve', label: 'Learning Curve' },
+            { action: 'biasDetection', label: 'Bias Detection' },
+          ].map(({ action, label }) => (
+            <button key={action} onClick={() => handleAction(action)} disabled={!!isRunning}
+              className="btn-secondary text-sm flex items-center gap-1 disabled:opacity-50">
+              {isRunning === action ? <Loader2 className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
+              {label}
+            </button>
+          ))}
+        </div>
+        {actionResult && (
+          <div className="bg-lattice-deep rounded-lg p-4 space-y-3 text-sm">
+            {'brierScore' in actionResult && (
+              <div className="space-y-2">
+                <div className="flex flex-wrap gap-4 text-xs">
+                  <span className="text-gray-400">Brier Score: <span className="text-neon-cyan font-bold">{String(actionResult.brierScore)}</span></span>
+                  <span className="text-gray-400">Skill Score: <span className="text-neon-green">{String(actionResult.brierSkillScore)}</span></span>
+                  <span className="text-gray-400">Log Loss: <span className="text-yellow-400">{String(actionResult.logLoss)}</span></span>
+                </div>
+                {'calibration' in actionResult && actionResult.calibration !== null && typeof actionResult.calibration === 'object' && (
+                  <div className="flex flex-wrap gap-3 text-xs">
+                    {Object.entries(actionResult.calibration as Record<string, unknown>).map(([k, v]) => (
+                      <span key={k} className="text-gray-400">{k}: <span className="text-neon-cyan">{String(v)}</span></span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            {'currentPerformance' in actionResult && (
+              <div className="space-y-2">
+                <div className="flex flex-wrap gap-4 text-xs">
+                  <span className="text-gray-400">Performance: <span className="text-neon-cyan font-bold">{String(actionResult.currentPerformance)}</span></span>
+                  <span className="text-gray-400">Mastered: <span className={actionResult.mastered ? 'text-neon-green' : 'text-yellow-400'}>{String(actionResult.mastered)}</span></span>
+                  <span className="text-gray-400">Best Model: <span className="text-neon-purple">{String(actionResult.bestModel)}</span></span>
+                </div>
+                {'learningRate' in actionResult && actionResult.learningRate !== null && typeof actionResult.learningRate === 'object' && (
+                  <div className="flex flex-wrap gap-3 text-xs">
+                    {Object.entries(actionResult.learningRate as Record<string, unknown>).map(([k, v]) => (
+                      <span key={k} className="text-gray-400">{k}: <span className="text-neon-cyan">{String(v)}</span></span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            {'biasesDetected' in actionResult && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-3">
+                  <span className="text-gray-400 text-xs">Detected: <span className="text-neon-cyan font-bold">{String(actionResult.biasesDetected)}</span></span>
+                  <span className={`text-xs px-2 py-0.5 rounded ${
+                    actionResult.riskLevel === 'high' ? 'bg-red-400/20 text-red-400' :
+                    actionResult.riskLevel === 'medium' ? 'bg-yellow-400/20 text-yellow-400' : 'bg-neon-green/20 text-neon-green'
+                  }`}>{String(actionResult.riskLevel)} risk</span>
+                </div>
+                {'biases' in actionResult && Array.isArray(actionResult.biases) && actionResult.biases.length > 0 && (
+                  <div className="space-y-1">
+                    {(actionResult.biases as Array<Record<string, unknown>>).map((b, i) => (
+                      <div key={i} className="text-xs bg-lattice-surface rounded px-2 py-1 flex justify-between">
+                        <span className="text-gray-300">{String(b.type || b.name)}</span>
+                        <span className="text-yellow-400">{String(b.severity || b.score || '')}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            {'message' in actionResult && <p className="text-gray-400">{String(actionResult.message)}</p>}
+          </div>
+        )}
+      </div>
 
       {/* Lens Features */}
       <div className="border-t border-white/10">

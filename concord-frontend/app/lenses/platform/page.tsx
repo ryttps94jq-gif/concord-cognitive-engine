@@ -8,8 +8,10 @@ import {
   Activity, Brain, FlaskConical, Layers, Radio,
   BarChart3, Zap, Shield, Database,
   Heart, Clock, CheckCircle, AlertTriangle,
-  ChevronDown, ChevronRight, Eye, Server, Gauge,
+  ChevronDown, ChevronRight, Eye, Server, Gauge, Play, Loader2,
 } from 'lucide-react';
+import { useLensData } from '@/lib/hooks/use-lens-data';
+import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { motion } from 'framer-motion';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 import PipelineMonitor from '@/components/platform/PipelineMonitor';
@@ -316,6 +318,20 @@ export default function PlatformPage() {
   const [activeTab, setActiveTab] = useState<Tab>('overview');
   const [showFeatures, setShowFeatures] = useState(true);
   const { events, connected } = usePlatformEvents();
+  const { items: platformItems } = useLensData('platform', 'service', { noSeed: true });
+  const runAction = useRunArtifact('platform');
+  const [actionResult, setActionResult] = useState<Record<string, unknown> | null>(null);
+  const [isRunning, setIsRunning] = useState<string | null>(null);
+  const handleAction = async (action: string) => {
+    const targetId = platformItems[0]?.id;
+    if (!targetId) { setActionResult({ message: 'No platform service data found. Add service data first.' }); return; }
+    setIsRunning(action);
+    try {
+      const res = await runAction.mutateAsync({ id: targetId, action });
+      setActionResult(res.result as Record<string, unknown>);
+    } catch (e) { console.error(`Action ${action} failed:`, e); }
+    finally { setIsRunning(null); }
+  };
 
   return (
     <div data-lens-theme="platform" className="min-h-screen bg-lattice-void text-gray-200">
@@ -401,6 +417,103 @@ export default function PlatformPage() {
           compact
         />
       )}
+      </div>
+
+      {/* Backend Action Panel */}
+      <div className="panel p-4 space-y-3">
+        <h2 className="font-semibold flex items-center gap-2">
+          <Server className="w-4 h-4 text-neon-blue" />
+          Platform Analysis
+        </h2>
+        <div className="flex flex-wrap gap-2">
+          {[
+            { action: 'slaCompute', label: 'SLA Compute' },
+            { action: 'capacityPlan', label: 'Capacity Plan' },
+            { action: 'incidentTimeline', label: 'Incident Timeline' },
+            { action: 'dependencyMap', label: 'Dependency Map' },
+          ].map(({ action, label }) => (
+            <button key={action} onClick={() => handleAction(action)} disabled={!!isRunning}
+              className="btn-secondary text-sm flex items-center gap-1 disabled:opacity-50">
+              {isRunning === action ? <Loader2 className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
+              {label}
+            </button>
+          ))}
+        </div>
+        {actionResult && (
+          <div className="bg-lattice-deep rounded-lg p-4 space-y-3 text-sm">
+            {'uptimePercent' in actionResult && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-3">
+                  <span className="text-neon-green font-bold text-lg">{String(actionResult.uptimePercent)}%</span>
+                  <span className={`text-xs px-2 py-0.5 rounded ${actionResult.meetsTarget ? 'bg-neon-green/20 text-neon-green' : 'bg-red-400/20 text-red-400'}`}>
+                    {actionResult.meetsTarget ? 'Meets SLA' : 'Below SLA'}
+                  </span>
+                  <span className="text-gray-400 text-xs">{String(actionResult.nines)} nines</span>
+                </div>
+                {'errorBudget' in actionResult && actionResult.errorBudget !== null && typeof actionResult.errorBudget === 'object' && (
+                  <div className="flex flex-wrap gap-3 text-xs">
+                    {Object.entries(actionResult.errorBudget as Record<string, unknown>).map(([k, v]) => (
+                      <span key={k} className="text-gray-400">{k}: <span className="text-neon-cyan">{String(v)}</span></span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            {'resources' in actionResult && actionResult.resources !== null && typeof actionResult.resources === 'object' && (
+              <div className="space-y-2">
+                <span className="text-gray-400 text-xs">Overall: <span className={`font-bold ${
+                  actionResult.overallHealth === 'healthy' ? 'text-neon-green' :
+                  actionResult.overallHealth === 'warning' ? 'text-yellow-400' : 'text-red-400'
+                }`}>{String(actionResult.overallHealth)}</span></span>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  {Object.entries(actionResult.resources as Record<string, unknown>).map(([k, v]) => (
+                    v && typeof v === 'object' ? (
+                      <div key={k} className="bg-lattice-surface rounded px-2 py-1">
+                        <span className="text-gray-500 uppercase text-[10px]">{k}</span>
+                        <div className="flex gap-2 text-xs mt-0.5">
+                          {Object.entries(v as Record<string, unknown>).map(([ik, iv]) => (
+                            <span key={ik} className="text-gray-300">{ik}: <span className="text-neon-cyan">{String(iv)}</span></span>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null
+                  ))}
+                </div>
+              </div>
+            )}
+            {'timeline' in actionResult && Array.isArray(actionResult.timeline) && (
+              <div className="space-y-2">
+                <span className="text-gray-400 text-xs">Timeline events: <span className="text-neon-cyan">{String((actionResult.timeline as unknown[]).length)}</span></span>
+                {'cascades' in actionResult && Array.isArray(actionResult.cascades) && actionResult.cascades.length > 0 && (
+                  <div>
+                    <p className="text-xs text-red-400 font-semibold mb-1">Cascades</p>
+                    {(actionResult.cascades as Array<Record<string, unknown>>).map((c, i) => (
+                      <div key={i} className="text-xs bg-red-400/10 border border-red-400/20 rounded px-2 py-1 mb-1 text-red-400">
+                        {String(c.trigger || c.event)}: {String(c.affected || '')}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            {'healthScore' in actionResult && 'singlePointsOfFailure' in actionResult && (
+              <div className="space-y-2">
+                <span className="text-neon-cyan font-bold">Health: {String(actionResult.healthScore)}%</span>
+                {'singlePointsOfFailure' in actionResult && Array.isArray(actionResult.singlePointsOfFailure) && actionResult.singlePointsOfFailure.length > 0 && (
+                  <div>
+                    <p className="text-xs text-red-400 font-semibold mb-1">Single Points of Failure</p>
+                    <div className="flex flex-wrap gap-1">
+                      {(actionResult.singlePointsOfFailure as Array<{service: string; dependentCount: number; dependents: string[]; tier: string}>).map((s, i) => (
+                        <span key={i} className="text-xs bg-red-400/10 border border-red-400/20 rounded px-2 py-0.5 text-red-400">{s.service} ({s.dependentCount})</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+            {'message' in actionResult && <p className="text-gray-400">{String(actionResult.message)}</p>}
+          </div>
+        )}
       </div>
 
       {/* Lens Features */}

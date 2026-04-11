@@ -14,7 +14,7 @@ export default function registerAviationActions(registerLensAction) {
     const landingsLast90 = artifact.data?.recentLandings || 0;
     checks.push({ type: 'Passenger Currency (3 landings/90 days)', current: landingsLast90 >= 3, value: landingsLast90 });
     const allCurrent = checks.every(c => c.current);
-    return { ok: true, crewMember: artifact.title, checks, allCurrent, expiringSoon: checks.filter(c => c.daysRemaining !== null && c.daysRemaining <= 30 && c.daysRemaining > 0) };
+    return { ok: true, result: { crewMember: artifact.title, checks, allCurrent, expiringSoon: checks.filter(c => c.daysRemaining !== null && c.daysRemaining <= 30 && c.daysRemaining > 0) } };
   });
 
   registerLensAction("aviation", "maintenanceDue", (ctx, artifact, _params) => {
@@ -33,7 +33,7 @@ export default function registerAviationActions(registerLensAction) {
     adCompliance.filter(ad => ad.status !== 'complied').forEach(ad => {
       items.push({ type: `AD: ${ad.number}`, description: ad.description, status: ad.status, overdue: true });
     });
-    return { ok: true, aircraft: artifact.title, registration: artifact.data?.registration, totalTime, items, overdueCount: items.filter(i => i.overdue).length };
+    return { ok: true, result: { aircraft: artifact.title, registration: artifact.data?.registration, totalTime, items, overdueCount: items.filter(i => i.overdue).length } };
   });
 
   registerLensAction("aviation", "hobbsLog", (ctx, artifact, _params) => {
@@ -48,23 +48,25 @@ export default function registerAviationActions(registerLensAction) {
     });
     return {
       ok: true,
-      pilot: artifact.title,
-      totalTime: Math.round(totalTime * 10) / 10,
-      picTime: Math.round(picTime * 10) / 10,
-      nightTime: Math.round(nightTime * 10) / 10,
-      instrumentTime: Math.round(instrumentTime * 10) / 10,
-      crossCountry: Math.round(crossCountry * 10) / 10,
-      totalFlights: flights.length,
+      result: {
+        pilot: artifact.title,
+        totalTime: Math.round(totalTime * 10) / 10,
+        picTime: Math.round(picTime * 10) / 10,
+        nightTime: Math.round(nightTime * 10) / 10,
+        instrumentTime: Math.round(instrumentTime * 10) / 10,
+        crossCountry: Math.round(crossCountry * 10) / 10,
+        totalFlights: flights.length,
+      },
     };
   });
 
   registerLensAction("aviation", "slipUtilization", (ctx, artifact, _params) => {
     const slips = artifact.data?.slips || [];
-    if (slips.length === 0) return { ok: true, utilization: 0, occupied: 0, vacant: 0, total: 0 };
+    if (slips.length === 0) return { ok: true, result: { utilization: 0, occupied: 0, vacant: 0, total: 0 } };
     const occupied = slips.filter(s => s.assignedVessel || s.status === 'occupied').length;
     const vacant = slips.length - occupied;
     const utilization = Math.round((occupied / slips.length) * 100);
     const revenue = slips.filter(s => s.assignedVessel).reduce((sum, s) => sum + (s.rate || 0), 0);
-    return { ok: true, marina: artifact.title, utilization, occupied, vacant, total: slips.length, monthlyRevenue: revenue };
+    return { ok: true, result: { marina: artifact.title, utilization, occupied, vacant, total: slips.length, monthlyRevenue: revenue } };
   });
 };

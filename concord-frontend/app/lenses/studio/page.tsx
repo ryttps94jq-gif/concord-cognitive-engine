@@ -29,6 +29,7 @@ import {
   StopCircle,
   Upload,
 } from 'lucide-react';
+import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
@@ -212,6 +213,21 @@ export default function StudioLensPage() {
   const [showNewProject, setShowNewProject] = useState(false);
   const [showAddTrack, setShowAddTrack] = useState(false);
   const [showFeatures, setShowFeatures] = useState(true);
+  const { items: studioArtifacts } = useLensData('studio', 'project', { noSeed: true });
+  const runStudioAction = useRunArtifact('studio');
+  const [studioActionResult, setStudioActionResult] = useState<Record<string, unknown> | null>(null);
+  const [studioActiveAction, setStudioActiveAction] = useState<string | null>(null);
+
+  const handleStudioAction = useCallback(async (action: string) => {
+    const id = studioArtifacts[0]?.id;
+    if (!id) return;
+    setStudioActiveAction(action);
+    try {
+      const res = await runStudioAction.mutateAsync({ id, action });
+      setStudioActionResult({ action, ...(res.result as Record<string, unknown>) });
+    } catch (err) { console.error('Studio action failed:', err); }
+    finally { setStudioActiveAction(null); }
+  }, [studioArtifacts, runStudioAction]);
 
   // New project form
   const [newTitle, setNewTitle] = useState('');
@@ -1374,6 +1390,73 @@ export default function StudioLensPage() {
           />
         </>
       )}
+
+      {/* Studio Domain Actions */}
+      <div className="border-t border-white/10 p-4 space-y-3">
+        <h3 className="text-sm font-semibold text-neon-purple flex items-center gap-2"><Activity className="w-4 h-4" /> Studio Actions</h3>
+        <div className="flex flex-wrap gap-2">
+          {[
+            { action: 'projectTimeline', label: 'Project Timeline' },
+            { action: 'assetTracker', label: 'Asset Tracker' },
+            { action: 'renderEstimate', label: 'Render Estimate' },
+            { action: 'versionCompare', label: 'Version Compare' },
+          ].map(({ action, label }) => (
+            <button key={action} onClick={() => handleStudioAction(action)} disabled={studioActiveAction === action || !studioArtifacts[0]?.id}
+              className="px-3 py-1.5 text-xs bg-neon-purple/10 border border-neon-purple/20 rounded-lg hover:bg-neon-purple/20 disabled:opacity-50 flex items-center gap-1.5">
+              {studioActiveAction === action ? <div className="w-3 h-3 border border-neon-purple border-t-transparent rounded-full animate-spin" /> : <Zap className="w-3 h-3 text-neon-purple" />}
+              {label}
+            </button>
+          ))}
+        </div>
+        {studioActionResult && (
+          <div className="p-3 bg-black/40 rounded-lg border border-neon-purple/20 text-xs space-y-2">
+            {studioActionResult.action === 'projectTimeline' && (
+              <div className="space-y-1">
+                <div className="flex gap-4 flex-wrap">
+                  <span className="text-gray-400">Tasks: <span className="text-white font-mono">{String(studioActionResult.totalTasks ?? '')}</span></span>
+                  <span className="text-gray-400">Completed: <span className="text-green-400 font-mono">{String(studioActionResult.completed ?? 0)}</span></span>
+                  <span className="text-gray-400">Progress: <span className="text-neon-purple font-mono">{String(studioActionResult.completionRate ?? 0)}%</span></span>
+                  <span className="text-gray-400">Duration: <span className="text-white font-mono">{String(studioActionResult.totalDays ?? '')} days</span></span>
+                </div>
+                {!!studioActionResult.message && <p className="text-gray-400 italic">{String(studioActionResult.message)}</p>}
+              </div>
+            )}
+            {studioActionResult.action === 'assetTracker' && (
+              <div className="space-y-1">
+                <div className="flex gap-4 flex-wrap">
+                  <span className="text-gray-400">Assets: <span className="text-white font-mono">{String(studioActionResult.totalAssets ?? '')}</span></span>
+                  <span className="text-gray-400">Size: <span className="text-neon-purple font-mono">{String(studioActionResult.totalSizeMB ?? '')} MB</span></span>
+                  <span className="text-gray-400">Orphaned: <span className="text-yellow-400 font-mono">{String(studioActionResult.orphanedAssets ?? 0)}</span></span>
+                </div>
+                {!!studioActionResult.message && <p className="text-gray-400 italic">{String(studioActionResult.message)}</p>}
+              </div>
+            )}
+            {studioActionResult.action === 'renderEstimate' && (
+              <div className="space-y-1">
+                <div className="flex gap-4 flex-wrap">
+                  <span className="text-gray-400">Resolution: <span className="text-white font-mono">{String(studioActionResult.resolution ?? '')}</span></span>
+                  <span className="text-gray-400">Per frame: <span className="text-neon-purple font-mono">{String(studioActionResult.estimatedPerFrame ?? '')}</span></span>
+                  <span className="text-gray-400">Total: <span className="text-neon-cyan font-bold">{String(studioActionResult.estimatedTotal ?? '')}</span></span>
+                </div>
+                {Array.isArray(studioActionResult.recommendations) && studioActionResult.recommendations.length > 0 && (
+                  <div className="space-y-0.5">{(studioActionResult.recommendations as string[]).map((r, i) => <p key={i} className="text-yellow-300">• {r}</p>)}</div>
+                )}
+              </div>
+            )}
+            {studioActionResult.action === 'versionCompare' && (
+              <div className="space-y-1">
+                <div className="flex gap-4 flex-wrap">
+                  <span className="text-gray-400">Added: <span className="text-green-400 font-mono">{String((studioActionResult.diff as Record<string,number>)?.added ?? 0)}</span></span>
+                  <span className="text-gray-400">Removed: <span className="text-red-400 font-mono">{String((studioActionResult.diff as Record<string,number>)?.removed ?? 0)}</span></span>
+                  <span className="text-gray-400">Modified: <span className="text-yellow-400 font-mono">{String((studioActionResult.diff as Record<string,number>)?.modified ?? 0)}</span></span>
+                </div>
+                {!!studioActionResult.message && <p className="text-gray-400 italic">{String(studioActionResult.message)}</p>}
+              </div>
+            )}
+            <button onClick={() => setStudioActionResult(null)} className="text-gray-600 hover:text-gray-400 text-xs flex items-center gap-1"><X className="w-3 h-3" /> Dismiss</button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

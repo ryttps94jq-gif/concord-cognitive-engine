@@ -1029,7 +1029,76 @@ export default function ScienceLensPage() {
             <h3 className={ds.heading3}>Action Result</h3>
             <button onClick={() => setActionResult(null)} className={ds.btnGhost}><X className="w-4 h-4" /></button>
           </div>
-          <pre className={cn(ds.textMono, 'text-xs overflow-auto max-h-48')}>{JSON.stringify(actionResult, null, 2)}</pre>
+          <div className="space-y-3">
+            {/* chainOfCustody */}
+            {actionResult.intact !== undefined && actionResult.transfers !== undefined && !('equipment' in actionResult) && (
+              <div className="space-y-2">
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className={`text-sm font-bold ${actionResult.intact ? 'text-green-400' : 'text-red-400'}`}>{actionResult.intact ? 'Intact' : 'Broken'}</p>
+                    <p className="text-[10px] text-gray-500">Chain Status</p>
+                  </div>
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className="text-sm font-bold text-neon-cyan">{String(actionResult.transfers)}</p>
+                    <p className="text-[10px] text-gray-500">Transfers</p>
+                  </div>
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className={`text-sm font-bold ${Array.isArray(actionResult.gaps) && (actionResult.gaps as unknown[]).length > 0 ? 'text-red-400' : 'text-green-400'}`}>{Array.isArray(actionResult.gaps) ? (actionResult.gaps as unknown[]).length : 0}</p>
+                    <p className="text-[10px] text-gray-500">Gaps</p>
+                  </div>
+                </div>
+                <p className="text-[10px] text-gray-500">Sample: {String(actionResult.sample)}</p>
+              </div>
+            )}
+            {/* calibrationCheck */}
+            {'equipment' in actionResult && actionResult.status !== undefined && (
+              <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className={`text-sm font-bold capitalize ${actionResult.status === 'overdue' ? 'text-red-400' : actionResult.status === 'due_soon' ? 'text-amber-400' : 'text-green-400'}`}>{String(actionResult.status).replace(/_/g, ' ')}</p>
+                    <p className="text-[10px] text-gray-500">Calibration Status</p>
+                  </div>
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className={`text-sm font-bold ${actionResult.daysUntilDue !== null && Number(actionResult.daysUntilDue) < 0 ? 'text-red-400' : 'text-neon-cyan'}`}>{actionResult.daysUntilDue !== null ? `${String(actionResult.daysUntilDue)}d` : 'N/A'}</p>
+                    <p className="text-[10px] text-gray-500">Days Until Due</p>
+                  </div>
+                </div>
+                <p className="text-[10px] text-gray-500">Next: {String(actionResult.nextCalibration || 'Not set')}</p>
+              </div>
+            )}
+            {/* dataExport */}
+            {actionResult.records !== undefined && actionResult.format !== undefined && (
+              <div className="grid grid-cols-2 gap-2">
+                <div className="p-2 bg-lattice-surface rounded text-center">
+                  <p className="text-sm font-bold text-neon-cyan">{String(actionResult.records)}</p>
+                  <p className="text-[10px] text-gray-500">Records Exported</p>
+                </div>
+                <div className="p-2 bg-lattice-surface rounded text-center">
+                  <p className="text-sm font-bold text-neon-cyan uppercase">{String(actionResult.format)}</p>
+                  <p className="text-[10px] text-gray-500">Format</p>
+                </div>
+              </div>
+            )}
+            {/* spatialCluster */}
+            {actionResult.clusters !== undefined && Array.isArray(actionResult.clusters) && (
+              <div className="space-y-2">
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className="text-sm font-bold text-neon-cyan">{(actionResult.clusters as unknown[]).length}</p>
+                    <p className="text-[10px] text-gray-500">Clusters</p>
+                  </div>
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className="text-sm font-bold text-neon-cyan">{String(actionResult.totalObservations)}</p>
+                    <p className="text-[10px] text-gray-500">Observations</p>
+                  </div>
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className="text-sm font-bold text-neon-cyan">{String(actionResult.radiusKm)} km</p>
+                    <p className="text-[10px] text-gray-500">Radius</p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
 

@@ -1137,7 +1137,86 @@ export default function InsuranceLensPage() {
             <h3 className={ds.heading3}>Action Result</h3>
             <button onClick={() => setActionResult(null)} className={ds.btnGhost}><X className="w-4 h-4" /></button>
           </div>
-          <pre className={cn(ds.textMono, 'text-xs overflow-auto max-h-48')}>{JSON.stringify(actionResult, null, 2)}</pre>
+          <div className="space-y-3">
+            {/* coverageGap */}
+            {actionResult.gapCount !== undefined && (
+              <div className="space-y-2">
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className="text-sm font-bold text-neon-cyan">{String(actionResult.totalPolicies)}</p>
+                    <p className="text-[10px] text-gray-500">Policies</p>
+                  </div>
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className={`text-sm font-bold ${Number(actionResult.gapCount) > 0 ? 'text-red-400' : 'text-green-400'}`}>{String(actionResult.gapCount)}</p>
+                    <p className="text-[10px] text-gray-500">Gaps</p>
+                  </div>
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className={`text-sm font-bold ${Array.isArray(actionResult.expiringSoon) && (actionResult.expiringSoon as unknown[]).length > 0 ? 'text-amber-400' : 'text-green-400'}`}>{Array.isArray(actionResult.expiringSoon) ? (actionResult.expiringSoon as unknown[]).length : 0}</p>
+                    <p className="text-[10px] text-gray-500">Expiring Soon</p>
+                  </div>
+                </div>
+                {Array.isArray(actionResult.gaps) && (actionResult.gaps as string[]).length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {(actionResult.gaps as string[]).map((g, i) => (
+                      <span key={i} className="px-1.5 py-0.5 bg-red-500/10 text-red-400 text-[10px] rounded capitalize">{g}</span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            {/* premiumHistory */}
+            {actionResult.averageChangePercent !== undefined && (
+              <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className={`text-sm font-bold ${Number(actionResult.averageChangePercent) > 2 ? 'text-red-400' : Number(actionResult.averageChangePercent) < -2 ? 'text-green-400' : 'text-neon-cyan'}`}>{String(actionResult.averageChangePercent)}%</p>
+                    <p className="text-[10px] text-gray-500">Avg Change</p>
+                  </div>
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className="text-sm font-bold text-neon-cyan capitalize">{String(actionResult.trend)}</p>
+                    <p className="text-[10px] text-gray-500">Trend</p>
+                  </div>
+                </div>
+              </div>
+            )}
+            {/* claimStatus */}
+            {actionResult.totalClaims !== undefined && actionResult.byStatus !== undefined && (
+              <div className="space-y-2">
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className="text-sm font-bold text-neon-cyan">{String(actionResult.totalClaims)}</p>
+                    <p className="text-[10px] text-gray-500">Total Claims</p>
+                  </div>
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className="text-sm font-bold text-amber-400">{String(actionResult.openClaims)}</p>
+                    <p className="text-[10px] text-gray-500">Open</p>
+                  </div>
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className="text-sm font-bold text-neon-cyan">${Number(actionResult.totalAmount).toLocaleString()}</p>
+                    <p className="text-[10px] text-gray-500">Total Amount</p>
+                  </div>
+                </div>
+              </div>
+            )}
+            {/* riskScore */}
+            {actionResult.rawScore !== undefined && (
+              <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className={`text-sm font-bold ${actionResult.level === 'critical' ? 'text-red-400' : actionResult.level === 'high' ? 'text-orange-400' : actionResult.level === 'medium' ? 'text-amber-400' : 'text-green-400'}`}>{String(actionResult.normalizedScore)}/100</p>
+                    <p className="text-[10px] text-gray-500">Risk Score</p>
+                  </div>
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className={`text-sm font-bold capitalize ${actionResult.level === 'critical' ? 'text-red-400' : actionResult.level === 'high' ? 'text-orange-400' : actionResult.level === 'medium' ? 'text-amber-400' : 'text-green-400'}`}>{String(actionResult.level)}</p>
+                    <p className="text-[10px] text-gray-500">Level</p>
+                  </div>
+                </div>
+                <div className="h-2 bg-white/5 rounded-full overflow-hidden">
+                  <div className={`h-full rounded-full ${actionResult.level === 'critical' ? 'bg-red-400' : actionResult.level === 'high' ? 'bg-orange-400' : actionResult.level === 'medium' ? 'bg-amber-400' : 'bg-green-400'}`} style={{ width: `${Math.min(100, Number(actionResult.normalizedScore))}%` }} />
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
 

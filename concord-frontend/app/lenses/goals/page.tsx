@@ -3,8 +3,9 @@
 import { useLensNav } from '@/hooks/useLensNav';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLensData } from '@/lib/hooks/use-lens-data';
+import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { apiHelpers } from '@/lib/api/client';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import {
@@ -27,6 +28,9 @@ import {
   Award,
   TrendingUp,
   Swords,
+  Loader2,
+  BarChart3,
+  GitBranch,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -373,6 +377,18 @@ export default function GoalsLensPage() {
   const handleCreateGoal = () => {
     createGoalMutation.mutate();
   };
+
+  // --- Action wiring ---
+  const runAction = useRunArtifact('goals');
+  const [goalsActionResult, setGoalsActionResult] = useState<{ action: string; data: unknown } | null>(null);
+  const handleGoalsAction = useCallback((action: string) => {
+    const artifactId = goalItems[0]?.id;
+    if (!artifactId) return;
+    runAction.mutate(
+      { id: artifactId, action, params: {} },
+      { onSuccess: (res) => setGoalsActionResult({ action, data: res.result }) }
+    );
+  }, [goalItems, runAction]);
 
   const tabs = [
     { key: 'goals' as const, label: 'Goals', icon: Target, count: activeGoalCount },
@@ -993,6 +1009,193 @@ export default function GoalsLensPage() {
       )}
         </div>
       )}
+
+      {/* ---- Goals Domain Actions Panel ---- */}
+      <div className="panel p-4 space-y-4">
+        <h2 className="font-semibold flex items-center gap-2">
+          <BarChart3 className="w-4 h-4 text-neon-cyan" /> Goals Analytics Actions
+        </h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          {[
+            { action: 'okrScoring', label: 'OKR Scoring', icon: Target, color: 'neon-cyan', desc: 'Score objectives with confidence-adjusted key result completion' },
+            { action: 'goalDecomposition', label: 'Goal Decomposition', icon: GitBranch, color: 'neon-purple', desc: 'Critical path, dependency graph, and resource allocation' },
+            { action: 'progressForecast', label: 'Progress Forecast', icon: TrendingUp, color: 'neon-green', desc: 'Linear regression forecast with confidence bands' },
+          ].map(({ action, label, icon: Icon, color, desc }) => (
+            <button
+              key={action}
+              onClick={() => handleGoalsAction(action)}
+              disabled={runAction.isPending || !goalItems[0]?.id}
+              className={`p-4 rounded-lg border text-left transition-all disabled:opacity-50 disabled:cursor-not-allowed bg-lattice-surface border-lattice-border hover:border-${color}/40`}
+            >
+              <div className="flex items-center gap-2 mb-1">
+                {runAction.isPending && goalsActionResult === null ? (
+                  <Loader2 className={`w-4 h-4 text-${color} animate-spin`} />
+                ) : (
+                  <Icon className={`w-4 h-4 text-${color}`} />
+                )}
+                <span className="text-sm font-semibold text-white">{label}</span>
+              </div>
+              <p className="text-xs text-gray-400">{desc}</p>
+            </button>
+          ))}
+        </div>
+        {!goalItems[0]?.id && (
+          <p className="text-xs text-gray-500 text-center">Create a goal to run analytics actions.</p>
+        )}
+
+        {runAction.isPending && (
+          <div className="flex items-center justify-center gap-3 py-4">
+            <Loader2 className="w-5 h-5 text-neon-cyan animate-spin" />
+            <span className="text-sm text-gray-400">Running...</span>
+          </div>
+        )}
+
+        {goalsActionResult && !runAction.isPending && (() => {
+          const r = goalsActionResult.data as Record<string, unknown>;
+          if (goalsActionResult.action === 'okrScoring') {
+            const overallScore = r.overallScore as number;
+            const overallStatus = r.overallStatus as string;
+            const summary = r.summary as Record<string, number> | undefined;
+            const objectives = (r.objectives as { id: string; title: string; score: number; status: string; krCount: number; krOnTrack: number }[]) || [];
+            return (
+              <div className="space-y-3">
+                <div className="flex items-center gap-4">
+                  <div className={`px-3 py-1.5 rounded-full text-sm font-bold ${overallStatus === 'green' ? 'bg-neon-green/20 text-neon-green' : overallStatus === 'yellow' ? 'bg-yellow-400/20 text-yellow-400' : 'bg-red-400/20 text-red-400'}`}>
+                    {overallScore}% Overall
+                  </div>
+                  <span className={`text-sm font-medium ${overallStatus === 'green' ? 'text-neon-green' : overallStatus === 'yellow' ? 'text-yellow-400' : 'text-red-400'}`}>{overallStatus?.toUpperCase()}</span>
+                </div>
+                {summary && (
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="lens-card text-center">
+                      <p className="text-xl font-bold text-neon-green">{summary.onTrack}</p>
+                      <p className="text-xs text-gray-400">On Track</p>
+                    </div>
+                    <div className="lens-card text-center">
+                      <p className="text-xl font-bold text-yellow-400">{summary.atRisk}</p>
+                      <p className="text-xs text-gray-400">At Risk</p>
+                    </div>
+                    <div className="lens-card text-center">
+                      <p className="text-xl font-bold text-red-400">{summary.offTrack}</p>
+                      <p className="text-xs text-gray-400">Off Track</p>
+                    </div>
+                  </div>
+                )}
+                {objectives.length > 0 && (
+                  <div className="space-y-2">
+                    {objectives.slice(0, 5).map((obj) => (
+                      <div key={obj.id} className="lens-card flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-white truncate max-w-xs">{obj.title}</p>
+                          <p className="text-xs text-gray-500">{obj.krCount} key results — {obj.krOnTrack} on track</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="w-16 h-2 bg-lattice-deep rounded-full overflow-hidden">
+                            <div className={`h-full rounded-full ${obj.status === 'green' ? 'bg-neon-green' : obj.status === 'yellow' ? 'bg-yellow-400' : 'bg-red-400'}`} style={{ width: `${obj.score}%` }} />
+                          </div>
+                          <span className="text-xs font-mono text-gray-300 w-10">{obj.score}%</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          }
+          if (goalsActionResult.action === 'goalDecomposition') {
+            return (
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {[
+                    { label: 'Total Tasks', value: r.totalTasks as number },
+                    { label: 'Top-Level Goals', value: r.topLevelGoals as number },
+                    { label: 'Sub-Goals', value: r.subGoalCount as number },
+                    { label: 'Project Duration', value: `${r.projectDuration} units` },
+                  ].map(({ label, value }) => (
+                    <div key={label} className="lens-card text-center">
+                      <p className="text-xl font-bold text-white">{value}</p>
+                      <p className="text-xs text-gray-400">{label}</p>
+                    </div>
+                  ))}
+                </div>
+                {(r.criticalPath as { tasks: string[] })?.tasks?.length > 0 && (
+                  <div className="lens-card">
+                    <p className="text-xs text-red-400 uppercase tracking-wider mb-2">Critical Path ({(r.criticalPath as { length: number }).length} tasks)</p>
+                    <div className="flex flex-wrap gap-1">
+                      {(r.criticalPath as { tasks: string[] }).tasks.map((t) => (
+                        <span key={t} className="text-xs px-2 py-0.5 rounded bg-red-400/10 text-red-400">{t}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {(r.hasCycle as boolean) && (
+                  <div className="lens-card border-red-400/30">
+                    <p className="text-xs text-red-400">Dependency cycle detected in: {(r.cyclicTasks as string[]).join(', ')}</p>
+                  </div>
+                )}
+                {(r.resourceConflicts as unknown[])?.length > 0 && (
+                  <div className="lens-card">
+                    <p className="text-xs text-yellow-400 mb-1">{(r.resourceConflicts as unknown[]).length} resource conflict(s) detected</p>
+                  </div>
+                )}
+              </div>
+            );
+          }
+          if (goalsActionResult.action === 'progressForecast') {
+            const forecast = r.forecast as Record<string, unknown> | undefined;
+            const velocity = r.velocity as Record<string, unknown> | undefined;
+            const regression = r.regression as Record<string, unknown> | undefined;
+            const currentState = r.currentState as Record<string, unknown> | undefined;
+            return (
+              <div className="space-y-3">
+                {currentState && (
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                    <div className="lens-card text-center">
+                      <p className="text-xl font-bold text-neon-cyan">{currentState.progress as number}%</p>
+                      <p className="text-xs text-gray-400">Current Progress</p>
+                    </div>
+                    <div className="lens-card text-center">
+                      <p className="text-xl font-bold text-gray-300">{currentState.remaining as number}%</p>
+                      <p className="text-xs text-gray-400">Remaining</p>
+                    </div>
+                    <div className="lens-card text-center">
+                      <p className="text-xl font-bold text-white">{currentState.daysElapsed as number}d</p>
+                      <p className="text-xs text-gray-400">Days Elapsed</p>
+                    </div>
+                  </div>
+                )}
+                {forecast && (
+                  <div className="lens-card">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-sm font-medium text-white">Forecast</p>
+                      <span className={`text-xs px-2 py-0.5 rounded ${forecast.onTrack ? 'bg-neon-green/10 text-neon-green' : 'bg-red-400/10 text-red-400'}`}>{forecast.onTrack ? 'On Track' : 'Behind'}</span>
+                    </div>
+                    {!!forecast.estimatedCompletionDate && (
+                      <p className="text-sm text-gray-300">Est. completion: <span className="text-neon-cyan font-mono">{forecast.estimatedCompletionDate as string}</span></p>
+                    )}
+                    {!!forecast.daysRemainingBest && (
+                      <p className="text-xs text-gray-400 mt-1">Best: {forecast.daysRemainingBest as number}d — Worst: {forecast.daysRemainingWorst as number}d</p>
+                    )}
+                  </div>
+                )}
+                {velocity && (
+                  <div className="lens-card flex items-center justify-between">
+                    <span className="text-sm text-gray-300">Velocity Trend</span>
+                    <span className={`text-sm font-medium ${velocity.trend === 'accelerating' ? 'text-neon-green' : velocity.trend === 'steady progress' ? 'text-neon-cyan' : 'text-red-400'}`}>{velocity.trend as string}</span>
+                  </div>
+                )}
+                {regression && (
+                  <div className="lens-card">
+                    <p className="text-xs text-gray-500 mb-1">Regression fit: <span className={`font-medium ${(regression.rSquared as number) > 0.8 ? 'text-neon-green' : 'text-yellow-400'}`}>{regression.fit as string}</span> (R²={regression.rSquared as number})</p>
+                    <p className="text-xs font-mono text-gray-400">{regression.equation as string}</p>
+                  </div>
+                )}
+              </div>
+            );
+          }
+          return null;
+        })()}
+      </div>
     </div>
   );
 }

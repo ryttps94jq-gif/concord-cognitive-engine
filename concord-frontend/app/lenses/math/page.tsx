@@ -9,6 +9,7 @@ import {
   History, TrendingUp, Hash, Plus, Trash2, BarChart3, Layers, ChevronDown
 } from 'lucide-react';
 import { useLensData } from '@/lib/hooks/use-lens-data';
+import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { apiHelpers } from '@/lib/api/client';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -141,6 +142,20 @@ const CATEGORY_DIFFICULTY: Record<string, { label: string; color: string; bg: st
 export default function MathLensPage() {
   useLensNav('math');
   const { latestData: realtimeData, alerts: realtimeAlerts, insights: realtimeInsights, isLive, lastUpdated } = useRealtimeLens('math');
+
+  const runAction = useRunArtifact('math');
+  const [actionResult, setActionResult] = useState<Record<string, unknown> | null>(null);
+  const [isRunning, setIsRunning] = useState<string | null>(null);
+  const handleAction = async (action: string) => {
+    const targetId = expressionItems[0]?.id;
+    if (!targetId) { setActionResult({ message: 'Add a math expression first to run analysis.' }); return; }
+    setIsRunning(action);
+    try {
+      const res = await runAction.mutateAsync({ id: targetId, action });
+      setActionResult(res.result as Record<string, unknown>);
+    } catch (e) { console.error(`Action ${action} failed:`, e); }
+    finally { setIsRunning(null); }
+  };
 
   /* ─── Expression evaluator state ─── */
   const [expression, setExpression] = useState('');
@@ -1021,6 +1036,76 @@ export default function MathLensPage() {
           )}
         </>
       )}
+
+      {/* Backend Action Panel */}
+      <div className="panel p-4 space-y-3">
+        <h2 className="font-semibold flex items-center gap-2">
+          <Sigma className="w-4 h-4 text-neon-cyan" />
+          Math Analysis
+        </h2>
+        <div className="flex flex-wrap gap-2">
+          {[
+            { action: 'statisticalAnalysis', label: 'Statistical Analysis' },
+            { action: 'matrixOperations', label: 'Matrix Operations' },
+            { action: 'polynomialAnalysis', label: 'Polynomial Analysis' },
+            { action: 'regressionFit', label: 'Regression Fit' },
+          ].map(({ action, label }) => (
+            <button key={action} onClick={() => handleAction(action)} disabled={!!isRunning}
+              className="btn-secondary text-sm flex items-center gap-1 disabled:opacity-50">
+              {isRunning === action ? <Loader2 className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
+              {label}
+            </button>
+          ))}
+        </div>
+        {actionResult && (
+          <div className="bg-lattice-deep rounded-lg p-4 space-y-3 text-sm">
+            {'centralTendency' in actionResult && (
+              <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  {'n' in actionResult && <span className="text-gray-400">n: <span className="text-neon-cyan font-bold">{String(actionResult.n)}</span></span>}
+                  {'centralTendency' in actionResult && actionResult.centralTendency !== null && typeof actionResult.centralTendency === 'object' && (
+                    Object.entries(actionResult.centralTendency as Record<string, unknown>).map(([k, v]) => (
+                      <span key={k} className="text-gray-400">{k}: <span className="text-white">{String(v)}</span></span>
+                    ))
+                  )}
+                  {'spread' in actionResult && actionResult.spread !== null && typeof actionResult.spread === 'object' && (
+                    Object.entries(actionResult.spread as Record<string, unknown>).map(([k, v]) => (
+                      <span key={k} className="text-gray-400">{k}: <span className="text-neon-cyan">{String(v)}</span></span>
+                    ))
+                  )}
+                </div>
+                {'outliers' in actionResult && actionResult.outliers !== null && typeof actionResult.outliers === 'object' && (
+                  <div className="text-xs text-gray-400">
+                    Outliers: <span className="text-yellow-400">{String((actionResult.outliers as Record<string, unknown>).count || 0)}</span>
+                  </div>
+                )}
+              </div>
+            )}
+            {'operation' in actionResult && 'determinant' in actionResult && (
+              <div className="text-xs">
+                <span className="text-gray-400">Operation: <span className="text-neon-cyan">{String(actionResult.operation)}</span></span>
+                <span className="ml-4 text-gray-400">Det: <span className="text-white">{String(actionResult.determinant)}</span></span>
+              </div>
+            )}
+            {'degree' in actionResult && 'coefficients' in actionResult && (
+              <div className="space-y-1 text-xs">
+                <p className="text-gray-400">Degree: <span className="text-neon-cyan">{String(actionResult.degree)}</span></p>
+                {'roots' in actionResult && actionResult.roots !== null && typeof actionResult.roots === 'object' && (
+                  <p className="text-gray-400">Roots: <span className="text-neon-green">{String((actionResult.roots as Record<string, unknown>).values || 'none')}</span></p>
+                )}
+              </div>
+            )}
+            {'rSquared' in actionResult && 'type' in actionResult && 'equation' in actionResult && (
+              <div className="space-y-1 text-xs">
+                <p className="text-gray-400">Type: <span className="text-neon-cyan">{String(actionResult.type)}</span></p>
+                <p className="font-mono text-white bg-lattice-surface rounded px-2 py-1">{String(actionResult.equation)}</p>
+                <p className="text-gray-400">R²: <span className={String(actionResult.rSquared) > '0.9' ? 'text-neon-green' : 'text-yellow-400'}>{String(actionResult.rSquared)}</span></p>
+              </div>
+            )}
+            {'message' in actionResult && <p className="text-gray-400">{String(actionResult.message)}</p>}
+          </div>
+        )}
+      </div>
 
       {/* Lens Features */}
       <div className="border-t border-white/10">

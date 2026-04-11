@@ -10,8 +10,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Bell, Plus, Sparkles, CheckCircle2, Clock, Play, Pause, Square, RotateCcw,
   Coffee, CheckSquare, BookOpen, Target, TrendingUp, Flame, ChevronLeft,
-  ChevronRight, FileText, ListChecks,
+  ChevronRight, FileText, ListChecks, Loader2, XCircle,
 } from 'lucide-react';
+import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { ErrorState } from '@/components/common/EmptyState';
 import { showToast } from '@/components/common/Toasts';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -129,6 +130,11 @@ export default function DailyLensPage() {
     const d = new Date(); return { year: d.getFullYear(), month: d.getMonth() };
   });
 
+  // ── Backend action state ───────────────────────────────────────────────────
+  const runAction = useRunArtifact('daily');
+  const [actionResult, setActionResult] = useState<Record<string, unknown> | null>(null);
+  const [isRunningAction, setIsRunningAction] = useState(false);
+
   const { isLoading, isError: isError, error: error, refetch: refetch, items: entryItems, create: createEntry } = useLensData('daily', 'entry', {
     seed: INITIAL_ENTRIES.map(e => ({ title: e.date, data: e as unknown as Record<string, unknown> })),
   });
@@ -202,6 +208,20 @@ export default function DailyLensPage() {
   const startTimer = useCallback(() => setTimerRunning(true), []);
   const stopTimer = useCallback(() => setTimerRunning(false), []);
   const resetTimer = useCallback(() => { setTimerRunning(false); setTimeLeft(timerDuration); }, [timerDuration]);
+
+  const handleRunAction = useCallback(async (action: string) => {
+    const targetId = entryItems[0]?.id ?? 'daily-default';
+    setIsRunningAction(true);
+    setActionResult(null);
+    try {
+      const result = await runAction.mutateAsync({ id: targetId, action });
+      setActionResult(result as Record<string, unknown>);
+    } catch (err) {
+      setActionResult({ error: err instanceof Error ? err.message : 'Action failed' });
+    } finally {
+      setIsRunningAction(false);
+    }
+  }, [runAction, entryItems]);
 
   // -- Audio recording via MediaRecorder API --------------------------------
   const handleRecordToggle = useCallback(async () => {
@@ -721,6 +741,205 @@ export default function DailyLensPage() {
           compact
         />
       )}
+
+      {/* Backend Actions Panel */}
+      <div className="panel p-4 space-y-4">
+        <h3 className="font-semibold flex items-center gap-2 text-sm text-gray-300 uppercase tracking-wider">
+          <Sparkles className="w-4 h-4 text-neon-cyan" />
+          Daily Actions
+        </h3>
+        <div className="flex flex-wrap gap-2">
+          {[
+            { action: 'dailySummary', label: 'Daily Summary' },
+            { action: 'habitStreak', label: 'Habit Streak' },
+            { action: 'focusTimer', label: 'Focus Timer' },
+            { action: 'weeklyReview', label: 'Weekly Review' },
+          ].map(({ action, label }) => (
+            <button
+              key={action}
+              onClick={() => handleRunAction(action)}
+              disabled={isRunningAction}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm bg-neon-cyan/10 text-neon-cyan border border-neon-cyan/30 hover:bg-neon-cyan/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {isRunningAction ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Flame className="w-3.5 h-3.5" />}
+              {label}
+            </button>
+          ))}
+        </div>
+        {actionResult && (
+          <div className="relative rounded-lg bg-lattice-deep border border-lattice-border p-4">
+            <button
+              onClick={() => setActionResult(null)}
+              className="absolute top-2 right-2 text-gray-500 hover:text-white transition-colors"
+              aria-label="Dismiss result"
+            >
+              <XCircle className="w-4 h-4" />
+            </button>
+            <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">Result</p>
+            {(() => {
+              const r = (actionResult as any)?.result ?? actionResult;
+              if (!r) return null;
+              return (
+                <div className="text-xs space-y-3 max-h-72 overflow-y-auto">
+                  {/* Error */}
+                  {(actionResult as any)?.error && (
+                    <p className="text-red-400">{(actionResult as any).error}</p>
+                  )}
+                  {/* Message-only result */}
+                  {r?.message && !r?.error && (
+                    <p className="text-gray-300">{r.message}</p>
+                  )}
+
+                  {/* dailySummary */}
+                  {r?.productivityScore !== undefined && (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-gray-500">Date:</span>
+                        <span className="text-gray-200">{r.date}</span>
+                        <span className="ml-auto text-gray-500">Mood: <span className="text-neon-cyan">{r.mood}</span></span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="p-2 bg-lattice-bg rounded text-center">
+                          <p className="text-lg font-bold text-neon-green">{r.productivityScore}</p>
+                          <p className="text-[10px] text-gray-500">Productivity Score</p>
+                        </div>
+                        <div className="p-2 bg-lattice-bg rounded text-center">
+                          <p className="text-lg font-bold text-neon-cyan">{r.completionRate}%</p>
+                          <p className="text-[10px] text-gray-500">Task Completion</p>
+                        </div>
+                      </div>
+                      <div className="w-full bg-lattice-bg rounded-full h-2">
+                        <div className="bg-neon-green h-2 rounded-full" style={{ width: `${Math.min(r.completionRate as number, 100)}%` }} />
+                      </div>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div className="p-2 bg-lattice-bg rounded text-center">
+                          <p className="font-bold text-neon-blue">{r.tasksCompleted}/{r.totalTasks}</p>
+                          <p className="text-[10px] text-gray-500">Tasks</p>
+                        </div>
+                        <div className="p-2 bg-lattice-bg rounded text-center">
+                          <p className="font-bold text-neon-cyan">{r.totalFocusMinutes}m</p>
+                          <p className="text-[10px] text-gray-500">Focus</p>
+                        </div>
+                        <div className="p-2 bg-lattice-bg rounded text-center">
+                          <p className="font-bold text-gray-300">{r.entriesLogged}</p>
+                          <p className="text-[10px] text-gray-500">Entries</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* habitStreak */}
+                  {r?.habits !== undefined && r?.totalHabits !== undefined && (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-gray-500">Active habits:</span>
+                        <span className="text-neon-green font-bold">{r.activeHabits}</span>
+                        <span className="text-gray-500">/ {r.totalHabits}</span>
+                      </div>
+                      <div className="space-y-1">
+                        {((r.habits as any[]) || []).map((h: any) => (
+                          <div key={h.habit} className="space-y-0.5">
+                            <div className="flex items-center justify-between">
+                              <span className="text-gray-200">{h.habit}</span>
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-neon-cyan font-bold">{h.currentStreak}d</span>
+                                <span className={`px-1.5 py-0.5 rounded text-[9px] ${h.status === 'strong' ? 'bg-neon-green/20 text-neon-green' : h.status === 'building' ? 'bg-neon-cyan/20 text-neon-cyan' : h.status === 'starting' ? 'bg-yellow-500/20 text-yellow-400' : 'bg-red-500/20 text-red-400'}`}>
+                                  {h.status}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="w-full bg-lattice-bg rounded-full h-1.5">
+                              <div className="bg-neon-cyan h-1.5 rounded-full" style={{ width: `${Math.min((h.currentStreak / 30) * 100, 100)}%` }} />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* focusTimer */}
+                  {r?.pomodorosCompleted !== undefined && (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-gray-500">Date:</span>
+                        <span className="text-gray-200">{r.date}</span>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div className="p-2 bg-lattice-bg rounded text-center">
+                          <p className="text-sm font-bold text-neon-green">{r.totalHours}h</p>
+                          <p className="text-[10px] text-gray-500">Focus Today</p>
+                        </div>
+                        <div className="p-2 bg-lattice-bg rounded text-center">
+                          <p className="text-sm font-bold text-neon-cyan">{r.sessionsToday}</p>
+                          <p className="text-[10px] text-gray-500">Sessions</p>
+                        </div>
+                        <div className="p-2 bg-lattice-bg rounded text-center">
+                          <p className="text-sm font-bold text-yellow-400">{r.pomodorosCompleted}</p>
+                          <p className="text-[10px] text-gray-500">Pomodoros</p>
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between text-[10px] text-gray-500">
+                          <span>Daily target ({r.targetMinutes}m)</span>
+                          <span>{r.progress}%</span>
+                        </div>
+                        <div className="w-full bg-lattice-bg rounded-full h-2">
+                          <div className={`h-2 rounded-full ${(r.progress as number) >= 100 ? 'bg-neon-green' : 'bg-neon-cyan'}`} style={{ width: `${Math.min(r.progress as number, 100)}%` }} />
+                        </div>
+                      </div>
+                      {Object.keys(r.byCategory as Record<string, unknown> || {}).length > 0 && (
+                        <div className="space-y-1">
+                          {Object.entries(r.byCategory as Record<string, number>).map(([cat, mins]) => (
+                            <div key={cat} className="flex items-center justify-between text-gray-300">
+                              <span>{cat}</span>
+                              <span className="text-neon-cyan">{mins}m</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* weeklyReview */}
+                  {r?.daysTracked !== undefined && r?.totalFocusHours !== undefined && (
+                    <div className="space-y-2">
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="p-2 bg-lattice-bg rounded text-center">
+                          <p className="text-sm font-bold text-neon-green">{r.totalTasksCompleted}</p>
+                          <p className="text-[10px] text-gray-500">Tasks Done</p>
+                        </div>
+                        <div className="p-2 bg-lattice-bg rounded text-center">
+                          <p className="text-sm font-bold text-neon-cyan">{r.totalFocusHours}h</p>
+                          <p className="text-[10px] text-gray-500">Focus Hours</p>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div className="p-2 bg-lattice-bg rounded text-center">
+                          <p className="font-bold text-gray-300">{r.daysTracked}</p>
+                          <p className="text-[10px] text-gray-500">Days</p>
+                        </div>
+                        <div className="p-2 bg-lattice-bg rounded text-center">
+                          <p className="font-bold text-yellow-400">{r.avgTasksPerDay}</p>
+                          <p className="text-[10px] text-gray-500">Avg Tasks/Day</p>
+                        </div>
+                        <div className="p-2 bg-lattice-bg rounded text-center">
+                          <p className="font-bold text-neon-blue">{r.avgMood ?? '—'}</p>
+                          <p className="text-[10px] text-gray-500">Avg Mood</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 text-gray-400">
+                        <span>Best day:</span>
+                        <span className="text-neon-green">{r.bestDay}</span>
+                        <span className="ml-auto text-gray-500">{r.avgFocusPerDay}m avg focus</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+          </div>
+        )}
+      </div>
         </div>
       </main>
     </div>

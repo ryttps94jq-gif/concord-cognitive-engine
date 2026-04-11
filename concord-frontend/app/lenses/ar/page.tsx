@@ -9,9 +9,9 @@ import { ds } from '@/lib/design-system';
 import { cn } from '@/lib/utils';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import {
-  Glasses, Camera, Scan, Settings2, Layers, Eye, Maximize, Plus,
+  Glasses, Camera, Scan, Settings2, Layers, Eye, Plus,
   Search, Trash2, X, BarChart3, Zap, ChevronDown, Box,
-  MapPin, Globe, Cpu, Image, Video, Monitor,
+  MapPin, Globe, Monitor,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';

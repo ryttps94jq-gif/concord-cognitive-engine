@@ -1786,7 +1786,94 @@ export default function AviationLensPage() {
             <h3 className={ds.heading3}>Action Result</h3>
             <button onClick={() => setActionResult(null)} className={ds.btnGhost}><X className="w-4 h-4" /></button>
           </div>
-          <pre className={cn(ds.textMono, 'text-xs overflow-auto max-h-48')}>{JSON.stringify(actionResult, null, 2)}</pre>
+          {/* currencyCheck */}
+          {actionResult.checks !== undefined && actionResult.allCurrent !== undefined && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-3 mb-2">
+                <span className={`px-2 py-0.5 rounded text-xs font-semibold ${actionResult.allCurrent ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>{actionResult.allCurrent ? 'All Current' : 'Attention Needed'}</span>
+                <span className="text-xs text-gray-400">{String(actionResult.crewMember)}</span>
+              </div>
+              {(actionResult.checks as {type:string;current:boolean;daysRemaining?:number|null}[]).map((c, i) => (
+                <div key={i} className="flex items-center justify-between p-1.5 bg-lattice-surface rounded">
+                  <span className="text-xs text-gray-300">{c.type}</span>
+                  <div className="flex items-center gap-2">
+                    {c.daysRemaining != null && <span className="text-[10px] text-gray-400">{c.daysRemaining}d left</span>}
+                    <span className={`text-[10px] font-semibold ${c.current ? 'text-green-400' : 'text-red-400'}`}>{c.current ? '✓' : '!'}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {/* maintenanceDue */}
+          {actionResult.items !== undefined && actionResult.overdueCount !== undefined && (
+            <div className="space-y-1">
+              <div className="flex items-center gap-3 mb-2">
+                <span className="text-xs text-gray-400">{String(actionResult.aircraft)}</span>
+                <span className={`px-2 py-0.5 rounded text-xs font-semibold ${Number(actionResult.overdueCount) > 0 ? 'bg-red-500/20 text-red-400' : 'bg-green-500/20 text-green-400'}`}>{String(actionResult.overdueCount)} Overdue</span>
+              </div>
+              {(actionResult.items as {type:string;overdue:boolean;hoursRemaining?:number;dueIn?:number}[]).map((item, i) => (
+                <div key={i} className={`flex items-center justify-between p-1.5 rounded ${item.overdue ? 'bg-red-500/10' : 'bg-lattice-surface'}`}>
+                  <span className="text-xs text-gray-300">{item.type}</span>
+                  <span className={`text-[10px] font-semibold ${item.overdue ? 'text-red-400' : 'text-green-400'}`}>{item.overdue ? 'OVERDUE' : item.hoursRemaining != null ? `${item.hoursRemaining}h left` : item.dueIn != null ? `${item.dueIn}d left` : 'OK'}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          {/* hobbsLog */}
+          {actionResult.totalTime !== undefined && actionResult.picTime !== undefined && (
+            <div className="grid grid-cols-3 gap-2">
+              <div className="p-2 bg-lattice-surface rounded text-center">
+                <p className="text-sm font-bold text-neon-cyan">{String(actionResult.totalTime)}h</p>
+                <p className="text-[10px] text-gray-500">Total Time</p>
+              </div>
+              <div className="p-2 bg-lattice-surface rounded text-center">
+                <p className="text-sm font-bold text-neon-cyan">{String(actionResult.picTime)}h</p>
+                <p className="text-[10px] text-gray-500">PIC Time</p>
+              </div>
+              <div className="p-2 bg-lattice-surface rounded text-center">
+                <p className="text-sm font-bold text-neon-cyan">{String(actionResult.nightTime)}h</p>
+                <p className="text-[10px] text-gray-500">Night Time</p>
+              </div>
+              <div className="p-2 bg-lattice-surface rounded text-center">
+                <p className="text-sm font-bold text-neon-cyan">{String(actionResult.instrumentTime)}h</p>
+                <p className="text-[10px] text-gray-500">Instrument</p>
+              </div>
+              <div className="p-2 bg-lattice-surface rounded text-center">
+                <p className="text-sm font-bold text-neon-cyan">{String(actionResult.crossCountry)}h</p>
+                <p className="text-[10px] text-gray-500">Cross-Country</p>
+              </div>
+              <div className="p-2 bg-lattice-surface rounded text-center">
+                <p className="text-sm font-bold text-neon-cyan">{String(actionResult.totalFlights)}</p>
+                <p className="text-[10px] text-gray-500">Total Flights</p>
+              </div>
+            </div>
+          )}
+          {/* slipUtilization */}
+          {actionResult.utilization !== undefined && actionResult.marina !== undefined && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-gray-400">{String(actionResult.marina)}</span>
+                <span className="text-sm font-bold text-neon-cyan">{String(actionResult.utilization)}% Utilized</span>
+              </div>
+              <div className="h-2 bg-white/5 rounded-full overflow-hidden">
+                <div className="h-full bg-neon-cyan rounded-full transition-all" style={{ width: `${actionResult.utilization}%` }} />
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <div className="p-2 bg-lattice-surface rounded text-center">
+                  <p className="text-sm font-bold text-green-400">{String(actionResult.occupied)}</p>
+                  <p className="text-[10px] text-gray-500">Occupied</p>
+                </div>
+                <div className="p-2 bg-lattice-surface rounded text-center">
+                  <p className="text-sm font-bold text-amber-400">{String(actionResult.vacant)}</p>
+                  <p className="text-[10px] text-gray-500">Vacant</p>
+                </div>
+                <div className="p-2 bg-lattice-surface rounded text-center">
+                  <p className="text-sm font-bold text-neon-cyan">${String(actionResult.monthlyRevenue)}</p>
+                  <p className="text-[10px] text-gray-500">Monthly Rev</p>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

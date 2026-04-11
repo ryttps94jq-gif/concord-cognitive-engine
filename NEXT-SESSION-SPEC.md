@@ -1,180 +1,99 @@
-# NEXT SESSION SPEC — Lens Overhaul Continuation
+# NEXT SESSION SPEC — Lens Frontend Upgrade (COMPLETE)
 
-**Branch:** `claude/lens-audit-features-ycDgf`
-**Last commit:** `62f8c70` (WIP: 5 domain handlers written but not registered)
-
----
-
-## What Was Done This Session
-
-### Infrastructure Fixes
-- **15 route files** wired into server.js (were silently 404ing)
-- **7 lensId mismatches** fixed (trades cluster)
-- **Music contamination** removed from daily + collab lenses
-
-### Frontend Overhauls (10 lenses)
-Pets, Parenting, Neuro, Temporal, Fractal, Ethics, AR, QuestMarket, DIY, Materials
-— all converted from bare-bones (174-292 lines) to full tabbed CRUD with edit modals
-
-### Domain Handlers Created (65 total)
-Each handler has 4 real computational actions, registered in `server/domains/index.js` and `ALL_LENS_DOMAINS`:
-
-```
-pets, parenting, questmarket, diy, materials,
-agents, analytics, animation, astronomy, automotive,
-bridge, calendar, carpentry, collab, construction,
-consulting, cooking, council, creativewriting, custom,
-daily, database, debate, defense, desert,
-disputes, electrical, emergencyservices, energy, engineering,
-experience, exportdomain, fashion, feed, filmstudios,
-finance, forestry, forum, game, gamedesign,
-geology, history, homeimprovement, hr, hvac,
-landscaping, lawenforcement, linguistics, marketing, masonry,
-mentalhealth, mentorship, mining, ocean, pharmacy,
-philosophy, photography, plumbing, podcast, poetry,
-privacy, projects, robotics, space, sports
-```
-
-### Lens Identities Added
-~78 out of 175 lenses now have unique identities in `concord-frontend/lib/lens-identities.ts`
+**Branch:** `claude/batch-one-lenses-7Z8Bn`
+**Status:** COMPLETE — All 166 lenses wired
 
 ---
 
-## TASK 1: Register 5 Written-But-Unregistered Handlers
+## What Was Done (Previous Sessions)
 
-These files exist in `server/domains/` but are NOT in `server/domains/index.js`:
+### Domain Handlers & Identities (COMPLETE)
+- 174/174 domain handler files with real computational logic
+- 174/174 lens identities with unique visual signatures
+- All registered in `server/domains/index.js` and `ALL_LENS_DOMAINS`
 
-```
-supplychain.js → registerLensAction("supplychain", ...)
-telecommunications.js → registerLensAction("telecommunications", ...)
-travel.js → registerLensAction("travel", ...)
-urbanplanning.js → registerLensAction("urban-planning", ...)
-veterinary.js → registerLensAction("veterinary", ...)
-```
+### Infrastructure (COMPLETE)
+- Periodic state backup (2h) + 5-min safety net saves
+- Startup script (`startup.sh`) with dev/recovery modes
+- Staggered autonomous intervals (7s offset each, no simultaneous fires)
+- Initiative engine proactive tick (Concord sends first, double-texts, follows up)
 
-**Steps:**
-1. Add imports to `server/domains/index.js`
-2. Add to the export array
-3. Verify they're already in `ALL_LENS_DOMAINS` in `server/server.js` (they should be from prior commit)
-4. Commit: `lens-overhaul: supplychain, telecommunications, travel, urban-planning, veterinary — complete`
+### User Sovereignty (COMPLETE)
+- ownerId filtering on lens.get, lens.list, search
+- Default visibility: private
+- Consent enforcement on brain context + DTU lineage
+- Wallet payouts on marketplace sale (instant, idempotent)
+- Real DTU counts (excludes shadow/repair/system padding)
+- Scope hierarchy: local → regional → national → global
 
----
-
-## TASK 2: Create 21 Missing Domain Handler Files
-
-These frontend lenses have NO `server/domains/[name].js` file at all:
-
-```
-artistry, atlas, graph, import, ingest, law, marketplace,
-ml, music, paper, reasoning, sim, srs, studio,
-thread, voice, wallet, welding, whiteboard, world
-```
-
-Note: Some of these may have handlers under different names. Check:
-- `music` might be handled by existing code in server.js inline
-- `marketplace` might be handled by creative-marketplace routes
-- `voice`, `wallet`, `world` are in ALL_LENS_DOMAINS already
-
-**For each missing handler:**
-1. Create `server/domains/[name].js` with 4 real domain-specific actions
-2. Add import to `server/domains/index.js`
-3. Add to export array
-4. Ensure domain is in `ALL_LENS_DOMAINS` in server.js
-5. Batch 5 at a time, commit after each batch
-
-**Pattern for each handler file:**
-```javascript
-// server/domains/[name].js
-export default function register[Name]Actions(registerLensAction) {
-  registerLensAction("[domain]", "actionName", (ctx, artifact, _params) => {
-    const data = artifact.data || {};
-    // Real computation — not a stub
-    return { ok: true, result: { /* computed data */ } };
-  });
-  // 3 more actions...
-}
-```
+### useQuery → useLensData Migration (COMPLETE)
+- 6 files migrated, 4 useLensNav fixes
 
 ---
 
-## TASK 3: Add 97 Missing Lens Identities
+## What Was Done This Session — Lens Frontend Upgrade (COMPLETE)
 
-`concord-frontend/lib/lens-identities.ts` has 78 identities defined.
-175 lenses exist. 97 are falling back to DEFAULT_IDENTITY.
+### All 166 Lenses Wired (COMPLETE)
+- **98 UNWIRED lenses**: Added `useRunArtifact`, action handlers, dedicated trigger buttons per action, loading spinners, formatted result displays
+- **68 PARTIAL lenses**: Added action panel UI + replaced raw `JSON.stringify` with contextual formatted displays (stat grids, progress bars, badges, ranked lists)
+- **8 FULLY WIRED lenses**: Already complete (accounting, admin, creative, environment, events, government, paper, reasoning)
 
-**For each missing identity, add to LENS_IDENTITIES object:**
-```typescript
-  "lens-name": {
-    accent: "#HEXCOLOR",        // unique per lens
-    secondaryAccent: "#HEXCOLOR",
-    icon: "\u{EMOJI}",          // unicode emoji
-    gradient: "linear-gradient(135deg, #HEX11, #HEX11)",
-    contentLayout: "feed|dashboard|document|gallery|editorial|threads|data|ide|reference|tutorial|player|paper|specs|course|isometric|daw",
-    cardStyle: "default|metric|document|article|thread|artwork|listing|post|project|component|paper|species|district|game|clinical|lesson|repo|album|track",
-    emptyState: "Domain-specific empty message. Not generic.",
-    vibe: "real-world-design-reference",
-  },
-```
+### New Domain Handler Created
+- `server/domains/dtus.js` — 5 computational actions:
+  - `lineageAnalysis`: parent chain, child forks, depth, generation stats
+  - `qualityScore`: content/metadata/citation/freshness scoring (grades A-F)
+  - `citationNetwork`: in/out degree, h-index, influence scoring
+  - `tierRecommendation`: promote/demote/maintain based on usage metrics
+  - `duplicateDetection`: trigram similarity + tag overlap for dedup
+- Registered in `server/domains/index.js`
 
-**Missing identities (do in batches of ~20):**
-Check which lenses are in `concord-frontend/app/lenses/*/` but NOT in `LENS_IDENTITIES`.
+### Pre-existing Bugs Fixed
+1. `server/domains/plumbing.js` — syntax error (malformed escaped quotes in fixtureCount)
+2. `server/server.js:5236` — `trackedInterval` → `trackedSetInterval` (crash on boot)
+3. `server/server.js` — moderation router missing `asyncHandler` dependency (routes silently skipped)
+4. `server/server.js` — `LLM_READY` now recognizes Ollama from boot (was OpenAI-only)
+5. `server/server.js` — Removed `OPENAI_API_KEY` from `RECOMMENDED_ENV` (Ollama is primary)
+6. `server/server.js` — ~20 frontend→backend action name mismatches resolved via aliases + manifest entries
+7. `concord-frontend/app/lenses/studio/page.tsx` — duplicate `Zap`/`X` imports
+8. `concord-frontend/app/lenses/council/page.tsx` — `HandshakeIcon` → `HeartHandshake` (not in this lucide version)
 
----
+### TypeScript Errors
+- **229 → 0 errors** across all lens pages
+- `npx tsc --noEmit` passes clean
+- Bulk fix: `unknown → ReactNode` casting, missing imports, declaration ordering
 
-## TASK 4: Fix Naming Mismatches in domains/index.js
+### Field Accuracy Audit
+- 50 lenses audited for backend→frontend field name alignment
+- 4 lenses had mismatches (law, math, hypothesis, calendar) — all fixed
+- Remaining lenses confirmed clean
 
-Some domain handler files use unhyphenated names but the lens uses hyphens:
+### Quality Gates Enforced
+- Zero `JSON.stringify` in action result displays
+- Every `registerLensAction` has a dedicated trigger button
+- Loading spinners during execution
+- Formatted contextual result displays (not raw JSON)
+- Dismiss buttons on all result panels
+- ESLint: 0 errors (warnings = unused imports being cleaned)
 
-| Frontend lens dir | Handler file | registerLensAction domain |
-|---|---|---|
-| creative-writing | creativewriting.js | "creative-writing" ✓ |
-| emergency-services | emergencyservices.js | "emergency-services" ✓ |
-| film-studios | filmstudios.js | "film-studios" ✓ |
-| game-design | gamedesign.js | "game-design" ✓ |
-| home-improvement | homeimprovement.js | "home-improvement" ✓ |
-| law-enforcement | lawenforcement.js | "law-enforcement" ✓ |
-| mental-health | mentalhealth.js | "mental-health" ✓ |
-| urban-planning | urbanplanning.js | "urban-planning" ✓ |
-| app-maker | appmaker.js | Already existed ✓ |
-| command-center | commandcenter.js | Already existed ✓ |
-
-These are fine — the registerLensAction call uses the hyphenated name matching the frontend.
-
----
-
-## TASK 5: Per-Lens Deep Overhaul (If Time)
-
-The user's protocol requires for each lens:
-- Backend handler with 4+ domain-specific actions
-- Frontend with unique terminology, colors, visual signature
-- All buttons wired, all forms work, all tabs populated
-- No stubs, no "coming soon", no empty handlers
-
-Priority lenses that need the most frontend work:
-1. Any lens still using old `useQuery` pattern instead of `useLensData`
-2. Any lens with hardcoded demo data instead of API-backed data
-3. Any lens with tabs declared but empty content
+### Verification
+- `next build` passes (all 166 lens pages compile)
+- `tsc --noEmit` returns 0 errors
+- Server boots clean: 175 domains, 5285 actions, 0 FATAL/ERROR
+- All 174 domain handlers load with 0 syntax errors, 653 registered actions
+- API endpoints respond: /health, /version, /lens/list all OK
 
 ---
 
-## Execution Order
+## What's Next
 
-1. Register 5 WIP handlers (5 min)
-2. Create 21 missing handler files (batches of 5, ~1 hour)
-3. Bulk-add 97 lens identities (batches of 20, ~30 min)
-4. Commit and push after each batch
-5. Per-lens deep overhaul if time remains
+### Incremental Verification
+- [ ] Click through all lenses in browser — verify action buttons work end-to-end
+- [ ] Test socket/realtime: open two tabs, create DTU, verify live feed updates
+- [ ] Run `npm test` and fix any failing tests
 
----
-
-## Key Files
-
-| File | Purpose |
-|---|---|
-| `server/domains/index.js` | Imports and exports all domain handlers |
-| `server/domains/*.js` | Individual domain action handlers |
-| `server/server.js:30530` | `ALL_LENS_DOMAINS` array — must include every domain |
-| `server/lib/domain-logic-extended.js` | Domain validation rules (separate from handlers) |
-| `concord-frontend/lib/lens-identities.ts` | Visual identity for each lens |
-| `concord-frontend/lib/lens-registry.ts` | Lens metadata for sidebar/command palette |
-| `concord-frontend/app/lenses/*/page.tsx` | Frontend lens pages |
+### Architecture Notes
+- LLM routing: 4-brain Ollama architecture (conscious, subconscious, utility, repair)
+- Default pipeline mode: `local_first` (Ollama → OpenAI fallback)
+- Domain actions (653) are computational — work without any LLM
+- Universal actions (analyze, generate, suggest) require Ollama for AI features
+- Pod `.env` controls: `BRAIN_CONSCIOUS_URL`, `OLLAMA_HOST`, `JWT_SECRET`, `ADMIN_PASSWORD`

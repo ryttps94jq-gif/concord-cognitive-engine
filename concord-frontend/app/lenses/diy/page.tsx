@@ -10,8 +10,8 @@ import { cn } from '@/lib/utils';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import {
   Wrench, Plus, Search, Trash2, DollarSign, Clock, Layers, ChevronDown,
-  CheckCircle2, Hammer, Package, Ruler, X, BarChart3, Zap,
-  Camera, BookOpen, Settings2, AlertTriangle, Lightbulb,
+  CheckCircle2, Hammer, Package, X, BarChart3, Zap,
+  Camera, BookOpen, Lightbulb,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';

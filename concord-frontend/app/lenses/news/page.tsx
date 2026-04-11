@@ -11,8 +11,9 @@ import {
   Newspaper, Clock, Tag, TrendingUp, Bookmark, Share2,
   Search, RefreshCw, ChevronDown, ChevronUp, ExternalLink,
   Filter, X, Eye, BarChart3, ArrowUpRight, Bell, Globe, Rss,
-  Download, Quote, GitFork,
+  Download, Quote, Play, Loader2,
 } from 'lucide-react';
+import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { motion } from 'framer-motion';
 import { ErrorState } from '@/components/common/EmptyState';
 import { ReportButton } from '@/components/common/ReportButton';
@@ -79,12 +80,27 @@ export default function NewsLensPage() {
     onSuccess: () => addToast({ type: 'success', message: 'Citation recorded' }),
   });
 
+  const runAction = useRunArtifact('news');
+  const [actionResult, setActionResult] = useState<Record<string, unknown> | null>(null);
+  const [isRunning, setIsRunning] = useState<string | null>(null);
+
   const { items: newsItems, isLoading, isError, error, refetch } = useLensData('news', 'article', {
     tags: selectedCategory !== 'all' ? [selectedCategory] : undefined,
     noSeed: true,
   });
 
   const { items: trendingItems, isError: isError2, error: error2, refetch: refetch2 } = useLensData('news', 'trending', { noSeed: true });
+
+  const handleAction = async (action: string) => {
+    const targetId = newsItems[0]?.id;
+    if (!targetId) { setActionResult({ message: 'No news articles found. Add an article first.' }); return; }
+    setIsRunning(action);
+    try {
+      const res = await runAction.mutateAsync({ id: targetId, action });
+      setActionResult(res.result as Record<string, unknown>);
+    } catch (e) { console.error(`Action ${action} failed:`, e); }
+    finally { setIsRunning(null); }
+  };
 
   const categories = [
     { id: 'all', name: 'All', icon: Newspaper },
@@ -96,14 +112,14 @@ export default function NewsLensPage() {
   ];
 
   const articles: NewsArticle[] = useMemo(() => {
-    return (newsItems || []).map((item: Record<string, unknown>) => {
+    return (newsItems || []).map((item) => {
       const data = (item.data || {}) as Record<string, unknown>;
       return {
         id: String(item.id || ''),
         title: String(data.title || item.title || ''),
         summary: String(data.summary || data.description || ''),
         source: String(data.source || ''),
-        category: String(data.eventType?.toString().split(':')[1] || item.type || 'general'),
+        category: String(data.eventType?.toString().split(':')[1] || data.type || 'general'),
         timestamp: String(item.createdAt || item.updatedAt || ''),
         imageUrl: (data.imageUrl as string) || undefined,
         trending: Boolean(data.trending),
@@ -588,20 +604,23 @@ export default function NewsLensPage() {
             </h3>
             <div className="space-y-2">
               {trendingItems?.length > 0 ? (
-                trendingItems.map((topic: Record<string, unknown>, index: number) => (
+                trendingItems.map((topic, index: number) => {
+                  const topicData = topic.data as Record<string, unknown>;
+                  return (
                   <div
-                    key={topic.id as string}
+                    key={topic.id}
                     className="flex items-center gap-3 p-2 rounded-lg hover:bg-lattice-elevated cursor-pointer transition-colors"
-                    onClick={() => setSearchText(topic.name as string)}
+                    onClick={() => setSearchText(String(topicData.name ?? topic.title ?? ''))}
                   >
                     <span className="text-gray-500 text-sm w-6 text-right font-mono">{index + 1}</span>
                     <div className="flex-1">
-                      <p className="font-medium text-sm">{topic.name as string}</p>
-                      <p className="text-xs text-gray-500">{topic.count as number} mentions</p>
+                      <p className="font-medium text-sm">{String(topicData.name ?? topic.title ?? '')}</p>
+                      <p className="text-xs text-gray-500">{String(topicData.count ?? 0)} mentions</p>
                     </div>
                     <ArrowUpRight className="w-3 h-3 text-gray-600" />
                   </div>
-                ))
+                  );
+                })
               ) : (
                 <p className="text-sm text-gray-500 text-center py-4">No trending topics</p>
               )}
@@ -672,6 +691,77 @@ export default function NewsLensPage() {
       {/* Real-time Data Panel */}
       <RealtimeDataPanel domain="news" data={realtimeData} isLive={isLive} lastUpdated={lastUpdated} insights={insights} compact />
       <UniversalActions domain="news" artifactId={null} compact />
+
+      {/* Backend Action Panel */}
+      <div className="panel p-4 space-y-3">
+        <h2 className="font-semibold flex items-center gap-2">
+          <Newspaper className="w-4 h-4 text-neon-cyan" />
+          News Analysis
+        </h2>
+        <div className="flex flex-wrap gap-2">
+          {[
+            { action: 'biasDetection', label: 'Bias Detection' },
+            { action: 'eventExtraction', label: 'Event Extraction' },
+            { action: 'narrativeTracking', label: 'Narrative Tracking' },
+          ].map(({ action, label }) => (
+            <button key={action} onClick={() => handleAction(action)} disabled={!!isRunning}
+              className="btn-secondary text-sm flex items-center gap-1 disabled:opacity-50">
+              {isRunning === action ? <Loader2 className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
+              {label}
+            </button>
+          ))}
+        </div>
+        {actionResult && (
+          <div className="bg-lattice-deep rounded-lg p-4 space-y-3 text-sm">
+            {'overallBiasScore' in actionResult && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-3">
+                  <span className="text-gray-400 text-xs">Bias Score: <span className="text-neon-cyan font-bold">{String(actionResult.overallBiasScore)}</span></span>
+                  <span className={`text-xs px-2 py-0.5 rounded ${
+                    actionResult.biasLevel === 'high' ? 'bg-red-400/20 text-red-400' :
+                    actionResult.biasLevel === 'moderate' ? 'bg-yellow-400/20 text-yellow-400' : 'bg-neon-green/20 text-neon-green'
+                  }`}>{String(actionResult.biasLevel)}</span>
+                </div>
+                {'sourceBiasProfiles' in actionResult && Array.isArray(actionResult.sourceBiasProfiles) && actionResult.sourceBiasProfiles.length > 0 && (
+                  <div className="space-y-1">
+                    <p className="text-xs text-gray-500 uppercase tracking-wider">Sources</p>
+                    {(actionResult.sourceBiasProfiles as Array<Record<string, unknown>>).slice(0, 4).map((s, i) => (
+                      <div key={i} className="flex justify-between text-xs bg-lattice-surface rounded px-2 py-1">
+                        <span className="text-gray-300">{String(s.source)}</span>
+                        <span className="text-yellow-400">{String(s.avgBiasScore ?? 0)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            {'eventsExtracted' in actionResult && (
+              <div className="space-y-2">
+                <span className="text-gray-400 text-xs">Events: <span className="text-neon-cyan font-bold">{String(actionResult.eventsExtracted)}</span></span>
+                {'topEntities' in actionResult && Array.isArray(actionResult.topEntities) && actionResult.topEntities.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {(actionResult.topEntities as Array<Record<string, unknown>>).slice(0, 5).map((e, i) => (
+                      <span key={i} className="text-xs bg-neon-cyan/10 border border-neon-cyan/20 rounded px-2 py-0.5 text-neon-cyan">{String(e.entity || e.name)}</span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            {'narrativeStability' in actionResult && (
+              <div className="space-y-1">
+                <div className="flex items-center gap-3">
+                  <span className="text-gray-400 text-xs">Stability: <span className="text-neon-cyan font-bold">{String(actionResult.narrativeStability)}</span></span>
+                  <span className={`text-xs px-2 py-0.5 rounded ${
+                    actionResult.stabilityLevel === 'stable' ? 'bg-neon-green/20 text-neon-green' : 'bg-yellow-400/20 text-yellow-400'
+                  }`}>{String(actionResult.stabilityLevel)}</span>
+                </div>
+                {'shiftCount' in actionResult && <p className="text-xs text-gray-400">Narrative shifts: <span className="text-yellow-400">{String(actionResult.shiftCount)}</span></p>}
+              </div>
+            )}
+            {'message' in actionResult && <p className="text-gray-400">{String(actionResult.message)}</p>}
+          </div>
+        )}
+      </div>
       </div>
     </div>
   );

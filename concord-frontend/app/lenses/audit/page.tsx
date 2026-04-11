@@ -5,7 +5,9 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api/client';
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { FileSearch, AlertTriangle, Check, X, Eye, Layers, ChevronDown, Link2, ShieldCheck, ClipboardList, ArrowRight, Hash } from 'lucide-react';
+import { FileSearch, AlertTriangle, Check, X, Eye, Layers, ChevronDown, Link2, ShieldCheck, ClipboardList, ArrowRight, Hash, Loader2, XCircle, Zap, BarChart3 } from 'lucide-react';
+import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
+import { useLensData } from '@/lib/hooks/use-lens-data';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 import { ConnectiveTissueBar } from '@/components/lens/ConnectiveTissueBar';
 import { ErrorState } from '@/components/common/EmptyState';
@@ -37,6 +39,22 @@ export default function AuditLensPage() {
   const [filter, setFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [showFeatures, setShowFeatures] = useState(true);
+  const [actionResult, setActionResult] = useState<Record<string, unknown> | null>(null);
+  const [isRunning, setIsRunning] = useState<string | null>(null);
+
+  const runAction = useRunArtifact('audit');
+  const { items: auditItems } = useLensData<Record<string, unknown>>('audit', 'entry', { seed: [] });
+
+  const handleAuditAction = async (action: string) => {
+    const targetId = auditItems[0]?.id;
+    if (!targetId) return;
+    setIsRunning(action);
+    try {
+      const res = await runAction.mutateAsync({ id: targetId, action });
+      setActionResult(res.result as Record<string, unknown>);
+    } catch (e) { console.error(`Action ${action} failed:`, e); }
+    setIsRunning(null);
+  };
 
   // Backend: GET /api/events
   const { data: events, isLoading, isError: isError, error: error, refetch: refetch,} = useQuery({
@@ -387,6 +405,216 @@ export default function AuditLensPage() {
           </div>
         </div>
       </div>
+
+      {/* ── Backend Audit Actions ── */}
+      <div className="panel p-4">
+        <h3 className="font-semibold text-white mb-4 flex items-center gap-2">
+          <Zap className="w-4 h-4 text-neon-cyan" /> Audit Intelligence Actions
+        </h3>
+        {!auditItems[0] && (
+          <p className="text-xs text-gray-500 mb-3">No audit entries in store yet — actions will be available once entries are present.</p>
+        )}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <button
+            onClick={() => handleAuditAction('complianceCheck')}
+            disabled={isRunning !== null || !auditItems[0]}
+            className="flex flex-col items-center gap-2 p-3 bg-lattice-bg rounded-lg border border-lattice-border hover:border-neon-green/50 transition-colors disabled:opacity-50"
+          >
+            {isRunning === 'complianceCheck' ? <Loader2 className="w-5 h-5 text-neon-green animate-spin" /> : <ShieldCheck className="w-5 h-5 text-neon-green" />}
+            <span className="text-xs text-gray-300">Compliance Check</span>
+          </button>
+          <button
+            onClick={() => handleAuditAction('trailAnalysis')}
+            disabled={isRunning !== null || !auditItems[0]}
+            className="flex flex-col items-center gap-2 p-3 bg-lattice-bg rounded-lg border border-lattice-border hover:border-neon-cyan/50 transition-colors disabled:opacity-50"
+          >
+            {isRunning === 'trailAnalysis' ? <Loader2 className="w-5 h-5 text-neon-cyan animate-spin" /> : <ArrowRight className="w-5 h-5 text-neon-cyan" />}
+            <span className="text-xs text-gray-300">Trail Analysis</span>
+          </button>
+          <button
+            onClick={() => handleAuditAction('riskScore')}
+            disabled={isRunning !== null || !auditItems[0]}
+            className="flex flex-col items-center gap-2 p-3 bg-lattice-bg rounded-lg border border-lattice-border hover:border-yellow-400/50 transition-colors disabled:opacity-50"
+          >
+            {isRunning === 'riskScore' ? <Loader2 className="w-5 h-5 text-yellow-400 animate-spin" /> : <AlertTriangle className="w-5 h-5 text-yellow-400" />}
+            <span className="text-xs text-gray-300">Risk Score</span>
+          </button>
+          <button
+            onClick={() => handleAuditAction('samplingPlan')}
+            disabled={isRunning !== null || !auditItems[0]}
+            className="flex flex-col items-center gap-2 p-3 bg-lattice-bg rounded-lg border border-lattice-border hover:border-neon-purple/50 transition-colors disabled:opacity-50"
+          >
+            {isRunning === 'samplingPlan' ? <Loader2 className="w-5 h-5 text-neon-purple animate-spin" /> : <ClipboardList className="w-5 h-5 text-neon-purple" />}
+            <span className="text-xs text-gray-300">Sampling Plan</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Action Result Display */}
+      {actionResult && (
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="panel p-4"
+        >
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-semibold text-white flex items-center gap-2">
+              <BarChart3 className="w-4 h-4 text-neon-cyan" /> Action Result
+            </h3>
+            <button onClick={() => setActionResult(null)} className="text-gray-400 hover:text-white">
+              <XCircle className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Compliance Check Result */}
+          {actionResult.passed !== undefined && actionResult.score !== undefined && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-4">
+                <div className={`flex items-center gap-2 text-lg font-bold ${actionResult.passed ? 'text-neon-green' : 'text-neon-pink'}`}>
+                  {actionResult.passed ? <ShieldCheck className="w-5 h-5" /> : <XCircle className="w-5 h-5" />}
+                  {actionResult.passed ? 'PASS' : 'FAIL'}
+                </div>
+                <div className="text-3xl font-bold text-white">{actionResult.score as number}<span className="text-lg text-gray-400">/100</span></div>
+              </div>
+              {(actionResult.violations as string[])?.length > 0 && (
+                <div>
+                  <p className="text-xs text-gray-400 mb-1">Violations</p>
+                  <ul className="space-y-1">
+                    {(actionResult.violations as string[]).map((v, i) => (
+                      <li key={i} className="text-xs text-neon-pink flex items-center gap-1">
+                        <XCircle className="w-3 h-3 flex-shrink-0" /> {v}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {(actionResult.recommendations as string[])?.length > 0 && (
+                <div>
+                  <p className="text-xs text-gray-400 mb-1">Recommendations</p>
+                  <ul className="space-y-1">
+                    {(actionResult.recommendations as string[]).map((r, i) => (
+                      <li key={i} className="text-xs text-neon-green flex items-center gap-1">
+                        <Check className="w-3 h-3 flex-shrink-0" /> {r}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Trail Analysis Result */}
+          {actionResult.entries !== undefined && !actionResult.score && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-3 gap-3">
+                <div className="bg-lattice-deep rounded-lg p-3 text-center">
+                  <p className="text-2xl font-bold text-neon-cyan">{actionResult.totalEntries as number ?? (actionResult.entries as unknown[])?.length}</p>
+                  <p className="text-xs text-gray-400">Total Entries</p>
+                </div>
+                {actionResult.anomalies !== undefined && (
+                  <div className="bg-lattice-deep rounded-lg p-3 text-center">
+                    <p className="text-2xl font-bold text-yellow-400">{(actionResult.anomalies as unknown[])?.length ?? actionResult.anomalies as number}</p>
+                    <p className="text-xs text-gray-400">Anomalies</p>
+                  </div>
+                )}
+                {actionResult.integrityScore !== undefined && (
+                  <div className="bg-lattice-deep rounded-lg p-3 text-center">
+                    <p className="text-2xl font-bold text-neon-green">{actionResult.integrityScore as number}%</p>
+                    <p className="text-xs text-gray-400">Integrity</p>
+                  </div>
+                )}
+              </div>
+              {(actionResult.summary as string) && (
+                <p className="text-sm text-gray-300">{actionResult.summary as string}</p>
+              )}
+            </div>
+          )}
+
+          {/* Risk Score Result */}
+          {actionResult.riskScore !== undefined && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-4">
+                <div className={`text-3xl font-bold ${
+                  (actionResult.riskScore as number) >= 75 ? 'text-neon-pink' :
+                  (actionResult.riskScore as number) >= 40 ? 'text-yellow-400' :
+                  'text-neon-green'
+                }`}>
+                  {actionResult.riskScore as number}
+                </div>
+                {!!actionResult.riskLevel && (
+                  <span className={`text-sm font-medium px-2 py-0.5 rounded ${
+                    (actionResult.riskLevel as string) === 'HIGH' ? 'bg-red-500/20 text-red-400' :
+                    (actionResult.riskLevel as string) === 'MEDIUM' ? 'bg-yellow-500/20 text-yellow-400' :
+                    'bg-green-500/20 text-green-400'
+                  }`}>
+                    {actionResult.riskLevel as string}
+                  </span>
+                )}
+              </div>
+              {(actionResult.factors as Array<{ name: string; weight: number }>)?.map((f, i) => (
+                <div key={i}>
+                  <div className="flex justify-between text-xs mb-1">
+                    <span className="text-gray-400">{f.name}</span>
+                    <span className="text-white font-mono">{f.weight}</span>
+                  </div>
+                  <div className="h-1.5 bg-lattice-deep rounded-full overflow-hidden">
+                    <div className="h-full bg-yellow-400 rounded-full" style={{ width: `${Math.min(f.weight, 100)}%` }} />
+                  </div>
+                </div>
+              ))}
+              {(actionResult.mitigations as string[])?.length > 0 && (
+                <div>
+                  <p className="text-xs text-gray-400 mb-1">Mitigations</p>
+                  <ul className="space-y-1">
+                    {(actionResult.mitigations as string[]).map((m, i) => (
+                      <li key={i} className="text-xs text-neon-cyan">• {m}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Sampling Plan Result */}
+          {actionResult.sampleSize !== undefined && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-lattice-deep rounded-lg p-3">
+                  <p className="text-2xl font-bold text-neon-purple">{actionResult.sampleSize as number}</p>
+                  <p className="text-xs text-gray-400">Sample Size</p>
+                </div>
+                {actionResult.confidence !== undefined && (
+                  <div className="bg-lattice-deep rounded-lg p-3">
+                    <p className="text-2xl font-bold text-neon-cyan">{actionResult.confidence as number}%</p>
+                    <p className="text-xs text-gray-400">Confidence</p>
+                  </div>
+                )}
+              </div>
+              {!!actionResult.method && (
+                <p className="text-xs text-gray-400">Method: <span className="text-white">{actionResult.method as string}</span></p>
+              )}
+              {(actionResult.strata as Array<{ name: string; count: number }>)?.length > 0 && (
+                <div>
+                  <p className="text-xs text-gray-400 mb-1">Strata</p>
+                  <div className="space-y-1">
+                    {(actionResult.strata as Array<{ name: string; count: number }>).map((s, i) => (
+                      <div key={i} className="flex justify-between text-xs">
+                        <span className="text-gray-300">{s.name}</span>
+                        <span className="font-mono text-neon-purple">{s.count}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Fallback: generic message */}
+          {!!actionResult.message && actionResult.passed === undefined && actionResult.entries === undefined && actionResult.riskScore === undefined && actionResult.sampleSize === undefined && (
+            <p className="text-sm text-gray-400">{actionResult.message as string}</p>
+          )}
+        </motion.div>
+      )}
 
       <ConnectiveTissueBar lensId="audit" />
 

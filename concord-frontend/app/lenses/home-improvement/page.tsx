@@ -4,11 +4,12 @@ import { useState, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData } from '@/lib/hooks/use-lens-data';
+import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import {
   Hammer, Plus, Search, Trash2, DollarSign,
   CheckCircle2, Wrench, Layers, ChevronDown,
-  Home, ToggleLeft, ToggleRight, Loader2,
+  Home, ToggleLeft, ToggleRight, Loader2, BarChart3, Calculator,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ErrorState } from '@/components/common/EmptyState';
@@ -17,6 +18,50 @@ import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
+
+interface ProjectEstimateResult {
+  projectType: string;
+  squareFootage: number;
+  materialsCost: number;
+  laborCost: number;
+  permits: number;
+  total: number;
+  diyEstimate: number;
+  contractorEstimate: number;
+  savings: number;
+  timeline: string;
+}
+
+interface RoiResult {
+  projects: { project: string; cost: number; valueAdded: number; roi: number; netGain: number; worthIt: boolean }[];
+  bestROI: string;
+  worstROI: string;
+  totalInvested: number;
+  totalValueAdded: number;
+  avgROI: number;
+}
+
+interface PermitResult {
+  projectType: string;
+  requiresPermit: boolean;
+  permitType: string;
+  estimatedCost: number;
+  processingTime: string;
+  inspectionsRequired: string[];
+  tip: string;
+}
+
+interface ColorPaletteResult {
+  room: string;
+  style: string;
+  palette: string;
+  wallColor: string;
+  trim: string;
+  accent: string;
+  furniture: string;
+  decor: string;
+  coverage: string;
+}
 
 interface ProjectData {
   name: string;
@@ -111,6 +156,18 @@ export default function HomeImprovementLensPage() {
     });
     return Object.values(map);
   }, [projects]);
+
+  const runAction = useRunArtifact('home-improvement');
+  const [hiActionResult, setHiActionResult] = useState<{ action: string; data: unknown } | null>(null);
+
+  const handleHiAction = useCallback((action: string) => {
+    const artifactId = items[0]?.id;
+    if (!artifactId) return;
+    runAction.mutate(
+      { id: artifactId, action, params: {} },
+      { onSuccess: (res) => setHiActionResult({ action, data: res.result }) }
+    );
+  }, [items, runAction]);
 
   const handleCreate = useCallback(async () => {
     if (!newProject.name.trim()) return;
@@ -455,6 +512,175 @@ export default function HomeImprovementLensPage() {
       </AnimatePresence>
 
       <RealtimeDataPanel domain="home-improvement" data={realtimeData} isLive={isLive} lastUpdated={lastUpdated} insights={insights} compact />
+
+      {/* AI Actions Panel */}
+      <div className="panel p-4 space-y-4">
+        <h2 className="font-semibold flex items-center gap-2">
+          <BarChart3 className="w-4 h-4 text-amber-400" />
+          AI Home Improvement Actions
+        </h2>
+        {!items[0]?.id && (
+          <p className="text-xs text-gray-500">Create a project to run AI actions.</p>
+        )}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {[
+            { action: 'projectEstimate', label: 'Project Estimate', icon: Hammer, color: 'text-amber-400' },
+            { action: 'roiCalculator', label: 'ROI Calculator', icon: Calculator, color: 'text-neon-green' },
+            { action: 'permitCheck', label: 'Permit Check', icon: CheckCircle2, color: 'text-neon-cyan' },
+            { action: 'colorPalette', label: 'Color Palette', icon: Home, color: 'text-neon-purple' },
+          ].map(({ action, label, icon: Icon, color }) => (
+            <button
+              key={action}
+              onClick={() => handleHiAction(action)}
+              disabled={runAction.isPending || !items[0]?.id}
+              className="flex items-center gap-2 px-4 py-3 bg-lattice-surface border border-lattice-border rounded-lg text-sm font-medium text-white hover:border-amber-400/40 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {runAction.isPending && hiActionResult?.action !== action ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Icon className={`w-4 h-4 ${color}`} />
+              )}
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {hiActionResult && !runAction.isPending && (() => {
+          if (hiActionResult.action === 'projectEstimate') {
+            const d = hiActionResult.data as ProjectEstimateResult;
+            return (
+              <div className="space-y-3 pt-2 border-t border-lattice-border">
+                <h3 className="text-sm font-semibold text-amber-400">Project Estimate — {d.projectType}</h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {[
+                    { label: 'Materials', value: `$${(d.materialsCost || 0).toLocaleString()}`, color: 'text-neon-cyan' },
+                    { label: 'Labor', value: `$${(d.laborCost || 0).toLocaleString()}`, color: 'text-neon-purple' },
+                    { label: 'Permits', value: `$${(d.permits || 0).toLocaleString()}`, color: 'text-yellow-400' },
+                    { label: 'Total', value: `$${(d.total || 0).toLocaleString()}`, color: 'text-neon-green' },
+                  ].map(s => (
+                    <div key={s.label} className="lens-card text-center">
+                      <p className={`text-lg font-bold ${s.color}`}>{s.value}</p>
+                      <p className="text-xs text-gray-400">{s.label}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="lens-card">
+                    <p className="text-xs text-gray-400 mb-1">DIY Estimate</p>
+                    <p className="text-lg font-bold text-neon-cyan">${(d.diyEstimate || 0).toLocaleString()}</p>
+                    <p className="text-xs text-neon-green mt-1">Save ${(d.savings || 0).toLocaleString()}</p>
+                  </div>
+                  <div className="lens-card">
+                    <p className="text-xs text-gray-400 mb-1">Contractor Estimate</p>
+                    <p className="text-lg font-bold text-neon-purple">${(d.contractorEstimate || 0).toLocaleString()}</p>
+                    <p className="text-xs text-gray-500 mt-1">Timeline: {d.timeline}</p>
+                  </div>
+                </div>
+              </div>
+            );
+          }
+          if (hiActionResult.action === 'roiCalculator') {
+            const d = hiActionResult.data as RoiResult;
+            return (
+              <div className="space-y-3 pt-2 border-t border-lattice-border">
+                <h3 className="text-sm font-semibold text-neon-green">ROI Calculator</h3>
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="lens-card text-center">
+                    <p className="text-lg font-bold text-neon-green">{(d.avgROI || 0).toFixed(1)}%</p>
+                    <p className="text-xs text-gray-400">Avg ROI</p>
+                  </div>
+                  <div className="lens-card text-center">
+                    <p className="text-lg font-bold text-neon-cyan">${(d.totalInvested || 0).toLocaleString()}</p>
+                    <p className="text-xs text-gray-400">Total Invested</p>
+                  </div>
+                  <div className="lens-card text-center">
+                    <p className="text-lg font-bold text-neon-purple">${(d.totalValueAdded || 0).toLocaleString()}</p>
+                    <p className="text-xs text-gray-400">Value Added</p>
+                  </div>
+                </div>
+                {d.bestROI && <p className="text-xs text-neon-green">Best ROI: {d.bestROI}</p>}
+                {d.worstROI && <p className="text-xs text-red-400">Worst ROI: {d.worstROI}</p>}
+                {(d.projects || []).map((p, i) => (
+                  <div key={i} className="lens-card space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-white">{p.project}</span>
+                      <span className={`text-xs px-2 py-0.5 rounded font-medium ${p.worthIt ? 'bg-neon-green/20 text-neon-green' : 'bg-red-400/20 text-red-400'}`}>
+                        {p.worthIt ? 'Worth It' : 'Marginal'} · {p.roi.toFixed(1)}%
+                      </span>
+                    </div>
+                    <div className="h-1.5 bg-lattice-deep rounded-full overflow-hidden">
+                      <div className={`h-full rounded-full ${p.roi >= 0 ? 'bg-neon-green' : 'bg-red-400'}`} style={{ width: `${Math.min(100, Math.abs(p.roi))}%` }} />
+                    </div>
+                    <p className="text-xs text-gray-500">Net Gain: ${p.netGain.toLocaleString()}</p>
+                  </div>
+                ))}
+              </div>
+            );
+          }
+          if (hiActionResult.action === 'permitCheck') {
+            const d = hiActionResult.data as PermitResult;
+            return (
+              <div className="space-y-3 pt-2 border-t border-lattice-border">
+                <h3 className="text-sm font-semibold text-neon-cyan">Permit Check — {d.projectType}</h3>
+                <div className="flex items-center gap-3">
+                  <span className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${d.requiresPermit ? 'bg-yellow-400/20 text-yellow-400' : 'bg-neon-green/20 text-neon-green'}`}>
+                    {d.requiresPermit ? 'Permit Required' : 'No Permit Needed'}
+                  </span>
+                  {d.permitType && <span className="text-sm text-gray-300">{d.permitType}</span>}
+                </div>
+                {d.requiresPermit && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="lens-card">
+                      <p className="text-xs text-gray-400">Estimated Cost</p>
+                      <p className="text-lg font-bold text-neon-cyan">${(d.estimatedCost || 0).toLocaleString()}</p>
+                    </div>
+                    <div className="lens-card">
+                      <p className="text-xs text-gray-400">Processing Time</p>
+                      <p className="text-sm font-semibold text-white">{d.processingTime}</p>
+                    </div>
+                  </div>
+                )}
+                {(d.inspectionsRequired || []).length > 0 && (
+                  <div>
+                    <p className="text-xs text-gray-400 mb-2">Inspections Required</p>
+                    <div className="flex flex-wrap gap-2">
+                      {d.inspectionsRequired.map((ins, i) => (
+                        <span key={i} className="text-xs px-2 py-1 bg-neon-purple/10 text-neon-purple rounded border border-neon-purple/20">{ins}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {d.tip && <p className="text-xs text-gray-400 italic p-3 bg-lattice-deep rounded-lg">{d.tip}</p>}
+              </div>
+            );
+          }
+          if (hiActionResult.action === 'colorPalette') {
+            const d = hiActionResult.data as ColorPaletteResult;
+            return (
+              <div className="space-y-3 pt-2 border-t border-lattice-border">
+                <h3 className="text-sm font-semibold text-neon-purple">Color Palette — {d.room} ({d.style})</h3>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                  {[
+                    { label: 'Wall Color', value: d.wallColor, color: 'text-amber-400' },
+                    { label: 'Trim', value: d.trim, color: 'text-gray-300' },
+                    { label: 'Accent', value: d.accent, color: 'text-neon-cyan' },
+                    { label: 'Furniture', value: d.furniture, color: 'text-neon-purple' },
+                    { label: 'Decor', value: d.decor, color: 'text-neon-green' },
+                  ].map(c => (
+                    <div key={c.label} className="lens-card">
+                      <p className="text-xs text-gray-400">{c.label}</p>
+                      <p className={`text-sm font-semibold ${c.color}`}>{c.value}</p>
+                    </div>
+                  ))}
+                </div>
+                {d.coverage && <p className="text-xs text-gray-400">Coverage: {d.coverage}</p>}
+                <p className="text-xs text-gray-500">Palette: {d.palette}</p>
+              </div>
+            );
+          }
+          return null;
+        })()}
+      </div>
 
       <div className="border-t border-white/10">
         <button onClick={() => setShowFeatures(!showFeatures)} className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg">

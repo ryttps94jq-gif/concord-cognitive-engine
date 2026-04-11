@@ -5,13 +5,14 @@ import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api/client';
 import { useLensData } from '@/lib/hooks/use-lens-data';
+import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { useLensDTUs } from '@/hooks/useLensDTUs';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Gamepad2, Plus, Trash2, X, Save,
   BookOpen, Users, Map,
   BarChart3, Search, Loader2,
-  FileText, Settings,
+  FileText, Settings, Zap, TrendingUp, DollarSign, GitBranch,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useUIStore } from '@/store/ui';
@@ -115,6 +116,22 @@ export default function GameDesignPage() {
   const [levelDifficulty, setLevelDifficulty] = useState('easy');
   const [levelDesc, setLevelDesc] = useState('');
 
+  // Backend action wiring
+  const runDesignAction = useRunArtifact('game-design');
+  const [designActionResult, setDesignActionResult] = useState<Record<string, unknown> | null>(null);
+  const [designRunning, setDesignRunning] = useState<string | null>(null);
+
+  const handleDesignAction = useCallback(async (action: string) => {
+    const targetId = projectItems[0]?.id;
+    if (!targetId) return;
+    setDesignRunning(action);
+    try {
+      const res = await runDesignAction.mutateAsync({ id: targetId, action });
+      setDesignActionResult({ _action: action, ...(res.result as Record<string, unknown>) });
+    } catch (e) { console.error(`Design action ${action} failed:`, e); }
+    setDesignRunning(null);
+  }, [projectItems, runDesignAction]);
+
   const handleCreate = useCallback(async () => {
     if (!newTitle.trim()) return;
     const data: Partial<GameDesignProject> = {
@@ -202,6 +219,151 @@ export default function GameDesignPage() {
         {showFeatures && <LensFeaturePanel lensId="game-design" />}
         <RealtimeDataPanel data={realtimeData} insights={realtimeInsights} />
       <UniversalActions domain="game-design" artifactId={null} compact />
+
+        {/* Game Design Analysis Actions */}
+        <div className="bg-white/5 border border-white/10 rounded-xl p-4 space-y-3">
+          <h2 className="font-semibold text-sm flex items-center gap-2">
+            <Zap className="w-4 h-4 text-emerald-400" />
+            Design Analysis
+          </h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+            {[
+              { action: 'mechanicsAnalysis',  label: 'Mechanics Analysis', icon: Gamepad2,   color: 'text-emerald-400' },
+              { action: 'playerFlow',         label: 'Player Flow',        icon: TrendingUp, color: 'text-neon-cyan' },
+              { action: 'narrativeBranch',    label: 'Narrative Branch',   icon: GitBranch,  color: 'text-neon-purple' },
+              { action: 'monetizationModel',  label: 'Monetization',       icon: DollarSign, color: 'text-neon-green' },
+            ].map(({ action, label, icon: Icon, color }) => (
+              <button
+                key={action}
+                onClick={() => handleDesignAction(action)}
+                disabled={!!designRunning || !projectItems[0]?.id}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg bg-black/20 border border-white/10 text-sm hover:border-emerald-500/30 disabled:opacity-40 transition-colors"
+              >
+                {designRunning === action ? <Loader2 className="w-4 h-4 animate-spin" /> : <Icon className={`w-4 h-4 ${color}`} />}
+                <span className="truncate text-xs">{label}</span>
+              </button>
+            ))}
+          </div>
+
+          {designActionResult && (
+            <div className="mt-3 rounded-lg bg-black/30 border border-white/10 p-4 relative">
+              <button onClick={() => setDesignActionResult(null)} className="absolute top-3 right-3 text-gray-500 hover:text-white">
+                <X className="w-4 h-4" />
+              </button>
+
+              {/* mechanicsAnalysis */}
+              {designActionResult._action === 'mechanicsAnalysis' && (
+                <div className="space-y-3">
+                  <p className="text-xs text-gray-400 uppercase tracking-wider font-semibold">Mechanics Analysis</p>
+                  {(designActionResult.message as string) ? <p className="text-sm text-gray-400">{designActionResult.message as string}</p> : (
+                    <>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        {[
+                          { label: 'Mechanics', value: String(designActionResult.totalMechanics ?? 0), color: 'text-white' },
+                          { label: 'Depth Score', value: String(designActionResult.depthScore ?? 0), color: 'text-emerald-400' },
+                          { label: 'Loop Count', value: String(designActionResult.loopCount ?? 0), color: 'text-neon-cyan' },
+                          { label: 'Emergent', value: String(designActionResult.emergentPotential ?? '—'), color: (designActionResult.emergentPotential as string) === 'high' ? 'text-neon-green' : 'text-yellow-400' },
+                        ].map(({ label, value, color }) => (
+                          <div key={label} className="bg-white/5 rounded-lg p-3 text-center">
+                            <p className={`text-sm font-bold ${color} capitalize`}>{value}</p>
+                            <p className="text-xs text-gray-400">{label}</p>
+                          </div>
+                        ))}
+                      </div>
+                      {Array.isArray(designActionResult.categories) && (
+                        <div className="flex flex-wrap gap-2">
+                          {(designActionResult.categories as {category:string;count:number}[]).filter(c => c.count > 0).map(c => (
+                            <span key={c.category} className="text-xs px-2 py-1 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 capitalize">{c.category}: {c.count}</span>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* playerFlow */}
+              {designActionResult._action === 'playerFlow' && (
+                <div className="space-y-3">
+                  <p className="text-xs text-gray-400 uppercase tracking-wider font-semibold">Player Flow Analysis</p>
+                  {(designActionResult.message as string) ? <p className="text-sm text-gray-400">{designActionResult.message as string}</p> : (
+                    <>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        {[
+                          { label: 'States', value: String(designActionResult.totalStates ?? 0), color: 'text-white' },
+                          { label: 'In Flow', value: String(designActionResult.inFlowZone ?? 0), color: 'text-neon-green' },
+                          { label: 'Flow %', value: `${designActionResult.flowPercent ?? 0}%`, color: 'text-neon-cyan' },
+                          { label: 'Duration', value: `${designActionResult.totalDuration ?? 0}min`, color: 'text-gray-300' },
+                        ].map(({ label, value, color }) => (
+                          <div key={label} className="bg-white/5 rounded-lg p-3 text-center">
+                            <p className={`text-lg font-bold ${color}`}>{value}</p>
+                            <p className="text-xs text-gray-400">{label}</p>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="h-2 bg-white/5 rounded-full overflow-hidden">
+                        <div className={`h-full rounded-full ${(designActionResult.flowPercent as number) > 60 ? 'bg-neon-green' : 'bg-yellow-400'}`} style={{ width: `${designActionResult.flowPercent as number}%` }} />
+                      </div>
+                      <p className="text-xs text-gray-400">Pacing: <span className="text-white capitalize">{(designActionResult.pacing as string)?.replace(/-/g, ' ')}</span></p>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* narrativeBranch */}
+              {designActionResult._action === 'narrativeBranch' && (
+                <div className="space-y-3">
+                  <p className="text-xs text-gray-400 uppercase tracking-wider font-semibold">Narrative Branching</p>
+                  {(designActionResult.message as string) ? <p className="text-sm text-gray-400">{designActionResult.message as string}</p> : (
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      {[
+                        { label: 'Nodes', value: String(designActionResult.totalNodes ?? 0), color: 'text-white' },
+                        { label: 'Choices', value: String(designActionResult.totalChoices ?? 0), color: 'text-neon-purple' },
+                        { label: 'Endings', value: String(designActionResult.endings ?? 0), color: 'text-neon-cyan' },
+                        { label: 'Replay Value', value: String(designActionResult.replayValue ?? '—'), color: (designActionResult.replayValue as string) === 'high' ? 'text-neon-green' : (designActionResult.replayValue as string) === 'moderate' ? 'text-yellow-400' : 'text-gray-400' },
+                      ].map(({ label, value, color }) => (
+                        <div key={label} className="bg-white/5 rounded-lg p-3 text-center">
+                          <p className={`text-sm font-bold ${color} capitalize`}>{value}</p>
+                          <p className="text-xs text-gray-400">{label}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* monetizationModel */}
+              {designActionResult._action === 'monetizationModel' && (
+                <div className="space-y-3">
+                  <p className="text-xs text-gray-400 uppercase tracking-wider font-semibold">Monetization Model</p>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                    {[
+                      { label: 'Model', value: String(designActionResult.model ?? '—'), color: 'text-neon-purple' },
+                      { label: 'Revenue Type', value: String(designActionResult.revenue ?? '—'), color: 'text-white' },
+                      { label: 'Monthly Revenue', value: `$${(designActionResult.projectedMonthlyRevenue as number || 0).toLocaleString()}`, color: 'text-neon-green' },
+                      { label: 'Annual Revenue', value: `$${(designActionResult.projectedAnnualRevenue as number || 0).toLocaleString()}`, color: 'text-emerald-400' },
+                      { label: 'Avg LTV', value: `$${designActionResult.avgLTV ?? 0}`, color: 'text-neon-cyan' },
+                      { label: 'Conversion', value: String(designActionResult.conversionRate ?? '—'), color: 'text-yellow-400' },
+                    ].map(({ label, value, color }) => (
+                      <div key={label} className="bg-white/5 rounded-lg p-3 text-center">
+                        <p className={`text-sm font-bold ${color} capitalize`}>{value}</p>
+                        <p className="text-xs text-gray-400">{label}</p>
+                      </div>
+                    ))}
+                  </div>
+                  {Array.isArray(designActionResult.ethicalConsiderations) && (
+                    <div className="space-y-1">
+                      <p className="text-xs text-gray-500">Ethical Considerations</p>
+                      {(designActionResult.ethicalConsiderations as string[]).map((e, i) => (
+                        <p key={i} className="text-xs text-gray-400 bg-white/5 rounded px-3 py-1">{e}</p>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
 
         {/* Search */}
         <div className="relative">

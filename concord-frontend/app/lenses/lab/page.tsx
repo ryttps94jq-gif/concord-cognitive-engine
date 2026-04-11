@@ -4,10 +4,11 @@ import { useLensNav } from '@/hooks/useLensNav';
 import { useMutation } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
 import { useUIStore } from '@/store/ui';
-import { useLensData } from '@/lib/hooks/use-lens-data';
+import { useLensData, type LensItem } from '@/lib/hooks/use-lens-data';
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { FlaskConical, Play, Square, History, Zap, Search, Plus, Trash2, CheckCircle, AlertTriangle, Lightbulb, Layers, ChevronDown, Microscope, Activity } from 'lucide-react';
+import { FlaskConical, Play, Square, History, Zap, Search, Plus, Trash2, CheckCircle, AlertTriangle, Lightbulb, Layers, ChevronDown, Microscope, Activity, Loader2 } from 'lucide-react';
+import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { ErrorState } from '@/components/common/EmptyState';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -28,6 +29,20 @@ export default function LabLensPage() {
 
   const { items: experimentItems, isError: isError2, error: error2, refetch: refetch2, create: createExperiment } = useLensData<Record<string, unknown>>('lab', 'experiment', { seed: [] });
   const experiments = experimentItems.map(i => ({ id: i.id, ...(i.data || {}) })) as unknown as Record<string, unknown>[];
+
+  const runAction = useRunArtifact('lab');
+  const [actionResult, setActionResult] = useState<Record<string, unknown> | null>(null);
+  const [isRunning, setIsRunning] = useState<string | null>(null);
+  const handleAction = async (action: string) => {
+    const targetId = experimentItems[0]?.id;
+    if (!targetId) return;
+    setIsRunning(action);
+    try {
+      const res = await runAction.mutateAsync({ id: targetId, action });
+      setActionResult(res.result as Record<string, unknown>);
+    } catch (e) { console.error(`Action ${action} failed:`, e); }
+    finally { setIsRunning(null); }
+  };
 
   const runExperiment = useMutation({
     mutationFn: (payload: { code: string; organ: string }) =>
@@ -184,7 +199,12 @@ export default function LabLensPage() {
       <RealtimeDataPanel data={realtimeInsights} />
 
       {/* Adjacent Reality Explorer */}
-      <RealityExplorerSection />
+      <RealityExplorerSection
+        handleAction={handleAction}
+        isRunning={isRunning}
+        experimentItems={experimentItems}
+        actionResult={actionResult}
+      />
 
       {/* Experiment History */}
       <div className="panel p-4">
@@ -222,7 +242,14 @@ export default function LabLensPage() {
 
 interface ExploreConstraint { key: string; min: string; max: string; }
 
-function RealityExplorerSection() {
+interface RealityExplorerSectionProps {
+  handleAction: (action: string) => void;
+  isRunning: string | null;
+  experimentItems: LensItem<Record<string, unknown>>[];
+  actionResult: Record<string, unknown> | null;
+}
+
+function RealityExplorerSection({ handleAction, isRunning, experimentItems, actionResult }: RealityExplorerSectionProps) {
   const [domain, setDomain] = useState('');
   const [constraints, setConstraints] = useState<ExploreConstraint[]>([{ key: '', min: '', max: '' }]);
   const [results, setResults] = useState<Record<string, unknown> | null>(null);
@@ -324,6 +351,86 @@ function RealityExplorerSection() {
           ))}
         </div>
       )}
+
+      {/* Backend Action Panel */}
+      <div className="panel p-4 space-y-3">
+        <h2 className="font-semibold flex items-center gap-2"><FlaskConical className="w-4 h-4 text-neon-green" />Lab Analysis</h2>
+        <div className="flex flex-wrap gap-2">
+          {['calibrationCurve','qcAnalysis','sampleTracker','experimentDesign'].map((action) => (
+            <button key={action} onClick={() => handleAction(action)} disabled={!!isRunning || !experimentItems[0]}
+              className="btn-secondary text-sm flex items-center gap-1 disabled:opacity-50">
+              {isRunning === action ? <Loader2 className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
+              {action === 'calibrationCurve' ? 'Calibration Curve' : action === 'qcAnalysis' ? 'QC Analysis' : action === 'sampleTracker' ? 'Sample Tracker' : 'Experiment Design'}
+            </button>
+          ))}
+        </div>
+        {!experimentItems[0] && <p className="text-xs text-gray-500">Create a lab experiment artifact to run analysis.</p>}
+        {actionResult && (
+          <div className="bg-lattice-deep rounded-lg p-4 space-y-3 text-sm">
+            {'model' in actionResult && 'rSquared' in actionResult && (
+              <>
+                <div className="font-semibold text-neon-cyan">Calibration Curve — {String(actionResult.model)}</div>
+                <div className="text-gray-300 font-mono text-xs">{String(actionResult.equation)}</div>
+                <div className="flex gap-4 text-xs">
+                  <span>R²: <span className="font-bold text-neon-green">{String(actionResult.rSquared)}</span></span>
+                  <span>Fit: <span className="font-bold">{String(actionResult.fitQuality)}</span></span>
+                  <span>Range: {String((actionResult.range as Record<string,unknown>)?.min)} – {String((actionResult.range as Record<string,unknown>)?.max)}</span>
+                </div>
+                {Array.isArray(actionResult.unknownResults) && actionResult.unknownResults.length > 0 && (
+                  <div className="space-y-1">
+                    <div className="text-xs text-gray-400 font-semibold">Unknown Results:</div>
+                    {(actionResult.unknownResults as Record<string,unknown>[]).map((u, i) => (
+                      <div key={i} className="text-xs flex gap-3"><span>ID: {String(u.id)}</span><span>Response: {String(u.response)}</span><span>Conc: {String(u.computedConcentration)}</span><span className={u.withinRange ? 'text-neon-green' : 'text-yellow-400'}>{u.withinRange ? 'In range' : 'Extrapolated'}</span></div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+            {'inControl' in actionResult && (
+              <>
+                <div className="flex items-center gap-2">
+                  <span className={`font-semibold ${actionResult.inControl ? 'text-neon-green' : 'text-red-400'}`}>{actionResult.inControl ? 'In Control' : 'Out of Control'}</span>
+                  <span className="text-gray-400 text-xs">Violations: {String(actionResult.violationCount)} ({String(actionResult.rejectCount)} rejects)</span>
+                </div>
+                {actionResult.statistics && (
+                  <div className="grid grid-cols-3 gap-2 text-xs">
+                    {Object.entries(actionResult.statistics as Record<string,unknown>).map(([k,v]) => (
+                      <div key={k} className="bg-lattice-surface rounded p-2"><div className="text-gray-400">{k}</div><div className="font-bold">{String(v)}</div></div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+            {'totalSamples' in actionResult && (
+              <>
+                <div className="font-semibold text-neon-cyan">Sample Tracking — {String(actionResult.totalSamples)} samples</div>
+                <div className="flex gap-4 text-xs">
+                  <span>Completed: <span className="text-neon-green font-bold">{String(actionResult.completedCount)}</span></span>
+                  <span>In progress: <span className="font-bold">{String(actionResult.inProgressCount)}</span></span>
+                  <span>Custody compliance: <span className="font-bold">{String(actionResult.custodyCompliance)}%</span></span>
+                </div>
+                {actionResult.turnaroundStats && (
+                  <div className="text-xs text-gray-400">Avg TAT: {String((actionResult.turnaroundStats as Record<string,unknown>).avgHours)}h · Median: {String((actionResult.turnaroundStats as Record<string,unknown>).medianMinutes)}min</div>
+                )}
+              </>
+            )}
+            {'designType' in actionResult && (
+              <>
+                <div className="font-semibold text-neon-cyan">Experiment Design — {String(actionResult.designType)}</div>
+                <div className="flex gap-4 text-xs">
+                  <span>Runs: <span className="font-bold">{String(actionResult.totalRuns)}</span></span>
+                  <span>Replicates: <span className="font-bold">{String(actionResult.replicates)}</span></span>
+                </div>
+                {actionResult.degreesOfFreedom && (
+                  <div className="text-xs text-gray-400">DoF — Total: {String((actionResult.degreesOfFreedom as Record<string,unknown>).total)}, Error: {String((actionResult.degreesOfFreedom as Record<string,unknown>).error)}</div>
+                )}
+                {actionResult.recommendation && <div className="text-xs text-yellow-400">{String(actionResult.recommendation)}</div>}
+              </>
+            )}
+            {'message' in actionResult && <p className="text-gray-400">{String(actionResult.message)}</p>}
+          </div>
+        )}
+      </div>
 
       {/* Lens Features */}
       <div className="border-t border-white/10">

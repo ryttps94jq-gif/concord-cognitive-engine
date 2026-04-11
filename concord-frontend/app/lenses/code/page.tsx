@@ -5,6 +5,7 @@ import { useLensNav } from '@/hooks/useLensNav';
 import { useMutation } from '@tanstack/react-query';
 import { api } from '@/lib/api/client';
 import { useLensData } from '@/lib/hooks/use-lens-data';
+import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ErrorState } from '@/components/common/EmptyState';
@@ -18,7 +19,8 @@ import {
   Sparkles, RefreshCw, Copy,
   Download, Zap, Waves, SlidersHorizontal,
   Loader2, BookOpen,
-  Save, Maximize2, Minimize2, Layers
+  Save, Maximize2, Minimize2, Layers,
+  XCircle, BarChart3, AlertTriangle
 } from 'lucide-react';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
@@ -527,6 +529,11 @@ export default function CodeLensPage() {
 
   const [savingOutputDTU, setSavingOutputDTU] = useState(false);
 
+  // Backend action wiring
+  const runCodeAction = useRunArtifact('code');
+  const [codeActionResult, setCodeActionResult] = useState<Record<string, unknown> | null>(null);
+  const [runningCodeAction, setRunningCodeAction] = useState<string | null>(null);
+
   const runScriptMutation = useMutation({
     mutationFn: async () => {
       const res = await api.post('/api/lens/run', {
@@ -618,6 +625,17 @@ export default function CodeLensPage() {
       console.error('[Code] Save failed:', err);
     }
   }, [tabs, activeTabId, saveScript]);
+
+  const handleCodeAction = async (action: string) => {
+    const targetId = savedScripts[0]?.id;
+    if (!targetId) return;
+    setRunningCodeAction(action);
+    try {
+      const res = await runCodeAction.mutateAsync({ id: targetId, action });
+      setCodeActionResult(res.result as Record<string, unknown>);
+    } catch (e) { console.error(`[Code] Action ${action} failed:`, e); }
+    setRunningCodeAction(null);
+  };
 
   const handleNewTab = useCallback(() => {
     const id = `new-${Date.now()}`;
@@ -898,6 +916,184 @@ export default function CodeLensPage() {
 
       {/* AI Actions */}
       <UniversalActions domain="code" artifactId={savedScripts[0]?.id} compact />
+
+      {/* Backend Code Analysis Actions */}
+      <div className="px-4 py-3 border-b border-green-900/30 bg-[#161b22] space-y-3">
+        <div className="flex items-center gap-2 mb-1">
+          <Zap className="w-4 h-4 text-neon-yellow" />
+          <span className="text-xs font-semibold text-gray-300 uppercase tracking-wider">Code Analysis</span>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+          <button
+            onClick={() => handleCodeAction('complexityAnalysis')}
+            disabled={runningCodeAction !== null || !savedScripts[0]}
+            className="flex flex-col items-center gap-1.5 p-3 bg-lattice-bg rounded-lg border border-lattice-border hover:border-neon-cyan/50 transition-colors disabled:opacity-50"
+            title={!savedScripts[0] ? 'Save a script first to run analysis' : 'Analyze cyclomatic & cognitive complexity'}
+          >
+            {runningCodeAction === 'complexityAnalysis' ? <Loader2 className="w-5 h-5 text-neon-cyan animate-spin" /> : <BarChart3 className="w-5 h-5 text-neon-cyan" />}
+            <span className="text-xs text-gray-300">Complexity Analysis</span>
+          </button>
+          <button
+            onClick={() => handleCodeAction('dependencyAudit')}
+            disabled={runningCodeAction !== null || !savedScripts[0]}
+            className="flex flex-col items-center gap-1.5 p-3 bg-lattice-bg rounded-lg border border-lattice-border hover:border-neon-purple/50 transition-colors disabled:opacity-50"
+            title={!savedScripts[0] ? 'Save a script first to run analysis' : 'Audit dependencies for vulnerabilities and license risk'}
+          >
+            {runningCodeAction === 'dependencyAudit' ? <Loader2 className="w-5 h-5 text-neon-purple animate-spin" /> : <Layers className="w-5 h-5 text-neon-purple" />}
+            <span className="text-xs text-gray-300">Dependency Audit</span>
+          </button>
+          <button
+            onClick={() => handleCodeAction('coverageAnalysis')}
+            disabled={runningCodeAction !== null || !savedScripts[0]}
+            className="flex flex-col items-center gap-1.5 p-3 bg-lattice-bg rounded-lg border border-lattice-border hover:border-green-400/50 transition-colors disabled:opacity-50"
+            title={!savedScripts[0] ? 'Save a script first to run analysis' : 'Analyze test coverage gaps'}
+          >
+            {runningCodeAction === 'coverageAnalysis' ? <Loader2 className="w-5 h-5 text-green-400 animate-spin" /> : <RefreshCw className="w-5 h-5 text-green-400" />}
+            <span className="text-xs text-gray-300">Coverage Analysis</span>
+          </button>
+          <button
+            onClick={() => handleCodeAction('changeRiskAssessment')}
+            disabled={runningCodeAction !== null || !savedScripts[0]}
+            className="flex flex-col items-center gap-1.5 p-3 bg-lattice-bg rounded-lg border border-lattice-border hover:border-yellow-400/50 transition-colors disabled:opacity-50"
+            title={!savedScripts[0] ? 'Save a script first to run analysis' : 'Assess risk of pending changes'}
+          >
+            {runningCodeAction === 'changeRiskAssessment' ? <Loader2 className="w-5 h-5 text-yellow-400 animate-spin" /> : <AlertTriangle className="w-5 h-5 text-yellow-400" />}
+            <span className="text-xs text-gray-300">Change Risk</span>
+          </button>
+        </div>
+
+        {/* Action Result Display */}
+        <AnimatePresence>
+          {codeActionResult && (
+            <motion.div
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 6 }}
+              className="p-4 bg-lattice-bg rounded-lg border border-lattice-border"
+            >
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-semibold text-white flex items-center gap-2 text-sm">
+                  <BarChart3 className="w-4 h-4 text-neon-cyan" /> Analysis Result
+                </h3>
+                <button onClick={() => setCodeActionResult(null)} className="text-gray-400 hover:text-white" aria-label="Dismiss result">
+                  <XCircle className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Complexity Analysis Result */}
+              {codeActionResult.averageMaintainability !== undefined && (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-3">
+                    <div className="text-3xl font-bold text-neon-cyan">{codeActionResult.averageMaintainability as number}</div>
+                    <div>
+                      <span className={`text-sm font-medium px-2 py-0.5 rounded ${
+                        (codeActionResult.overallRating as string) === 'A' ? 'bg-green-500/20 text-green-400' :
+                        (codeActionResult.overallRating as string) === 'B' ? 'bg-blue-500/20 text-blue-400' :
+                        (codeActionResult.overallRating as string) === 'C' ? 'bg-yellow-500/20 text-yellow-400' :
+                        'bg-red-500/20 text-red-400'
+                      }`}>Grade {codeActionResult.overallRating as string}</span>
+                      <p className="text-xs text-gray-400 mt-1">Avg Maintainability Index</p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="p-2 bg-lattice-deep rounded text-center">
+                      <p className="text-xs text-gray-400">Modules</p>
+                      <p className="text-sm font-bold text-white">{codeActionResult.totalModules as number}</p>
+                    </div>
+                    <div className="p-2 bg-lattice-deep rounded text-center">
+                      <p className="text-xs text-gray-400">Total Lines</p>
+                      <p className="text-sm font-bold text-neon-blue">{(codeActionResult.totalLines as number)?.toLocaleString()}</p>
+                    </div>
+                    <div className="p-2 bg-lattice-deep rounded text-center">
+                      <p className="text-xs text-gray-400">Hotspots</p>
+                      <p className="text-sm font-bold text-yellow-400">{(codeActionResult.hotspots as unknown[])?.length ?? 0}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Dependency Audit Result */}
+              {codeActionResult.totalDependencies !== undefined && (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="p-2 bg-lattice-deep rounded text-center">
+                      <p className="text-xs text-gray-400">Total Deps</p>
+                      <p className="text-sm font-bold text-white">{codeActionResult.totalDependencies as number}</p>
+                    </div>
+                    <div className="p-2 bg-lattice-deep rounded text-center">
+                      <p className="text-xs text-gray-400">Direct</p>
+                      <p className="text-sm font-bold text-neon-blue">{codeActionResult.directCount as number}</p>
+                    </div>
+                    <div className="p-2 bg-lattice-deep rounded text-center">
+                      <p className="text-xs text-gray-400">High Risk</p>
+                      <p className="text-sm font-bold text-red-400">{(codeActionResult.highRisk as unknown[])?.length ?? 0}</p>
+                    </div>
+                  </div>
+                  {(codeActionResult.circularDependencies as unknown[])?.length > 0 && (
+                    <p className="text-xs text-yellow-400 flex items-center gap-1">
+                      <AlertTriangle className="w-3.5 h-3.5" />
+                      {(codeActionResult.circularDependencies as unknown[]).length} circular dependenc{(codeActionResult.circularDependencies as unknown[]).length === 1 ? 'y' : 'ies'} detected
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Coverage Analysis Result */}
+              {codeActionResult.overall !== undefined && (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="p-2 bg-lattice-deep rounded text-center">
+                      <p className="text-xs text-gray-400">Statement Coverage</p>
+                      <p className="text-sm font-bold text-neon-cyan">{(codeActionResult.overall as Record<string, number>).statementCoverage}%</p>
+                    </div>
+                    <div className="p-2 bg-lattice-deep rounded text-center">
+                      <p className="text-xs text-gray-400">Branch Coverage</p>
+                      <p className="text-sm font-bold text-neon-purple">{(codeActionResult.overall as Record<string, number>).branchCoverage}%</p>
+                    </div>
+                  </div>
+                  <p className={`text-xs flex items-center gap-1 ${codeActionResult.meetsThreshold80 ? 'text-green-400' : 'text-yellow-400'}`}>
+                    {codeActionResult.meetsThreshold80 ? '✓ Meets 80% threshold' : '⚠ Below 80% threshold'}
+                  </p>
+                  {(codeActionResult.gaps as unknown[])?.length > 0 && (
+                    <p className="text-xs text-red-400">{(codeActionResult.gaps as unknown[]).length} file{(codeActionResult.gaps as unknown[]).length !== 1 ? 's' : ''} with critical coverage gaps</p>
+                  )}
+                </div>
+              )}
+
+              {/* Change Risk Assessment Result */}
+              {codeActionResult.overallRisk !== undefined && codeActionResult.totalChurn !== undefined && (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-3">
+                    <span className={`text-sm font-bold px-3 py-1 rounded ${
+                      codeActionResult.overallRisk === 'critical' ? 'bg-red-500/20 text-red-400' :
+                      codeActionResult.overallRisk === 'high' ? 'bg-orange-500/20 text-orange-400' :
+                      codeActionResult.overallRisk === 'moderate' ? 'bg-yellow-500/20 text-yellow-400' :
+                      'bg-green-500/20 text-green-400'
+                    }`}>{String(codeActionResult.overallRisk).toUpperCase()} RISK</span>
+                    <span className="text-xs text-gray-400">{codeActionResult.totalFiles as number} file{(codeActionResult.totalFiles as number) !== 1 ? 's' : ''} changed &bull; {(codeActionResult.totalChurn as number).toLocaleString()} lines churned</span>
+                  </div>
+                  {(codeActionResult.recommendations as string[])?.length > 0 && (
+                    <ul className="space-y-1">
+                      {(codeActionResult.recommendations as string[]).map((rec, i) => (
+                        <li key={i} className="text-xs text-gray-300 flex items-start gap-1.5">
+                          <AlertTriangle className="w-3.5 h-3.5 text-yellow-400 mt-0.5 flex-shrink-0" />
+                          {rec}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+
+              {/* Generic message fallback */}
+              {!!codeActionResult.message && !codeActionResult.averageMaintainability && !codeActionResult.totalDependencies && !codeActionResult.overall && !codeActionResult.totalChurn && (
+                <p className="text-sm text-gray-400">{codeActionResult.message as string}</p>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
       <div className="flex-1 flex overflow-hidden">
         {/* File Tree Sidebar */}
         <AnimatePresence>

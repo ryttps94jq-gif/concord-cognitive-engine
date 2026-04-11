@@ -30,8 +30,9 @@ import type {
 import type { ConcordiaDistrict } from '@/components/world-lens/ConcordiaHub';
 
 import {
-  Globe, ChevronDown, Layers, Map as MapIcon,
+  Globe, ChevronDown, Layers, Map as MapIcon, Zap, X,
 } from 'lucide-react';
+import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 
 // ── View Modes ──────────────────────────────────────────────────────
 
@@ -85,6 +86,22 @@ export default function WorldLensPage() {
     seed: [],
     enabled: true,
   });
+
+  const runWorldAction = useRunArtifact('world');
+  const [worldActionResult, setWorldActionResult] = useState<{ action: string; result: Record<string, unknown> } | null>(null);
+  const [worldActiveAction, setWorldActiveAction] = useState<string | null>(null);
+
+  const handleWorldAction = useCallback(async (action: string) => {
+    const id = _buildingItems[0]?.id;
+    if (!id) return;
+    setWorldActiveAction(action);
+    try {
+      const res = await runWorldAction.mutateAsync({ id, action });
+      if (res.ok) setWorldActionResult({ action, result: res.result as Record<string, unknown> });
+    } finally {
+      setWorldActiveAction(null);
+    }
+  }, [_buildingItems, runWorldAction]);
 
   // ── Handlers ──────────────────────────────────────────────────
 
@@ -332,6 +349,91 @@ export default function WorldLensPage() {
 
       {/* Bottom Status Bar */}
       <StatusBar district={viewMode === 'district' ? activeDistrict : null} />
+
+      {/* World Actions Panel */}
+      <div className="px-4 py-3 border-t border-white/10">
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="text-xs font-semibold text-gray-300 flex items-center gap-1.5">
+            <Zap className="w-3.5 h-3.5 text-neon-green" />
+            World Actions
+          </h3>
+          {worldActionResult && (
+            <button onClick={() => setWorldActionResult(null)} className="p-0.5 rounded hover:bg-white/5 text-gray-400">
+              <X className="w-3 h-3" />
+            </button>
+          )}
+        </div>
+        <div className="flex flex-wrap gap-2 mb-2">
+          {(['countryCompare', 'indicatorTrack', 'tradeFlow', 'demographicProfile'] as const).map((action) => (
+            <button
+              key={action}
+              onClick={() => handleWorldAction(action)}
+              disabled={!_buildingItems[0]?.id || worldActiveAction !== null}
+              className="px-2.5 py-1 text-xs rounded-lg bg-neon-green/10 text-neon-green border border-neon-green/30 hover:bg-neon-green/20 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"
+            >
+              {worldActiveAction === action ? (
+                <div className="w-2.5 h-2.5 border border-neon-green border-t-transparent rounded-full animate-spin" />
+              ) : null}
+              {action === 'countryCompare' ? 'Compare' : action === 'indicatorTrack' ? 'Indicators' : action === 'tradeFlow' ? 'Trade Flow' : 'Demographics'}
+            </button>
+          ))}
+        </div>
+        {worldActionResult && (
+          <div className="bg-white/[0.03] border border-white/10 rounded-lg p-2 text-xs space-y-1">
+            {worldActionResult.action === 'countryCompare' && (() => {
+              const r = worldActionResult.result;
+              const countries = Array.isArray(r.countries) ? r.countries as Array<Record<string, unknown>> : [];
+              return (
+                <div className="space-y-1">
+                  <div className="text-gray-400">Comparing <span className="text-white">{String(r.comparisonCount ?? countries.length)}</span> countries</div>
+                  {countries.slice(0, 3).map((c, i) => (
+                    <div key={i} className="flex justify-between bg-white/5 px-2 py-0.5 rounded">
+                      <span className="text-gray-300">{String(c.name ?? c.code ?? `Country ${i + 1}`)}</span>
+                      <span className="text-neon-green">{String(c.gdp ?? c.score ?? '-')}</span>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+            {worldActionResult.action === 'indicatorTrack' && (() => {
+              const r = worldActionResult.result;
+              const indicators = Array.isArray(r.indicators) ? r.indicators as Array<Record<string, unknown>> : [];
+              return (
+                <div className="space-y-1">
+                  <div className="text-gray-400">Tracked: <span className="text-white">{String(r.indicatorCount ?? indicators.length)}</span></div>
+                  {indicators.slice(0, 4).map((ind, i) => (
+                    <div key={i} className="flex justify-between">
+                      <span className="text-gray-300">{String(ind.name ?? ind.indicator)}</span>
+                      <span className="text-white">{String(ind.value ?? ind.current ?? '-')}</span>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+            {worldActionResult.action === 'tradeFlow' && (() => {
+              const r = worldActionResult.result;
+              return (
+                <div className="flex flex-wrap gap-3">
+                  <span className="text-gray-400">Total Trade: <span className="text-white font-medium">{String(r.totalTradeVolume ?? r.totalVolume ?? 0)}</span></span>
+                  <span className="text-gray-400">Partners: <span className="text-white">{String(r.partnerCount ?? 0)}</span></span>
+                  <span className="text-gray-400">Balance: <span className={Number(r.tradeBalance ?? 0) >= 0 ? 'text-neon-green' : 'text-red-400'}>{String(r.tradeBalance ?? 0)}</span></span>
+                </div>
+              );
+            })()}
+            {worldActionResult.action === 'demographicProfile' && (() => {
+              const r = worldActionResult.result;
+              return (
+                <div className="flex flex-wrap gap-3">
+                  <span className="text-gray-400">Population: <span className="text-white font-medium">{String(r.population ?? '-')}</span></span>
+                  <span className="text-gray-400">Median Age: <span className="text-white">{String(r.medianAge ?? '-')}</span></span>
+                  <span className="text-gray-400">Growth: <span className="text-white">{String(r.growthRate ?? '-')}%</span></span>
+                  <span className="text-gray-400">Urban: <span className="text-white">{String(r.urbanPercent ?? '-')}%</span></span>
+                </div>
+              );
+            })()}
+          </div>
+        )}
+      </div>
 
       {/* Lens Features (collapsible) */}
       <div className="border-t border-white/10">

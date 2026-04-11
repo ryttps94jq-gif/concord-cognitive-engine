@@ -10,6 +10,7 @@ import {
   Target, Clock, TrendingUp, Layers, ChevronDown, Zap,
   Medal, Swords, MapPin, X, BarChart3, Loader2,
 } from 'lucide-react';
+import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { cn } from '@/lib/utils';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -59,6 +60,11 @@ const INTENSITY_COLORS: Record<string, string> = {
 export default function SportsLensPage() {
   useLensNav('sports');
   const { latestData: realtimeData, isLive, lastUpdated, insights } = useRealtimeLens('sports');
+
+  const runSportsAction = useRunArtifact('sports');
+  const [sportsActionResult, setSportsActionResult] = useState<Record<string, unknown> | null>(null);
+  const [sportsActiveAction, setSportsActiveAction] = useState<string | null>(null);
+
   const [tab, setTab] = useState<Tab>('games');
   const [search, setSearch] = useState('');
   const [showCreate, setShowCreate] = useState(false);
@@ -74,6 +80,17 @@ export default function SportsLensPage() {
     items, isLoading, isError, error, refetch,
     create, createMut, remove, deleteMut,
   } = useLensData<GameData>('sports', 'game', { seed: [] });
+
+  const handleSportsAction = useCallback(async (action: string) => {
+    const id = items[0]?.id;
+    if (!id) return;
+    setSportsActiveAction(action);
+    try {
+      const res = await runSportsAction.mutateAsync({ id, action });
+      setSportsActionResult({ action, ...(res.result as Record<string, unknown>) });
+    } catch (err) { console.error('Sports action failed:', err); }
+    finally { setSportsActiveAction(null); }
+  }, [items, runSportsAction]);
 
   const games = useMemo(() =>
     items.map(item => ({ id: item.id, ...item.data, title: item.title || item.data?.title || 'Untitled Game' }))
@@ -409,6 +426,73 @@ export default function SportsLensPage() {
       )}
 
       <RealtimeDataPanel domain="sports" data={realtimeData} isLive={isLive} lastUpdated={lastUpdated} insights={insights} compact />
+
+      {/* Sports Domain Actions */}
+      <div className="panel p-4 space-y-3">
+        <h3 className="text-sm font-semibold text-neon-green flex items-center gap-2"><Trophy className="w-4 h-4" /> Sports Analysis</h3>
+        <div className="flex flex-wrap gap-2">
+          {[
+            { action: 'performanceStats', label: 'Performance Stats' },
+            { action: 'trainingPlan', label: 'Training Plan' },
+            { action: 'injuryRisk', label: 'Injury Risk' },
+            { action: 'teamAnalysis', label: 'Team Analysis' },
+          ].map(({ action, label }) => (
+            <button key={action} onClick={() => handleSportsAction(action)} disabled={sportsActiveAction === action || !items[0]?.id}
+              className="px-3 py-1.5 text-xs bg-neon-green/10 border border-neon-green/20 rounded-lg hover:bg-neon-green/20 disabled:opacity-50 flex items-center gap-1.5">
+              {sportsActiveAction === action ? <div className="w-3 h-3 border border-neon-green border-t-transparent rounded-full animate-spin" /> : <Zap className="w-3 h-3 text-neon-green" />}
+              {label}
+            </button>
+          ))}
+        </div>
+        {sportsActionResult && (
+          <div className="p-3 bg-black/40 rounded-lg border border-neon-green/20 text-xs space-y-2">
+            {sportsActionResult.action === 'performanceStats' && (
+              <div className="space-y-1">
+                <div className="flex gap-4 flex-wrap">
+                  <span className="text-gray-400">Avg: <span className="text-neon-green font-mono">{String(sportsActionResult.average ?? '')}</span></span>
+                  <span className="text-gray-400">Best: <span className="text-green-400 font-mono">{String(sportsActionResult.best ?? '')}</span></span>
+                  <span className="text-gray-400">Trend: <span className={`font-mono capitalize ${sportsActionResult.trend === 'improving' ? 'text-green-400' : sportsActionResult.trend === 'declining' ? 'text-red-400' : 'text-yellow-400'}`}>{String(sportsActionResult.trend ?? '')}</span></span>
+                  <span className="text-gray-400">Data points: <span className="text-white font-mono">{String(sportsActionResult.dataPoints ?? '')}</span></span>
+                </div>
+                {!!sportsActionResult.message && <p className="text-gray-400 italic">{String(sportsActionResult.message)}</p>}
+              </div>
+            )}
+            {sportsActionResult.action === 'trainingPlan' && (
+              <div className="space-y-1">
+                <p className="text-neon-green font-semibold capitalize">{String(sportsActionResult.sport ?? '')} – {String(sportsActionResult.level ?? '')} level</p>
+                {Array.isArray(sportsActionResult.schedule) && (
+                  <div className="grid grid-cols-2 gap-1">{(sportsActionResult.schedule as {day:number;workout:string;intensity:string}[]).map(s => (
+                    <div key={s.day} className="flex gap-2"><span className="text-gray-500 w-8">Day {s.day}</span><span className="text-gray-200">{s.workout}</span><span className={`ml-auto ${s.intensity === 'high' ? 'text-red-400' : s.intensity === 'low' ? 'text-green-400' : 'text-yellow-400'}`}>{s.intensity}</span></div>
+                  ))}</div>
+                )}
+                {!!sportsActionResult.principle && <p className="text-gray-500 italic">{String(sportsActionResult.principle)}</p>}
+              </div>
+            )}
+            {sportsActionResult.action === 'injuryRisk' && (
+              <div className="space-y-1">
+                <div className="flex gap-4 flex-wrap">
+                  <span className="text-gray-400">Risk score: <span className={`font-mono font-bold ${(sportsActionResult.riskScore as number) >= 60 ? 'text-red-400' : (sportsActionResult.riskScore as number) >= 35 ? 'text-yellow-400' : 'text-green-400'}`}>{String(sportsActionResult.riskScore ?? '')}/100</span></span>
+                  <span className="text-gray-400">Level: <span className="text-white capitalize">{String(sportsActionResult.riskLevel ?? '')}</span></span>
+                </div>
+                {Array.isArray(sportsActionResult.recommendations) && sportsActionResult.recommendations.length > 0 && (
+                  <div className="space-y-0.5">{(sportsActionResult.recommendations as string[]).map((r, i) => <p key={i} className="text-yellow-300">• {r}</p>)}</div>
+                )}
+              </div>
+            )}
+            {sportsActionResult.action === 'teamAnalysis' && (
+              <div className="space-y-1">
+                <div className="flex gap-4 flex-wrap">
+                  <span className="text-gray-400">Roster: <span className="text-white font-mono">{String(sportsActionResult.rosterSize ?? '')}</span></span>
+                  <span className="text-gray-400">Avg rating: <span className="text-neon-green font-mono">{String(sportsActionResult.avgRating ?? '')}</span></span>
+                  <span className="text-gray-400">Strength: <span className="text-white capitalize">{String(sportsActionResult.teamStrength ?? '')}</span></span>
+                </div>
+                {!!sportsActionResult.message && <p className="text-gray-400 italic">{String(sportsActionResult.message)}</p>}
+              </div>
+            )}
+            <button onClick={() => setSportsActionResult(null)} className="text-gray-600 hover:text-gray-400 text-xs flex items-center gap-1"><X className="w-3 h-3" /> Dismiss</button>
+          </div>
+        )}
+      </div>
 
       <div className="border-t border-white/10">
         <button onClick={() => setShowFeatures(!showFeatures)} className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg">

@@ -5,6 +5,7 @@ import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { api } from '@/lib/api/client';
 import { useLensData } from '@/lib/hooks/use-lens-data';
+import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Trophy, Star, Zap, Target, Users, Swords, Crown,
@@ -12,7 +13,7 @@ import {
   ChevronRight, ChevronDown, Plus, X, Check, Clock,
   BarChart3, Sparkles, Gem, Gamepad2, Joystick,
   GitBranch, BookOpen, Cpu,
-  Activity, ArrowUp,
+  Activity, ArrowUp, Loader2, Scale, BarChart2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { showToast } from '@/components/common/Toasts';
@@ -229,6 +230,22 @@ export default function GameLensPage() {
   const [activeTab, setActiveTab] = useState<MainTab>('dashboard');
   const [lbPeriod, setLbPeriod] = useState<LeaderboardPeriod>('alltime');
   const { items: shopLensItems, update: updateShopItem } = useLensData<ShopItem>('game', 'shop-item', { noSeed: true });
+
+  // Backend action wiring
+  const runGameAction = useRunArtifact('game');
+  const [gameActionResult, setGameActionResult] = useState<Record<string, unknown> | null>(null);
+  const [gameRunning, setGameRunning] = useState<string | null>(null);
+
+  const handleGameAction = useCallback(async (action: string) => {
+    const targetId = shopLensItems[0]?.id;
+    if (!targetId) return;
+    setGameRunning(action);
+    try {
+      const res = await runGameAction.mutateAsync({ id: targetId, action });
+      setGameActionResult({ _action: action, ...(res.result as Record<string, unknown>) });
+    } catch (e) { console.error(`Game action ${action} failed:`, e); }
+    setGameRunning(null);
+  }, [shopLensItems, runGameAction]);
   const [shopItems, setShopItems] = useState<ShopItem[]>([]);
   const [purchasingIds, setPurchasingIds] = useState<Set<string>>(new Set());
 
@@ -1033,6 +1050,167 @@ export default function GameLensPage() {
 
       {/* Real-time Data Panel */}
       <UniversalActions domain="game" artifactId={null} compact />
+
+      {/* Game Balance Actions */}
+      <div className="panel p-4 space-y-3 mx-4 mb-4">
+        <h2 className="font-semibold text-sm flex items-center gap-2">
+          <Scale className="w-4 h-4 text-neon-purple" />
+          Game Balance Tools
+        </h2>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+          {[
+            { action: 'balanceCheck',    label: 'Balance Check',     icon: Scale,      color: 'text-neon-green' },
+            { action: 'economySimulate', label: 'Economy Simulate',  icon: TrendingUp, color: 'text-neon-cyan' },
+            { action: 'levelCurve',      label: 'Level Curve',       icon: Activity,   color: 'text-neon-purple' },
+            { action: 'dropRateCalc',    label: 'Drop Rate Calc',    icon: BarChart2,  color: 'text-yellow-400' },
+          ].map(({ action, label, icon: Icon, color }) => (
+            <button
+              key={action}
+              onClick={() => handleGameAction(action)}
+              disabled={!!gameRunning || !shopLensItems[0]?.id}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg bg-lattice-deep border border-lattice-border text-sm hover:border-neon-purple/30 disabled:opacity-40 transition-colors"
+            >
+              {gameRunning === action ? <Loader2 className="w-4 h-4 animate-spin" /> : <Icon className={`w-4 h-4 ${color}`} />}
+              <span className="truncate text-xs">{label}</span>
+            </button>
+          ))}
+        </div>
+
+        {gameActionResult && (
+          <div className="mt-3 rounded-lg bg-black/30 border border-white/10 p-4 relative">
+            <button onClick={() => setGameActionResult(null)} className="absolute top-3 right-3 text-gray-500 hover:text-white">
+              <X className="w-4 h-4" />
+            </button>
+
+            {/* balanceCheck */}
+            {gameActionResult._action === 'balanceCheck' && (
+              <div className="space-y-3">
+                <p className="text-xs text-gray-400 uppercase tracking-wider font-semibold">Balance Check</p>
+                {(gameActionResult.message as string) ? <p className="text-sm text-gray-400">{gameActionResult.message as string}</p> : (
+                  <>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      {[
+                        { label: 'Avg Power', value: String(gameActionResult.avgPower ?? 0), color: 'text-white' },
+                        { label: 'Variance', value: String(gameActionResult.powerVariance ?? 0), color: 'text-neon-cyan' },
+                        { label: 'Strongest', value: String(gameActionResult.strongest ?? '—'), color: 'text-neon-green' },
+                        { label: 'Weakest', value: String(gameActionResult.weakest ?? '—'), color: 'text-red-400' },
+                      ].map(({ label, value, color }) => (
+                        <div key={label} className="bg-white/5 rounded-lg p-3 text-center">
+                          <p className={`text-sm font-bold ${color}`}>{value}</p>
+                          <p className="text-xs text-gray-400">{label}</p>
+                        </div>
+                      ))}
+                    </div>
+                    <div className={`text-xs px-3 py-2 rounded border ${(gameActionResult.balance as string) === 'well-balanced' ? 'bg-neon-green/10 border-neon-green/30 text-neon-green' : (gameActionResult.balance as string) === 'slightly-unbalanced' ? 'bg-yellow-400/10 border-yellow-400/30 text-yellow-400' : 'bg-red-400/10 border-red-400/30 text-red-400'}`}>
+                      Balance: {(gameActionResult.balance as string)?.replace(/-/g, ' ')}
+                    </div>
+                    {Array.isArray(gameActionResult.units) && (
+                      <div className="space-y-1 max-h-32 overflow-y-auto">
+                        {(gameActionResult.units as {name:string;power:number;efficiency:number;cost:number}[]).map(u => (
+                          <div key={u.name} className="flex items-center gap-3 text-xs px-2 py-1 rounded bg-white/5">
+                            <span className="flex-1 text-white">{u.name}</span>
+                            <span className="text-gray-400">Cost: {u.cost}</span>
+                            <span className="text-neon-cyan">Power: {u.power}</span>
+                            <span className="text-neon-green">Eff: {u.efficiency}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* economySimulate */}
+            {gameActionResult._action === 'economySimulate' && (
+              <div className="space-y-3">
+                <p className="text-xs text-gray-400 uppercase tracking-wider font-semibold">Economy Simulation</p>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {[
+                    { label: 'Start Gold', value: String(gameActionResult.startGold ?? 0), color: 'text-white' },
+                    { label: 'Final Gold', value: String(gameActionResult.finalGold ?? 0), color: (gameActionResult.finalGold as number) >= (gameActionResult.startGold as number) ? 'text-neon-green' : 'text-red-400' },
+                    { label: 'Net Flow', value: `${(gameActionResult.netFlow as number) >= 0 ? '+' : ''}${gameActionResult.netFlow ?? 0}`, color: (gameActionResult.netFlow as number) >= 0 ? 'text-neon-green' : 'text-red-400' },
+                    { label: 'Sustainable', value: gameActionResult.sustainable ? 'Yes' : 'No', color: gameActionResult.sustainable ? 'text-neon-green' : 'text-red-400' },
+                  ].map(({ label, value, color }) => (
+                    <div key={label} className="bg-white/5 rounded-lg p-3 text-center">
+                      <p className={`text-lg font-bold ${color}`}>{value}</p>
+                      <p className="text-xs text-gray-400">{label}</p>
+                    </div>
+                  ))}
+                </div>
+                {!!gameActionResult.tip && <p className="text-xs text-gray-500 italic">{gameActionResult.tip as string}</p>}
+                {Array.isArray(gameActionResult.timeline) && (
+                  <div className="grid grid-cols-6 gap-1">
+                    {(gameActionResult.timeline as {minute:number;gold:number}[]).slice(0,6).map(t => (
+                      <div key={t.minute} className="bg-white/5 rounded p-2 text-center">
+                        <p className="text-[10px] text-gray-400">Min {t.minute}</p>
+                        <p className="text-xs font-mono text-neon-green">{t.gold}g</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* levelCurve */}
+            {gameActionResult._action === 'levelCurve' && (
+              <div className="space-y-3">
+                <p className="text-xs text-gray-400 uppercase tracking-wider font-semibold">Level Curve</p>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {[
+                    { label: 'Max Level', value: String(gameActionResult.maxLevel ?? 0), color: 'text-white' },
+                    { label: 'Total XP', value: String((gameActionResult.totalXPToMax as number || 0).toLocaleString()), color: 'text-neon-cyan' },
+                    { label: 'Midpoint', value: `Lv ${gameActionResult.midpointLevel ?? 0}`, color: 'text-neon-purple' },
+                    { label: 'Growth', value: String(gameActionResult.growthFactor ?? 0), color: 'text-yellow-400' },
+                  ].map(({ label, value, color }) => (
+                    <div key={label} className="bg-white/5 rounded-lg p-3 text-center">
+                      <p className={`text-lg font-bold ${color}`}>{value}</p>
+                      <p className="text-xs text-gray-400">{label}</p>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-gray-400">Feel: <span className="text-white capitalize">{(gameActionResult.earlyGameFeels as string)?.replace(/-/g, ' ')}</span></p>
+                {Array.isArray(gameActionResult.levels) && (
+                  <div className="flex gap-1 overflow-x-auto pb-1">
+                    {(gameActionResult.levels as {level:number;xpRequired:number}[]).map(l => (
+                      <div key={l.level} className="shrink-0 bg-white/5 rounded p-2 text-center min-w-[48px]">
+                        <p className="text-[10px] text-gray-400">Lv {l.level}</p>
+                        <p className="text-[10px] font-mono text-neon-green">{(l.xpRequired / 1000).toFixed(1)}k</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* dropRateCalc */}
+            {gameActionResult._action === 'dropRateCalc' && (
+              <div className="space-y-3">
+                <p className="text-xs text-gray-400 uppercase tracking-wider font-semibold">Drop Rate Calculator</p>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  {[
+                    { label: 'Drop Rate', value: String(gameActionResult.dropRate ?? '—'), color: 'text-neon-cyan' },
+                    { label: 'Expected Drops', value: String(gameActionResult.expectedDrops ?? 0), color: 'text-white' },
+                    { label: 'P(≥1)', value: String(gameActionResult.probabilityAtLeastOne ?? '—'), color: 'text-neon-green' },
+                    { label: '50% Chance', value: `${gameActionResult.attemptsFor50Percent ?? 0} tries`, color: 'text-yellow-400' },
+                    { label: '90% Chance', value: `${gameActionResult.attemptsFor90Percent ?? 0} tries`, color: 'text-orange-400' },
+                    { label: '99% Chance', value: `${gameActionResult.attemptsFor99Percent ?? 0} tries`, color: 'text-red-400' },
+                  ].map(({ label, value, color }) => (
+                    <div key={label} className="bg-white/5 rounded-lg p-3 text-center">
+                      <p className={`text-sm font-bold ${color}`}>{value}</p>
+                      <p className="text-xs text-gray-400">{label}</p>
+                    </div>
+                  ))}
+                </div>
+                {!!gameActionResult.pitySystemSuggestion && (
+                  <p className="text-xs text-neon-cyan bg-neon-cyan/5 border border-neon-cyan/20 rounded px-3 py-2">{gameActionResult.pitySystemSuggestion as string}</p>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
       {realtimeData && (
         <RealtimeDataPanel
           domain="game"

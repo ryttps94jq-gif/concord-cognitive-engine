@@ -9,8 +9,9 @@ import { api } from '@/lib/api/client';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import {
   BadgeCheck, Plus, Search, Users, MessageSquare,
-  Star, Calendar, Target, Clock, Layers, ChevronDown, Send, Trash2, Loader2,
+  Star, Calendar, Target, Clock, Layers, ChevronDown, Send, Trash2, Loader2, Play,
 } from 'lucide-react';
+import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { cn } from '@/lib/utils';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -57,6 +58,20 @@ export default function MentorshipLensPage() {
   const [activeTab, setActiveTab] = useState<'mentors' | 'sessions' | 'goals'>('mentors');
   const [newMentorship, setNewMentorship] = useState({ mentorName: '', menteeName: '', topic: '', meetingFrequency: 'weekly' });
   const [newNote, setNewNote] = useState('');
+
+  const runAction = useRunArtifact('mentorship');
+  const [actionResult, setActionResult] = useState<Record<string, unknown> | null>(null);
+  const [isRunning, setIsRunning] = useState<string | null>(null);
+  const handleAction = async (action: string) => {
+    const targetId = items[0]?.id;
+    if (!targetId) { setActionResult({ message: 'Add a mentorship relation first to run analysis.' }); return; }
+    setIsRunning(action);
+    try {
+      const res = await runAction.mutateAsync({ id: targetId, action });
+      setActionResult(res.result as Record<string, unknown>);
+    } catch (e) { console.error(`Action ${action} failed:`, e); }
+    finally { setIsRunning(null); }
+  };
 
   // Wire to social profiles for matching
   const { data: profiles } = useQuery({
@@ -489,6 +504,88 @@ export default function MentorshipLensPage() {
       </AnimatePresence>
 
       <RealtimeDataPanel domain="mentorship" data={realtimeData} isLive={isLive} lastUpdated={lastUpdated} insights={insights} compact />
+
+      {/* Backend Action Panel */}
+      <div className="panel p-4 space-y-3">
+        <h2 className="font-semibold flex items-center gap-2">
+          <Users className="w-4 h-4 text-neon-cyan" />
+          Mentorship Analysis
+        </h2>
+        <div className="flex flex-wrap gap-2">
+          {[
+            { action: 'matchScore', label: 'Match Score' },
+            { action: 'progressTrack', label: 'Progress Track' },
+            { action: 'feedbackSummary', label: 'Feedback Summary' },
+            { action: 'developmentPlan', label: 'Development Plan' },
+          ].map(({ action, label }) => (
+            <button key={action} onClick={() => handleAction(action)} disabled={!!isRunning}
+              className="btn-secondary text-sm flex items-center gap-1 disabled:opacity-50">
+              {isRunning === action ? <Loader2 className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
+              {label}
+            </button>
+          ))}
+        </div>
+        {actionResult && (
+          <div className="bg-lattice-deep rounded-lg p-4 space-y-3 text-sm">
+            {'matchScore' in actionResult && (
+              <div className="space-y-1">
+                <div className="flex items-center gap-3">
+                  <span className="text-neon-cyan font-bold text-xl">{String(actionResult.matchScore)}%</span>
+                  <span className="text-gray-400 text-xs">{String(actionResult.mentor)} ↔ {String(actionResult.mentee)}</span>
+                </div>
+                <div className="flex gap-4 text-xs">
+                  <span className="text-gray-400">Overlap: <span className="text-neon-green">{String(actionResult.skillOverlap)}</span></span>
+                  <span className="text-gray-400">Compat: <span className="text-neon-cyan">{String(actionResult.compatibility)}</span></span>
+                </div>
+              </div>
+            )}
+            {'totalGoals' in actionResult && (
+              <div className="flex flex-wrap gap-4 text-xs">
+                <span className="text-gray-400">Goals: <span className="text-neon-cyan font-bold">{String(actionResult.totalGoals)}</span></span>
+                <span className="text-gray-400">Done: <span className="text-neon-green font-bold">{String(actionResult.completed)}</span></span>
+                <span className="text-gray-400">Rate: <span className="text-yellow-400">{String(actionResult.completionRate)}%</span></span>
+                <span className="text-gray-400">Hours: <span className="text-neon-cyan">{String(actionResult.totalHours)}</span></span>
+                <span className="text-gray-400">Momentum: <span className="text-neon-green">{String(actionResult.momentum)}</span></span>
+              </div>
+            )}
+            {'sessions' in actionResult && 'avgRating' in actionResult && (
+              <div className="space-y-2">
+                <div className="flex gap-4 text-xs">
+                  <span className="text-gray-400">Sessions: <span className="text-neon-cyan">{String(actionResult.sessions)}</span></span>
+                  <span className="text-gray-400">Rating: <span className="text-yellow-400">{String(actionResult.avgRating)}/5</span></span>
+                  <span className="text-gray-400">Satisfaction: <span className="text-neon-green">{String(actionResult.satisfaction)}</span></span>
+                </div>
+                {'topThemes' in actionResult && Array.isArray(actionResult.topThemes) && actionResult.topThemes.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {(actionResult.topThemes as Array<{theme: string; count: number}>).map((t, i) => (
+                      <span key={i} className="text-xs bg-neon-cyan/10 border border-neon-cyan/20 rounded px-2 py-0.5 text-neon-cyan">{t.theme}</span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            {'gaps' in actionResult && Array.isArray(actionResult.gaps) && (
+              <div className="space-y-2">
+                <div className="flex gap-4 text-xs text-gray-400">
+                  <span>Target: <span className="text-neon-cyan">{String(actionResult.targetRole)}</span></span>
+                  <span>Timeline: <span className="text-yellow-400">{String(actionResult.timelineWeeks)} weeks</span></span>
+                </div>
+                {actionResult.gaps.length > 0 && (
+                  <div>
+                    <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">Skill Gaps</p>
+                    <div className="flex flex-wrap gap-1">
+                      {(actionResult.gaps as string[]).map((g, i) => (
+                        <span key={i} className="text-xs bg-red-400/10 border border-red-400/20 rounded px-2 py-0.5 text-red-400">{g}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+            {'message' in actionResult && <p className="text-gray-400">{String(actionResult.message)}</p>}
+          </div>
+        )}
+      </div>
 
       <div className="border-t border-white/10">
         <button onClick={() => setShowFeatures(!showFeatures)} className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg">

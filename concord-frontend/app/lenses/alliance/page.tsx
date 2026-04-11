@@ -2,10 +2,11 @@
 
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData } from '@/lib/hooks/use-lens-data';
+import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { Loading } from '@/components/common/Loading';
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Users, Plus, MessageSquare, Target, Zap, Layers, ChevronDown, HeartHandshake as Handshake, Crown } from 'lucide-react';
+import { Users, Plus, MessageSquare, Target, Zap, Layers, ChevronDown, HeartHandshake as Handshake, Crown, Loader2, XCircle, Shield, Network, BarChart3, AlertTriangle, CheckCircle } from 'lucide-react';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 import { ErrorState } from '@/components/common/EmptyState';
 import { UniversalActions } from '@/components/lens/UniversalActions';
@@ -52,6 +53,22 @@ export default function AllianceLensPage() {
   const [newAllianceDesc, setNewAllianceDesc] = useState('');
   const [newAllianceType, setNewAllianceType] = useState<AllianceData['type']>('research');
   const [showFeatures, setShowFeatures] = useState(true);
+
+  // Backend action wiring
+  const runAction = useRunArtifact('alliance');
+  const [actionResult, setActionResult] = useState<Record<string, unknown> | null>(null);
+  const [isRunning, setIsRunning] = useState<string | null>(null);
+
+  const handleAllianceAction = async (action: string) => {
+    const targetId = selectedAlliance || allianceItems[0]?.id;
+    if (!targetId) return;
+    setIsRunning(action);
+    try {
+      const res = await runAction.mutateAsync({ id: targetId, action });
+      setActionResult(res.result as Record<string, unknown>);
+    } catch (e) { console.error(`Action ${action} failed:`, e); }
+    setIsRunning(null);
+  };
 
   const {
     items: allianceItems,
@@ -367,6 +384,196 @@ export default function AllianceLensPage() {
                     ))}
                   </div>
                 </div>
+              </div>
+
+              {/* ── Backend Action Panels ── */}
+              <div className="panel p-4">
+                <h3 className="font-semibold mb-3 flex items-center gap-2">
+                  <Zap className="w-4 h-4 text-neon-yellow" />
+                  Alliance Analysis
+                </h3>
+                <div className="grid grid-cols-3 gap-3">
+                  <button
+                    onClick={() => handleAllianceAction('compatibilityScore')}
+                    disabled={isRunning !== null}
+                    className="flex flex-col items-center gap-2 p-3 bg-lattice-deep rounded-lg border border-lattice-border hover:border-neon-cyan/50 transition-colors disabled:opacity-50"
+                  >
+                    {isRunning === 'compatibilityScore' ? <Loader2 className="w-5 h-5 text-neon-cyan animate-spin" /> : <Handshake className="w-5 h-5 text-neon-cyan" />}
+                    <span className="text-xs text-gray-300">Compatibility Score</span>
+                  </button>
+                  <button
+                    onClick={() => handleAllianceAction('networkAnalysis')}
+                    disabled={isRunning !== null}
+                    className="flex flex-col items-center gap-2 p-3 bg-lattice-deep rounded-lg border border-lattice-border hover:border-neon-purple/50 transition-colors disabled:opacity-50"
+                  >
+                    {isRunning === 'networkAnalysis' ? <Loader2 className="w-5 h-5 text-neon-purple animate-spin" /> : <Network className="w-5 h-5 text-neon-purple" />}
+                    <span className="text-xs text-gray-300">Network Analysis</span>
+                  </button>
+                  <button
+                    onClick={() => handleAllianceAction('riskAssessment')}
+                    disabled={isRunning !== null}
+                    className="flex flex-col items-center gap-2 p-3 bg-lattice-deep rounded-lg border border-lattice-border hover:border-red-400/50 transition-colors disabled:opacity-50"
+                  >
+                    {isRunning === 'riskAssessment' ? <Loader2 className="w-5 h-5 text-red-400 animate-spin" /> : <Shield className="w-5 h-5 text-red-400" />}
+                    <span className="text-xs text-gray-300">Risk Assessment</span>
+                  </button>
+                </div>
+
+                {/* Action Result Display */}
+                {actionResult && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="mt-4 p-3 bg-lattice-deep rounded-lg border border-lattice-border"
+                  >
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className="text-sm font-semibold text-white flex items-center gap-2">
+                        <BarChart3 className="w-4 h-4 text-neon-cyan" /> Result
+                      </h4>
+                      <button onClick={() => setActionResult(null)} className="text-gray-400 hover:text-white">
+                        <XCircle className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    {/* Compatibility Score Result */}
+                    {actionResult.compositeScore !== undefined && (
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-3">
+                          <div className="text-3xl font-bold text-neon-cyan">{actionResult.compositeScore as number}%</div>
+                          <div>
+                            <span className={`text-xs font-medium px-2 py-0.5 rounded ${
+                              (actionResult.compatibilityLevel as string) === 'excellent' ? 'bg-green-500/20 text-green-400' :
+                              (actionResult.compatibilityLevel as string) === 'good' ? 'bg-blue-500/20 text-blue-400' :
+                              (actionResult.compatibilityLevel as string) === 'moderate' ? 'bg-yellow-500/20 text-yellow-400' :
+                              'bg-red-500/20 text-red-400'
+                            }`}>
+                              {actionResult.compatibilityLevel as string}
+                            </span>
+                            <p className="text-xs text-gray-400 mt-1">{actionResult.partnerA as string} + {actionResult.partnerB as string}</p>
+                          </div>
+                        </div>
+                        {!!actionResult.componentScores && (
+                          <div className="grid grid-cols-2 gap-2">
+                            {Object.entries(actionResult.componentScores as Record<string, number>).map(([key, val]) => (
+                              <div key={key} className="p-2 bg-lattice-surface rounded">
+                                <p className="text-[10px] text-gray-500 capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</p>
+                                <p className="text-sm font-bold text-white">{val}%</p>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {!!actionResult.overlap && (
+                          <div className="text-xs text-gray-400 space-y-1">
+                            {Object.entries(actionResult.overlap as Record<string, string[]>).map(([key, vals]) => (
+                              vals.length > 0 && (
+                                <div key={key} className="flex items-center gap-2">
+                                  <CheckCircle className="w-3 h-3 text-neon-green flex-shrink-0" />
+                                  <span className="capitalize">{key}:</span>
+                                  <span className="text-white">{vals.join(', ')}</span>
+                                </div>
+                              )
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Network Analysis Result */}
+                    {actionResult.nodeCount !== undefined && actionResult.density !== undefined && (
+                      <div className="space-y-3">
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                          <div className="p-2 bg-lattice-surface rounded text-center">
+                            <p className="text-sm font-bold text-neon-cyan">{actionResult.nodeCount as number}</p>
+                            <p className="text-[10px] text-gray-500">Nodes</p>
+                          </div>
+                          <div className="p-2 bg-lattice-surface rounded text-center">
+                            <p className="text-sm font-bold text-neon-purple">{actionResult.edgeCount as number}</p>
+                            <p className="text-[10px] text-gray-500">Edges</p>
+                          </div>
+                          <div className="p-2 bg-lattice-surface rounded text-center">
+                            <p className="text-sm font-bold text-neon-green">{actionResult.density as number}</p>
+                            <p className="text-[10px] text-gray-500">Density</p>
+                          </div>
+                          <div className="p-2 bg-lattice-surface rounded text-center">
+                            <p className="text-sm font-bold text-neon-blue">{actionResult.connectedComponents as number}</p>
+                            <p className="text-[10px] text-gray-500">Components</p>
+                          </div>
+                        </div>
+                        <div className="text-xs text-gray-400">
+                          <span>Global Clustering: <span className="text-white font-medium">{actionResult.globalClusteringCoefficient as number}</span></span>
+                        </div>
+                        {(actionResult.brokers as Array<{ name: string; brokerageScore: number }>)?.length > 0 && (
+                          <div>
+                            <p className="text-xs text-gray-400 mb-1">Key Brokers</p>
+                            <div className="space-y-1">
+                              {(actionResult.brokers as Array<{ name: string; brokerageScore: number }>).slice(0, 3).map((b, i) => (
+                                <div key={i} className="flex items-center justify-between text-xs p-1.5 bg-lattice-surface rounded">
+                                  <span className="text-white">{b.name}</span>
+                                  <span className="text-neon-purple font-mono">{b.brokerageScore}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Risk Assessment Result */}
+                    {actionResult.overallRiskScore !== undefined && (
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-3">
+                          <div className={`text-3xl font-bold ${
+                            (actionResult.riskLevel as string) === 'critical' ? 'text-red-400' :
+                            (actionResult.riskLevel as string) === 'high' ? 'text-orange-400' :
+                            (actionResult.riskLevel as string) === 'moderate' ? 'text-yellow-400' :
+                            'text-green-400'
+                          }`}>{actionResult.overallRiskScore as number}</div>
+                          <div>
+                            <span className={`text-xs font-medium px-2 py-0.5 rounded uppercase ${
+                              (actionResult.riskLevel as string) === 'critical' ? 'bg-red-500/20 text-red-400' :
+                              (actionResult.riskLevel as string) === 'high' ? 'bg-orange-500/20 text-orange-400' :
+                              (actionResult.riskLevel as string) === 'moderate' ? 'bg-yellow-500/20 text-yellow-400' :
+                              'bg-green-500/20 text-green-400'
+                            }`}>
+                              {actionResult.riskLevel as string} risk
+                            </span>
+                            <p className="text-xs text-gray-400 mt-1">HHI: {actionResult.hhi as number} ({actionResult.hhiClassification as string})</p>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="p-2 bg-lattice-surface rounded text-center">
+                            <p className="text-sm font-bold text-white">{actionResult.allianceCount as number}</p>
+                            <p className="text-[10px] text-gray-500">Alliances Analyzed</p>
+                          </div>
+                          <div className="p-2 bg-lattice-surface rounded text-center">
+                            <p className="text-sm font-bold text-neon-green">{actionResult.diversificationIndex as number}</p>
+                            <p className="text-[10px] text-gray-500">Diversification</p>
+                          </div>
+                        </div>
+                        {(actionResult.singlePointsOfFailure as Array<{ category: string; partnerName: string; isCritical: boolean }>)?.length > 0 && (
+                          <div>
+                            <p className="text-xs text-gray-400 mb-1">Single Points of Failure</p>
+                            <div className="space-y-1">
+                              {(actionResult.singlePointsOfFailure as Array<{ category: string; partnerName: string; isCritical: boolean }>).map((spof, i) => (
+                                <div key={i} className="flex items-center gap-2 text-xs p-1.5 bg-red-500/10 rounded">
+                                  <AlertTriangle className={`w-3 h-3 flex-shrink-0 ${spof.isCritical ? 'text-red-400' : 'text-yellow-400'}`} />
+                                  <span className="text-gray-300">{spof.category}:</span>
+                                  <span className="text-white">{spof.partnerName}</span>
+                                  {spof.isCritical && <span className="text-red-400 font-medium">CRITICAL</span>}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Fallback: message-only */}
+                    {!!actionResult.message && !actionResult.compositeScore && !actionResult.nodeCount && !actionResult.overallRiskScore && (
+                      <p className="text-sm text-gray-400">{actionResult.message as string}</p>
+                    )}
+                  </motion.div>
+                )}
               </div>
 
               {/* Chat */}

@@ -1102,7 +1102,84 @@ export default function SecurityLensPage() {
             <h3 className={ds.heading3}>Action Result</h3>
             <button onClick={() => setActionResult(null)} className={ds.btnGhost}><X className="w-4 h-4" /></button>
           </div>
-          <pre className={cn(ds.textMono, 'text-xs overflow-auto max-h-48')}>{JSON.stringify(actionResult, null, 2)}</pre>
+          <div className="space-y-3">
+            {/* incidentTrend */}
+            {actionResult.byType !== undefined && actionResult.totalIncidents !== undefined && !('matrix' in actionResult) && (
+              <div className="space-y-2">
+                <div className="p-2 bg-lattice-surface rounded text-center">
+                  <p className="text-sm font-bold text-neon-cyan">{String(actionResult.totalIncidents)}</p>
+                  <p className="text-[10px] text-gray-500">Total Incidents</p>
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {Object.entries(actionResult.byType as Record<string, number>).map(([type, count]) => (
+                    <span key={type} className="px-1.5 py-0.5 bg-lattice-surface text-xs rounded text-gray-300">{type}: {count}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {/* patrolCoverage */}
+            {actionResult.coverage !== undefined && actionResult.completed !== undefined && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-gray-400">{String(actionResult.patrol)}</span>
+                  <span className="text-sm font-bold text-neon-cyan">{String(actionResult.coverage)}%</span>
+                </div>
+                <div className="h-2 bg-white/5 rounded-full overflow-hidden">
+                  <div className="h-full bg-neon-cyan rounded-full" style={{ width: `${Math.min(100, Number(actionResult.coverage))}%` }} />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className="text-sm font-bold text-green-400">{String(actionResult.completed)}</p>
+                    <p className="text-[10px] text-gray-500">Completed</p>
+                  </div>
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className={`text-sm font-bold ${Array.isArray(actionResult.missed) && (actionResult.missed as unknown[]).length > 0 ? 'text-red-400' : 'text-green-400'}`}>{Array.isArray(actionResult.missed) ? (actionResult.missed as unknown[]).length : 0}</p>
+                    <p className="text-[10px] text-gray-500">Missed</p>
+                  </div>
+                </div>
+              </div>
+            )}
+            {/* threatMatrix */}
+            {'matrix' in actionResult && Array.isArray(actionResult.matrix) && (
+              <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className="text-sm font-bold text-neon-cyan">{String(actionResult.totalThreats)}</p>
+                    <p className="text-[10px] text-gray-500">Total Threats</p>
+                  </div>
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className={`text-sm font-bold ${Number(actionResult.criticalCount) > 0 ? 'text-red-400' : 'text-green-400'}`}>{String(actionResult.criticalCount)}</p>
+                    <p className="text-[10px] text-gray-500">Critical</p>
+                  </div>
+                </div>
+                {(actionResult.matrix as {name:string;riskLevel:string;riskScore:number}[]).slice(0,4).map((t, i) => (
+                  <div key={i} className="flex items-center justify-between px-2 py-1 bg-lattice-surface rounded text-xs">
+                    <span className="text-gray-300">{t.name}</span>
+                    <span className={`font-semibold ${t.riskLevel === 'critical' ? 'text-red-400' : t.riskLevel === 'high' ? 'text-orange-400' : t.riskLevel === 'medium' ? 'text-amber-400' : 'text-green-400'}`}>{t.riskLevel} ({t.riskScore})</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {/* evidenceChain */}
+            {actionResult.investigationId !== undefined && (
+              <div className="space-y-2">
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className={`text-sm font-bold ${actionResult.intact ? 'text-green-400' : 'text-red-400'}`}>{actionResult.intact ? 'Intact' : 'Issues'}</p>
+                    <p className="text-[10px] text-gray-500">Chain Status</p>
+                  </div>
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className="text-sm font-bold text-neon-cyan">{String(actionResult.transfers)}</p>
+                    <p className="text-[10px] text-gray-500">Entries</p>
+                  </div>
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className={`text-sm font-bold ${Array.isArray(actionResult.issues) && (actionResult.issues as unknown[]).length > 0 ? 'text-red-400' : 'text-green-400'}`}>{Array.isArray(actionResult.issues) ? (actionResult.issues as unknown[]).length : 0}</p>
+                    <p className="text-[10px] text-gray-500">Issues</p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
 

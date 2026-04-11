@@ -11,7 +11,10 @@ import {
   GraduationCap, Plus, TrendingUp, Award,
   ArrowRight, BarChart3, Zap, BookOpen, Layers, ChevronDown,
   Brain, Target, AlertCircle, Lightbulb, CircleDot, Puzzle, Sparkles, Waypoints,
+  Play, Loader2,
 } from 'lucide-react';
+import { useLensData } from '@/lib/hooks/use-lens-data';
+import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
@@ -75,6 +78,21 @@ export default function MetalearningLensPage() {
     },
     onError: (err) => console.error('runCurriculum failed:', err instanceof Error ? err.message : err),
   });
+
+  const { items: mlStratItems } = useLensData('metalearning', 'strategy', { noSeed: true });
+  const runAction = useRunArtifact('metalearning');
+  const [actionResult, setActionResult] = useState<Record<string, unknown> | null>(null);
+  const [isRunning, setIsRunning] = useState<string | null>(null);
+  const handleAction = async (action: string) => {
+    const targetId = mlStratItems[0]?.id;
+    if (!targetId) { setActionResult({ message: 'No metalearning strategies found. Create a strategy first.' }); return; }
+    setIsRunning(action);
+    try {
+      const res = await runAction.mutateAsync({ id: targetId, action });
+      setActionResult(res.result as Record<string, unknown>);
+    } catch (e) { console.error(`Action ${action} failed:`, e); }
+    finally { setIsRunning(null); }
+  };
 
   const strategyList: Strategy[] = useMemo(() => strategies?.strategies || strategies || [], [strategies]);
   const statusInfo = status?.status || status || {};
@@ -398,6 +416,95 @@ export default function MetalearningLensPage() {
             </span>
           </div>
         </div>
+      </div>
+
+      {/* Backend Action Panel */}
+      <div className="panel p-4 space-y-3">
+        <h2 className="font-semibold flex items-center gap-2">
+          <GraduationCap className="w-4 h-4 text-neon-cyan" />
+          Metalearning Analysis
+        </h2>
+        <div className="flex flex-wrap gap-2">
+          {[
+            { action: 'strategySelection', label: 'Strategy Selection' },
+            { action: 'transferAnalysis', label: 'Transfer Analysis' },
+            { action: 'performanceProfile', label: 'Performance Profile' },
+          ].map(({ action, label }) => (
+            <button key={action} onClick={() => handleAction(action)} disabled={!!isRunning}
+              className="btn-secondary text-sm flex items-center gap-1 disabled:opacity-50">
+              {isRunning === action ? <Loader2 className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
+              {label}
+            </button>
+          ))}
+        </div>
+        {actionResult && (
+          <div className="bg-lattice-deep rounded-lg p-4 space-y-3 text-sm">
+            {'recommended' in actionResult && 'method' in actionResult && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-3">
+                  <span className="text-gray-400 text-xs">Method: <span className="text-neon-cyan font-bold">{String(actionResult.method)}</span></span>
+                  <span className="text-gray-400 text-xs">Recommended: <span className="text-neon-green font-bold">{String(actionResult.recommended)}</span></span>
+                  <span className="text-gray-400 text-xs">Confidence: <span className="text-yellow-400">{String(actionResult.confidence)}</span></span>
+                </div>
+                {'rankings' in actionResult && Array.isArray(actionResult.rankings) && actionResult.rankings.length > 0 && (
+                  <div className="space-y-1">
+                    <p className="text-xs text-gray-500 uppercase tracking-wider">Rankings</p>
+                    {(actionResult.rankings as Array<Record<string, unknown>>).slice(0, 5).map((r, i) => (
+                      <div key={i} className="flex justify-between text-xs bg-lattice-surface rounded px-2 py-1">
+                        <span className="text-gray-300">{String(r.strategy || r.name)}</span>
+                        <span className="text-neon-cyan">{String(r.score || r.rank || i + 1)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            {'transferability' in actionResult && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-3">
+                  <span className="text-gray-400 text-xs">Transferability: <span className="text-neon-green font-bold">{String(actionResult.transferability)}</span></span>
+                </div>
+                {'sharedConcepts' in actionResult && Array.isArray(actionResult.sharedConcepts) && actionResult.sharedConcepts.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {(actionResult.sharedConcepts as string[]).map((c, i) => (
+                      <span key={i} className="text-xs bg-neon-cyan/10 border border-neon-cyan/20 rounded px-2 py-0.5 text-neon-cyan">{c}</span>
+                    ))}
+                  </div>
+                )}
+                {'recommendation' in actionResult && <p className="text-xs text-gray-300">{String(actionResult.recommendation)}</p>}
+              </div>
+            )}
+            {'overallScore' in actionResult && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-3">
+                  <span className="text-neon-cyan font-bold text-xl">{String(actionResult.overallScore)}</span>
+                  <span className="text-gray-400 text-xs">Style: <span className="text-neon-purple">{String(actionResult.learningStyle)}</span></span>
+                </div>
+                {'strengths' in actionResult && Array.isArray(actionResult.strengths) && actionResult.strengths.length > 0 && (
+                  <div>
+                    <p className="text-xs text-neon-green font-semibold mb-1">Strengths</p>
+                    <div className="flex flex-wrap gap-1">
+                      {(actionResult.strengths as Array<{skill: string; score: number}>).map((s, i) => (
+                        <span key={i} className="text-xs bg-neon-green/10 border border-neon-green/20 rounded px-2 py-0.5 text-neon-green">{s.skill}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {'weaknesses' in actionResult && Array.isArray(actionResult.weaknesses) && actionResult.weaknesses.length > 0 && (
+                  <div>
+                    <p className="text-xs text-red-400 font-semibold mb-1">Weaknesses</p>
+                    <div className="flex flex-wrap gap-1">
+                      {(actionResult.weaknesses as Array<{skill: string; score: number}>).map((w, i) => (
+                        <span key={i} className="text-xs bg-red-400/10 border border-red-400/20 rounded px-2 py-0.5 text-red-400">{w.skill}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+            {'message' in actionResult && <p className="text-gray-400">{String(actionResult.message)}</p>}
+          </div>
+        )}
       </div>
 
       <ConnectiveTissueBar lensId="metalearning" />

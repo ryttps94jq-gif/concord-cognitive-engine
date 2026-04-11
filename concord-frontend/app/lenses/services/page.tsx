@@ -911,7 +911,87 @@ export default function ServicesLensPage() {
             <h3 className={ds.heading3}>Action Result</h3>
             <button onClick={() => setActionResult(null)} className={ds.btnGhost}><X className="w-4 h-4" /></button>
           </div>
-          <pre className={cn(ds.textMono, 'text-xs overflow-auto max-h-48')}>{JSON.stringify(actionResult, null, 2)}</pre>
+          <div className="space-y-3">
+            {/* scheduleOptimize */}
+            {actionResult.optimizedOrder !== undefined && Array.isArray(actionResult.optimizedOrder) && (
+              <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className="text-sm font-bold text-neon-cyan">{(actionResult.optimizedOrder as unknown[]).length}</p>
+                    <p className="text-[10px] text-gray-500">Appointments</p>
+                  </div>
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className={`text-sm font-bold ${Number(actionResult.totalGapMinutes) > 60 ? 'text-amber-400' : 'text-green-400'}`}>{String(actionResult.totalGapMinutes)} min</p>
+                    <p className="text-[10px] text-gray-500">Total Gap</p>
+                  </div>
+                </div>
+                {(actionResult.optimizedOrder as {client:string;time:string;service:string}[]).slice(0,5).map((a, i) => (
+                  <div key={i} className="flex items-center gap-2 text-xs px-2 py-1 bg-lattice-surface rounded">
+                    <span className="w-5 h-5 rounded-full bg-neon-cyan/20 text-neon-cyan text-center leading-5 flex-shrink-0">{i+1}</span>
+                    <span className="text-gray-300 flex-1">{a.client}</span>
+                    <span className="text-gray-500">{a.service}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {/* reminderGenerate */}
+            {actionResult.reminders !== undefined && Array.isArray(actionResult.reminders) && (
+              <div className="space-y-2">
+                <div className="p-2 bg-lattice-surface rounded text-center">
+                  <p className="text-sm font-bold text-neon-cyan">{String(actionResult.count)}</p>
+                  <p className="text-[10px] text-gray-500">Reminders Generated</p>
+                </div>
+                {(actionResult.reminders as {client:string;service:string;date:string}[]).slice(0,4).map((r, i) => (
+                  <div key={i} className="px-2 py-1 bg-lattice-surface rounded text-xs">
+                    <p className="text-white font-semibold">{r.client}</p>
+                    <p className="text-gray-400">{r.service} &bull; {r.date}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+            {/* revenueByProvider */}
+            {actionResult.summary !== undefined && Array.isArray(actionResult.summary) && (
+              <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className="text-sm font-bold text-neon-cyan">${Number(actionResult.totalRevenue).toLocaleString()}</p>
+                    <p className="text-[10px] text-gray-500">Total Revenue</p>
+                  </div>
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className="text-sm font-bold text-neon-cyan">{String(actionResult.period)}d period</p>
+                    <p className="text-[10px] text-gray-500">Period</p>
+                  </div>
+                </div>
+                {(actionResult.summary as {provider:string;appointments:number;revenue:number}[]).slice(0,4).map((p, i) => (
+                  <div key={i} className="flex items-center justify-between px-2 py-1 bg-lattice-surface rounded text-xs">
+                    <span className="text-gray-300">{p.provider}</span>
+                    <span className="text-neon-cyan">${p.revenue.toLocaleString()} ({p.appointments} appts)</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {/* supplyCheck */}
+            {actionResult.needsOrder !== undefined && Array.isArray(actionResult.lowStock) && (
+              <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className={`text-sm font-bold ${Number(actionResult.count) > 0 ? 'text-amber-400' : 'text-green-400'}`}>{String(actionResult.count)}</p>
+                    <p className="text-[10px] text-gray-500">Low Stock Items</p>
+                  </div>
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className="text-sm font-bold text-neon-cyan">{String(actionResult.totalItems)}</p>
+                    <p className="text-[10px] text-gray-500">Total Items</p>
+                  </div>
+                </div>
+                {(actionResult.lowStock as {name:string;currentStock:number;reorderPoint:number}[]).slice(0,4).map((s, i) => (
+                  <div key={i} className="flex items-center justify-between px-2 py-1 bg-amber-500/10 rounded text-xs">
+                    <span className="text-gray-300">{s.name}</span>
+                    <span className="text-amber-400">{s.currentStock} / {s.reorderPoint} min</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
 

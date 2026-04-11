@@ -9,11 +9,12 @@ import {
   Plus, X, Edit2, Trash2, Bell, Repeat, Users,
   Search, Settings, Check, Video,
   ExternalLink, Rocket, CalendarDays, Megaphone, BookOpen, CheckSquare,
-  Play, Timer
+  Play, Timer, Loader2, XCircle, Zap, BarChart3, AlertTriangle
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import { useLensData } from '@/lib/hooks/use-lens-data';
+import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
@@ -178,6 +179,11 @@ export default function CalendarLensPage() {
   });
 
   const [collaboratorInput, setCollaboratorInput] = useState('');
+
+  // Action panel state
+  const [isRunning, setIsRunning] = useState<string | null>(null);
+  const [actionResult, setActionResult] = useState<Record<string, unknown> | null>(null);
+  const runAction = useRunArtifact('calendar');
 
   // Sync backend event data into local state when available
   useEffect(() => {
@@ -446,6 +452,17 @@ export default function CalendarLensPage() {
         c.id === categoryId ? { ...c, visible: !c.visible } : c
       )
     );
+  };
+
+  const handleCalendarAction = async (action: string) => {
+    const targetId = eventItems[0]?.id;
+    if (!targetId) return;
+    setIsRunning(action);
+    try {
+      const res = await runAction.mutateAsync({ id: targetId, action });
+      setActionResult(res.result as Record<string, unknown>);
+    } catch (e) { console.error(`Action ${action} failed:`, e); }
+    setIsRunning(null);
   };
 
   // ---------------------------------------------------------------------------
@@ -1219,6 +1236,184 @@ export default function CalendarLensPage() {
           {viewMode === 'week' && renderWeekView()}
           {viewMode === 'day' && renderDayView()}
           {viewMode === 'agenda' && renderAgendaView()}
+
+          {/* Calendar Action Panel */}
+          <div className="border-t border-lattice-border bg-lattice-surface/60 px-4 py-3 flex-shrink-0">
+            <div className="flex items-center gap-2 mb-2">
+              <Zap className="w-4 h-4 text-neon-cyan" />
+              <span className="text-xs font-semibold text-neon-cyan uppercase tracking-wider">Calendar Actions</span>
+              {!eventItems[0]?.id && (
+                <span className="text-xs text-yellow-400 ml-2">(Add an event to enable actions)</span>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => handleCalendarAction('detectConflicts')}
+                disabled={!eventItems[0]?.id || isRunning !== null}
+                className={cn(
+                  'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors',
+                  'border-yellow-500/40 text-yellow-400 hover:bg-yellow-500/10 disabled:opacity-40 disabled:cursor-not-allowed'
+                )}
+              >
+                {isRunning === 'detectConflicts'
+                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  : <AlertTriangle className="w-3.5 h-3.5" />}
+                Detect Conflicts
+              </button>
+              <button
+                onClick={() => handleCalendarAction('findAvailability')}
+                disabled={!eventItems[0]?.id || isRunning !== null}
+                className={cn(
+                  'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors',
+                  'border-cyan-500/40 text-cyan-400 hover:bg-cyan-500/10 disabled:opacity-40 disabled:cursor-not-allowed'
+                )}
+              >
+                {isRunning === 'findAvailability'
+                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  : <Clock className="w-3.5 h-3.5" />}
+                Find Availability
+              </button>
+              <button
+                onClick={() => handleCalendarAction('expandRecurring')}
+                disabled={!eventItems[0]?.id || isRunning !== null}
+                className={cn(
+                  'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors',
+                  'border-purple-500/40 text-purple-400 hover:bg-purple-500/10 disabled:opacity-40 disabled:cursor-not-allowed'
+                )}
+              >
+                {isRunning === 'expandRecurring'
+                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  : <Repeat className="w-3.5 h-3.5" />}
+                Expand Recurring
+              </button>
+              <button
+                onClick={() => handleCalendarAction('scheduleOptimize')}
+                disabled={!eventItems[0]?.id || isRunning !== null}
+                className={cn(
+                  'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors',
+                  'border-green-500/40 text-green-400 hover:bg-green-500/10 disabled:opacity-40 disabled:cursor-not-allowed'
+                )}
+              >
+                {isRunning === 'scheduleOptimize'
+                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  : <Rocket className="w-3.5 h-3.5" />}
+                Schedule Optimize
+              </button>
+            </div>
+
+            {/* Action result display */}
+            <AnimatePresence>
+              {actionResult && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="mt-3 relative rounded-lg border border-lattice-border bg-lattice-deep p-3 text-xs overflow-hidden"
+                >
+                  <button
+                    onClick={() => setActionResult(null)}
+                    className="absolute top-2 right-2 text-gray-500 hover:text-gray-300"
+                    aria-label="Dismiss result"
+                  >
+                    <XCircle className="w-4 h-4" />
+                  </button>
+
+                  {/* Detect Conflicts */}
+                  {!!actionResult.conflicts && (
+                    <div>
+                      <div className="flex items-center gap-1.5 mb-2 text-yellow-400 font-semibold">
+                        <AlertTriangle className="w-3.5 h-3.5" /> Conflict Report
+                      </div>
+                      {(actionResult.conflicts as Array<{ event1: string; event2: string; overlap?: string }>).length === 0
+                        ? <p className="text-gray-400">No scheduling conflicts found.</p>
+                        : (actionResult.conflicts as Array<{ event1: string; event2: string; overlap?: string }>).map((c, i) => (
+                          <div key={i} className="mb-1 text-yellow-300">
+                            <span className="font-medium">{c.event1}</span>
+                            <span className="text-gray-500 mx-1">&#x2715;</span>
+                            <span className="font-medium">{c.event2}</span>
+                            {c.overlap && <span className="text-gray-400 ml-1">({c.overlap})</span>}
+                          </div>
+                        ))
+                      }
+                    </div>
+                  )}
+
+                  {/* Find Availability */}
+                  {!!actionResult.availableSlots && (
+                    <div>
+                      <div className="flex items-center gap-1.5 mb-2 text-cyan-400 font-semibold">
+                        <Clock className="w-3.5 h-3.5" /> Available Slots
+                      </div>
+                      {(actionResult.availableSlots as Array<{ start: string; end: string; minutes: number }>).length === 0
+                        ? <p className="text-gray-400">No availability windows found.</p>
+                        : (actionResult.availableSlots as Array<{ start: string; end: string; minutes: number }>).map((s, i) => (
+                          <div key={i} className="mb-1 text-cyan-300">
+                            {s.start} &ndash; {s.end}
+                            {s.minutes !== undefined && (
+                              <span className="ml-2 text-gray-400">{s.minutes} min</span>
+                            )}
+                          </div>
+                        ))
+                      }
+                    </div>
+                  )}
+
+                  {/* Expand Recurring */}
+                  {!!actionResult.occurrences && (
+                    <div>
+                      <div className="flex items-center gap-1.5 mb-2 text-purple-400 font-semibold">
+                        <Repeat className="w-3.5 h-3.5" /> Expanded Events
+                      </div>
+                      {(actionResult.occurrences as Array<{ occurrence: number; date: string; dayOfWeek: string }>).length === 0
+                        ? <p className="text-gray-400">No recurring events to expand.</p>
+                        : (actionResult.occurrences as Array<{ occurrence: number; date: string; dayOfWeek: string }>).map((e, i) => (
+                          <div key={i} className="mb-1 text-purple-300">
+                            <span className="font-medium">{e.dayOfWeek}</span>
+                            <span className="text-gray-400 ml-2">{e.date}</span>
+                          </div>
+                        ))
+                      }
+                    </div>
+                  )}
+
+                  {/* Schedule Optimize */}
+                  {!!actionResult.optimizedOrder && (
+                    <div>
+                      <div className="flex items-center gap-1.5 mb-2 text-green-400 font-semibold">
+                        <BarChart3 className="w-3.5 h-3.5" /> Optimized Order
+                      </div>
+                      {(actionResult.optimizedOrder as Array<string>).length === 0
+                        ? <p className="text-gray-400">Schedule looks optimal.</p>
+                        : (actionResult.optimizedOrder as Array<string>).map((s, i) => (
+                          <div key={i} className="mb-1 text-green-300">
+                            &bull; {s}
+                          </div>
+                        ))
+                      }
+                    </div>
+                  )}
+
+                  {/* Fallback */}
+                  {!actionResult.conflicts && !actionResult.availableSlots && !actionResult.occurrences && !actionResult.optimizedOrder && (
+                    <div className="text-sm text-gray-400">
+                      {actionResult.message ? (
+                        <p>{actionResult.message as string}</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {Object.entries(actionResult).map(([key, val]) => (
+                            <div key={key} className="flex justify-between p-2 bg-lattice-deep rounded text-xs">
+                              <span className="text-gray-500 capitalize">{key.replace(/([A-Z])/g, ' $1')}</span>
+                              <span className="text-white font-medium">{typeof val === 'object' ? `${Object.keys(val as Record<string, unknown>).length} items` : String(val)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
 
           {/* Book Session floating button */}
           <motion.button

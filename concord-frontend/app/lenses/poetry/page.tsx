@@ -9,8 +9,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Feather, Plus, Search, Edit2, Trash2, BookOpen, X, Save, Sparkles,
   AlignLeft, Globe,
-  Hash, Music, Layers, Moon,
+  Hash, Music, Layers, Moon, Zap,
 } from 'lucide-react';
+import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { cn } from '@/lib/utils';
 import { useUIStore } from '@/store/ui';
 import { UniversalActions } from '@/components/lens/UniversalActions';
@@ -253,6 +254,24 @@ export default function PoetryPage() {
   const { items: poemItems, isLoading, isError, error, refetch, create: createPoem, update: updatePoem, remove: removePoem } = useLensData<Poem>('poetry', 'poem', { seed: [] });
   const poems = useMemo(() => poemItems.map(i => ({ ...(i.data as unknown as Poem), id: i.id, title: i.title })), [poemItems]);
 
+  const runAction = useRunArtifact('poetry');
+  const [actionResult, setActionResult] = useState<Record<string, unknown> | null>(null);
+  const [activeAction, setActiveAction] = useState<string | null>(null);
+
+  const handleAction = useCallback(async (action: string) => {
+    const targetId = poemItems[0]?.id;
+    if (!targetId) return;
+    setActiveAction(action);
+    try {
+      const res = await runAction.mutateAsync({ id: targetId, action });
+      setActionResult({ action, ...(res.result as Record<string, unknown>) });
+    } catch (err) {
+      console.error('Poetry action failed:', err);
+    } finally {
+      setActiveAction(null);
+    }
+  }, [poemItems, runAction]);
+
   const [tab, setTab] = useState<PoetryTab>('collection');
   const [searchQuery, setSearchQuery] = useState('');
   const [showFeatures, setShowFeatures] = useState(true);
@@ -380,6 +399,80 @@ export default function PoetryPage() {
         <FeedBanner domain="poetry" />
         <RealtimeDataPanel data={realtimeData} insights={realtimeInsights} />
       <UniversalActions domain="poetry" artifactId={null} compact />
+
+        {/* Poetry Actions Panel */}
+        <div className="bg-white/3 border border-white/10 rounded-xl p-4 space-y-3">
+          <h3 className="text-sm font-semibold text-rose-300 flex items-center gap-2"><Zap className="w-4 h-4" /> Poetry Analysis</h3>
+          <div className="flex flex-wrap gap-2">
+            {[
+              { action: 'meterAnalysis', label: 'Meter Analysis' },
+              { action: 'rhymeScheme', label: 'Rhyme Scheme' },
+              { action: 'formGuide', label: 'Form Guide' },
+              { action: 'wordFrequency', label: 'Word Frequency' },
+            ].map(({ action, label }) => (
+              <button key={action} onClick={() => handleAction(action)} disabled={activeAction === action || !poemItems[0]?.id}
+                className="px-3 py-1.5 text-xs bg-rose-500/10 border border-rose-500/20 rounded-lg hover:bg-rose-500/20 disabled:opacity-50 flex items-center gap-1.5">
+                {activeAction === action ? <div className="w-3 h-3 border border-rose-400 border-t-transparent rounded-full animate-spin" /> : <Zap className="w-3 h-3 text-rose-400" />}
+                {label}
+              </button>
+            ))}
+          </div>
+          {actionResult && (
+            <div className="mt-3 p-3 bg-black/30 rounded-lg border border-rose-500/20 text-xs space-y-2">
+              {actionResult.action === 'meterAnalysis' && (
+                <div className="space-y-1">
+                  <div className="flex gap-4 flex-wrap">
+                    <span className="text-gray-400">Lines: <span className="text-white font-mono">{String(actionResult.lines ?? '')}</span></span>
+                    <span className="text-gray-400">Avg syllables: <span className="text-rose-300 font-mono">{String(actionResult.avgSyllables ?? '')}</span></span>
+                    <span className="text-gray-400">Consistency: <span className={`font-mono ${actionResult.meterConsistency === 'regular' ? 'text-green-400' : 'text-yellow-400'}`}>{String(actionResult.meterConsistency ?? '')}</span></span>
+                    <span className="text-gray-400">Form: <span className="text-rose-300 font-mono">{String(actionResult.possibleForm ?? '')}</span></span>
+                  </div>
+                  {Array.isArray(actionResult.syllablesPerLine) && (
+                    <div className="flex flex-wrap gap-1 mt-1">{(actionResult.syllablesPerLine as number[]).map((n, i) => <span key={i} className="px-1.5 py-0.5 bg-rose-500/10 rounded text-rose-300 font-mono">{n}</span>)}</div>
+                  )}
+                </div>
+              )}
+              {actionResult.action === 'rhymeScheme' && (
+                <div className="space-y-1">
+                  <div className="flex gap-4 flex-wrap">
+                    <span className="text-gray-400">Scheme: <span className="text-rose-300 font-mono text-sm tracking-widest">{String(actionResult.scheme ?? '')}</span></span>
+                    <span className="text-gray-400">Form: <span className="text-white">{String(actionResult.form ?? '')}</span></span>
+                    <span className={`${actionResult.rhyming ? 'text-green-400' : 'text-gray-500'}`}>{actionResult.rhyming ? 'Rhymes detected' : 'No rhymes'}</span>
+                  </div>
+                </div>
+              )}
+              {actionResult.action === 'formGuide' && (
+                <div className="space-y-1">
+                  <p className="text-rose-300 font-semibold capitalize">{String(actionResult.form ?? '')}</p>
+                  <div className="grid grid-cols-2 gap-1">
+                    <span className="text-gray-400">Lines: <span className="text-white">{String(actionResult.lines ?? '')}</span></span>
+                    <span className="text-gray-400">Meter: <span className="text-white">{String(actionResult.meter ?? '')}</span></span>
+                    <span className="text-gray-400 col-span-2">Rhyme: <span className="text-rose-300">{String(actionResult.rhyme ?? '')}</span></span>
+                    <span className="text-gray-400 col-span-2">Structure: <span className="text-gray-200">{String(actionResult.structure ?? '')}</span></span>
+                  </div>
+                  {!!actionResult.tip && <p className="text-gray-500 italic">{String(actionResult.tip)}</p>}
+                </div>
+              )}
+              {actionResult.action === 'wordFrequency' && (
+                <div className="space-y-1">
+                  <div className="flex gap-4 flex-wrap">
+                    <span className="text-gray-400">Total words: <span className="text-white font-mono">{String(actionResult.totalWords ?? '')}</span></span>
+                    <span className="text-gray-400">Unique: <span className="text-rose-300 font-mono">{String(actionResult.uniqueWords ?? '')}</span></span>
+                    <span className="text-gray-400">Density: <span className="text-white font-mono">{String(actionResult.lexicalDensity ?? '')}%</span></span>
+                  </div>
+                  {Array.isArray(actionResult.topWords) && (
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {(actionResult.topWords as {word:string;count:number}[]).slice(0,8).map(({word,count}) => (
+                        <span key={word} className="px-2 py-0.5 bg-rose-500/10 rounded text-rose-300 font-mono">{word} <span className="text-gray-500">×{count}</span></span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+              <button onClick={() => setActionResult(null)} className="text-gray-600 hover:text-gray-400 text-xs flex items-center gap-1 mt-1"><X className="w-3 h-3" /> Dismiss</button>
+            </div>
+          )}
+        </div>
 
         {/* Tabs */}
         <div className="flex gap-1 bg-white/5 p-1 rounded-lg border border-white/10">

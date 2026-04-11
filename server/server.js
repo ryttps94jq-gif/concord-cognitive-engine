@@ -384,7 +384,7 @@ await tryLoadDotenv();
 
 // ---- Environment Validation ----
 const REQUIRED_ENV_PRODUCTION = ["JWT_SECRET", "ADMIN_PASSWORD"];
-const RECOMMENDED_ENV = ["OPENAI_API_KEY", "ALLOWED_ORIGINS"];
+const RECOMMENDED_ENV = ["ALLOWED_ORIGINS"];
 
 function validateEnvironment() {
   const errors = [];
@@ -878,8 +878,31 @@ function registerShutdownCallback(callback) {
   shutdownCallbacks.push(callback);
 }
 
-/** Track setInterval timers for cleanup on SIGTERM */
+/**
+ * Stagger registry — ensures no two autonomous processes fire at the same exact time.
+ * Each interval gets a unique initial delay offset (stagger window = 7 seconds apart).
+ * This prevents CPU spikes, database contention, and GC pressure from synchronized ticks.
+ */
+const _staggerRegistry = { count: 0, STAGGER_WINDOW_MS: 7000 };
+function _nextStaggerDelay() {
+  return ++_staggerRegistry.count * _staggerRegistry.STAGGER_WINDOW_MS;
+}
+
+/** Track setInterval timers for cleanup on SIGTERM — with stagger support */
 function trackedSetInterval(fn, ms) {
+  // Use stagger if available (post-init), otherwise direct
+  if (_staggerRegistry) {
+    const delay = _nextStaggerDelay();
+    const timerId = setTimeout(() => {
+      try { fn(); } catch (_e) { /* silent */ }
+      const id = setInterval(fn, ms);
+      if (id.unref) id.unref();
+      _activeTimers.add(id);
+    }, delay);
+    if (timerId.unref) timerId.unref();
+    _activeTimers.add(timerId);
+    return timerId;
+  }
   const id = setInterval(fn, ms);
   _activeTimers.add(id);
   return id;
@@ -892,8 +915,11 @@ function clearTrackedInterval(id) {
 
 /** Memory-aware setInterval: skips tick if heap exceeds threshold or memory ceiling paused */
 const _THROTTLE_HEAP_LIMIT = 3 * 1024 * 1024 * 1024;
+
 function throttledInterval(fn, ms, name) {
-  const id = setInterval(async () => {
+  const staggerDelay = _nextStaggerDelay();
+  // Initial fire is staggered; subsequent fires are at the regular interval
+  const wrappedFn = async () => {
     // Check RSS-based memory ceiling (native memory awareness)
     if (globalThis.__memoryPaused?.()) {
       structuredLog("warn", "task_skipped_rss", { name });
@@ -909,10 +935,18 @@ function throttledInterval(fn, ms, name) {
     } catch (err) {
       structuredLog("error", "task_error", { name, error: String(err?.message || err) });
     }
-  }, ms);
-  if (id.unref) id.unref();
-  _activeTimers.add(id);
-  return id;
+  };
+  // Staggered start: delay first tick, then run at regular interval
+  const timerId = setTimeout(() => {
+    wrappedFn(); // First tick (staggered)
+    const intervalId = setInterval(wrappedFn, ms);
+    if (intervalId.unref) intervalId.unref();
+    _activeTimers.add(intervalId);
+  }, staggerDelay);
+  if (timerId.unref) timerId.unref();
+  _activeTimers.add(timerId);
+  structuredLog("debug", "staggered_interval_registered", { name, staggerDelay, intervalMs: ms, slot: _staggerRegistry.count });
+  return timerId;
 }
 
 async function gracefulShutdown(signal) {
@@ -1171,10 +1205,10 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
 const OPENAI_BASE_URL = process.env.OPENAI_BASE_URL || "https://api.openai.com/v1";
 const OPENAI_MODEL_FAST = process.env.OPENAI_MODEL_FAST || process.env.OPENAI_MODEL || "gpt-4o-mini";
 const OPENAI_MODEL_SMART = process.env.OPENAI_MODEL_SMART || "gpt-4.1";
-let LLM_READY = Boolean(OPENAI_API_KEY);
+let LLM_READY = Boolean(OPENAI_API_KEY) || Boolean((process.env.BRAIN_CONSCIOUS_URL || process.env.OLLAMA_HOST || "").trim());
 // Also mark LLM ready if conscious brain becomes available (updated in initThreeBrains)
 function _refreshLlmReady() {
-  LLM_READY = Boolean(OPENAI_API_KEY) || (BRAIN && BRAIN.conscious && BRAIN.conscious.enabled);
+  LLM_READY = Boolean(OPENAI_API_KEY) || Boolean((process.env.BRAIN_CONSCIOUS_URL || process.env.OLLAMA_HOST || "").trim()) || (BRAIN && BRAIN.conscious && BRAIN.conscious.enabled);
 }
 // LLM toggle: default ON only when a key is present
 const __envBool = (v) => String(v ?? "").toLowerCase().trim();
@@ -5074,7 +5108,13 @@ function metricsMiddleware(req, res, next) {
 
 // Update gauges periodically (30s — no need to update faster, these are scraped on demand)
 setInterval(() => {
-  if (METRICS.gauges.dtuCount) METRICS.gauges.dtuCount.set(STATE.dtus.size);
+  // Report real DTU count (excluding shadow/repair/system DTUs) to Prometheus
+  if (METRICS.gauges.dtuCount) {
+    const EXCLUDED_KINDS = new Set(["shadow", "pattern_shadow", "repair_record", "royalty_record", "session_context", "linguistic_map", "audit_trail", "system_metric", "repair_dtu"]);
+    let _realCount = 0;
+    for (const d of STATE.dtus.values()) { if (!EXCLUDED_KINDS.has(d.machine?.kind) && d.tier !== "shadow") _realCount++; }
+    METRICS.gauges.dtuCount.set(_realCount);
+  }
   if (METRICS.gauges.activeConnections) METRICS.gauges.activeConnections.set(REALTIME.clients?.size || 0);
 }, 30_000);
 
@@ -5187,8 +5227,31 @@ function startAutoBackup(intervalHours = 24) {
   structuredLog("info", "autobackup_enabled", { intervalHours });
 }
 if (String(process.env.AUTO_BACKUP || "true").toLowerCase() === "true") {
-  startAutoBackup(Number(process.env.BACKUP_INTERVAL_HOURS || 24));
+  startAutoBackup(Number(process.env.BACKUP_INTERVAL_HOURS || 2));
 }
+
+// Periodic state save safety net — catches mutations if debounced save somehow missed
+// Runs every 5 minutes, no-op if no changes since last save
+let _lastPeriodicSaveHash = "";
+trackedSetInterval(() => {
+  try {
+    const data = JSON.stringify(_serializeState());
+    const hash = data.length.toString(); // cheap change detection
+    if (hash === _lastPeriodicSaveHash) return; // no changes
+    _lastPeriodicSaveHash = hash;
+    if (USE_SQLITE_STATE && db) {
+      const stmt = db.prepare("INSERT OR REPLACE INTO state_snapshots (id, data, version, saved_at) VALUES (1, ?, ?, ?)");
+      stmt.run(data, VERSION, new Date().toISOString());
+    } else if (typeof STATE_PATH === "string") {
+      const tmpPath = STATE_PATH + ".tmp";
+      fs.writeFileSync(tmpPath, data, "utf-8");
+      fs.renameSync(tmpPath, STATE_PATH);
+    }
+    structuredLog("debug", "periodic_state_save", { sizeKb: Math.round(data.length / 1024) });
+  } catch (e) {
+    structuredLog("error", "periodic_state_save_failed", { error: String(e?.message || e) });
+  }
+}, 5 * 60 * 1000);
 
 // Export for CLI
 export { createBackup, restoreBackup, listBackups };
@@ -15910,6 +15973,34 @@ register("dtu", "create", async (ctx, input) => {
   const meta = input.meta && typeof input.meta === "object" ? input.meta : {};
   const allowRewrite = input.allowRewrite !== false;
 
+  // ── Usage Rights Enforcement: check parent DTU consent ─────────────
+  // If this DTU derives from another user's DTU, verify they allow citations.
+  // Can't have people stealing work — consent must be explicit.
+  const _creatorId = ctx?.actor?.userId || ctx?.actor?.id || input.authorId || "anon";
+  const _lineageViolations = [];
+  for (const parentRef of lineage) {
+    const parentId = typeof parentRef === "string" ? parentRef : parentRef?.id;
+    if (!parentId) continue;
+    const parentDtu = STATE.dtus.get(parentId);
+    if (!parentDtu) continue;
+    // Own DTUs and system DTUs: no restriction
+    if (!parentDtu.ownerId || parentDtu.ownerId === _creatorId || parentDtu.ownerId === "anon" || parentDtu.ownerId === "system" || parentDtu.ownerId === "founder") continue;
+    if (parentDtu.creatorType === "system") continue;
+    // Check consent
+    const consent = parentDtu.consent || parentDtu.meta?.consent || {};
+    const vis = parentDtu.meta?.visibility || parentDtu.visibility;
+    // Published/public with no explicit denial: implied license for citation
+    if (vis === "published" || vis === "public") continue;
+    // Private DTU from another user: must have allowCitations
+    if (!consent.allowCitations) {
+      _lineageViolations.push({ parentId, parentTitle: parentDtu.title, owner: parentDtu.ownerId, reason: "citations_not_allowed" });
+    }
+  }
+  if (_lineageViolations.length > 0) {
+    structuredLog("warn", "dtu_lineage_consent_denied", { creator: _creatorId, violations: _lineageViolations });
+    return { ok: false, error: "usage_rights_denied", message: "Cannot derive from these DTUs without citation consent from their creators", violations: _lineageViolations };
+  }
+
   const coreIn = (input.core && typeof input.core === "object") ? input.core : {};
   const humanIn = (input.human && typeof input.human === "object") ? input.human : {};
   const machineIn = (input.machine && typeof input.machine === "object") ? input.machine : {};
@@ -16136,22 +16227,47 @@ register("dtu", "list", (ctx, input) => {
   const scopeFilter = input.scope || null; // "local", "global", or null (default: user's view)
   const userId = ctx?.actor?.id || ctx?.actor?.odId || null;
 
-  // Filter out shadow DTUs - they are internal and should not appear in user-facing lists
-  let items = userVisibleDTUs().filter(d => !isShadowDTU(d));
+  // Filter out shadow/repair/system DTUs - internal, not real user content
+  const INTERNAL_KINDS = new Set(["shadow", "pattern_shadow", "repair_record", "royalty_record", "session_context", "linguistic_map", "audit_trail", "system_metric", "repair_dtu"]);
+  let items = userVisibleDTUs().filter(d => !isShadowDTU(d) && !INTERNAL_KINDS.has(d.machine?.kind) && d.tier !== "shadow");
 
-  // Scope-aware filtering:
-  // - scope="global" → only global DTUs (visible to everyone)
-  // - scope="local"  → only this user's local DTUs
-  // - no scope (default) → user's local DTUs + all global DTUs (the user's complete view)
-  if (scopeFilter === "global") {
-    items = items.filter(d => d.scope === "global");
-  } else if (scopeFilter === "local") {
-    items = items.filter(d => d.scope !== "global" && (!userId || !d.ownerId || d.ownerId === userId));
-  } else if (userId) {
-    // Default view: show user's own local DTUs + all global DTUs + published/public DTUs
+  // ── Scope Hierarchy Enforcement ──────────────────────────────────
+  // Scopes: local → regional → national → global (strict containment)
+  // - local:    only owner can see
+  // - regional: owner + same region users
+  // - national: owner + same country users
+  // - global:   everyone (published/public only for non-owners)
+  const SCOPE_LEVELS = { local: 0, regional: 1, national: 2, global: 3 };
+
+  if (scopeFilter && SCOPE_LEVELS[scopeFilter] !== undefined) {
+    const requestedLevel = SCOPE_LEVELS[scopeFilter];
     items = items.filter(d => {
-      if (d.scope === "global") return true;
+      const dtuScope = d.scope || "local";
+      const dtuLevel = SCOPE_LEVELS[dtuScope] ?? 0;
+
+      // Exact scope match
+      if (scopeFilter === "global") return dtuLevel === 3;
+      if (scopeFilter === "national") return dtuLevel >= 2;
+      if (scopeFilter === "regional") return dtuLevel >= 1 && dtuLevel <= 2;
+      if (scopeFilter === "local") {
+        if (dtuLevel > 0) return false; // local means local only
+        return !userId || !d.ownerId || d.ownerId === userId;
+      }
+      return true;
+    });
+    // Non-owners can only see published/public content at higher scopes
+    if (scopeFilter !== "local") {
+      items = items.filter(d => {
+        if (!d.ownerId || d.ownerId === userId) return true; // own content always visible
+        const vis = d.meta?.visibility || d.visibility;
+        return vis === "published" || vis === "public";
+      });
+    }
+  } else if (userId) {
+    // Default view: user's own DTUs (any scope) + published/public DTUs at any scope
+    items = items.filter(d => {
       if (!d.ownerId || d.ownerId === userId) return true;
+      if (d.scope === "global") return true;
       const vis = d.meta?.visibility || d.visibility;
       if (vis === "published" || vis === "public") return true;
       return false;
@@ -16879,7 +16995,26 @@ const expandTokensFromTokens = (tokens=[]) => {
   return Array.from(out).slice(0, 256);
 };
 
-const scored = all.map(d => {
+// ── Usage Rights Enforcement ─────────────────────────────────────
+// Before using someone else's DTU as brain context, check consent.
+// Own DTUs and system DTUs are always usable. Other users' DTUs
+// require allowCitations or allowAiTraining consent.
+const _consentFiltered = all.filter(d => {
+  if (!d) return false;
+  // Own DTUs: always usable
+  if (!d.ownerId || d.ownerId === _universeUserId || d.ownerId === "anon" || d.ownerId === "system" || d.ownerId === "founder") return true;
+  // System-generated DTUs: usable
+  if (d.creatorType === "system") return true;
+  // Other users' DTUs: check consent
+  const consent = d.consent || d.meta?.consent || {};
+  if (consent.allowCitations || consent.allowAiTraining) return true;
+  // Published/public DTUs with no explicit consent denial: allow (implied license)
+  const vis = d.meta?.visibility || d.visibility;
+  if (vis === "published" || vis === "public") return true;
+  return false;
+});
+
+const scored = _consentFiltered.map(d => {
   const dText = [
     d?.title || "",
     Array.isArray(d?.tags) ? d.tags.join(" ") : "",
@@ -19014,11 +19149,29 @@ register("quality", "preview", (_ctx, input) => {
 // ===================== System Status =====================
 // Returns live system metrics consumed by dashboard, header bar, and status cards
 register("system", "status", (_ctx, _input) => {
+  // Real DTU count: exclude shadow, repair, system-internal, and audit DTUs
+  // Users should see how much REAL content exists, not number-padded counts
+  const EXCLUDED_KINDS = new Set(["shadow", "pattern_shadow", "repair_record", "royalty_record", "session_context", "linguistic_map", "audit_trail", "system_metric", "repair_dtu"]);
+  const EXCLUDED_SOURCES = new Set(["repair-cortex", "shadow-promoter", "ghost-fleet"]);
+  let realDtuCount = 0;
+  for (const dtu of STATE.dtus.values()) {
+    const kind = dtu.machine?.kind;
+    const source = dtu.source;
+    const tags = dtu.tags || [];
+    if (EXCLUDED_KINDS.has(kind)) continue;
+    if (EXCLUDED_SOURCES.has(source)) continue;
+    if (tags.includes("shadow") || tags.includes("repair") || tags.includes("audit")) continue;
+    if (dtu.tier === "shadow") continue;
+    realDtuCount++;
+  }
+
   return {
     ok: true,
     version: "5.1.0",
     counts: {
-      dtus: STATE.dtus.size,
+      dtus: realDtuCount,
+      dtusRaw: STATE.dtus.size,  // raw count for debug/admin
+      shadowDtus: STATE.shadowDtus?.size || 0,
       events: AUDIT_LOG?.length || 0,
       emergents: STATE.__emergent?.emergents?.size || 0,
     },
@@ -23838,7 +23991,91 @@ if (db) {
   app.use("/api/disputes", createDisputeRouter({ db, requireAuth, adminOnly: economyAdminOnly }));
   registerLegalRoutes(app, { db, requireAuth, requireRole, structuredLog, auditLog });
   registerRepairEnhancedRoutes(app, { db, requireRole, log: structuredLog });
-  registerInitiativeRoutes(app, { db });
+  registerInitiativeRoutes(app, { db, realtimeEmit });
+
+  // ── Initiative Engine Proactive Tick ────────────────────────────────
+  // Concord doesn't wait. It can send the first message, double-text if
+  // the user takes too long, and share ideas unprompted.
+  // Runs every 15 minutes, staggered with other autonomous processes.
+  if (app._initiativeEngine) {
+    const _initEngine = app._initiativeEngine;
+    throttledInterval(async () => {
+      try {
+        // Check all active users for proactive triggers
+        const activeUsers = new Set();
+        for (const [sessionId, sess] of STATE.sessions) {
+          const userId = sess.userId || sessionId;
+          if (userId && userId !== "default" && userId !== "anon") activeUsers.add(userId);
+        }
+
+        for (const userId of activeUsers) {
+          // Check each trigger type
+          for (const triggerType of ["check_in", "pending_work", "reflective_followup", "substrate_discovery"]) {
+            try {
+              const lastMsg = STATE.sessions.get(userId)?.messages?.slice(-1)[0];
+              const idleMinutes = lastMsg?.ts ? Math.round((Date.now() - new Date(lastMsg.ts).getTime()) / 60000) : 999;
+
+              // Only trigger if user has been idle long enough
+              if (triggerType === "check_in" && idleMinutes < 120) continue;        // 2h idle
+              if (triggerType === "reflective_followup" && idleMinutes < 30) continue; // 30min idle
+              if (triggerType === "pending_work" && idleMinutes < 60) continue;      // 1h idle
+
+              const evalResult = _initEngine.evaluateTrigger(userId, triggerType, {
+                idleMinutes,
+                priority: idleMinutes > 480 ? "low" : "normal",
+              });
+
+              if (evalResult.shouldFire) {
+                // Generate contextual message based on trigger type
+                let message;
+                if (triggerType === "check_in") {
+                  message = "Been a while. Anything on your mind, or want me to surface something interesting from your lattice?";
+                } else if (triggerType === "pending_work") {
+                  const pendingArtifacts = Array.from(STATE.lensArtifacts?.values() || [])
+                    .filter(a => a.ownerId === userId && a.meta?.status === "draft")
+                    .slice(0, 3);
+                  message = pendingArtifacts.length > 0
+                    ? `You have ${pendingArtifacts.length} draft${pendingArtifacts.length > 1 ? "s" : ""} waiting. Want to pick up where you left off?`
+                    : null;
+                } else if (triggerType === "reflective_followup") {
+                  const lastTopic = lastMsg?.content?.slice(0, 100);
+                  message = lastTopic
+                    ? `Had another thought about what we were discussing. Want to hear it?`
+                    : null;
+                } else if (triggerType === "substrate_discovery") {
+                  const recentDtus = Array.from(STATE.dtus.values())
+                    .filter(d => d.ownerId === userId && Date.now() - new Date(d.createdAt || 0).getTime() < 86400000)
+                    .length;
+                  message = recentDtus > 0
+                    ? `I noticed some connections between your recent DTUs. Want me to map them out?`
+                    : null;
+                }
+
+                if (message) {
+                  _initEngine.createInitiative(userId, triggerType, message, {
+                    priority: evalResult.suggestedPriority,
+                    channel: "inApp",
+                  });
+
+                  // Push to frontend via WebSocket
+                  if (typeof realtimeEmit === "function") {
+                    realtimeEmit("initiative:new", { userId, triggerType, message, score: evalResult.score });
+                  }
+                }
+              }
+            } catch (_e) {
+              // Per-user evaluation errors don't block other users
+            }
+          }
+        }
+      } catch (e) {
+        structuredLog("error", "initiative_tick_error", { error: e?.message });
+      }
+    }, 15 * 60 * 1000, "initiative_proactive_tick");
+
+    structuredLog("info", "initiative_engine_active", { message: "Proactive tick registered — Concord can initiate conversations" });
+  }
+
   app.use("/api", createTransparencyRouter({ db, adminOnly: economyAdminOnly }));
   const backupScheduler = createBackupScheduler(db, { dataDir: DATA_DIR });
   registerBackupRoutes(app, { requireRole, backupScheduler, db });
@@ -23882,7 +24119,7 @@ import createMediaRouter from "./routes/media.js";
 try { app.use("/api/media", createMediaRouter({ STATE })); } catch (e) { structuredLog("warn", "media_routes_skip", { error: e.message }); }
 
 import { createModerationRouter } from "./routes/moderation.js";
-try { app.use("/api/moderation", createModerationRouter({ db, requireAuth, requireRole, structuredLog })); } catch (e) { structuredLog("warn", "moderation_routes_skip", { error: e.message }); }
+try { app.use("/api/moderation", createModerationRouter({ db, requireAuth, requireRole, structuredLog, asyncHandler })); } catch (e) { structuredLog("warn", "moderation_routes_skip", { error: e.message }); }
 
 import createSocialGroupRoutes from "./routes/social-groups.js";
 try { app.use("/api/social", createSocialGroupRoutes({ db, requireAuth })); } catch (e) { structuredLog("warn", "social_groups_routes_skip", { error: e.message }); }
@@ -26684,6 +26921,38 @@ register("marketplace", "purchaseWithRoyalties", async (ctx, input) => {
   // Platform fee
   payments.push({ recipient: "platform", amount: Math.round(platformFee * 100) / 100, type: "platform_fee" });
 
+  // ── ACTUALLY CREDIT WALLETS ──────────────────────────────────────
+  // Every payment computed above MUST hit the wallet immediately.
+  // No deferred settlement — creators get paid the instant a sale happens.
+  for (const payment of payments) {
+    if (payment.recipient && payment.recipient !== "platform" && payment.amount > 0) {
+      try {
+        creditWallet(
+          payment.recipient,
+          payment.amount,
+          `${payment.type === "royalty" ? "Royalty" : "Sale"}: ${dtu.title || dtuId} (${payment.type})`,
+          `purchase:${dtuId}:${clone.id}:${payment.recipient}`  // idempotency key
+        );
+      } catch (_e) {
+        structuredLog("error", "wallet_credit_failed", { recipient: payment.recipient, amount: payment.amount, error: _e?.message });
+      }
+    }
+  }
+  // Debit buyer
+  try {
+    const buyerId = ctx?.actor?.userId;
+    if (buyerId && price > 0) {
+      const buyerWallet = getWallet(buyerId);
+      buyerWallet.balance -= price;
+      buyerWallet.tokensSpent = (buyerWallet.tokensSpent || 0) + price;
+      buyerWallet.updatedAt = Date.now();
+      logTransaction({ type: 'debit', odId: buyerId, amount: price, reason: `Purchase: ${dtu.title || dtuId}`, balance: buyerWallet.balance });
+    }
+  } catch (_e) {
+    structuredLog("error", "buyer_debit_failed", { error: _e?.message });
+  }
+  saveStateDebounced();
+
   // Clone DTU to buyer
   const clone = JSON.parse(JSON.stringify(dtu));
   clone.id = uid("dtu");
@@ -27343,6 +27612,13 @@ register("lens", "get", (ctx, input={}) => {
   const artifact = STATE.lensArtifacts.get(id);
   if (!artifact) return { ok: false, error: "not found" };
   if (domain && artifact.domain !== domain) return { ok: false, error: "domain mismatch" };
+  // User sovereignty: private artifacts only visible to owner
+  const currentUserId = ctx.actor?.userId || "anon";
+  const vis = artifact.meta?.visibility;
+  const SOCIAL_DOMAINS = new Set(["forum", "feed", "marketplace", "collab", "thread", "vote", "alliance", "global", "news", "questmarket"]);
+  if (!SOCIAL_DOMAINS.has(artifact.domain) && artifact.ownerId && artifact.ownerId !== "anon" && artifact.ownerId !== currentUserId && vis !== "published" && vis !== "public") {
+    return { ok: false, error: "not found" }; // Don't reveal existence
+  }
   return { ok: true, artifact };
 });
 
@@ -30610,8 +30886,8 @@ registerUniversalLensActions();
     // Entity lens: frontend calls terminal
     ["entity", "terminal", "entityResolution"],
 
-    // Code lens: frontend calls forge-generate
-    ["code", "forge-generate", "complexityAnalysis"],
+    // Code lens: frontend calls forge-generate (app generation, map to generate universal action)
+    ["code", "forge-generate", "generate"],
 
     // Integrations lens: frontend calls run
     ["integrations", "run", "apiHealthCheck"],
@@ -30630,12 +30906,13 @@ registerUniversalLensActions();
     ["events", "registration_report", "settlementCalc"],
     ["events", "event_summary", "budgetReconcile"],
 
-    // Creative lens: frontend calls generate_shot_list, asset_report, budget_analysis, distribution_checklist, project_summary
+    // Creative lens: frontend calls generate_shot_list, asset_report, budget_analysis, distribution_checklist, project_summary, revision_summary
     ["creative", "generate_shot_list", "shotListGenerate"],
     ["creative", "asset_report", "assetOrganize"],
     ["creative", "budget_analysis", "budgetTrack"],
     ["creative", "distribution_checklist", "distributionChecklist"],
     ["creative", "project_summary", "assetOrganize"],
+    ["creative", "revision_summary", "assetOrganize"],
 
     // Pharmacy lens: frontend calls checkInteractions
     ["pharmacy", "checkInteractions", "analyze"],
@@ -30645,6 +30922,24 @@ registerUniversalLensActions();
 
     // Projects lens: frontend calls analyze-risks
     ["projects", "analyze-risks", "analyze"],
+
+    // Animation lens: frontend calls play, pause, reset (playback transport controls)
+    ["animation", "play", "interpolateKeyframes"],
+    ["animation", "pause", "timingAnalysis"],
+    ["animation", "reset", "optimizeFPS"],
+
+    // Fork lens: frontend calls merge, cherry-pick (version control operations)
+    ["fork", "merge", "mergeComplexity"],
+    ["fork", "cherry-pick", "divergenceAnalysis"],
+
+    // Ingest lens: frontend calls batch-ingest
+    ["ingest", "batch-ingest", "batchStatus"],
+
+    // Manufacturing lens: frontend uses camelCase names differing from backend snake_case
+    ["manufacturing", "scheduleOptimizer", "scheduleOptimize"],
+    ["manufacturing", "bomCostCalc", "bomCost"],
+    ["manufacturing", "oeeCalculator", "oeeCalculate"],
+    ["manufacturing", "safetyRateReport", "safetyRate"],
   ];
 
   let aliasCount = 0;
@@ -30836,6 +31131,9 @@ const DOMAIN_ACTION_MANIFEST = {
     { action: "analyze-mix", brain: "U", desc: "Analyze frequency balance, dynamic range, stereo width of a mix" },
     { action: "auto-arrange", brain: "S", desc: "Generate song structure arrangements from pattern blocks" },
     { action: "validate-track", brain: "R", desc: "Check for clipping, phase issues, format problems" },
+    { action: "generate-drums", brain: "U", desc: "Generate drum patterns at the project BPM and genre" },
+    { action: "sound-design", brain: "U", desc: "Generate synthesizer preset parameters for a requested sound character" },
+    { action: "reference-match", brain: "U", desc: "Analyze a reference track and suggest EQ/compression settings to match its tone" },
   ],
   music: [
     { action: "analyze-lyrics", brain: "U", desc: "Identify verse/chorus structure, rhyme scheme, syllable patterns" },
@@ -31032,6 +31330,9 @@ const DOMAIN_ACTION_MANIFEST = {
     { action: "check-compliance", brain: "U", desc: "Evaluate against regulatory framework, flag gaps" },
     { action: "alert-deadlines", brain: "S", desc: "Generate countdown alerts for legal deadlines" },
     { action: "validate-clauses", brain: "R", desc: "Validate clause library entries for consistency" },
+    { action: "add-clause", brain: "U", desc: "Add a named clause to the contract artifact by category" },
+    { action: "preview-contract", brain: "U", desc: "Render a formatted contract preview from all added clauses" },
+    { action: "generate-document", brain: "U", desc: "Generate a complete contract document from the clause set" },
   ],
   legal: [
     { action: "organize-discovery", brain: "U", desc: "Categorize and tag documents for litigation" },
@@ -31317,6 +31618,11 @@ const DOMAIN_ACTION_MANIFEST = {
     { action: "optimize-production", brain: "U", desc: "Optimize production schedule for orders and capacity" },
     { action: "monitor-quality", brain: "R", desc: "Monitor QC pass/fail rates and alert on degradation" },
     { action: "predict-maintenance", brain: "S", desc: "Predict maintenance needs from equipment data" },
+    { action: "advanceStep", brain: "U", desc: "Advance the work order to the next production step" },
+    { action: "generateTraveler", brain: "U", desc: "Generate a production traveler document for a work order" },
+    { action: "scheduleMaintenance", brain: "U", desc: "Schedule a preventive maintenance task for a machine" },
+    { action: "logDowntime", brain: "U", desc: "Log machine downtime event with reason and duration" },
+    { action: "defectAnalysis", brain: "U", desc: "Analyze defect data and suggest root cause corrective actions" },
   ],
   retail: [
     { action: "analyze-sales", brain: "S", desc: "Generate daily/weekly sales trends and top products" },
@@ -31505,6 +31811,14 @@ const DOMAIN_ACTION_MANIFEST = {
 
 // Supplement existing domains with frontend-manifest actions that aren't already registered
 const FRONTEND_MANIFEST_SUPPLEMENTS = {
+  animation: [
+    { action: "play", brain: "U", desc: "Start playback of the animation timeline from the current frame" },
+    { action: "pause", brain: "U", desc: "Pause playback of the animation timeline at the current frame" },
+    { action: "reset", brain: "U", desc: "Reset the animation timeline to frame 0" },
+  ],
+  ingest: [
+    { action: "batch-ingest", brain: "U", desc: "Initiate batch ingestion for multiple files, returning job status" },
+  ],
   board: [
     { action: "move_card", brain: "U", desc: "Move card between board columns" },
     { action: "assign", brain: "U", desc: "Assign card to team member" },
@@ -31535,6 +31849,48 @@ const FRONTEND_MANIFEST_SUPPLEMENTS = {
     { action: "temporal_query", brain: "U", desc: "Query substrate at a specific point in time" },
     { action: "truth_at_time", brain: "U", desc: "Determine what was known at a given time" },
     { action: "version_compare", brain: "U", desc: "Compare DTU versions across time" },
+  ],
+  artistry: [
+    { action: "colorPaletteAnalysis", brain: "U", desc: "Analyze artwork colors, calculate harmony scores, detect dominant hues" },
+    { action: "compositionScore", brain: "U", desc: "Evaluate layout balance using rule-of-thirds grid positioning" },
+    { action: "styleClassify", brain: "U", desc: "Classify art style from tags, medium, era, and technique attributes" },
+    { action: "mediaInventory", brain: "U", desc: "Track art supplies inventory with cost totals and reorder alerts" },
+  ],
+  atlas: [
+    { action: "geocode", brain: "U", desc: "Resolve place names to coordinates with distance calculations" },
+    { action: "distanceMatrix", brain: "U", desc: "Compute distances between multiple points using Haversine formula" },
+    { action: "regionStats", brain: "U", desc: "Aggregate demographic and economic stats for regions" },
+    { action: "routeOptimize", brain: "U", desc: "Find optimal visiting order for waypoints (nearest-neighbor TSP)" },
+  ],
+  import: [
+    { action: "validateImport", brain: "U", desc: "Check required fields, data types, detect malformed rows" },
+    { action: "mapFields", brain: "U", desc: "Suggest source-to-target field mappings using name similarity" },
+    { action: "detectDuplicates", brain: "U", desc: "Find duplicate rows by key fields using hash comparison" },
+    { action: "transformPreview", brain: "U", desc: "Preview first N rows with applied type coercion and trimming" },
+  ],
+  world: [
+    { action: "countryCompare", brain: "U", desc: "Compare countries on GDP, population, area, HDI with rankings" },
+    { action: "indicatorTrack", brain: "U", desc: "Track development indicators over time, compute growth rates" },
+    { action: "tradeFlow", brain: "U", desc: "Analyze import/export data, compute trade balance and top partners" },
+    { action: "demographicProfile", brain: "U", desc: "Analyze population data: age distribution, urbanization, growth" },
+  ],
+  wallet: [
+    { action: "portfolioBalance", brain: "U", desc: "Compute portfolio allocation percentages, gains/losses per asset" },
+    { action: "transactionCategorize", brain: "U", desc: "Auto-categorize transactions by merchant name patterns" },
+    { action: "budgetCheck", brain: "U", desc: "Compare spending by category against budget limits, flag overages" },
+    { action: "spendingTrend", brain: "U", desc: "Analyze spending over time, compute month-over-month changes" },
+  ],
+  thread: [
+    { action: "threadAnalyze", brain: "U", desc: "Analyze thread: message count, avg length, response times" },
+    { action: "sentimentMap", brain: "U", desc: "Score sentiment per message, track flow through conversation" },
+    { action: "participantStats", brain: "U", desc: "Compute per-participant metrics: messages, response time, activity" },
+    { action: "topicExtract", brain: "U", desc: "Extract top topics from messages using word frequency analysis" },
+  ],
+  welding: [
+    { action: "jointStrength", brain: "U", desc: "Calculate theoretical joint strength from material and weld type" },
+    { action: "rodSelection", brain: "U", desc: "Recommend welding rod/wire based on metals, position, joint type" },
+    { action: "heatInput", brain: "U", desc: "Calculate heat input in kJ/mm from voltage, amperage, travel speed" },
+    { action: "inspectionChecklist", brain: "U", desc: "Generate inspection checklist based on weld type and code" },
   ],
 };
 
@@ -57648,7 +58004,14 @@ app.get("/api/search", (req, res) => {
     }
     if (searchScope !== "local") {
       for (const [id, dtu] of STATE.dtus) {
-        if (!pool.has(id)) pool.set(id, dtu);
+        if (pool.has(id)) continue;
+        // User sovereignty: only include own, system, or published DTUs in global search
+        const dtuOwner = dtu.ownerId || "system";
+        const vis = dtu.visibility || dtu.meta?.visibility;
+        if (dtuOwner === "system" || dtuOwner === "anon" || dtuOwner === userId ||
+            vis === "published" || vis === "public") {
+          pool.set(id, dtu);
+        }
       }
     }
 

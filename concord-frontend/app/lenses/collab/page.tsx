@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLensData } from '@/lib/hooks/use-lens-data';
+import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { apiHelpers, api } from '@/lib/api/client';
 import { useUIStore } from '@/store/ui';
 import { cn } from '@/lib/utils';
@@ -29,6 +30,7 @@ import {
   MessageSquare,
   Check,
   XCircle,
+  Loader2,
   Crown,
   Hash,
   Paperclip,
@@ -240,6 +242,26 @@ export default function CollabLensPage() {
   const [activeSession, setActiveSession] = useState<CollabSession | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [showFeatures, setShowFeatures] = useState(true);
+
+  // --- Backend action wiring ---
+  const runAction = useRunArtifact('collab');
+  const [actionResult, setActionResult] = useState<unknown>(null);
+  const [isRunning, setIsRunning] = useState(false);
+
+  const targetId = sessionItems[0]?.id ?? 'default';
+
+  const handleAction = useCallback(async (action: string) => {
+    setIsRunning(true);
+    setActionResult(null);
+    try {
+      const res = await runAction.mutateAsync({ id: targetId, action });
+      setActionResult(res.result ?? res);
+    } catch (err) {
+      setActionResult({ error: err instanceof Error ? err.message : 'Action failed' });
+    } finally {
+      setIsRunning(false);
+    }
+  }, [runAction, targetId]);
 
   const sessions: CollabSession[] = sessionItems.map(i => i.data as unknown as CollabSession);
   const invitations: Invitation[] = invitationItems.map(i => i.data as unknown as Invitation);
@@ -544,6 +566,185 @@ export default function CollabLensPage() {
 
       <RealtimeDataPanel data={realtimeInsights} />
       <UniversalActions domain="collab" artifactId={null} compact />
+
+      {/* Backend Action Panel */}
+      <div className="panel p-4 space-y-3 border border-neon-blue/20">
+        <h3 className="text-sm font-semibold flex items-center gap-2">
+          <Handshake className="w-4 h-4 text-neon-blue" />
+          Collab Actions
+        </h3>
+        <div className="flex flex-wrap gap-2">
+          {[
+            { action: 'sessionAnalytics', label: 'Session Analytics' },
+            { action: 'contributionScore', label: 'Contribution Scoring' },
+            { action: 'detectConsensus', label: 'Consensus Detection' },
+            { action: 'balanceWorkload', label: 'Workload Balancing' },
+          ].map(({ action, label }) => (
+            <button
+              key={action}
+              onClick={() => handleAction(action)}
+              disabled={isRunning}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-neon-blue/10 text-neon-blue border border-neon-blue/20 hover:bg-neon-blue/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {isRunning ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+              {label}
+            </button>
+          ))}
+        </div>
+        {actionResult !== null && (
+          <div className="mt-2 space-y-1">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-gray-400">Result</span>
+              <button
+                onClick={() => setActionResult(null)}
+                className="text-gray-500 hover:text-white transition-colors"
+              >
+                <XCircle className="w-3.5 h-3.5" />
+              </button>
+            </div>
+            <div className="bg-lattice-surface p-3 rounded-lg text-xs space-y-3 max-h-72 overflow-y-auto">
+              {/* Error */}
+              {(actionResult as any)?.error && (
+                <p className="text-red-400">{(actionResult as any).error}</p>
+              )}
+              {/* Message-only result */}
+              {(actionResult as any)?.message && !(actionResult as any)?.error && (
+                <p className="text-gray-300">{(actionResult as any).message}</p>
+              )}
+
+              {/* sessionAnalytics */}
+              {(actionResult as any)?.totalMessages !== undefined && (
+                <div className="space-y-2">
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="p-2 bg-lattice-bg rounded text-center">
+                      <p className="text-sm font-bold text-neon-blue">{(actionResult as any).totalMessages}</p>
+                      <p className="text-[10px] text-gray-500">Messages</p>
+                    </div>
+                    <div className="p-2 bg-lattice-bg rounded text-center">
+                      <p className="text-sm font-bold text-neon-blue">{(actionResult as any).totalParticipants}</p>
+                      <p className="text-[10px] text-gray-500">Participants</p>
+                    </div>
+                    <div className="p-2 bg-lattice-bg rounded text-center">
+                      <p className="text-sm font-bold text-neon-blue">{(actionResult as any).messagesPerMinute}/m</p>
+                      <p className="text-[10px] text-gray-500">Msg/Min</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-gray-500">Balance:</span>
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${(actionResult as any).balanceRating === 'well-balanced' ? 'bg-neon-green/20 text-neon-green' : (actionResult as any).balanceRating === 'slightly-uneven' ? 'bg-yellow-500/20 text-yellow-400' : 'bg-red-500/20 text-red-400'}`}>
+                      {(actionResult as any).balanceRating}
+                    </span>
+                    <span className="text-gray-500 ml-auto">Gini: {(actionResult as any).participationBalance}</span>
+                  </div>
+                  {((actionResult as any).participantStats || []).length > 0 && (
+                    <div className="space-y-1">
+                      {((actionResult as any).participantStats as any[]).map((p: any) => (
+                        <div key={p.name} className="flex items-center gap-2">
+                          <span className="text-gray-300 w-24 truncate">{p.name}</span>
+                          <div className="flex-1 bg-lattice-bg rounded-full h-1.5">
+                            <div className="bg-neon-blue h-1.5 rounded-full" style={{ width: `${p.sharePercent}%` }} />
+                          </div>
+                          <span className="text-gray-500 w-10 text-right">{p.sharePercent}%</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* contributionScore */}
+              {(actionResult as any)?.rankings !== undefined && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 text-gray-400">
+                    <span>Top contributor:</span>
+                    <span className="text-neon-green font-medium">{(actionResult as any).topContributor ?? '—'}</span>
+                    <span className="ml-auto text-gray-500">{(actionResult as any).totalContributions} total</span>
+                  </div>
+                  <div className="space-y-1">
+                    {((actionResult as any).rankings as any[]).map((r: any, i: number) => (
+                      <div key={r.name} className="flex items-center gap-2 p-1.5 bg-lattice-bg rounded">
+                        <span className="text-gray-500 w-4">{i + 1}.</span>
+                        <span className="text-gray-200 flex-1">{r.name}</span>
+                        <span className="text-neon-blue font-bold">{r.totalScore}</span>
+                        <span className="text-gray-500 text-[10px]">{r.contributions} contribs</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* detectConsensus */}
+              {(actionResult as any)?.consensusPercent !== undefined && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${(actionResult as any).hasSupermajority ? 'bg-neon-green/20 text-neon-green' : (actionResult as any).hasConsensus ? 'bg-yellow-500/20 text-yellow-400' : 'bg-red-500/20 text-red-400'}`}>
+                      {(actionResult as any).status}
+                    </span>
+                    <span className="text-gray-400 ml-auto">{(actionResult as any).totalVotes} votes</span>
+                  </div>
+                  <div className="p-2 bg-lattice-bg rounded text-center">
+                    <p className="text-xl font-bold text-neon-blue">{(actionResult as any).consensusPercent}%</p>
+                    <p className="text-[10px] text-gray-500">for "{(actionResult as any).leadingPosition}"</p>
+                  </div>
+                  <div className="w-full bg-lattice-bg rounded-full h-2">
+                    <div className="bg-neon-blue h-2 rounded-full" style={{ width: `${(actionResult as any).consensusPercent}%` }} />
+                  </div>
+                  {((actionResult as any).dissenting || []).length > 0 && (
+                    <div className="space-y-1">
+                      <p className="text-[10px] text-gray-500 uppercase">Dissenting</p>
+                      {((actionResult as any).dissenting as any[]).map((d: any) => (
+                        <div key={d.position} className="flex items-center justify-between text-gray-400">
+                          <span>{d.position}</span>
+                          <span>{d.count} ({d.percent}%)</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* balanceWorkload */}
+              {(actionResult as any)?.members !== undefined && (
+                <div className="space-y-2">
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="p-2 bg-lattice-bg rounded text-center">
+                      <p className="text-sm font-bold text-neon-blue">{(actionResult as any).avgUtilization}%</p>
+                      <p className="text-[10px] text-gray-500">Avg Load</p>
+                    </div>
+                    <div className="p-2 bg-lattice-bg rounded text-center">
+                      <p className="text-sm font-bold text-red-400">{(actionResult as any).overloadedMembers}</p>
+                      <p className="text-[10px] text-gray-500">Overloaded</p>
+                    </div>
+                    <div className="p-2 bg-lattice-bg rounded text-center">
+                      <p className="text-sm font-bold text-yellow-400">{(actionResult as any).unassignedTasks}</p>
+                      <p className="text-[10px] text-gray-500">Unassigned</p>
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    {((actionResult as any).members as any[]).map((m: any) => (
+                      <div key={m.name} className="space-y-0.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-gray-300">{m.name}</span>
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded ${m.status === 'overloaded' ? 'bg-red-500/20 text-red-400' : m.status === 'near-capacity' ? 'bg-yellow-500/20 text-yellow-400' : 'bg-neon-green/20 text-neon-green'}`}>{m.status}</span>
+                        </div>
+                        <div className="w-full bg-lattice-bg rounded-full h-1.5">
+                          <div className={`h-1.5 rounded-full ${m.status === 'overloaded' ? 'bg-red-500' : m.status === 'near-capacity' ? 'bg-yellow-500' : 'bg-neon-green'}`} style={{ width: `${Math.min(m.utilization, 100)}%` }} />
+                        </div>
+                        <p className="text-[10px] text-gray-500">{m.totalHours}h / {m.capacity}h · {m.assignedTasks} tasks</p>
+                      </div>
+                    ))}
+                  </div>
+                  {((actionResult as any).suggestions || []).length > 0 && (
+                    <div className="p-2 bg-yellow-500/10 border border-yellow-500/20 rounded text-yellow-300 text-[11px]">
+                      {((actionResult as any).suggestions as string[]).join(' · ')}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Lens Features */}
       <div className="border-t border-white/10">

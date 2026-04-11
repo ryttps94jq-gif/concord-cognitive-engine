@@ -1459,7 +1459,89 @@ export default function LogisticsLensPage() {
             <h3 className={ds.heading3}>Action Result</h3>
             <button onClick={() => setActionResult(null)} className={ds.btnGhost}><X className="w-4 h-4" /></button>
           </div>
-          <pre className={cn(ds.textMono, 'text-xs overflow-auto max-h-48')}>{JSON.stringify(actionResult, null, 2)}</pre>
+          <div className="space-y-3">
+            {/* optimizeRoute */}
+            {actionResult.totalDistanceMiles !== undefined && (
+              <div className="space-y-2">
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className="text-sm font-bold text-neon-cyan">{String(actionResult.stopCount)}</p>
+                    <p className="text-[10px] text-gray-500">Stops</p>
+                  </div>
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className="text-sm font-bold text-neon-cyan">{String(actionResult.totalDistanceMiles)} mi</p>
+                    <p className="text-[10px] text-gray-500">Distance</p>
+                  </div>
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className="text-sm font-bold text-neon-cyan">{String(actionResult.estimatedTotalMinutes)} min</p>
+                    <p className="text-[10px] text-gray-500">Est. Time</p>
+                  </div>
+                </div>
+                {Array.isArray(actionResult.optimizedRoute) && (actionResult.optimizedRoute as {sequence:number;name:string;distanceFromPrevious:number}[]).slice(0,5).map((stop, i) => (
+                  <div key={i} className="flex items-center gap-2 text-xs px-2 py-1 bg-lattice-surface rounded">
+                    <span className="w-5 h-5 rounded-full bg-neon-cyan/20 text-neon-cyan text-center leading-5 flex-shrink-0">{stop.sequence}</span>
+                    <span className="text-gray-300 flex-1">{stop.name}</span>
+                    <span className="text-gray-500">{stop.distanceFromPrevious} mi</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {/* hosCheck */}
+            {actionResult.driversChecked !== undefined && (
+              <div className="space-y-2">
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className="text-sm font-bold text-neon-cyan">{String(actionResult.driversChecked)}</p>
+                    <p className="text-[10px] text-gray-500">Drivers</p>
+                  </div>
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className={`text-sm font-bold ${Number(actionResult.violationCount) > 0 ? 'text-red-400' : 'text-green-400'}`}>{String(actionResult.violationCount)}</p>
+                    <p className="text-[10px] text-gray-500">Violations</p>
+                  </div>
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className={`text-sm font-bold ${Number(actionResult.warningCount) > 0 ? 'text-amber-400' : 'text-green-400'}`}>{String(actionResult.warningCount)}</p>
+                    <p className="text-[10px] text-gray-500">Warnings</p>
+                  </div>
+                </div>
+              </div>
+            )}
+            {/* maintenanceDue (vehicles) */}
+            {actionResult.totalVehicles !== undefined && (
+              <div className="grid grid-cols-3 gap-2">
+                <div className="p-2 bg-lattice-surface rounded text-center">
+                  <p className="text-sm font-bold text-red-400">{String(actionResult.overdueCount)}</p>
+                  <p className="text-[10px] text-gray-500">Overdue</p>
+                </div>
+                <div className="p-2 bg-lattice-surface rounded text-center">
+                  <p className="text-sm font-bold text-amber-400">{String(actionResult.upcomingCount)}</p>
+                  <p className="text-[10px] text-gray-500">Upcoming</p>
+                </div>
+                <div className="p-2 bg-lattice-surface rounded text-center">
+                  <p className="text-sm font-bold text-neon-cyan">{String(actionResult.totalVehicles)}</p>
+                  <p className="text-[10px] text-gray-500">Total</p>
+                </div>
+              </div>
+            )}
+            {/* inventoryAudit */}
+            {actionResult.accuracyRate !== undefined && (
+              <div className="space-y-2">
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className="text-sm font-bold text-neon-cyan">{String(actionResult.accuracyRate)}%</p>
+                    <p className="text-[10px] text-gray-500">Accuracy</p>
+                  </div>
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className={`text-sm font-bold ${Number(actionResult.discrepancyCount) > 0 ? 'text-red-400' : 'text-green-400'}`}>{String(actionResult.discrepancyCount)}</p>
+                    <p className="text-[10px] text-gray-500">Discrepancies</p>
+                  </div>
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className={`text-sm font-bold ${Number(actionResult.totalValueDiscrepancy) !== 0 ? 'text-amber-400' : 'text-green-400'}`}>${Number(actionResult.totalValueDiscrepancy).toFixed(2)}</p>
+                    <p className="text-[10px] text-gray-500">Value Delta</p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
 

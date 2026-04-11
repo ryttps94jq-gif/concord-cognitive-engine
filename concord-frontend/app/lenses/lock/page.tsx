@@ -3,7 +3,8 @@
 import { useLensNav } from '@/hooks/useLensNav';
 import { use70Lock } from '@/hooks/use70Lock';
 import { useState } from 'react';
-import { Lock, Unlock, Shield, Eye, AlertTriangle, Check, Key, Loader2, Layers, ChevronDown, Gauge, ShieldAlert, Ban, Activity } from 'lucide-react';
+import { Lock, Unlock, Shield, Eye, AlertTriangle, Check, Key, Loader2, Layers, ChevronDown, Gauge, ShieldAlert, Ban, Activity, Play } from 'lucide-react';
+import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { motion } from 'framer-motion';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { apiHelpers } from '@/lib/api/client';
@@ -42,6 +43,20 @@ export default function LockLensPage() {
     event: item.data.event,
     level: item.data.level,
   }));
+
+  const runAction = useRunArtifact('lock');
+  const [actionResult, setActionResult] = useState<Record<string, unknown> | null>(null);
+  const [isRunning, setIsRunning] = useState<string | null>(null);
+  const handleAction = async (action: string) => {
+    const targetId = historyItems[0]?.id;
+    if (!targetId) { setActionResult({ message: 'Run an audit first to create lock events.' }); return; }
+    setIsRunning(action);
+    try {
+      const res = await runAction.mutateAsync({ id: targetId, action });
+      setActionResult(res.result as Record<string, unknown>);
+    } catch (e) { console.error(`Action ${action} failed:`, e); }
+    finally { setIsRunning(null); }
+  };
 
   const runAudit = useMutation({
     mutationFn: async () => {
@@ -413,6 +428,100 @@ export default function LockLensPage() {
             ))}
           </div>
         </div>
+      </div>
+
+      {/* Backend Action Panel */}
+      <div className="panel p-4 space-y-3">
+        <h2 className="font-semibold flex items-center gap-2">
+          <ShieldAlert className="w-4 h-4 text-neon-cyan" />
+          Lock Analysis
+        </h2>
+        <div className="flex flex-wrap gap-2">
+          {[
+            { action: 'deadlockDetect', label: 'Deadlock Detect' },
+            { action: 'contentionAnalysis', label: 'Contention Analysis' },
+            { action: 'fairnessScore', label: 'Fairness Score' },
+          ].map(({ action, label }) => (
+            <button key={action} onClick={() => handleAction(action)} disabled={!!isRunning}
+              className="btn-secondary text-sm flex items-center gap-1 disabled:opacity-50">
+              {isRunning === action ? <Loader2 className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
+              {label}
+            </button>
+          ))}
+        </div>
+        {actionResult && (
+          <div className="bg-lattice-deep rounded-lg p-4 space-y-3 text-sm">
+            {'deadlocked' in actionResult && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-3">
+                  <span className={`text-lg font-bold ${actionResult.deadlocked ? 'text-red-400' : 'text-neon-green'}`}>
+                    {actionResult.deadlocked ? 'DEADLOCK DETECTED' : 'No Deadlock'}
+                  </span>
+                  <span className="text-xs text-gray-400">Cycles: <span className="text-neon-cyan">{String(actionResult.cycleCount || 0)}</span></span>
+                </div>
+                {'deadlockSets' in actionResult && Array.isArray(actionResult.deadlockSets) && actionResult.deadlockSets.length > 0 && (
+                  <div>
+                    <p className="text-xs text-red-400 font-semibold mb-1">Deadlock Sets</p>
+                    {(actionResult.deadlockSets as Array<unknown[]>).map((set, i) => (
+                      <div key={i} className="text-xs bg-red-400/10 border border-red-400/20 rounded px-2 py-1 mb-1">
+                        {(set as string[]).join(' → ')}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            {'resources' in actionResult && Array.isArray(actionResult.resources) && (
+              <div className="space-y-2">
+                {'summary' in actionResult && actionResult.summary !== null && typeof actionResult.summary === 'object' && (
+                  <div className="flex flex-wrap gap-4 text-xs">
+                    {Object.entries(actionResult.summary as Record<string, unknown>).map(([k, v]) => (
+                      <span key={k} className="text-gray-400">{k}: <span className="text-neon-cyan">{String(v)}</span></span>
+                    ))}
+                  </div>
+                )}
+                {'hotLocks' in actionResult && Array.isArray(actionResult.hotLocks) && actionResult.hotLocks.length > 0 && (
+                  <div>
+                    <p className="text-xs text-yellow-400 font-semibold mb-1">Hot Locks</p>
+                    {(actionResult.hotLocks as Array<Record<string, unknown>>).map((h, i) => (
+                      <div key={i} className="flex justify-between text-xs bg-yellow-400/10 border border-yellow-400/20 rounded px-2 py-1 mb-1">
+                        <span className="text-yellow-400">{String(h.resource || h.name)}</span>
+                        <span className="text-gray-300">{String(h.contention || h.waiters || 0)} waiting</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {'suggestions' in actionResult && Array.isArray(actionResult.suggestions) && actionResult.suggestions.length > 0 && (
+                  <div>
+                    <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">Suggestions</p>
+                    {(actionResult.suggestions as Array<{resource: string; recommendation: string; reason: string}>).map((s, i) => (
+                      <p key={i} className="text-xs text-gray-300">• <span className="font-mono text-neon-cyan">{s.resource}</span>: {s.reason}</p>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            {'jainsIndex' in actionResult && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-4">
+                  <span className="text-gray-400 text-xs">Jain&apos;s Index: <span className="text-neon-cyan font-bold text-lg">{String(actionResult.jainsIndex)}</span></span>
+                  <span className={`text-xs px-2 py-0.5 rounded ${
+                    actionResult.fairnessLevel === 'excellent' || actionResult.fairnessLevel === 'good' ? 'bg-neon-green/20 text-neon-green' :
+                    actionResult.fairnessLevel === 'moderate' ? 'bg-yellow-400/20 text-yellow-400' : 'bg-red-400/20 text-red-400'
+                  }`}>{String(actionResult.fairnessLevel)}</span>
+                </div>
+                {'starvation' in actionResult && actionResult.starvation !== null && typeof actionResult.starvation === 'object' && (
+                  <div className="flex flex-wrap gap-3 text-xs">
+                    {Object.entries(actionResult.starvation as Record<string, unknown>).map(([k, v]) => (
+                      <span key={k} className="text-gray-400">{k}: <span className="text-yellow-400">{String(v)}</span></span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            {'message' in actionResult && <p className="text-gray-400">{String(actionResult.message)}</p>}
+          </div>
+        )}
       </div>
 
       <ConnectiveTissueBar lensId="lock" />

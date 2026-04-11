@@ -1589,7 +1589,85 @@ export default function NonprofitLensPage() {
             <h3 className={ds.heading3}>Action Result</h3>
             <button onClick={() => setActionResult(null)} className={ds.btnGhost}><X className="w-4 h-4" /></button>
           </div>
-          <pre className={cn(ds.textMono, 'text-xs overflow-auto max-h-48')}>{JSON.stringify(actionResult, null, 2)}</pre>
+          <div className="space-y-3">
+            {/* donorRetention */}
+            {actionResult.retentionRate !== undefined && (
+              <div className="space-y-2">
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className={`text-sm font-bold ${Number(actionResult.retentionRate) >= 70 ? 'text-green-400' : Number(actionResult.retentionRate) >= 50 ? 'text-amber-400' : 'text-red-400'}`}>{String(actionResult.retentionRate)}%</p>
+                    <p className="text-[10px] text-gray-500">Retention Rate</p>
+                  </div>
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className="text-sm font-bold text-neon-cyan">{String(actionResult.retained)}</p>
+                    <p className="text-[10px] text-gray-500">Retained</p>
+                  </div>
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className="text-sm font-bold text-neon-cyan">{String(actionResult.priorTotal)}</p>
+                    <p className="text-[10px] text-gray-500">Prior Year</p>
+                  </div>
+                </div>
+                <p className="text-[10px] text-gray-500 text-center">{String(actionResult.period)}</p>
+              </div>
+            )}
+            {/* grantReporting */}
+            {actionResult.deliverableProgress !== undefined && (
+              <div className="space-y-2">
+                <p className="text-xs text-gray-400">{String(actionResult.funder)} &bull; ${Number(actionResult.amount).toLocaleString()}</p>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-gray-400">Deliverables</span>
+                  <span className="text-sm font-bold text-neon-cyan">{String(actionResult.deliverableProgress)}%</span>
+                </div>
+                <div className="h-2 bg-white/5 rounded-full overflow-hidden">
+                  <div className="h-full bg-neon-cyan rounded-full" style={{ width: `${Math.min(100, Number(actionResult.deliverableProgress))}%` }} />
+                </div>
+                <p className="text-[10px] text-gray-500">{String(actionResult.completedDeliverables)}/{String(actionResult.totalDeliverables)} completed</p>
+              </div>
+            )}
+            {/* volunteerMatch */}
+            {actionResult.matchScore !== undefined && (
+              <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="p-2 bg-lattice-surface rounded text-center col-span-2">
+                    <p className={`text-sm font-bold ${Number(actionResult.matchScore) >= 75 ? 'text-green-400' : Number(actionResult.matchScore) >= 50 ? 'text-amber-400' : 'text-red-400'}`}>{String(actionResult.matchScore)}% Match</p>
+                    <p className="text-[10px] text-gray-500">{String(actionResult.volunteer)}</p>
+                  </div>
+                </div>
+                {Array.isArray(actionResult.matches) && (actionResult.matches as {program:string;matched:boolean;availabilityMatch:boolean}[]).map((m, i) => (
+                  <div key={i} className="flex items-center justify-between px-2 py-1 bg-lattice-surface rounded text-xs">
+                    <span className="text-gray-300">{m.program}</span>
+                    <span className={m.matched && m.availabilityMatch ? 'text-green-400' : m.matched ? 'text-amber-400' : 'text-red-400'}>{m.matched && m.availabilityMatch ? 'Full Match' : m.matched ? 'Skill Only' : 'No Match'}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {/* campaignProgress */}
+            {actionResult.percentComplete !== undefined && actionResult.goal !== undefined && (
+              <div className="space-y-2">
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className="text-sm font-bold text-neon-cyan">${Number(actionResult.raised).toLocaleString()}</p>
+                    <p className="text-[10px] text-gray-500">Raised</p>
+                  </div>
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className="text-sm font-bold text-gray-400">${Number(actionResult.goal).toLocaleString()}</p>
+                    <p className="text-[10px] text-gray-500">Goal</p>
+                  </div>
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className="text-sm font-bold text-neon-cyan">{String(actionResult.donorCount)}</p>
+                    <p className="text-[10px] text-gray-500">Donors</p>
+                  </div>
+                </div>
+                <div className="h-2 bg-white/5 rounded-full overflow-hidden">
+                  <div className="h-full bg-neon-cyan rounded-full" style={{ width: `${Math.min(100, Number(actionResult.percentComplete))}%` }} />
+                </div>
+                <div className="flex items-center justify-between text-[10px] text-gray-500">
+                  <span>{String(actionResult.percentComplete)}% complete</span>
+                  <span className={actionResult.onTrack ? 'text-green-400' : 'text-red-400'}>{actionResult.onTrack ? 'On Track' : 'Behind'}</span>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
 

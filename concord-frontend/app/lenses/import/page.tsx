@@ -2,9 +2,10 @@
 
 import { useState, useCallback } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
-import { Upload, FileJson, Database, Check, AlertTriangle, Loader2, FileText, Archive, RefreshCw, Layers, ChevronDown, Clock, CheckCircle2, Download } from 'lucide-react';
+import { Upload, FileJson, Database, Check, AlertTriangle, Loader2, FileText, Archive, RefreshCw, Layers, ChevronDown, Clock, CheckCircle2, Download, BarChart3, Map, Search, GitMerge } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useLensData } from '@/lib/hooks/use-lens-data';
+import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import { api, apiHelpers } from '@/lib/api/client';
 import { useUIStore } from '@/store/ui';
@@ -15,6 +16,46 @@ import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 import { UniversalImport } from '@/components/import/UniversalImport';
+
+interface ValidateImportResult {
+  totalRows: number;
+  validRows: number;
+  invalidRows: number;
+  validationRate: number;
+  status: string;
+  fieldSummary: { field: string; valid: number; invalid: number; type: string }[];
+  errors: { row: number; field: string; message: string }[];
+  totalErrorCount: number;
+}
+
+interface MapFieldsResult {
+  mappingCount: number;
+  mappings: { source: string; target: string; confidence: number; confidenceLabel: string }[];
+  unmappedSources: string[];
+  unmappedTargets: string[];
+  coverage: number;
+  averageConfidence: number;
+}
+
+interface DetectDuplicatesResult {
+  totalRows: number;
+  duplicateGroupCount: number;
+  duplicateRowCount: number;
+  deduplicationSavings: number;
+  keyFields: string[];
+  duplicateGroups: { key: string; count: number; rows: number[] }[];
+  fieldRepetition: { field: string; repetitionRate: number }[];
+}
+
+interface TransformPreviewResult {
+  totalRows: number;
+  previewCount: number;
+  preview: Record<string, unknown>[];
+  transformsApplied: number;
+  totalValueChanges: number;
+  changeLog: { row: number; field: string; before: unknown; after: unknown }[];
+  fieldImpact: { field: string; changes: number; changeRate: number }[];
+}
 
 interface ImportJob {
   id: string;
@@ -66,6 +107,18 @@ export default function ImportLens() {
     started_at: item.data.started_at ?? item.createdAt,
     completed_at: item.data.completed_at,
   } as ImportJob));
+
+  const runAction = useRunArtifact('import');
+  const [importActionResult, setImportActionResult] = useState<{ action: string; data: unknown } | null>(null);
+
+  const handleImportAction = useCallback((action: string) => {
+    const artifactId = importJobItems[0]?.id;
+    if (!artifactId) return;
+    runAction.mutate(
+      { id: artifactId, action, params: {} },
+      { onSuccess: (res) => setImportActionResult({ action, data: res.result }) }
+    );
+  }, [importJobItems, runAction]);
 
   const [showFeatures, setShowFeatures] = useState(true);
   const [dragActive, setDragActive] = useState(false);
@@ -746,6 +799,179 @@ export default function ImportLens() {
           compact
         />
       )}
+      </div>
+
+      {/* AI Import Actions Panel */}
+      <div className="panel p-4 space-y-4">
+        <h2 className="font-semibold flex items-center gap-2">
+          <BarChart3 className="w-4 h-4 text-neon-blue" />
+          AI Import Analysis Actions
+        </h2>
+        {!importJobItems[0]?.id && (
+          <p className="text-xs text-gray-500">Create an import job to run AI actions.</p>
+        )}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {[
+            { action: 'validateImport', label: 'Validate Import', icon: CheckCircle2, color: 'text-neon-green' },
+            { action: 'mapFields', label: 'Map Fields', icon: Map, color: 'text-neon-cyan' },
+            { action: 'detectDuplicates', label: 'Detect Duplicates', icon: Search, color: 'text-yellow-400' },
+            { action: 'transformPreview', label: 'Transform Preview', icon: GitMerge, color: 'text-neon-purple' },
+          ].map(({ action, label, icon: Icon, color }) => (
+            <button
+              key={action}
+              onClick={() => handleImportAction(action)}
+              disabled={runAction.isPending || !importJobItems[0]?.id}
+              className="flex items-center gap-2 px-4 py-3 bg-lattice-surface border border-lattice-border rounded-lg text-sm font-medium text-white hover:border-neon-blue/40 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {runAction.isPending ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Icon className={`w-4 h-4 ${color}`} />
+              )}
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {importActionResult && !runAction.isPending && (() => {
+          if (importActionResult.action === 'validateImport') {
+            const d = importActionResult.data as ValidateImportResult;
+            return (
+              <div className="space-y-3 pt-2 border-t border-lattice-border">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-neon-green">Validation Results</h3>
+                  <span className={`text-xs px-2 py-1 rounded font-medium ${d.status === 'valid' ? 'bg-neon-green/20 text-neon-green' : 'bg-red-400/20 text-red-400'}`}>
+                    {d.status}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {[
+                    { label: 'Total Rows', value: (d.totalRows || 0).toLocaleString(), color: 'text-gray-300' },
+                    { label: 'Valid', value: (d.validRows || 0).toLocaleString(), color: 'text-neon-green' },
+                    { label: 'Invalid', value: (d.invalidRows || 0).toLocaleString(), color: 'text-red-400' },
+                    { label: 'Rate', value: `${((d.validationRate || 0) * 100).toFixed(1)}%`, color: 'text-neon-cyan' },
+                  ].map(s => (
+                    <div key={s.label} className="lens-card text-center">
+                      <p className={`text-lg font-bold ${s.color}`}>{s.value}</p>
+                      <p className="text-xs text-gray-400">{s.label}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="h-2 bg-lattice-deep rounded-full overflow-hidden">
+                  <div className="h-full bg-neon-green rounded-full" style={{ width: `${(d.validationRate || 0) * 100}%` }} />
+                </div>
+                {(d.errors || []).slice(0, 3).map((err, i) => (
+                  <p key={i} className="text-xs text-red-400">Row {err.row}: {err.field} — {err.message}</p>
+                ))}
+                {d.totalErrorCount > 3 && <p className="text-xs text-gray-500">+{d.totalErrorCount - 3} more errors</p>}
+              </div>
+            );
+          }
+          if (importActionResult.action === 'mapFields') {
+            const d = importActionResult.data as MapFieldsResult;
+            return (
+              <div className="space-y-3 pt-2 border-t border-lattice-border">
+                <h3 className="text-sm font-semibold text-neon-cyan">Field Mappings — {d.mappingCount} mapped</h3>
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="lens-card text-center">
+                    <p className="text-lg font-bold text-neon-cyan">{((d.coverage || 0) * 100).toFixed(1)}%</p>
+                    <p className="text-xs text-gray-400">Coverage</p>
+                  </div>
+                  <div className="lens-card text-center">
+                    <p className="text-lg font-bold text-neon-green">{((d.averageConfidence || 0) * 100).toFixed(1)}%</p>
+                    <p className="text-xs text-gray-400">Avg Confidence</p>
+                  </div>
+                  <div className="lens-card text-center">
+                    <p className="text-lg font-bold text-yellow-400">{(d.unmappedSources || []).length}</p>
+                    <p className="text-xs text-gray-400">Unmapped</p>
+                  </div>
+                </div>
+                <div className="space-y-2 max-h-40 overflow-y-auto">
+                  {(d.mappings || []).map((m, i) => (
+                    <div key={i} className="flex items-center justify-between text-xs">
+                      <span className="text-gray-300">{m.source}</span>
+                      <span className="text-gray-500">→</span>
+                      <span className="text-neon-cyan">{m.target}</span>
+                      <span className={`px-1.5 py-0.5 rounded text-xs ${m.confidence > 0.8 ? 'bg-neon-green/10 text-neon-green' : m.confidence > 0.5 ? 'bg-yellow-400/10 text-yellow-400' : 'bg-red-400/10 text-red-400'}`}>
+                        {m.confidenceLabel}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          }
+          if (importActionResult.action === 'detectDuplicates') {
+            const d = importActionResult.data as DetectDuplicatesResult;
+            return (
+              <div className="space-y-3 pt-2 border-t border-lattice-border">
+                <h3 className="text-sm font-semibold text-yellow-400">Duplicate Detection</h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {[
+                    { label: 'Total Rows', value: (d.totalRows || 0).toLocaleString(), color: 'text-gray-300' },
+                    { label: 'Dup Groups', value: (d.duplicateGroupCount || 0).toString(), color: 'text-yellow-400' },
+                    { label: 'Dup Rows', value: (d.duplicateRowCount || 0).toLocaleString(), color: 'text-red-400' },
+                    { label: 'Savings', value: `${((d.deduplicationSavings || 0) * 100).toFixed(1)}%`, color: 'text-neon-green' },
+                  ].map(s => (
+                    <div key={s.label} className="lens-card text-center">
+                      <p className={`text-lg font-bold ${s.color}`}>{s.value}</p>
+                      <p className="text-xs text-gray-400">{s.label}</p>
+                    </div>
+                  ))}
+                </div>
+                {(d.keyFields || []).length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    <span className="text-xs text-gray-500 mr-1">Key fields:</span>
+                    {d.keyFields.map((f, i) => (
+                      <span key={i} className="text-xs px-2 py-0.5 bg-yellow-400/10 text-yellow-400 rounded">{f}</span>
+                    ))}
+                  </div>
+                )}
+                {(d.fieldRepetition || []).slice(0, 3).map((fr, i) => (
+                  <div key={i} className="flex items-center gap-2 text-xs">
+                    <span className="text-gray-400 w-24 truncate">{fr.field}</span>
+                    <div className="flex-1 h-1.5 bg-lattice-deep rounded-full overflow-hidden">
+                      <div className="h-full bg-yellow-400 rounded-full" style={{ width: `${fr.repetitionRate * 100}%` }} />
+                    </div>
+                    <span className="text-gray-500">{(fr.repetitionRate * 100).toFixed(1)}%</span>
+                  </div>
+                ))}
+              </div>
+            );
+          }
+          if (importActionResult.action === 'transformPreview') {
+            const d = importActionResult.data as TransformPreviewResult;
+            return (
+              <div className="space-y-3 pt-2 border-t border-lattice-border">
+                <h3 className="text-sm font-semibold text-neon-purple">Transform Preview</h3>
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="lens-card text-center">
+                    <p className="text-lg font-bold text-neon-purple">{d.transformsApplied || 0}</p>
+                    <p className="text-xs text-gray-400">Transforms Applied</p>
+                  </div>
+                  <div className="lens-card text-center">
+                    <p className="text-lg font-bold text-neon-cyan">{d.totalValueChanges || 0}</p>
+                    <p className="text-xs text-gray-400">Value Changes</p>
+                  </div>
+                  <div className="lens-card text-center">
+                    <p className="text-lg font-bold text-gray-300">{d.previewCount || 0}</p>
+                    <p className="text-xs text-gray-400">Preview Rows</p>
+                  </div>
+                </div>
+                {(d.fieldImpact || []).slice(0, 4).map((fi, i) => (
+                  <div key={i} className="flex items-center gap-2 text-xs">
+                    <span className="text-gray-400 w-28 truncate">{fi.field}</span>
+                    <div className="flex-1 h-1.5 bg-lattice-deep rounded-full overflow-hidden">
+                      <div className="h-full bg-neon-purple rounded-full" style={{ width: `${fi.changeRate * 100}%` }} />
+                    </div>
+                    <span className="text-gray-500">{fi.changes} changes</span>
+                  </div>
+                ))}
+              </div>
+            );
+          }
+          return null;
+        })()}
       </div>
 
       {/* Lens Features */}

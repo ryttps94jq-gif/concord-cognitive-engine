@@ -10,9 +10,9 @@ import { cn } from '@/lib/utils';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import {
   PawPrint, Plus, Search, Trash2, Calendar, Heart, Layers, ChevronDown,
-  Syringe, ShieldCheck, X, BarChart3, DollarSign, Weight, Activity,
-  Clock, Pill, UtensilsCrossed, Stethoscope, FileText, Camera,
-  AlertTriangle, CheckCircle2, Zap, Edit3, TrendingUp,
+  Syringe, X, BarChart3, DollarSign, Activity,
+  Pill, UtensilsCrossed, Stethoscope, FileText,
+  AlertTriangle, Zap,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';

@@ -6,12 +6,14 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api/client';
 import { useUIStore } from '@/store/ui';
 import { useLensData } from '@/lib/hooks/use-lens-data';
+import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { useLensDTUs } from '@/hooks/useLensDTUs';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Clapperboard, Plus, Play, Pause, Layers,
   Clock, X, Upload, Film,
   BarChart3, Sparkles, RotateCcw, Zap,
+  Loader2, XCircle, Spline, Timer, Monitor, BookOpen, AlertTriangle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { UniversalActions } from '@/components/lens/UniversalActions';
@@ -54,6 +56,22 @@ export default function AnimationPage() {
   const { contextDTUs, isLoading: dtusLoading } = useLensDTUs({ lens: 'animation' });
 
   const { items: projectItems, isLoading, isError, error, refetch, create: createProject, update: updateProject } = useLensData<AnimProject>('animation', 'project', { seed: [] });
+
+  // Backend action wiring
+  const runAction = useRunArtifact('animation');
+  const [actionResult, setActionResult] = useState<Record<string, unknown> | null>(null);
+  const [isRunning, setIsRunning] = useState<string | null>(null);
+
+  const handleAnimAction = async (action: string) => {
+    const targetId = selectedProject?.id || projectItems[0]?.id;
+    if (!targetId) return;
+    setIsRunning(action);
+    try {
+      const res = await runAction.mutateAsync({ id: targetId, action });
+      setActionResult(res.result as Record<string, unknown>);
+    } catch (e) { console.error(`Action ${action} failed:`, e); }
+    setIsRunning(null);
+  };
   const projects = useMemo(() => projectItems.map(i => ({ ...(i.data as unknown as AnimProject), id: i.id, title: i.title })), [projectItems]);
 
   const [tab, setTab] = useState<AnimTab>('projects');
@@ -286,12 +304,129 @@ export default function AnimationPage() {
           </div>
         )}
 
-        {/* Render */}
+        {/* Render & Computational Actions */}
         {tab === 'render' && (
-          <div className="text-center py-16 text-gray-500">
-            <Zap className="w-12 h-12 mx-auto mb-3 opacity-30" />
-            <p className="text-sm mb-2">Render Queue</p>
-            <p className="text-xs text-gray-600">Export animations as video, GIF, or sprite sheets via the render engine.</p>
+          <div className="space-y-4">
+            <div className="bg-white/5 border border-white/10 rounded-lg p-4">
+              <div className="flex items-center gap-2 mb-4">
+                <Zap className="w-4 h-4 text-orange-400" />
+                <h3 className="text-sm font-semibold">Animation Compute Actions</h3>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <button onClick={() => handleAnimAction('interpolateKeyframes')} disabled={isRunning !== null} className="flex flex-col items-center gap-2 p-3 bg-white/5 rounded-lg border border-white/10 hover:border-cyan-500/50 transition-colors disabled:opacity-50">
+                  {isRunning === 'interpolateKeyframes' ? <Loader2 className="w-5 h-5 text-cyan-400 animate-spin" /> : <Spline className="w-5 h-5 text-cyan-400" />}
+                  <span className="text-xs text-gray-300">Interpolate Keyframes</span>
+                </button>
+                <button onClick={() => handleAnimAction('timingAnalysis')} disabled={isRunning !== null} className="flex flex-col items-center gap-2 p-3 bg-white/5 rounded-lg border border-white/10 hover:border-purple-500/50 transition-colors disabled:opacity-50">
+                  {isRunning === 'timingAnalysis' ? <Loader2 className="w-5 h-5 text-purple-400 animate-spin" /> : <Timer className="w-5 h-5 text-purple-400" />}
+                  <span className="text-xs text-gray-300">Timing Analysis</span>
+                </button>
+                <button onClick={() => handleAnimAction('optimizeFPS')} disabled={isRunning !== null} className="flex flex-col items-center gap-2 p-3 bg-white/5 rounded-lg border border-white/10 hover:border-green-500/50 transition-colors disabled:opacity-50">
+                  {isRunning === 'optimizeFPS' ? <Loader2 className="w-5 h-5 text-green-400 animate-spin" /> : <Monitor className="w-5 h-5 text-green-400" />}
+                  <span className="text-xs text-gray-300">Optimize FPS</span>
+                </button>
+                <button onClick={() => handleAnimAction('storyboardSequence')} disabled={isRunning !== null} className="flex flex-col items-center gap-2 p-3 bg-white/5 rounded-lg border border-white/10 hover:border-orange-500/50 transition-colors disabled:opacity-50">
+                  {isRunning === 'storyboardSequence' ? <Loader2 className="w-5 h-5 text-orange-400 animate-spin" /> : <BookOpen className="w-5 h-5 text-orange-400" />}
+                  <span className="text-xs text-gray-300">Storyboard Sequence</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Action Result Display */}
+            {actionResult && (
+              <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="bg-white/5 border border-white/10 rounded-lg p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-semibold flex items-center gap-2"><BarChart3 className="w-4 h-4 text-orange-400" /> Result</h3>
+                  <button onClick={() => setActionResult(null)} className="text-gray-400 hover:text-white"><XCircle className="w-4 h-4" /></button>
+                </div>
+
+                {/* Interpolate Keyframes Result */}
+                {actionResult.totalFrames !== undefined && actionResult.sampleFrames !== undefined && (
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                      <div className="p-2 bg-white/5 rounded text-center"><p className="text-sm font-bold text-cyan-400">{actionResult.keyframeCount as number}</p><p className="text-[10px] text-gray-500">Keyframes</p></div>
+                      <div className="p-2 bg-white/5 rounded text-center"><p className="text-sm font-bold text-orange-400">{actionResult.fps as number}</p><p className="text-[10px] text-gray-500">FPS</p></div>
+                      <div className="p-2 bg-white/5 rounded text-center"><p className="text-sm font-bold text-purple-400">{actionResult.totalFrames as number}</p><p className="text-[10px] text-gray-500">Total Frames</p></div>
+                      <div className="p-2 bg-white/5 rounded text-center"><p className="text-sm font-bold text-green-400">{actionResult.durationSeconds as number}s</p><p className="text-[10px] text-gray-500">Duration</p></div>
+                    </div>
+                    {(actionResult.sampleFrames as Array<{ frame: number; time: number; value: number }>)?.length > 0 && (
+                      <div className="flex items-end gap-1 h-16">
+                        {(actionResult.sampleFrames as Array<{ frame: number; time: number; value: number }>).map((f, i) => (
+                          <div key={i} className="flex-1 bg-cyan-400/30 rounded-t" style={{ height: `${Math.max(10, Math.min(100, Math.abs(f.value) * 2))}%` }} title={`Frame ${f.frame}: ${f.value}`} />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Timing Analysis Result */}
+                {actionResult.totalDuration !== undefined && actionResult.sequences !== undefined && !actionResult.sampleFrames && (
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="p-2 bg-white/5 rounded text-center"><p className="text-sm font-bold text-purple-400">{actionResult.totalDuration as number}s</p><p className="text-[10px] text-gray-500">Total Duration</p></div>
+                      <div className="p-2 bg-white/5 rounded text-center"><p className="text-sm font-bold text-cyan-400">{actionResult.totalFrames as number}</p><p className="text-[10px] text-gray-500">Total Frames</p></div>
+                      <div className="p-2 bg-white/5 rounded text-center"><p className="text-sm font-bold text-orange-400">{actionResult.overlappingPairs as number}</p><p className="text-[10px] text-gray-500">Overlaps</p></div>
+                    </div>
+                    {(actionResult.sequences as Array<{ name: string; duration: number; delay: number; easing: string }>)?.map((seq, i) => (
+                      <div key={i} className="flex items-center gap-3 p-2 bg-white/5 rounded text-xs">
+                        <span className="text-white font-medium w-24 truncate">{seq.name}</span>
+                        <span className="text-gray-400">{seq.duration}s</span>
+                        <span className="text-gray-500">delay: {seq.delay}s</span>
+                        <span className="text-purple-400 ml-auto">{seq.easing}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Optimize FPS Result */}
+                {actionResult.recommendedFPS !== undefined && actionResult.frameTimeMs !== undefined && (
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                      <div className="p-2 bg-white/5 rounded text-center"><p className="text-sm font-bold text-gray-400">{actionResult.currentFPS as number}</p><p className="text-[10px] text-gray-500">Current FPS</p></div>
+                      <div className="p-2 bg-white/5 rounded text-center"><p className="text-sm font-bold text-green-400">{actionResult.recommendedFPS as number}</p><p className="text-[10px] text-gray-500">Recommended</p></div>
+                      <div className="p-2 bg-white/5 rounded text-center"><p className="text-sm font-bold text-cyan-400">{actionResult.frameTimeMs as number}ms</p><p className="text-[10px] text-gray-500">Frame Time</p></div>
+                      <div className="p-2 bg-white/5 rounded text-center"><p className="text-sm font-bold text-orange-400">{actionResult.targetDevice as string}</p><p className="text-[10px] text-gray-500">Target</p></div>
+                    </div>
+                    <div className={cn('flex items-center gap-2 text-xs p-2 rounded', (actionResult.withinBudget as boolean) ? 'bg-green-500/10 text-green-400' : 'bg-yellow-500/10 text-yellow-400')}>
+                      {(actionResult.withinBudget as boolean) ? <Sparkles className="w-3 h-3" /> : <AlertTriangle className="w-3 h-3" />}
+                      {(actionResult.withinBudget as boolean) ? 'Within performance budget' : 'Over complexity budget'}
+                    </div>
+                    {(actionResult.tips as string[])?.map((tip, i) => (
+                      <div key={i} className="text-xs text-gray-400 flex items-center gap-2"><span className="text-orange-400">-</span> {tip}</div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Storyboard Sequence Result */}
+                {actionResult.scenes !== undefined && actionResult.sceneCount !== undefined && (
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="p-2 bg-white/5 rounded text-center"><p className="text-sm font-bold text-orange-400">{actionResult.sceneCount as number}</p><p className="text-[10px] text-gray-500">Scenes</p></div>
+                      <div className="p-2 bg-white/5 rounded text-center"><p className="text-sm font-bold text-cyan-400">{actionResult.totalDuration as number}s</p><p className="text-[10px] text-gray-500">Total</p></div>
+                      <div className="p-2 bg-white/5 rounded text-center"><p className="text-sm font-bold text-purple-400">{actionResult.avgSceneDuration as number}s</p><p className="text-[10px] text-gray-500">Avg Scene</p></div>
+                    </div>
+                    {(actionResult.scenes as Array<{ scene: number; name: string; startTime: number; duration: number; description: string }>)?.map((s) => (
+                      <div key={s.scene} className="flex items-center gap-3 p-2 bg-white/5 rounded text-xs">
+                        <span className="text-orange-400 font-bold w-6 text-center">{s.scene}</span>
+                        <span className="text-white font-medium flex-1 truncate">{s.name}</span>
+                        <span className="text-gray-500">{s.startTime}s</span>
+                        <span className="text-gray-400">{s.duration}s</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Fallback */}
+                {!!actionResult.message && !actionResult.totalFrames && !actionResult.sequences && !actionResult.recommendedFPS && !actionResult.scenes && (
+                  <p className="text-sm text-gray-400">{actionResult.message as string}</p>
+                )}
+              </motion.div>
+            )}
+
+            <div className="text-center py-8 text-gray-500">
+              <Zap className="w-8 h-8 mx-auto mb-2 opacity-30" />
+              <p className="text-xs text-gray-600">Export animations as video, GIF, or sprite sheets via the render engine.</p>
+            </div>
           </div>
         )}
 

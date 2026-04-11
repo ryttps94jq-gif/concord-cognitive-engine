@@ -9,9 +9,9 @@ import { ds } from '@/lib/design-system';
 import { cn } from '@/lib/utils';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import {
-  Scale, Brain, Heart, Shield, Gavel, BookOpen, Plus, Search,
-  Trash2, X, BarChart3, Zap, ChevronDown, Layers, MessageSquare,
-  AlertTriangle, CheckCircle2, Users, Eye, Lightbulb,
+  Scale, Brain, Shield, Gavel, BookOpen, Plus, Search,
+  Trash2, X, BarChart3, Zap, ChevronDown, Layers,
+  AlertTriangle, CheckCircle2, Eye, Lightbulb,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';

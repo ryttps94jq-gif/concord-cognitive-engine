@@ -36,8 +36,10 @@ import {
   TestTube,
   Beaker,
   LineChart,
-  ChevronDown
+  ChevronDown,
+  Loader2,
 } from 'lucide-react';
+import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useUIStore } from '@/store/ui';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -156,6 +158,19 @@ export default function MLLensPage() {
 
   // Queries
   const { items: metricsItems } = useLensData('ml', 'metrics', { noSeed: true });
+  const runAction = useRunArtifact('ml');
+  const [actionResult, setActionResult] = useState<Record<string, unknown> | null>(null);
+  const [isRunning, setIsRunning] = useState<string | null>(null);
+  const handleAction = async (action: string) => {
+    const targetId = modelItems[0]?.id;
+    if (!targetId) { setActionResult({ message: 'Add a model first to run analysis.' }); return; }
+    setIsRunning(action);
+    try {
+      const res = await runAction.mutateAsync({ id: targetId, action });
+      setActionResult(res.result as Record<string, unknown>);
+    } catch (e) { console.error(`Action ${action} failed:`, e); }
+    finally { setIsRunning(null); }
+  };
 
   // Mutations
   const runInference = useMutation({
@@ -242,7 +257,7 @@ export default function MLLensPage() {
   // Data - sourced from persistent backend
   const datasets: Dataset[] = datasetItems.map(i => ({ ...(i.data as unknown as Dataset), id: i.id }));
   const deployments: Deployment[] = deploymentItems.map(i => ({ ...(i.data as unknown as Deployment), id: i.id }));
-  const metrics = metricsItems?.[0]?.data || { gpuUsage: 0, memoryUsage: 0, totalInferences: 0, avgLatency: 0 };
+  const metrics = (metricsItems?.[0]?.data || { gpuUsage: 0, memoryUsage: 0, totalInferences: 0, avgLatency: 0 }) as { gpuUsage: number; memoryUsage: number; totalInferences: number; avgLatency: number };
 
   // Filtered data
   const filteredModels = useMemo(() => {
@@ -890,6 +905,91 @@ export default function MLLensPage() {
 
       <RealtimeDataPanel data={realtimeInsights} />
       <UniversalActions domain="ml" artifactId={null} compact />
+
+      {/* Backend Action Panel */}
+      <div className="panel p-4 space-y-3">
+        <h2 className="font-semibold flex items-center gap-2">
+          <Brain className="w-4 h-4 text-neon-purple" />
+          ML Analysis
+        </h2>
+        <div className="flex flex-wrap gap-2">
+          {[
+            { action: 'modelEvaluate', label: 'Model Evaluate' },
+            { action: 'featureImportance', label: 'Feature Importance' },
+            { action: 'datasetProfile', label: 'Dataset Profile' },
+            { action: 'hyperparameterSuggest', label: 'Hyperparameter Suggest' },
+          ].map(({ action, label }) => (
+            <button key={action} onClick={() => handleAction(action)} disabled={!!isRunning}
+              className="btn-secondary text-sm flex items-center gap-1 disabled:opacity-50">
+              {isRunning === action ? <Loader2 className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
+              {label}
+            </button>
+          ))}
+        </div>
+        {actionResult && (
+          <div className="bg-lattice-deep rounded-lg p-4 space-y-3 text-sm">
+            {'type' in actionResult && 'samples' in actionResult && (
+              <div className="space-y-2">
+                <div className="flex flex-wrap gap-4 text-xs">
+                  <span className="text-gray-400">Type: <span className="text-neon-cyan">{String(actionResult.type)}</span></span>
+                  <span className="text-gray-400">Samples: <span className="text-neon-cyan">{String(actionResult.samples)}</span></span>
+                  {'accuracy' in actionResult && <span className="text-gray-400">Accuracy: <span className="text-neon-green font-bold">{String(actionResult.accuracy)}</span></span>}
+                  {'mse' in actionResult && <span className="text-gray-400">MSE: <span className="text-neon-cyan">{String(actionResult.mse)}</span></span>}
+                  {'r2' in actionResult && <span className="text-gray-400">R²: <span className="text-neon-green">{String(actionResult.r2)}</span></span>}
+                </div>
+                {'perClass' in actionResult && Array.isArray(actionResult.perClass) && actionResult.perClass.length > 0 && (
+                  <div className="space-y-1">
+                    <p className="text-xs text-gray-500 uppercase tracking-wider">Per Class</p>
+                    {(actionResult.perClass as Array<Record<string, unknown>>).map((c, i) => (
+                      <div key={i} className="flex justify-between text-xs bg-lattice-surface rounded px-2 py-1">
+                        <span className="text-gray-300">{String(c.label || c.class)}</span>
+                        <span className="text-neon-cyan">{String(c.f1 || c.precision || 0)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            {'rankings' in actionResult && Array.isArray(actionResult.rankings) && !('recommended' in actionResult) && (
+              <div className="space-y-2">
+                <div className="flex gap-4 text-xs text-gray-400">
+                  <span>Total Features: <span className="text-neon-cyan">{String(actionResult.totalFeatures)}</span></span>
+                  <span>Numeric: <span className="text-neon-cyan">{String(actionResult.numericFeatures)}</span></span>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs text-gray-500 uppercase tracking-wider">Top Features</p>
+                  {(actionResult.rankings as Array<Record<string, unknown>>).slice(0, 5).map((f, i) => (
+                    <div key={i} className="flex justify-between text-xs bg-lattice-surface rounded px-2 py-1">
+                      <span className="text-gray-300">{String(f.feature || f.name)}</span>
+                      <span className="text-neon-green">{String(f.importance || f.score || 0)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {'rows' in actionResult && 'columns' in actionResult && (
+              <div className="space-y-2">
+                <div className="flex gap-4 text-xs text-gray-400">
+                  <span>Rows: <span className="text-neon-cyan font-bold">{String(actionResult.rows)}</span></span>
+                  <span>Columns: <span className="text-neon-cyan font-bold">{String(actionResult.columns)}</span></span>
+                  <span>Quality: <span className="text-neon-green font-bold">{String(actionResult.qualityScore)}%</span></span>
+                </div>
+              </div>
+            )}
+            {'modelType' in actionResult && 'suggestions' in actionResult && (
+              <div className="space-y-2">
+                <span className="text-gray-400 text-xs">Model: <span className="text-neon-cyan">{String(actionResult.modelType)}</span></span>
+                {'notes' in actionResult && Array.isArray(actionResult.notes) && actionResult.notes.length > 0 && (
+                  <div className="space-y-1">
+                    {(actionResult.notes as string[]).map((n, i) => <p key={i} className="text-xs text-gray-300">• {n}</p>)}
+                  </div>
+                )}
+              </div>
+            )}
+            {'message' in actionResult && <p className="text-gray-400">{String(actionResult.message)}</p>}
+          </div>
+        )}
+      </div>
 
       {/* Lens Features */}
       <div className="border-t border-white/10">

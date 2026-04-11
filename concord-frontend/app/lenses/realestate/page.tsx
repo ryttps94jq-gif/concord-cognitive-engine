@@ -639,7 +639,88 @@ export default function RealEstateLensPage() {
                 <h3 className={ds.heading3}>Action Result</h3>
                 <button onClick={() => setActionResult(null)} className={ds.btnGhost}><X className="w-4 h-4" /></button>
               </div>
-              <pre className={cn(ds.textMono, 'text-xs overflow-auto max-h-48')}>{JSON.stringify(actionResult, null, 2)}</pre>
+              <div className="space-y-3">
+                {/* capRate */}
+                {actionResult.capRate !== undefined && actionResult.noi !== undefined && (
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="p-2 bg-lattice-surface rounded text-center">
+                        <p className={`text-sm font-bold ${Number(actionResult.capRate) >= 8 ? 'text-green-400' : Number(actionResult.capRate) >= 6 ? 'text-amber-400' : 'text-red-400'}`}>{String(actionResult.capRate)}%</p>
+                        <p className="text-[10px] text-gray-500">Cap Rate</p>
+                      </div>
+                      <div className="p-2 bg-lattice-surface rounded text-center">
+                        <p className="text-sm font-bold text-neon-cyan">${Number(actionResult.noi).toLocaleString()}</p>
+                        <p className="text-[10px] text-gray-500">NOI</p>
+                      </div>
+                      <div className="p-2 bg-lattice-surface rounded text-center">
+                        <p className="text-sm font-bold text-neon-cyan capitalize">{String(actionResult.rating)}</p>
+                        <p className="text-[10px] text-gray-500">Rating</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {/* cashFlow */}
+                {actionResult.monthly !== undefined && (
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="p-2 bg-lattice-surface rounded text-center">
+                        <p className={`text-sm font-bold ${Number((actionResult.monthly as {cashFlow:number}).cashFlow) >= 0 ? 'text-green-400' : 'text-red-400'}`}>${Number((actionResult.monthly as {cashFlow:number}).cashFlow).toLocaleString()}/mo</p>
+                        <p className="text-[10px] text-gray-500">Monthly Cash Flow</p>
+                      </div>
+                      <div className="p-2 bg-lattice-surface rounded text-center">
+                        <p className={`text-sm font-bold ${Number((actionResult.annual as {cashFlow:number}).cashFlow) >= 0 ? 'text-green-400' : 'text-red-400'}`}>${Number((actionResult.annual as {cashFlow:number}).cashFlow).toLocaleString()}/yr</p>
+                        <p className="text-[10px] text-gray-500">Annual Cash Flow</p>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="p-2 bg-lattice-surface rounded text-center">
+                        <p className="text-sm font-bold text-neon-cyan">${Number((actionResult.monthly as {grossRent:number}).grossRent).toLocaleString()}</p>
+                        <p className="text-[10px] text-gray-500">Gross Rent</p>
+                      </div>
+                      <div className="p-2 bg-lattice-surface rounded text-center">
+                        <p className="text-sm font-bold text-amber-400">${Number((actionResult.monthly as {expenses:number}).expenses).toLocaleString()}</p>
+                        <p className="text-[10px] text-gray-500">Expenses</p>
+                      </div>
+                      <div className="p-2 bg-lattice-surface rounded text-center">
+                        <p className="text-sm font-bold text-amber-400">${Number((actionResult.monthly as {mortgage:number}).mortgage).toLocaleString()}</p>
+                        <p className="text-[10px] text-gray-500">Mortgage</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {/* closingTimeline */}
+                {actionResult.timeline !== undefined && Array.isArray(actionResult.timeline) && (
+                  <div className="space-y-1">
+                    <p className="text-xs text-gray-400">{String(actionResult.totalDays)}-day closing timeline</p>
+                    {(actionResult.timeline as {milestone:string;date:string;status:string}[]).map((m, i) => (
+                      <div key={i} className="flex items-center gap-2 text-xs px-2 py-1 bg-lattice-surface rounded">
+                        <span className={`w-2 h-2 rounded-full flex-shrink-0 ${m.status === 'completed' ? 'bg-green-400' : 'bg-gray-500'}`} />
+                        <span className="text-gray-300 flex-1">{m.milestone}</span>
+                        <span className="text-gray-500">{m.date}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {/* vacancyRate */}
+                {actionResult.vacancyRate !== undefined && actionResult.total !== undefined && (
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="p-2 bg-lattice-surface rounded text-center">
+                        <p className={`text-sm font-bold ${Number(actionResult.vacancyRate) > 10 ? 'text-red-400' : Number(actionResult.vacancyRate) > 5 ? 'text-amber-400' : 'text-green-400'}`}>{String(actionResult.vacancyRate)}%</p>
+                        <p className="text-[10px] text-gray-500">Vacancy</p>
+                      </div>
+                      <div className="p-2 bg-lattice-surface rounded text-center">
+                        <p className="text-sm font-bold text-green-400">{String(actionResult.occupied)}</p>
+                        <p className="text-[10px] text-gray-500">Occupied</p>
+                      </div>
+                      <div className="p-2 bg-lattice-surface rounded text-center">
+                        <p className="text-sm font-bold text-neon-cyan">${Number(actionResult.monthlyRentCollected).toLocaleString()}</p>
+                        <p className="text-[10px] text-gray-500">Monthly Rent</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>

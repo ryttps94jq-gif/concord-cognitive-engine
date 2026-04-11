@@ -3,7 +3,8 @@
 import { useLensNav } from '@/hooks/useLensNav';
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Wand2, Layout, Code, Eye, Palette, Settings, Loader2, Layers, Link, BarChart } from 'lucide-react';
+import { Wand2, Layout, Code, Eye, Palette, Settings, Loader2, Layers, Link, BarChart, Play } from 'lucide-react';
+import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { apiHelpers } from '@/lib/api/client';
 import { cn } from '@/lib/utils';
@@ -157,6 +158,20 @@ export default function MetaLensPage() {
   const isLoading = templatesLoading || componentsLoading || generatedLoading;
 
   // Cross-lens links (synthetic for meta dashboard)
+  const runAction = useRunArtifact('meta');
+  const [actionResult, setActionResult] = useState<Record<string, unknown> | null>(null);
+  const [isRunning, setIsRunning] = useState<string | null>(null);
+  const handleAction = async (action: string) => {
+    const targetId = templateItems[0]?.id;
+    if (!targetId) { setActionResult({ message: 'No meta templates found. Add a template first.' }); return; }
+    setIsRunning(action);
+    try {
+      const res = await runAction.mutateAsync({ id: targetId, action });
+      setActionResult(res.result as Record<string, unknown>);
+    } catch (e) { console.error(`Action ${action} failed:`, e); }
+    finally { setIsRunning(null); }
+  };
+
   const crossLensLinks = [
     { from: 'attention', to: 'reflection', strength: 85, label: 'Focus analysis feeds reflections' },
     { from: 'hypothesis', to: 'transfer', strength: 72, label: 'Hypotheses transfer across domains' },
@@ -562,6 +577,75 @@ export default function MetaLensPage() {
           compact
         />
       )}
+
+      {/* Backend Action Panel */}
+      <div className="panel p-4 space-y-3">
+        <h2 className="font-semibold flex items-center gap-2">
+          <BarChart className="w-4 h-4 text-neon-purple" />
+          Meta Analysis
+        </h2>
+        <div className="flex flex-wrap gap-2">
+          {[
+            { action: 'systemReflection', label: 'System Reflection' },
+            { action: 'actionAnalytics', label: 'Action Analytics' },
+            { action: 'qualityMetrics', label: 'Quality Metrics' },
+          ].map(({ action, label }) => (
+            <button key={action} onClick={() => handleAction(action)} disabled={!!isRunning}
+              className="btn-secondary text-sm flex items-center gap-1 disabled:opacity-50">
+              {isRunning === action ? <Loader2 className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
+              {label}
+            </button>
+          ))}
+        </div>
+        {actionResult && (
+          <div className="bg-lattice-deep rounded-lg p-4 space-y-3 text-sm">
+            {'totalRequests' in actionResult && (
+              <div className="space-y-2">
+                <div className="flex flex-wrap gap-4 text-xs">
+                  <span className="text-gray-400">Requests: <span className="text-neon-cyan font-bold">{String(actionResult.totalRequests)}</span></span>
+                  <span className="text-gray-400">Error Rate: <span className="text-red-400">{String(actionResult.overallErrorRate)}</span></span>
+                  <span className="text-gray-400">Trend: <span className="text-yellow-400">{String(actionResult.errorTrend)}</span></span>
+                </div>
+                {'responseTime' in actionResult && actionResult.responseTime !== null && typeof actionResult.responseTime === 'object' && (
+                  <div className="flex flex-wrap gap-3 text-xs">
+                    {Object.entries(actionResult.responseTime as Record<string, unknown>).map(([k, v]) => (
+                      <span key={k} className="text-gray-400">{k}: <span className="text-neon-cyan">{String(v)}ms</span></span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            {'totalActions' in actionResult && (
+              <div className="flex flex-wrap gap-4 text-xs">
+                <span className="text-gray-400">Actions: <span className="text-neon-cyan font-bold">{String(actionResult.totalActions)}</span></span>
+                <span className="text-gray-400">Unique: <span className="text-neon-green">{String(actionResult.uniqueActions)}</span></span>
+                <span className="text-gray-400">Users: <span className="text-yellow-400">{String(actionResult.uniqueUsers)}</span></span>
+                <span className="text-gray-400">Sessions: <span className="text-neon-cyan">{String(actionResult.totalSessions)}</span></span>
+              </div>
+            )}
+            {'totalFields' in actionResult && (
+              <div className="space-y-2">
+                <div className="text-xs text-gray-400">Fields: <span className="text-neon-cyan font-bold">{String(actionResult.totalFields)}</span></div>
+                {'completeness' in actionResult && actionResult.completeness !== null && typeof actionResult.completeness === 'object' && (
+                  <div className="flex flex-wrap gap-3 text-xs">
+                    {Object.entries(actionResult.completeness as Record<string, unknown>).map(([k, v]) => (
+                      <span key={k} className="text-gray-400">{k}: <span className="text-neon-cyan">{String(v)}</span></span>
+                    ))}
+                  </div>
+                )}
+                {'overall' in actionResult && actionResult.overall !== null && typeof actionResult.overall === 'object' && (
+                  <div className="flex flex-wrap gap-3 text-xs">
+                    {Object.entries(actionResult.overall as Record<string, unknown>).map(([k, v]) => (
+                      <span key={k} className="text-gray-400">{k}: <span className="text-neon-green font-bold">{String(v)}</span></span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            {'message' in actionResult && <p className="text-gray-400">{String(actionResult.message)}</p>}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

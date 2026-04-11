@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData } from '@/lib/hooks/use-lens-data';
+import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { useUIStore } from '@/store/ui';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -31,7 +32,12 @@ import {
   BarChart2,
   Layers,
   Newspaper,
-  ChevronDown
+  ChevronDown,
+  Loader2,
+  Zap,
+  DollarSign,
+  BarChart3,
+  CreditCard,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { UniversalActions } from '@/components/lens/UniversalActions';
@@ -172,6 +178,22 @@ export default function FinanceLensPage() {
     seed: INITIAL_NEWS.map(n => ({ title: n.title, data: n as unknown as Record<string, unknown> })),
   });
   const { create: createOrderMut } = useLensData<Order>('finance', 'order', { noSeed: true });
+
+  // Backend action wiring
+  const runFinanceAction = useRunArtifact('finance');
+  const [financeActionResult, setFinanceActionResult] = useState<Record<string, unknown> | null>(null);
+  const [financeRunning, setFinanceRunning] = useState<string | null>(null);
+
+  const handleFinanceAction = useCallback(async (action: string) => {
+    const targetId = assetItems[0]?.id;
+    if (!targetId) return;
+    setFinanceRunning(action);
+    try {
+      const res = await runFinanceAction.mutateAsync({ id: targetId, action });
+      setFinanceActionResult({ _action: action, ...(res.result as Record<string, unknown>) });
+    } catch (e) { console.error(`Finance action ${action} failed:`, e); }
+    setFinanceRunning(null);
+  }, [assetItems, runFinanceAction]);
 
   const assets: Asset[] = assetItems.map(i => ({ ...(i.data as unknown as Asset), id: i.id }));
   const transactions: Transaction[] = txItems.map(i => ({ ...(i.data as unknown as Transaction), id: i.id }));
@@ -1419,6 +1441,171 @@ export default function FinanceLensPage() {
 
       <RealtimeDataPanel domain="finance" data={realtimeData} isLive={isLive} lastUpdated={lastUpdated} insights={insights} compact />
       <UniversalActions domain="finance" artifactId={null} compact />
+
+      {/* Finance Actions */}
+      <div className="bg-white/5 border border-emerald-900/20 rounded-xl p-4 space-y-3">
+        <h2 className="font-semibold text-sm flex items-center gap-2">
+          <Zap className="w-4 h-4 text-emerald-400" />
+          Finance Analysis
+        </h2>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+          {[
+            { action: 'portfolioAnalysis', label: 'Portfolio Analysis', icon: BarChart3,  color: 'text-emerald-400' },
+            { action: 'budgetTracker',     label: 'Budget Tracker',     icon: DollarSign, color: 'text-neon-cyan' },
+            { action: 'compoundInterest',  label: 'Compound Interest',  icon: TrendingUp, color: 'text-neon-green' },
+            { action: 'debtPayoff',        label: 'Debt Payoff',        icon: CreditCard, color: 'text-red-400' },
+          ].map(({ action, label, icon: Icon, color }) => (
+            <button
+              key={action}
+              onClick={() => handleFinanceAction(action)}
+              disabled={!!financeRunning || !assetItems[0]?.id}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg bg-black/20 border border-emerald-900/20 text-sm hover:border-emerald-500/30 disabled:opacity-40 transition-colors"
+            >
+              {financeRunning === action ? <Loader2 className="w-4 h-4 animate-spin" /> : <Icon className={`w-4 h-4 ${color}`} />}
+              <span className="truncate text-xs">{label}</span>
+            </button>
+          ))}
+        </div>
+
+        {financeActionResult && (
+          <div className="mt-3 rounded-lg bg-black/30 border border-emerald-900/20 p-4 relative">
+            <button onClick={() => setFinanceActionResult(null)} className="absolute top-3 right-3 text-gray-500 hover:text-white">
+              <X className="w-4 h-4" />
+            </button>
+
+            {/* portfolioAnalysis */}
+            {financeActionResult._action === 'portfolioAnalysis' && (
+              <div className="space-y-3">
+                <p className="text-xs text-gray-400 uppercase tracking-wider font-semibold">Portfolio Analysis</p>
+                {(financeActionResult.message as string) ? <p className="text-sm text-gray-400">{financeActionResult.message as string}</p> : (
+                  <>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      {[
+                        { label: 'Total Value', value: `$${(financeActionResult.totalValue as number || 0).toLocaleString()}`, color: 'text-emerald-400' },
+                        { label: 'Gain/Loss', value: `$${(financeActionResult.totalGainLoss as number || 0).toLocaleString()}`, color: (financeActionResult.totalGainLoss as number) >= 0 ? 'text-neon-green' : 'text-red-400' },
+                        { label: 'Return', value: `${financeActionResult.returnPercent ?? 0}%`, color: 'text-neon-cyan' },
+                        { label: 'Diversification', value: String(financeActionResult.diversificationScore ?? '—'), color: financeActionResult.diversificationScore === 'well-diversified' ? 'text-neon-green' : 'text-yellow-400' },
+                      ].map(({ label, value, color }) => (
+                        <div key={label} className="bg-black/20 rounded-lg p-3 text-center">
+                          <p className={`text-sm font-bold font-mono ${color}`}>{value}</p>
+                          <p className="text-xs text-gray-400">{label}</p>
+                        </div>
+                      ))}
+                    </div>
+                    {Array.isArray(financeActionResult.holdings) && (financeActionResult.holdings as {symbol:string;value:number;allocation:number;gainLoss:number;type:string}[]).slice(0,5).map(h => (
+                      <div key={h.symbol} className="flex items-center gap-3 text-xs px-2 py-1 rounded bg-white/5 font-mono">
+                        <span className="text-white w-16">{h.symbol}</span>
+                        <span className="text-gray-400 w-12">{h.type}</span>
+                        <div className="flex-1 h-1.5 bg-white/5 rounded-full overflow-hidden">
+                          <div className="h-full bg-emerald-500/60 rounded-full" style={{ width: `${h.allocation}%` }} />
+                        </div>
+                        <span className="text-gray-300 w-14 text-right">{h.allocation}%</span>
+                        <span className={`w-20 text-right ${h.gainLoss >= 0 ? 'text-neon-green' : 'text-red-400'}`}>${h.gainLoss.toLocaleString()}</span>
+                      </div>
+                    ))}
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* budgetTracker */}
+            {financeActionResult._action === 'budgetTracker' && (
+              <div className="space-y-3">
+                <p className="text-xs text-gray-400 uppercase tracking-wider font-semibold">Budget Tracker</p>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {[
+                    { label: 'Income', value: `$${(financeActionResult.monthlyIncome as number || 0).toLocaleString()}`, color: 'text-neon-green' },
+                    { label: 'Spent', value: `$${(financeActionResult.totalSpent as number || 0).toLocaleString()}`, color: 'text-red-400' },
+                    { label: 'Remaining', value: `$${(financeActionResult.remaining as number || 0).toLocaleString()}`, color: 'text-neon-cyan' },
+                    { label: 'Savings Rate', value: `${financeActionResult.savingsRate ?? 0}%`, color: 'text-emerald-400' },
+                  ].map(({ label, value, color }) => (
+                    <div key={label} className="bg-black/20 rounded-lg p-3 text-center">
+                      <p className={`text-sm font-bold font-mono ${color}`}>{value}</p>
+                      <p className="text-xs text-gray-400">{label}</p>
+                    </div>
+                  ))}
+                </div>
+                {Array.isArray(financeActionResult.categories) && (financeActionResult.categories as {category:string;spent:number;budget:number;percentUsed:number;status:string}[]).map(c => (
+                  <div key={c.category} className="flex items-center gap-3 text-xs">
+                    <span className="text-gray-400 w-28 truncate">{c.category}</span>
+                    <div className="flex-1 h-2 bg-white/5 rounded-full overflow-hidden">
+                      <div className={`h-full rounded-full ${c.status === 'over-budget' ? 'bg-red-500/60' : c.status === 'near-limit' ? 'bg-yellow-500/60' : 'bg-emerald-500/60'}`} style={{ width: `${Math.min(100, c.percentUsed)}%` }} />
+                    </div>
+                    <span className="text-white w-10 text-right font-mono">{c.percentUsed}%</span>
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] ${c.status === 'over-budget' ? 'bg-red-400/20 text-red-400' : c.status === 'near-limit' ? 'bg-yellow-400/20 text-yellow-400' : 'bg-neon-green/20 text-neon-green'}`}>{c.status}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* compoundInterest */}
+            {financeActionResult._action === 'compoundInterest' && (
+              <div className="space-y-3">
+                <p className="text-xs text-gray-400 uppercase tracking-wider font-semibold">Compound Interest Projection</p>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {[
+                    { label: 'Final Balance', value: `$${(financeActionResult.finalBalance as number || 0).toLocaleString()}`, color: 'text-emerald-400' },
+                    { label: 'Contributed', value: `$${(financeActionResult.totalContributed as number || 0).toLocaleString()}`, color: 'text-neon-cyan' },
+                    { label: 'Interest Earned', value: `$${(financeActionResult.totalInterest as number || 0).toLocaleString()}`, color: 'text-neon-green' },
+                    { label: 'Rate', value: String(financeActionResult.annualRate ?? '—'), color: 'text-yellow-400' },
+                  ].map(({ label, value, color }) => (
+                    <div key={label} className="bg-black/20 rounded-lg p-3 text-center">
+                      <p className={`text-sm font-bold font-mono ${color}`}>{value}</p>
+                      <p className="text-xs text-gray-400">{label}</p>
+                    </div>
+                  ))}
+                </div>
+                {Array.isArray(financeActionResult.timeline) && (
+                  <div className="grid grid-cols-5 gap-1">
+                    {(financeActionResult.timeline as {year:number;balance:number}[]).filter((_, i, arr) => i % Math.max(1, Math.floor(arr.length / 5)) === 0 || i === arr.length - 1).slice(0, 5).map(t => (
+                      <div key={t.year} className="bg-black/20 rounded p-2 text-center">
+                        <p className="text-xs text-gray-400">Yr {t.year}</p>
+                        <p className="text-xs font-mono text-neon-green">${(t.balance / 1000).toFixed(0)}k</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* debtPayoff */}
+            {financeActionResult._action === 'debtPayoff' && (
+              <div className="space-y-3">
+                <p className="text-xs text-gray-400 uppercase tracking-wider font-semibold">Debt Payoff Plan</p>
+                {(financeActionResult.message as string) ? <p className="text-sm text-gray-400">{financeActionResult.message as string}</p> : (
+                  <>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                      {[
+                        { label: 'Total Debt', value: `$${(financeActionResult.totalDebt as number || 0).toLocaleString()}`, color: 'text-red-400' },
+                        { label: 'Total Interest', value: `$${(financeActionResult.totalInterest as number || 0).toLocaleString()}`, color: 'text-orange-400' },
+                        { label: 'First Target', value: String(financeActionResult.firstTarget ?? '—'), color: 'text-neon-cyan' },
+                      ].map(({ label, value, color }) => (
+                        <div key={label} className="bg-black/20 rounded-lg p-3 text-center">
+                          <p className={`text-sm font-bold font-mono ${color}`}>{value}</p>
+                          <p className="text-xs text-gray-400">{label}</p>
+                        </div>
+                      ))}
+                    </div>
+                    {financeActionResult.strategy && <p className="text-xs text-gray-500 italic">{financeActionResult.strategy as string}</p>}
+                    {Array.isArray(financeActionResult.debts) && (
+                      <div className="space-y-1 max-h-32 overflow-y-auto">
+                        {(financeActionResult.debts as {name:string;balance:number;rate:string;monthsToPayoff:number}[]).map(d => (
+                          <div key={d.name} className="flex items-center gap-3 text-xs px-2 py-1 rounded bg-white/5 font-mono">
+                            <span className="flex-1 text-white">{d.name}</span>
+                            <span className="text-red-400">${d.balance.toLocaleString()}</span>
+                            <span className="text-orange-400">{d.rate}</span>
+                            <span className="text-gray-400">{d.monthsToPayoff < 999 ? `${d.monthsToPayoff}mo` : '∞'}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Navigation */}
       <nav className="flex items-center gap-1 border-b border-emerald-900/20 pb-4">

@@ -37,7 +37,9 @@ import {
   Palette,
   Plug,
   Settings2,
+  Loader2,
 } from 'lucide-react';
+import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { cn } from '@/lib/utils';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 // marketplace-demo.ts has been deprecated — all data comes from API
@@ -461,6 +463,20 @@ export default function MarketplaceLensPage() {
   const [packSelectedDTUs, setPackSelectedDTUs] = useState<string[]>([]);
   const [packSubmitting, setPackSubmitting] = useState(false);
   const [packError, setPackError] = useState<string | null>(null);
+
+  const runAction = useRunArtifact('marketplace');
+  const [actionResult, setActionResult] = useState<Record<string, unknown> | null>(null);
+  const [isRunning, setIsRunning] = useState<string | null>(null);
+  const handleAction = async (action: string) => {
+    const targetId = listingItems[0]?.id;
+    if (!targetId) { setActionResult({ message: 'No listings found. Add a listing first to run analysis.' }); return; }
+    setIsRunning(action);
+    try {
+      const res = await runAction.mutateAsync({ id: targetId, action });
+      setActionResult(res.result as Record<string, unknown>);
+    } catch (e) { console.error(`Action ${action} failed:`, e); }
+    finally { setIsRunning(null); }
+  };
 
   const { items: listingItems, isLoading, isError: isError, error: error, refetch: refetch } = useLensData('marketplace', 'listing', {
     noSeed: true,
@@ -1458,6 +1474,89 @@ export default function MarketplaceLensPage() {
       )}
         </div>
       )}
+
+      {/* Backend Action Panel */}
+      <div className="panel p-4 space-y-3">
+        <h2 className="font-semibold flex items-center gap-2">
+          <Store className="w-4 h-4 text-neon-green" />
+          Marketplace Analysis
+        </h2>
+        <div className="flex flex-wrap gap-2">
+          {[
+            { action: 'listingScore', label: 'Listing Score' },
+            { action: 'priceOptimize', label: 'Price Optimize' },
+            { action: 'sellerMetrics', label: 'Seller Metrics' },
+            { action: 'marketTrend', label: 'Market Trend' },
+          ].map(({ action, label }) => (
+            <button key={action} onClick={() => handleAction(action)} disabled={!!isRunning}
+              className="btn-secondary text-sm flex items-center gap-1 disabled:opacity-50">
+              {isRunning === action ? <Loader2 className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
+              {label}
+            </button>
+          ))}
+        </div>
+        {actionResult && (
+          <div className="bg-lattice-deep rounded-lg p-4 space-y-3 text-sm">
+            {'score' in actionResult && 'maxScore' in actionResult && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-3">
+                  <span className="text-neon-cyan font-bold text-xl">{String(actionResult.score)}<span className="text-gray-400 text-sm">/{String(actionResult.maxScore)}</span></span>
+                  <span className={`text-xs px-2 py-0.5 rounded ${
+                    actionResult.rating === 'Excellent' ? 'bg-neon-green/20 text-neon-green' :
+                    actionResult.rating === 'Good' ? 'bg-neon-cyan/20 text-neon-cyan' :
+                    'bg-yellow-400/20 text-yellow-400'
+                  }`}>{String(actionResult.rating)}</span>
+                </div>
+                {'tips' in actionResult && Array.isArray(actionResult.tips) && actionResult.tips.length > 0 && (
+                  <div className="space-y-1">
+                    <p className="text-xs text-gray-500 uppercase tracking-wider">Tips</p>
+                    {(actionResult.tips as string[]).map((t, i) => <p key={i} className="text-xs text-gray-300">• {t}</p>)}
+                  </div>
+                )}
+              </div>
+            )}
+            {'suggestedPrice' in actionResult && (
+              <div className="space-y-1">
+                <div className="flex gap-4">
+                  <span className="text-gray-400 text-xs">Current: <span className="text-white">${String(actionResult.currentPrice)}</span></span>
+                  <span className="text-gray-400 text-xs">Suggested: <span className="text-neon-green font-bold">${String(actionResult.suggestedPrice)}</span></span>
+                </div>
+                <div className="flex gap-4 text-xs text-gray-500">
+                  <span>Margin: <span className="text-neon-cyan">{String(actionResult.margin)}%</span></span>
+                  <span>Position: <span className="text-yellow-400">{String(actionResult.positioning)}</span></span>
+                </div>
+              </div>
+            )}
+            {'totalOrders' in actionResult && (
+              <div className="flex flex-wrap gap-4 text-xs">
+                <span className="text-gray-400">Orders: <span className="text-neon-cyan font-bold">{String(actionResult.totalOrders)}</span></span>
+                <span className="text-gray-400">Revenue: <span className="text-neon-green font-bold">${String(actionResult.totalRevenue)}</span></span>
+                <span className="text-gray-400">Level: <span className="text-yellow-400">{String(actionResult.sellerLevel)}</span></span>
+                <span className="text-gray-400">Fulfillment: <span className="text-neon-cyan">{String(actionResult.fulfillmentRate)}%</span></span>
+              </div>
+            )}
+            {'trends' in actionResult && Array.isArray(actionResult.trends) && (
+              <div className="space-y-2">
+                <div className="flex gap-4 text-xs text-gray-400">
+                  <span>Listings: <span className="text-neon-cyan">{String(actionResult.totalListings)}</span></span>
+                  <span>Categories: <span className="text-neon-cyan">{String(actionResult.categories)}</span></span>
+                </div>
+                {'hottest' in actionResult && Array.isArray(actionResult.hottest) && actionResult.hottest.length > 0 && (
+                  <div>
+                    <p className="text-xs text-neon-green font-semibold mb-1">Hottest</p>
+                    <div className="flex flex-wrap gap-1">
+                      {(actionResult.hottest as string[]).map((h, i) => (
+                        <span key={i} className="text-xs bg-neon-green/10 border border-neon-green/20 rounded px-2 py-0.5 text-neon-green">{h}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+            {'message' in actionResult && <p className="text-gray-400">{String(actionResult.message)}</p>}
+          </div>
+        )}
+      </div>
 
       {/* Lens Features */}
       <div className="border-t border-white/10">

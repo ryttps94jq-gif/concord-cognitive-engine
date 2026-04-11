@@ -1320,7 +1320,86 @@ export default function HealthcareLensPage() {
               <div className="text-sm text-gray-300 whitespace-pre-wrap leading-relaxed">{String(actionResult.content)}</div>
             </div>
           ) : (
-            <pre className={cn(ds.textMono, 'text-xs overflow-auto max-h-48')}>{JSON.stringify(actionResult, null, 2)}</pre>
+            <div className="space-y-3">
+              {/* checkInteractions */}
+              {actionResult.interactionsFound !== undefined && (
+                <div className="space-y-2">
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="p-2 bg-lattice-surface rounded text-center">
+                      <p className="text-sm font-bold text-neon-cyan">{String(actionResult.totalChecked)}</p>
+                      <p className="text-[10px] text-gray-500">Prescriptions</p>
+                    </div>
+                    <div className="p-2 bg-lattice-surface rounded text-center">
+                      <p className={`text-sm font-bold ${Number(actionResult.interactionsFound) > 0 ? 'text-red-400' : 'text-green-400'}`}>{String(actionResult.interactionsFound)}</p>
+                      <p className="text-[10px] text-gray-500">Interactions</p>
+                    </div>
+                    <div className="p-2 bg-lattice-surface rounded text-center">
+                      <p className={`text-sm font-bold ${actionResult.hasCritical ? 'text-red-400' : 'text-green-400'}`}>{actionResult.hasCritical ? 'Critical' : 'Safe'}</p>
+                      <p className="text-[10px] text-gray-500">Risk Level</p>
+                    </div>
+                  </div>
+                  {Array.isArray(actionResult.interactions) && (actionResult.interactions as {drugs:string[];severity:string;description:string}[]).map((ix, i) => (
+                    <div key={i} className="p-2 bg-lattice-surface rounded">
+                      <p className="text-xs font-semibold text-white">{ix.drugs.join(' + ')}</p>
+                      <p className={`text-[10px] font-semibold ${ix.severity === 'critical' ? 'text-red-400' : ix.severity === 'major' ? 'text-orange-400' : 'text-amber-400'}`}>{ix.severity.toUpperCase()}</p>
+                      {ix.description && <p className="text-[10px] text-gray-400 mt-0.5">{ix.description}</p>}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {/* protocolMatch */}
+              {actionResult.conditionsEvaluated !== undefined && (
+                <div className="space-y-2">
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="p-2 bg-lattice-surface rounded text-center">
+                      <p className="text-sm font-bold text-neon-cyan">{String(actionResult.conditionsEvaluated)}</p>
+                      <p className="text-[10px] text-gray-500">Conditions</p>
+                    </div>
+                    <div className="p-2 bg-lattice-surface rounded text-center">
+                      <p className="text-sm font-bold text-green-400">{Array.isArray(actionResult.matched) ? (actionResult.matched as unknown[]).length : 0}</p>
+                      <p className="text-[10px] text-gray-500">Full Matches</p>
+                    </div>
+                    <div className="p-2 bg-lattice-surface rounded text-center">
+                      <p className="text-sm font-bold text-amber-400">{Array.isArray(actionResult.partial) ? (actionResult.partial as unknown[]).length : 0}</p>
+                      <p className="text-[10px] text-gray-500">Partial</p>
+                    </div>
+                  </div>
+                  {Array.isArray(actionResult.matched) && (actionResult.matched as {name:string}[]).map((m, i) => (
+                    <div key={i} className="flex items-center gap-2 p-2 bg-lattice-surface rounded">
+                      <span className="w-2 h-2 rounded-full bg-green-400 flex-shrink-0" />
+                      <p className="text-xs text-white">{m.name}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {/* generateSummary */}
+              {actionResult.periodDays !== undefined && actionResult.encounterSummary !== undefined && (
+                <div className="space-y-2">
+                  <p className="text-xs text-gray-400">{String(actionResult.patientName)} &bull; Last {String(actionResult.periodDays)} days</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="p-2 bg-lattice-surface rounded text-center">
+                      <p className="text-sm font-bold text-neon-cyan">{String((actionResult.encounterSummary as {total:number}).total)}</p>
+                      <p className="text-[10px] text-gray-500">Encounters</p>
+                    </div>
+                    <div className="p-2 bg-lattice-surface rounded text-center">
+                      <p className="text-sm font-bold text-neon-cyan">{String((actionResult.labSummary as {totalTests:number}).totalTests)}</p>
+                      <p className="text-[10px] text-gray-500">Lab Tests</p>
+                    </div>
+                    <div className="p-2 bg-lattice-surface rounded text-center">
+                      <p className={`text-sm font-bold ${Number((actionResult.labSummary as {abnormalCount:number}).abnormalCount) > 0 ? 'text-amber-400' : 'text-green-400'}`}>{String((actionResult.labSummary as {abnormalCount:number}).abnormalCount)}</p>
+                      <p className="text-[10px] text-gray-500">Abnormal Labs</p>
+                    </div>
+                  </div>
+                  {Array.isArray(actionResult.activeConditions) && (actionResult.activeConditions as string[]).length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      {(actionResult.activeConditions as string[]).map((c, i) => (
+                        <span key={i} className="px-1.5 py-0.5 bg-neon-blue/10 text-neon-blue text-[10px] rounded">{c}</span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           )}
         </div>
       )}

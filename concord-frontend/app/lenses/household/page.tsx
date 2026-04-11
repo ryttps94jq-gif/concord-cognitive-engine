@@ -1674,7 +1674,68 @@ export default function HouseholdLensPage() {
             <h3 className={ds.heading3}>Action Result</h3>
             <button onClick={() => setActionResult(null)} className={ds.btnGhost}><X className="w-4 h-4" /></button>
           </div>
-          <pre className={cn(ds.textMono, 'text-xs overflow-auto max-h-48')}>{JSON.stringify(actionResult, null, 2)}</pre>
+          <div className="space-y-3">
+            {/* generateGroceryList */}
+            {actionResult.uniqueItems !== undefined && (
+              <div className="space-y-2">
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className="text-sm font-bold text-neon-cyan">{String(actionResult.uniqueItems)}</p>
+                    <p className="text-[10px] text-gray-500">Items Needed</p>
+                  </div>
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className="text-sm font-bold text-neon-cyan">{String(actionResult.mealsPlanned)}</p>
+                    <p className="text-[10px] text-gray-500">Meals Planned</p>
+                  </div>
+                  <div className="p-2 bg-lattice-surface rounded text-center">
+                    <p className="text-sm font-bold text-neon-cyan">{String(actionResult.pantryItemsSubtracted)}</p>
+                    <p className="text-[10px] text-gray-500">From Pantry</p>
+                  </div>
+                </div>
+                {Array.isArray(actionResult.list) && (actionResult.list as {name:string;quantity:number;unit:string;category:string}[]).slice(0,6).map((item, i) => (
+                  <div key={i} className="flex items-center justify-between text-xs px-2 py-1 bg-lattice-surface rounded">
+                    <span className="text-gray-300">{item.name}</span>
+                    <span className="text-neon-cyan font-semibold">{item.quantity} {item.unit}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {/* maintenanceDue */}
+            {actionResult.overdueCount !== undefined && actionResult.uniqueItems === undefined && (
+              <div className="grid grid-cols-3 gap-2">
+                <div className="p-2 bg-lattice-surface rounded text-center">
+                  <p className="text-sm font-bold text-red-400">{String(actionResult.overdueCount)}</p>
+                  <p className="text-[10px] text-gray-500">Overdue</p>
+                </div>
+                <div className="p-2 bg-lattice-surface rounded text-center">
+                  <p className="text-sm font-bold text-amber-400">{String(actionResult.upcomingCount)}</p>
+                  <p className="text-[10px] text-gray-500">Upcoming</p>
+                </div>
+                <div className="p-2 bg-lattice-surface rounded text-center">
+                  <p className="text-sm font-bold text-green-400">{String(actionResult.currentCount)}</p>
+                  <p className="text-[10px] text-gray-500">Current</p>
+                </div>
+                {Array.isArray(actionResult.overdue) && (actionResult.overdue as {name:string;daysOverdue:number}[]).slice(0,3).map((item, i) => (
+                  <div key={i} className="col-span-3 flex items-center justify-between p-2 bg-red-500/10 rounded">
+                    <span className="text-xs text-white">{item.name}</span>
+                    <span className="text-xs text-red-400">{item.daysOverdue}d overdue</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {/* choreRotation */}
+            {actionResult.assignments !== undefined && Array.isArray(actionResult.assignments) && (
+              <div className="space-y-2">
+                <p className="text-xs text-gray-400">{String(actionResult.strategy)} &bull; {String(actionResult.totalChores)} chores &bull; {String(actionResult.members)} members</p>
+                {(actionResult.assignments as {chore:string;assignee:string;frequency:string}[]).slice(0,6).map((a, i) => (
+                  <div key={i} className="flex items-center justify-between text-xs px-2 py-1 bg-lattice-surface rounded">
+                    <span className="text-gray-300">{a.chore}</span>
+                    <span className="text-neon-cyan font-semibold">{a.assignee}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
