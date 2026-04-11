@@ -793,7 +793,7 @@ export default function DailyLensPage() {
                   ) : null}
 
                   {/* dailySummary */}
-                  {r?.productivityScore !== undefined && (
+                  {r?.productivityScore !== undefined ? (
                     <div className="space-y-2">
                       <div className="flex items-center gap-2">
                         <span className="text-gray-500">Date:</span>
@@ -828,10 +828,10 @@ export default function DailyLensPage() {
                         </div>
                       </div>
                     </div>
-                  )}
+                  ) : null}
 
                   {/* habitStreak */}
-                  {r?.habits !== undefined && r?.totalHabits !== undefined && (
+                  {r?.habits !== undefined && r?.totalHabits !== undefined ? (
                     <div className="space-y-2">
                       <div className="flex items-center gap-2">
                         <span className="text-gray-500">Active habits:</span>
@@ -857,10 +857,10 @@ export default function DailyLensPage() {
                         ))}
                       </div>
                     </div>
-                  )}
+                  ) : null}
 
                   {/* focusTimer */}
-                  {r?.pomodorosCompleted !== undefined && (
+                  {r?.pomodorosCompleted !== undefined ? (
                     <div className="space-y-2">
                       <div className="flex items-center gap-2">
                         <span className="text-gray-500">Date:</span>
@@ -900,10 +900,10 @@ export default function DailyLensPage() {
                         </div>
                       )}
                     </div>
-                  )}
+                  ) : null}
 
                   {/* weeklyReview */}
-                  {r?.daysTracked !== undefined && r?.totalFocusHours !== undefined && (
+                  {r?.daysTracked !== undefined && r?.totalFocusHours !== undefined ? (
                     <div className="space-y-2">
                       <div className="grid grid-cols-2 gap-2">
                         <div className="p-2 bg-lattice-bg rounded text-center">
@@ -935,7 +935,7 @@ export default function DailyLensPage() {
                         <span className="ml-auto text-gray-500">{String(r.avgFocusPerDay)}m avg focus</span>
                       </div>
                     </div>
-                  )}
+                  ) : null}
                 </div>
               );
             })()}
