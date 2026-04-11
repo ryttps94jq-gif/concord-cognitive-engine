@@ -62,6 +62,7 @@ import { FeedBanner } from '@/components/lens/FeedBanner';
 import { ArtifactDetailModal } from '@/components/market/ArtifactDetailModal';
 import { RoyaltyDashboard } from '@/components/market/RoyaltyDashboard';
 import { MarketplaceTab } from '@/components/lens/MarketplaceTab';
+import RoyaltyCascadeViz from '@/components/visualizations/RoyaltyCascadeViz';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -1375,6 +1376,9 @@ export default function MarketplaceLensPage() {
       {/* ================================================================== */}
       {tab === 'analytics' && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
+          {/* Royalty Cascade Flow Visualization */}
+          <RoyaltyCascadeViz />
+
           {/* Royalty Earnings Dashboard */}
           {user?.id && <RoyaltyDashboard userId={user.id} />}
 

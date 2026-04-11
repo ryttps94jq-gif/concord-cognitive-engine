@@ -17,6 +17,7 @@ import QualiaBodyMap from '@/components/emergent/QualiaBodyMap';
 import PresenceDashboard from '@/components/emergent/PresenceDashboard';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { useLensData } from '@/lib/hooks/use-lens-data';
+import EntityLifecycleViz from '@/components/visualizations/EntityLifecycleViz';
 
 interface Entity {
   id: string;
@@ -197,6 +198,9 @@ export default function EntityLensPage() {
           </div>
         ))}
       </div>
+
+      {/* Entity Lifecycle Timeline Visualization */}
+      <EntityLifecycleViz />
 
       {/* Create Entity Form */}
       {showCreate && (

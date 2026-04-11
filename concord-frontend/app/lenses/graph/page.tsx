@@ -31,6 +31,7 @@ import { ProvenanceBadge } from '@/components/dtu/ProvenanceBadge';
 import { useLatticeStore } from '@/store/lattice';
 import { InteractiveGraph } from '@/components/graphs/InteractiveGraphCore';
 import { KnowledgeSpace3D } from '@/components/graphs/KnowledgeSpace3D';
+import KnowledgeGenomeBrowser from '@/components/visualizations/KnowledgeGenomeBrowser';
 
 // --- Types ---
 
@@ -1742,6 +1743,11 @@ export default function GraphLensPage() {
           </motion.aside>
         )}
       </AnimatePresence>
+      </div>
+
+      {/* Knowledge Genome Browser — DTU Lineage Visualization */}
+      <div className="mt-6">
+        <KnowledgeGenomeBrowser />
       </div>
 
       {/* DTU Context */}

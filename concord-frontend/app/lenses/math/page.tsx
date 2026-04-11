@@ -17,6 +17,7 @@ import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
+import STSVKExplorer from '@/components/visualizations/STSVKExplorer';
 
 /* ─── Interfaces ─── */
 interface ExpressionRecord {
@@ -434,6 +435,9 @@ export default function MathLensPage() {
               <p className="text-sm text-gray-400">Accuracy</p>
             </div>
           </div>
+
+          {/* ── STSVK Theorem Explorer ── */}
+          <STSVKExplorer />
 
           {/* ── Tab Navigation ── */}
           <div className="flex gap-2 border-b border-lattice-border pb-2">

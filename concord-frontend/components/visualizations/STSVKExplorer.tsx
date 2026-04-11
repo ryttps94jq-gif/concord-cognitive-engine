@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useEffect, useState, useCallback, useMemo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 
 // ---------------------------------------------------------------------------
@@ -12,7 +12,6 @@ export interface Theorem {
   id: string;
   domain: string;
   statement: string;
-  proof: string;
 }
 
 export interface STSVKExplorerProps {
@@ -21,297 +20,328 @@ export interface STSVKExplorerProps {
 }
 
 // ---------------------------------------------------------------------------
-// Hardcoded sample theorems for the 0-1 binary foundation (x^2 - x = 0)
+// Sample theorems
 // ---------------------------------------------------------------------------
 
 const SAMPLE_THEOREMS: Theorem[] = [
-  {
-    id: 'stsvk-001',
-    domain: 'Foundation',
-    statement: 'The equation x\u00B2 - x = 0 has exactly two solutions in \u211D: x = 0 and x = 1.',
-    proof: 'Factor: x(x - 1) = 0. By the zero-product property, x = 0 or x = 1. Since the polynomial is degree 2, there are at most 2 roots. Both are verified by substitution. \u220E',
-  },
-  {
-    id: 'stsvk-002',
-    domain: 'Foundation',
-    statement: 'The function f(x) = x\u00B2 - x achieves its minimum value of -1/4 at x = 1/2.',
-    proof: 'f\'(x) = 2x - 1 = 0 implies x = 1/2. f(1/2) = 1/4 - 1/2 = -1/4. f\'\'(x) = 2 > 0, so this is a minimum. \u220E',
-  },
-  {
-    id: 'stsvk-003',
-    domain: 'Boolean Logic',
-    statement: 'In \u2124/2\u2124 (the integers mod 2), x\u00B2 = x for all x. This is the idempotent law of Boolean algebra.',
-    proof: 'There are only two elements: 0 and 1. Check: 0\u00B2 = 0 = 0 (mod 2) and 1\u00B2 = 1 = 1 (mod 2). \u220E',
-  },
-  {
-    id: 'stsvk-004',
-    domain: 'Set Theory',
-    statement: 'The characteristic function \u03C7_A of any set A satisfies \u03C7_A\u00B2 = \u03C7_A, since \u03C7_A maps to {0, 1}.',
-    proof: 'For any x, \u03C7_A(x) \u2208 {0, 1}. If \u03C7_A(x) = 0, then 0\u00B2 = 0. If \u03C7_A(x) = 1, then 1\u00B2 = 1. Thus \u03C7_A\u00B2 = \u03C7_A. \u220E',
-  },
-  {
-    id: 'stsvk-005',
-    domain: 'Probability',
-    statement: 'A Bernoulli random variable X with p \u2208 {0,1} is deterministic and satisfies X\u00B2 = X a.s.',
-    proof: 'If p = 0, X = 0 a.s., so X\u00B2 = 0 = X. If p = 1, X = 1 a.s., so X\u00B2 = 1 = X. \u220E',
-  },
-  {
-    id: 'stsvk-006',
-    domain: 'Linear Algebra',
-    statement: 'A matrix P satisfying P\u00B2 = P is a projection matrix. Its eigenvalues lie in {0, 1}.',
-    proof: 'If Pv = \u03BBv for eigenvector v, then P\u00B2v = \u03BB\u00B2v = Pv = \u03BBv, so \u03BB\u00B2 = \u03BB, hence \u03BB \u2208 {0, 1}. \u220E',
-  },
-  {
-    id: 'stsvk-007',
-    domain: 'Category Theory',
-    statement: 'An idempotent morphism e: A \u2192 A in a category satisfies e \u2218 e = e, the categorical analog of x\u00B2 = x.',
-    proof: 'By definition, an idempotent is a morphism e with e \u2218 e = e. If the category splits idempotents, e factors as e = r \u2218 s where s \u2218 r = id, giving the image as a retract. \u220E',
-  },
-  {
-    id: 'stsvk-008',
-    domain: 'Information Theory',
-    statement: 'Binary entropy H(p) = -p log p - (1-p) log(1-p) vanishes exactly at the roots of x\u00B2 - x = 0.',
-    proof: 'H(0) = 0 and H(1) = 0 (using continuity: lim_{p\u21920} p log p = 0). H(p) > 0 for p \u2208 (0,1). The zero-entropy states correspond to deterministic bits. \u220E',
-  },
+  { id: 't1', domain: 'Mathematics', statement: 'x\u00b2 \u2212 x = 0 yields exactly two solutions (0 and 1), forming the binary foundation of all digital logic.' },
+  { id: 't2', domain: 'Mathematics', statement: 'Every continuous function on a closed interval attains its maximum and minimum (Extreme Value Theorem).' },
+  { id: 't3', domain: 'Physics', statement: 'Energy and mass are interchangeable: E = mc\u00b2 defines the conversion ratio at the speed of light squared.' },
+  { id: 't4', domain: 'Physics', statement: 'No information can travel faster than c; causality is preserved across all inertial reference frames.' },
+  { id: 't5', domain: 'Computer Science', statement: 'A universal Turing machine can simulate any other Turing machine, establishing the limits of computability.' },
+  { id: 't6', domain: 'Computer Science', statement: 'P \u2260 NP remains unresolved: verifying a solution may be fundamentally easier than finding one.' },
+  { id: 't7', domain: 'Philosophy', statement: 'Cogito ergo sum \u2014 the act of doubting one\u2019s existence proves a thinking entity must exist.' },
+  { id: 't8', domain: 'Biology', statement: 'DNA encodes hereditary information via four nucleotide bases arranged in a double helix structure.' },
+  { id: 't9', domain: 'Economics', statement: 'Supply and demand curves intersect at equilibrium; price adjusts to balance allocation in free markets.' },
+  { id: 't10', domain: 'Linguistics', statement: 'Universal Grammar posits that the capacity for language acquisition is hard-wired into the human brain.' },
 ];
 
 // ---------------------------------------------------------------------------
 // Domain colors
 // ---------------------------------------------------------------------------
 
-const DOMAIN_COLORS: Record<string, { bg: string; text: string; border: string; fill: string }> = {
-  Foundation:          { bg: 'bg-cyan-500/10',   text: 'text-cyan-400',   border: 'border-cyan-500/30',   fill: '#22d3ee' },
-  'Boolean Logic':     { bg: 'bg-purple-500/10', text: 'text-purple-400', border: 'border-purple-500/30', fill: '#a855f7' },
-  'Set Theory':        { bg: 'bg-green-500/10',  text: 'text-green-400',  border: 'border-green-500/30',  fill: '#22c55e' },
-  'Probability':       { bg: 'bg-amber-500/10',  text: 'text-amber-400',  border: 'border-amber-500/30',  fill: '#f59e0b' },
-  'Linear Algebra':    { bg: 'bg-blue-500/10',   text: 'text-blue-400',   border: 'border-blue-500/30',   fill: '#3b82f6' },
-  'Category Theory':   { bg: 'bg-pink-500/10',   text: 'text-pink-400',   border: 'border-pink-500/30',   fill: '#ec4899' },
-  'Information Theory': { bg: 'bg-orange-500/10', text: 'text-orange-400', border: 'border-orange-500/30', fill: '#f97316' },
+const DOMAIN_COLORS: Record<string, string> = {
+  'Mathematics': '#22d3ee',
+  'Physics': '#a855f7',
+  'Computer Science': '#22c55e',
+  'Philosophy': '#ec4899',
+  'Biology': '#10b981',
+  'Economics': '#f59e0b',
+  'Linguistics': '#8b5cf6',
 };
 
-function getDomainStyle(domain: string) {
-  return DOMAIN_COLORS[domain] || { bg: 'bg-gray-500/10', text: 'text-gray-400', border: 'border-gray-500/30', fill: '#6b7280' };
+function getDomainColor(domain: string): string {
+  return DOMAIN_COLORS[domain] || '#6b7280';
 }
 
 // ---------------------------------------------------------------------------
-// Component
+// Parabola canvas component
 // ---------------------------------------------------------------------------
 
-export default function STSVKExplorer({ theorems: externalTheorems, className }: STSVKExplorerProps) {
+function ParabolaCanvas({ sliderX, onSliderChange, width, height }: {
+  sliderX: number;
+  onSliderChange: (x: number) => void;
+  width: number;
+  height: number;
+}) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [canvasSize, setCanvasSize] = useState({ w: 600, h: 300 });
-  const [sliderX, setSliderX] = useState(0.5); // x value for interactive slider
-  const [selectedDomain, setSelectedDomain] = useState<string | null>(null);
-  const [expandedTheorem, setExpandedTheorem] = useState<string | null>(null);
+  const animRef = useRef(0);
+  const pulseRef = useRef(0);
+  const isDragging = useRef(false);
 
-  const theorems = useMemo(() => {
-    const t = externalTheorems && externalTheorems.length > 0 ? externalTheorems : SAMPLE_THEOREMS;
-    if (!selectedDomain) return t;
-    return t.filter(th => th.domain === selectedDomain);
-  }, [externalTheorems, selectedDomain]);
+  const xToCanvas = useCallback((x: number) => {
+    const padL = 60, padR = 40;
+    return padL + ((x + 1) / 3) * (width - padL - padR);
+  }, [width]);
 
-  const allTheorems = useMemo(() => externalTheorems && externalTheorems.length > 0 ? externalTheorems : SAMPLE_THEOREMS, [externalTheorems]);
+  const yToCanvas = useCallback((y: number) => {
+    const padT = 30, padB = 40;
+    const plotH = height - padT - padB;
+    return padT + (1 - (y + 0.5) / 3) * plotH;
+  }, [height]);
 
-  const domains = useMemo(() => {
-    const s = new Set(allTheorems.map(t => t.domain));
-    return [...s];
-  }, [allTheorems]);
+  const canvasToX = useCallback((cx: number) => {
+    const padL = 60, padR = 40;
+    return ((cx - padL) / (width - padL - padR)) * 3 - 1;
+  }, [width]);
 
-  // Resize
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-    const ro = new ResizeObserver(entries => {
-      const { width } = entries[0].contentRect;
-      if (width > 0) setCanvasSize({ w: width, h: 300 });
-    });
-    ro.observe(container);
-    return () => ro.disconnect();
-  }, []);
-
-  // Draw the parabola
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     const dpr = window.devicePixelRatio || 1;
-    const W = canvasSize.w;
-    const H = canvasSize.h;
-
-    canvas.width = W * dpr;
-    canvas.height = H * dpr;
+    canvas.width = width * dpr;
+    canvas.height = height * dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-    // Clear
-    ctx.fillStyle = '#0a0e17';
-    ctx.fillRect(0, 0, W, H);
+    let running = true;
 
-    // Coordinate transform: map math coords to canvas
-    const xRange = { min: -0.5, max: 1.5 };
-    const yRange = { min: -0.5, max: 0.8 };
-    const toCanvasX = (x: number) => ((x - xRange.min) / (xRange.max - xRange.min)) * W;
-    const toCanvasY = (y: number) => H - ((y - yRange.min) / (yRange.max - yRange.min)) * H;
+    const draw = () => {
+      if (!running) return;
+      pulseRef.current += 0.03;
+      const pulse = Math.sin(pulseRef.current) * 0.5 + 0.5;
+      ctx.clearRect(0, 0, width, height);
 
-    // Grid lines
-    ctx.strokeStyle = '#1f293730';
-    ctx.lineWidth = 1;
-    for (let x = -0.5; x <= 1.5; x += 0.25) {
-      ctx.beginPath();
-      ctx.moveTo(toCanvasX(x), 0);
-      ctx.lineTo(toCanvasX(x), H);
-      ctx.stroke();
-    }
-    for (let y = -0.5; y <= 0.8; y += 0.25) {
-      ctx.beginPath();
-      ctx.moveTo(0, toCanvasY(y));
-      ctx.lineTo(W, toCanvasY(y));
-      ctx.stroke();
-    }
+      // Background gradient
+      const bgGrad = ctx.createLinearGradient(0, 0, 0, height);
+      bgGrad.addColorStop(0, '#0a0e17');
+      bgGrad.addColorStop(1, '#0d1220');
+      ctx.fillStyle = bgGrad;
+      ctx.fillRect(0, 0, width, height);
 
-    // Axes
-    ctx.strokeStyle = '#374151';
-    ctx.lineWidth = 1.5;
-    // x-axis
-    ctx.beginPath();
-    ctx.moveTo(0, toCanvasY(0));
-    ctx.lineTo(W, toCanvasY(0));
-    ctx.stroke();
-    // y-axis
-    ctx.beginPath();
-    ctx.moveTo(toCanvasX(0), 0);
-    ctx.lineTo(toCanvasX(0), H);
-    ctx.stroke();
+      // Grid lines
+      ctx.strokeStyle = 'rgba(55,65,81,0.3)';
+      ctx.lineWidth = 0.5;
+      for (let gx = -1; gx <= 2; gx += 0.5) {
+        const cx = xToCanvas(gx);
+        ctx.beginPath();
+        ctx.moveTo(cx, 20);
+        ctx.lineTo(cx, height - 30);
+        ctx.stroke();
+      }
+      for (let gy = -0.5; gy <= 2.5; gy += 0.5) {
+        const cy = yToCanvas(gy);
+        ctx.beginPath();
+        ctx.moveTo(50, cy);
+        ctx.lineTo(width - 30, cy);
+        ctx.stroke();
+      }
 
-    // Axis labels
-    ctx.font = '10px monospace';
-    ctx.fillStyle = '#6b7280';
-    ctx.textAlign = 'center';
-    ctx.fillText('0', toCanvasX(0) - 10, toCanvasY(0) + 14);
-    ctx.fillText('1', toCanvasX(1), toCanvasY(0) + 14);
-    ctx.fillText('x', W - 15, toCanvasY(0) + 14);
-    ctx.textAlign = 'left';
-    ctx.fillText('y', toCanvasX(0) + 6, 14);
-
-    // Draw the parabola f(x) = x^2 - x
-    ctx.beginPath();
-    const steps = 200;
-    for (let i = 0; i <= steps; i++) {
-      const x = xRange.min + (i / steps) * (xRange.max - xRange.min);
-      const y = x * x - x;
-      const cx = toCanvasX(x);
-      const cy = toCanvasY(y);
-      if (i === 0) ctx.moveTo(cx, cy);
-      else ctx.lineTo(cx, cy);
-    }
-    ctx.strokeStyle = '#22d3ee';
-    ctx.lineWidth = 2.5;
-    ctx.shadowColor = '#22d3ee';
-    ctx.shadowBlur = 8;
-    ctx.stroke();
-    ctx.shadowBlur = 0;
-
-    // Label the curve
-    ctx.font = 'italic 12px Inter, system-ui, sans-serif';
-    ctx.fillStyle = '#22d3ee';
-    ctx.textAlign = 'left';
-    ctx.fillText('f(x) = x\u00B2 - x', toCanvasX(1.05), toCanvasY(0.2));
-
-    // Mark the roots with glowing dots
-    const roots = [0, 1];
-    for (const root of roots) {
-      const rx = toCanvasX(root);
-      const ry = toCanvasY(0);
-
-      // Glow
-      const glow = ctx.createRadialGradient(rx, ry, 0, rx, ry, 20);
-      glow.addColorStop(0, '#a855f780');
-      glow.addColorStop(1, '#a855f700');
-      ctx.beginPath();
-      ctx.arc(rx, ry, 20, 0, Math.PI * 2);
-      ctx.fillStyle = glow;
-      ctx.fill();
-
-      // Dot
-      ctx.beginPath();
-      ctx.arc(rx, ry, 6, 0, Math.PI * 2);
-      ctx.fillStyle = '#a855f7';
-      ctx.fill();
-      ctx.strokeStyle = '#ffffff50';
+      // Axes
+      const axisColor = '#4b5563';
+      ctx.strokeStyle = axisColor;
       ctx.lineWidth = 1.5;
+      const y0 = yToCanvas(0);
+      ctx.beginPath();
+      ctx.moveTo(50, y0);
+      ctx.lineTo(width - 30, y0);
+      ctx.stroke();
+      const x0 = xToCanvas(0);
+      ctx.beginPath();
+      ctx.moveTo(x0, 20);
+      ctx.lineTo(x0, height - 30);
       ctx.stroke();
 
-      // Label
-      ctx.font = 'bold 11px monospace';
-      ctx.fillStyle = '#a855f7';
+      // Axis labels
+      ctx.font = '9px monospace';
+      ctx.fillStyle = '#6b7280';
       ctx.textAlign = 'center';
-      ctx.fillText(`x = ${root}`, rx, ry - 14);
+      for (let gx = -1; gx <= 2; gx++) {
+        ctx.fillText(gx.toString(), xToCanvas(gx), y0 + 16);
+      }
+      ctx.textAlign = 'right';
+      for (let gy = 0; gy <= 2; gy++) {
+        ctx.fillText(gy.toString(), x0 - 8, yToCanvas(gy) + 3);
+      }
+
+      // Draw f(x) = x^2 - x
+      ctx.beginPath();
+      const steps = 200;
+      for (let i = 0; i <= steps; i++) {
+        const x = -1 + (i / steps) * 3;
+        const y = x * x - x;
+        const cx = xToCanvas(x);
+        const cy = yToCanvas(y);
+        if (i === 0) ctx.moveTo(cx, cy);
+        else ctx.lineTo(cx, cy);
+      }
+      const curveGrad = ctx.createLinearGradient(xToCanvas(-1), 0, xToCanvas(2), 0);
+      curveGrad.addColorStop(0, '#a855f7');
+      curveGrad.addColorStop(0.5, '#22d3ee');
+      curveGrad.addColorStop(1, '#ec4899');
+      ctx.strokeStyle = curveGrad;
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+
+      // Curve glow
+      ctx.beginPath();
+      for (let i = 0; i <= steps; i++) {
+        const x = -1 + (i / steps) * 3;
+        const y = x * x - x;
+        const cx = xToCanvas(x);
+        const cy = yToCanvas(y);
+        if (i === 0) ctx.moveTo(cx, cy);
+        else ctx.lineTo(cx, cy);
+      }
+      ctx.strokeStyle = 'rgba(34,211,238,0.15)';
+      ctx.lineWidth = 8;
+      ctx.stroke();
+
+      // Solution highlights at x=0 and x=1
+      const solutions = [0, 1];
+      for (const sx of solutions) {
+        const cx = xToCanvas(sx);
+        const cy = yToCanvas(0);
+        const glowR = 16 + pulse * 6;
+
+        const glow = ctx.createRadialGradient(cx, cy, 0, cx, cy, glowR);
+        glow.addColorStop(0, '#22c55e55');
+        glow.addColorStop(1, '#22c55e00');
+        ctx.beginPath();
+        ctx.arc(cx, cy, glowR, 0, Math.PI * 2);
+        ctx.fillStyle = glow;
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.arc(cx, cy, 6, 0, Math.PI * 2);
+        ctx.fillStyle = '#22c55e';
+        ctx.fill();
+        ctx.strokeStyle = '#ffffff40';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        ctx.font = 'bold 11px monospace';
+        ctx.fillStyle = '#22c55e';
+        ctx.textAlign = 'center';
+        ctx.fillText(`x=${sx}`, cx, cy - 14);
+      }
+
+      // Interactive slider point
+      const sxCanvas = xToCanvas(sliderX);
+      const sy = sliderX * sliderX - sliderX;
+      const syCanvas = yToCanvas(sy);
+
+      // Vertical dashed line
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.moveTo(sxCanvas, syCanvas);
+      ctx.lineTo(sxCanvas, y0);
+      ctx.strokeStyle = '#ec489960';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Horizontal dashed line
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.moveTo(sxCanvas, syCanvas);
+      ctx.lineTo(x0, syCanvas);
+      ctx.strokeStyle = '#a855f760';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Slider point glow
+      const sliderGlow = ctx.createRadialGradient(sxCanvas, syCanvas, 0, sxCanvas, syCanvas, 20);
+      sliderGlow.addColorStop(0, '#ec489966');
+      sliderGlow.addColorStop(1, '#ec489900');
+      ctx.beginPath();
+      ctx.arc(sxCanvas, syCanvas, 20, 0, Math.PI * 2);
+      ctx.fillStyle = sliderGlow;
+      ctx.fill();
+
+      // Slider dot
+      ctx.beginPath();
+      ctx.arc(sxCanvas, syCanvas, 7, 0, Math.PI * 2);
+      ctx.fillStyle = '#ec4899';
+      ctx.fill();
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      // Value label
+      ctx.font = 'bold 10px monospace';
+      ctx.fillStyle = '#e5e7eb';
+      ctx.textAlign = 'left';
+      ctx.fillText(`f(${sliderX.toFixed(2)}) = ${sy.toFixed(3)}`, sxCanvas + 14, syCanvas - 4);
+
+      // Title
+      ctx.font = 'bold 13px Inter, system-ui, sans-serif';
+      ctx.fillStyle = '#e5e7eb';
+      ctx.textAlign = 'center';
+      ctx.fillText('f(x) = x\u00b2 \u2212 x', width / 2, 18);
+
+      // Binary foundation label
+      ctx.font = '10px Inter, system-ui, sans-serif';
+      ctx.fillStyle = '#22c55e90';
+      ctx.fillText('Binary Foundation: solutions at 0 and 1', width / 2, height - 8);
+
+      animRef.current = requestAnimationFrame(draw);
+    };
+
+    animRef.current = requestAnimationFrame(draw);
+    return () => { running = false; cancelAnimationFrame(animRef.current); };
+  }, [width, height, sliderX, xToCanvas, yToCanvas]);
+
+  const handleMouse = useCallback((e: React.MouseEvent<HTMLCanvasElement>, isDown?: boolean) => {
+    if (isDown !== undefined) isDragging.current = isDown;
+    if (!isDragging.current) return;
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const mx = e.clientX - rect.left;
+    const newX = Math.max(-0.5, Math.min(1.5, canvasToX(mx)));
+    onSliderChange(Math.round(newX * 100) / 100);
+  }, [canvasToX, onSliderChange]);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      style={{ width: '100%', height: '100%', cursor: 'crosshair' }}
+      onMouseDown={(e) => handleMouse(e, true)}
+      onMouseMove={(e) => handleMouse(e)}
+      onMouseUp={(e) => handleMouse(e, false)}
+      onMouseLeave={() => { isDragging.current = false; }}
+    />
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Main component
+// ---------------------------------------------------------------------------
+
+export default function STSVKExplorer({ theorems: theoremsProp, className }: STSVKExplorerProps) {
+  const theorems = theoremsProp && theoremsProp.length > 0 ? theoremsProp : SAMPLE_THEOREMS;
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [canvasSize, setCanvasSize] = useState({ w: 900, h: 220 });
+  const [sliderX, setSliderX] = useState(0.5);
+  const [selectedDomain, setSelectedDomain] = useState<string | null>(null);
+
+  // Resize observer
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(entries => {
+      const { width } = entries[0].contentRect;
+      if (width > 0) setCanvasSize({ w: width, h: 220 });
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  // Group theorems by domain
+  const domains = useMemo(() => {
+    const map = new Map<string, Theorem[]>();
+    for (const t of theorems) {
+      if (!map.has(t.domain)) map.set(t.domain, []);
+      map.get(t.domain)!.push(t);
     }
+    return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  }, [theorems]);
 
-    // Mark the minimum at x = 0.5
-    const minX = toCanvasX(0.5);
-    const minY = toCanvasY(-0.25);
-    ctx.beginPath();
-    ctx.arc(minX, minY, 4, 0, Math.PI * 2);
-    ctx.fillStyle = '#f59e0b';
-    ctx.fill();
-    ctx.font = '9px monospace';
-    ctx.fillStyle = '#f59e0b';
-    ctx.textAlign = 'center';
-    ctx.fillText('min = -1/4', minX, minY + 14);
-
-    // Interactive slider position
-    const sx = toCanvasX(sliderX);
-    const sy = toCanvasY(sliderX * sliderX - sliderX);
-    const fVal = sliderX * sliderX - sliderX;
-
-    // Vertical dashed line from axis to point
-    ctx.beginPath();
-    ctx.setLineDash([4, 4]);
-    ctx.moveTo(sx, toCanvasY(0));
-    ctx.lineTo(sx, sy);
-    ctx.strokeStyle = '#facc1580';
-    ctx.lineWidth = 1;
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    // Horizontal dashed line from axis to point
-    ctx.beginPath();
-    ctx.setLineDash([4, 4]);
-    ctx.moveTo(toCanvasX(0), sy);
-    ctx.lineTo(sx, sy);
-    ctx.strokeStyle = '#facc1580';
-    ctx.lineWidth = 1;
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    // Point on curve
-    const ptGlow = ctx.createRadialGradient(sx, sy, 0, sx, sy, 16);
-    ptGlow.addColorStop(0, '#facc1560');
-    ptGlow.addColorStop(1, '#facc1500');
-    ctx.beginPath();
-    ctx.arc(sx, sy, 16, 0, Math.PI * 2);
-    ctx.fillStyle = ptGlow;
-    ctx.fill();
-
-    ctx.beginPath();
-    ctx.arc(sx, sy, 5, 0, Math.PI * 2);
-    ctx.fillStyle = '#facc15';
-    ctx.fill();
-
-    // Value readout
-    ctx.font = 'bold 10px monospace';
-    ctx.fillStyle = '#facc15';
-    ctx.textAlign = 'left';
-    ctx.fillText(`(${sliderX.toFixed(2)}, ${fVal.toFixed(3)})`, sx + 10, sy - 8);
-
-    // x^2 - x readout
-    ctx.font = '10px monospace';
-    ctx.fillStyle = '#9ca3af';
-    ctx.fillText(`x\u00B2 - x = ${fVal.toFixed(4)}`, sx + 10, sy + 8);
-
-  }, [canvasSize, sliderX]);
+  const filtered = selectedDomain
+    ? domains.filter(([d]) => d === selectedDomain)
+    : domains;
 
   return (
     <motion.div
@@ -322,131 +352,122 @@ export default function STSVKExplorer({ theorems: externalTheorems, className }:
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-lattice-border">
         <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-neon-cyan animate-pulse" />
+          <div className="w-2 h-2 rounded-full bg-neon-purple animate-pulse" />
           <h3 className="text-sm font-semibold text-white">STSVK Theorem Explorer</h3>
-          <span className="text-xs text-gray-500">x&sup2; - x = 0 Foundation</span>
+          <span className="text-xs text-gray-500">{theorems.length} theorems</span>
         </div>
-        <span className="text-[10px] text-gray-600">{allTheorems.length} theorems across {domains.length} domains</span>
-      </div>
-
-      {/* Canvas + Slider */}
-      <div ref={containerRef} className="relative w-full px-4 pt-3">
-        <canvas
-          ref={canvasRef}
-          style={{ width: '100%', height: 300 }}
-          className="rounded-lg"
-        />
-
-        {/* Slider */}
-        <div className="mt-3 mb-2 flex items-center gap-3">
-          <span className="text-[10px] text-gray-500 font-mono w-10 text-right">x = {sliderX.toFixed(2)}</span>
-          <input
-            type="range"
-            min="-0.3"
-            max="1.3"
-            step="0.01"
-            value={sliderX}
-            onChange={(e) => setSliderX(Number(e.target.value))}
-            className="flex-1 h-1.5 rounded-full appearance-none bg-lattice-border cursor-pointer
-              [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4
-              [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-yellow-400 [&::-webkit-slider-thumb]:shadow-lg
-              [&::-webkit-slider-thumb]:shadow-yellow-400/30 [&::-webkit-slider-thumb]:cursor-grab"
-          />
-          <span className={cn(
-            'text-[10px] font-mono w-24',
-            Math.abs(sliderX * sliderX - sliderX) < 0.01 ? 'text-neon-green font-bold' : 'text-gray-500'
-          )}>
-            f(x) = {(sliderX * sliderX - sliderX).toFixed(4)}
-          </span>
-        </div>
-
-        {/* Insight badge */}
-        {Math.abs(sliderX * sliderX - sliderX) < 0.005 && (
-          <motion.div
-            initial={{ opacity: 0, y: 5 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mb-2 text-xs text-neon-green bg-neon-green/5 border border-neon-green/20 rounded-lg px-3 py-1.5 flex items-center gap-2"
+        <div className="flex items-center gap-2 text-[10px] flex-wrap">
+          <button
+            onClick={() => setSelectedDomain(null)}
+            className={cn(
+              'px-2 py-0.5 rounded border transition-colors',
+              !selectedDomain
+                ? 'bg-white/10 border-white/20 text-white'
+                : 'bg-transparent border-lattice-border text-gray-500 hover:text-white hover:border-white/20'
+            )}
           >
-            <div className="w-2 h-2 rounded-full bg-neon-green animate-pulse" />
-            Root found! x = {sliderX.toFixed(2)} satisfies x&sup2; - x = 0 (the binary foundation)
-          </motion.div>
-        )}
-      </div>
-
-      {/* Domain filter */}
-      <div className="flex items-center gap-1.5 px-4 py-2 border-t border-lattice-border/50 overflow-x-auto">
-        <button
-          onClick={() => setSelectedDomain(null)}
-          className={cn(
-            'text-[10px] px-2 py-0.5 rounded-full border transition-colors whitespace-nowrap',
-            !selectedDomain ? 'bg-white/10 border-white/20 text-white' : 'border-lattice-border text-gray-500 hover:text-gray-300'
-          )}
-        >
-          All ({allTheorems.length})
-        </button>
-        {domains.map(d => {
-          const style = getDomainStyle(d);
-          const count = allTheorems.filter(t => t.domain === d).length;
-          return (
+            All
+          </button>
+          {domains.map(([domain]) => (
             <button
-              key={d}
-              onClick={() => setSelectedDomain(selectedDomain === d ? null : d)}
+              key={domain}
+              onClick={() => setSelectedDomain(selectedDomain === domain ? null : domain)}
               className={cn(
-                'text-[10px] px-2 py-0.5 rounded-full border transition-colors whitespace-nowrap',
-                selectedDomain === d ? `${style.bg} ${style.border} ${style.text}` : 'border-lattice-border text-gray-500 hover:text-gray-300'
+                'px-2 py-0.5 rounded border transition-colors',
+                selectedDomain === domain
+                  ? 'border-white/20 text-white'
+                  : 'bg-transparent border-lattice-border text-gray-500 hover:text-white hover:border-white/20'
               )}
+              style={selectedDomain === domain ? { backgroundColor: getDomainColor(domain) + '20' } : undefined}
             >
-              {d} ({count})
+              {domain}
             </button>
-          );
-        })}
+          ))}
+        </div>
       </div>
 
-      {/* Theorem cards */}
-      <div className="px-4 pb-4 space-y-2 max-h-[400px] overflow-y-auto">
-        <AnimatePresence mode="popLayout">
-          {theorems.map((thm) => {
-            const style = getDomainStyle(thm.domain);
-            const isExpanded = expandedTheorem === thm.id;
-            return (
-              <motion.div
-                key={thm.id}
-                layout
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -8 }}
-                className={cn(
-                  'rounded-lg border p-3 cursor-pointer transition-colors hover:bg-white/[0.02]',
-                  isExpanded ? `${style.bg} ${style.border}` : 'bg-lattice-deep border-lattice-border'
-                )}
-                onClick={() => setExpandedTheorem(isExpanded ? null : thm.id)}
-              >
-                <div className="flex items-start gap-2">
-                  <span className={cn('text-[10px] px-1.5 py-0.5 rounded border flex-shrink-0 mt-0.5', style.bg, style.border, style.text)}>
-                    {thm.domain}
-                  </span>
-                  <p className="text-xs text-gray-200 leading-relaxed flex-1">{thm.statement}</p>
-                </div>
+      {/* Parabola canvas */}
+      <div ref={containerRef} className="relative w-full" style={{ height: 220 }}>
+        <ParabolaCanvas
+          sliderX={sliderX}
+          onSliderChange={setSliderX}
+          width={canvasSize.w}
+          height={canvasSize.h}
+        />
+      </div>
 
-                <AnimatePresence>
-                  {isExpanded && (
-                    <motion.div
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: 'auto', opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      className="overflow-hidden"
-                    >
-                      <div className="mt-3 pt-2 border-t border-white/10">
-                        <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1 font-semibold">Proof</p>
-                        <p className="text-xs text-gray-400 leading-relaxed font-mono">{thm.proof}</p>
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </motion.div>
-            );
-          })}
-        </AnimatePresence>
+      {/* Slider control */}
+      <div className="flex items-center gap-3 px-4 py-2 border-t border-b border-lattice-border/50 bg-lattice-deep/50">
+        <span className="text-[10px] text-gray-500 font-mono w-16">x = {sliderX.toFixed(2)}</span>
+        <input
+          type="range"
+          min="-0.5"
+          max="1.5"
+          step="0.01"
+          value={sliderX}
+          onChange={(e) => setSliderX(parseFloat(e.target.value))}
+          className="flex-1 h-1 appearance-none bg-gradient-to-r from-purple-500 via-cyan-400 to-pink-500 rounded-full cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow-lg"
+        />
+        <span className="text-[10px] text-gray-500 font-mono w-24">
+          f(x) = {(sliderX * sliderX - sliderX).toFixed(4)}
+        </span>
+      </div>
+
+      {/* Theorem cards grid */}
+      <div className="p-4 max-h-[340px] overflow-y-auto">
+        {filtered.map(([domain, domainTheorems]) => (
+          <div key={domain} className="mb-4 last:mb-0">
+            <div className="flex items-center gap-2 mb-2">
+              <span
+                className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                style={{ background: getDomainColor(domain) }}
+              />
+              <h4 className="text-xs font-semibold text-white uppercase tracking-wider">
+                {domain}
+              </h4>
+              <span className="text-[10px] text-gray-600">{domainTheorems.length} theorem{domainTheorems.length !== 1 ? 's' : ''}</span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {domainTheorems.map((theorem) => (
+                <motion.div
+                  key={theorem.id}
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  whileHover={{ scale: 1.02 }}
+                  className="relative group rounded-lg border p-3 transition-colors cursor-default"
+                  style={{
+                    borderColor: getDomainColor(domain) + '25',
+                    background: `linear-gradient(135deg, ${getDomainColor(domain)}08, transparent)`,
+                  }}
+                >
+                  <div
+                    className="absolute inset-0 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"
+                    style={{
+                      background: `linear-gradient(135deg, ${getDomainColor(domain)}15, transparent)`,
+                    }}
+                  />
+                  <div className="relative">
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <span
+                        className="text-[9px] font-mono px-1.5 py-0.5 rounded"
+                        style={{
+                          color: getDomainColor(domain),
+                          backgroundColor: getDomainColor(domain) + '15',
+                          border: `1px solid ${getDomainColor(domain)}30`,
+                        }}
+                      >
+                        {theorem.id}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-300 leading-relaxed">
+                      {theorem.statement}
+                    </p>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          </div>
+        ))}
       </div>
     </motion.div>
   );
