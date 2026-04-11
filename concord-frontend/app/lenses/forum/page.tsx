@@ -4,6 +4,7 @@ import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLensData } from '@/lib/hooks/use-lens-data';
+import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { apiHelpers } from '@/lib/api/client';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -34,6 +35,7 @@ import {
   ArrowLeft,
   Hash,
   Check,
+  Loader2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { UniversalActions } from '@/components/lens/UniversalActions';
@@ -235,6 +237,22 @@ export default function ForumLensPage() {
   const { isError: isError2, error: error2, refetch: refetch2, items: communityItems, create: createForumCommunity } = useLensData('forum', 'community', {
     seed: INITIAL_COMMUNITIES.map(c => ({ title: c.name, data: c as unknown as Record<string, unknown> })),
   });
+
+  // Backend action wiring
+  const runForumAction = useRunArtifact('forum');
+  const [forumActionResult, setForumActionResult] = useState<Record<string, unknown> | null>(null);
+  const [forumRunning, setForumRunning] = useState<string | null>(null);
+
+  const handleForumAction = useCallback(async (action: string) => {
+    const targetId = postItems[0]?.id;
+    if (!targetId) return;
+    setForumRunning(action);
+    try {
+      const res = await runForumAction.mutateAsync({ id: targetId, action });
+      setForumActionResult({ _action: action, ...(res.result as Record<string, unknown>) });
+    } catch (e) { console.error(`Forum action ${action} failed:`, e); }
+    setForumRunning(null);
+  }, [postItems, runForumAction]);
 
   // Sync backend data into local state when available
   // IMPORTANT: Use the lens artifact ID (i.id) as the Post id so that
@@ -959,6 +977,171 @@ export default function ForumLensPage() {
 
       {/* Real-time Data Panel */}
       <UniversalActions domain="forum" artifactId={null} compact />
+
+      {/* Forum Analytics Actions */}
+      <div className="panel p-4 space-y-3 mx-4 mb-4">
+        <h2 className="font-semibold text-sm flex items-center gap-2">
+          <Shield className="w-4 h-4 text-orange-400" />
+          Community Analytics
+        </h2>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+          {[
+            { action: 'threadAnalysis',   label: 'Thread Analysis',   icon: MessageSquare, color: 'text-neon-cyan' },
+            { action: 'moderationQueue',  label: 'Moderation Queue',  icon: Shield,        color: 'text-red-400' },
+            { action: 'communityHealth',  label: 'Community Health',  icon: TrendingUp,    color: 'text-neon-green' },
+            { action: 'topicClustering',  label: 'Topic Clustering',  icon: Hash,          color: 'text-neon-purple' },
+          ].map(({ action, label, icon: Icon, color }) => (
+            <button
+              key={action}
+              onClick={() => handleForumAction(action)}
+              disabled={!!forumRunning || !postItems[0]?.id}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg bg-lattice-deep border border-lattice-border text-sm hover:border-orange-500/30 disabled:opacity-40 transition-colors"
+            >
+              {forumRunning === action ? <Loader2 className="w-4 h-4 animate-spin" /> : <Icon className={`w-4 h-4 ${color}`} />}
+              <span className="truncate text-xs">{label}</span>
+            </button>
+          ))}
+        </div>
+
+        {forumActionResult && (
+          <div className="mt-3 rounded-lg bg-black/30 border border-white/10 p-4 relative">
+            <button onClick={() => setForumActionResult(null)} className="absolute top-3 right-3 text-gray-500 hover:text-white">
+              <X className="w-4 h-4" />
+            </button>
+
+            {/* threadAnalysis */}
+            {forumActionResult._action === 'threadAnalysis' && (
+              <div className="space-y-3">
+                <p className="text-xs text-gray-400 uppercase tracking-wider font-semibold">Thread Analysis</p>
+                {(forumActionResult.message as string) ? <p className="text-sm text-gray-400">{forumActionResult.message as string}</p> : (
+                  <>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      {[
+                        { label: 'Posts', value: String(forumActionResult.totalPosts ?? 0), color: 'text-white' },
+                        { label: 'Authors', value: String(forumActionResult.uniqueAuthors ?? 0), color: 'text-neon-cyan' },
+                        { label: 'Avg Length', value: `${forumActionResult.avgPostLength ?? 0} chars`, color: 'text-gray-300' },
+                        { label: 'Health', value: String(forumActionResult.health ?? '—'), color: (forumActionResult.health as string) === 'active-discussion' ? 'text-neon-green' : 'text-yellow-400' },
+                      ].map(({ label, value, color }) => (
+                        <div key={label} className="bg-white/5 rounded-lg p-3 text-center">
+                          <p className={`text-sm font-bold ${color} capitalize`}>{value}</p>
+                          <p className="text-xs text-gray-400">{label}</p>
+                        </div>
+                      ))}
+                    </div>
+                    {Array.isArray(forumActionResult.topContributors) && (
+                      <div className="space-y-1">
+                        <p className="text-xs text-gray-500">Top Contributors</p>
+                        {(forumActionResult.topContributors as {name:string;posts:number}[]).map(c => (
+                          <div key={c.name} className="flex items-center gap-3 text-xs px-2 py-1 rounded bg-white/5">
+                            <span className="flex-1 text-white">{c.name}</span>
+                            <span className="text-neon-cyan">{c.posts} posts</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* moderationQueue */}
+            {forumActionResult._action === 'moderationQueue' && (
+              <div className="space-y-3">
+                <p className="text-xs text-gray-400 uppercase tracking-wider font-semibold">Moderation Queue</p>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {[
+                    { label: 'Total Reports', value: String(forumActionResult.totalReports ?? 0), color: 'text-white' },
+                    { label: 'Pending', value: String(forumActionResult.pending ?? 0), color: 'text-red-400' },
+                    { label: 'Resolved', value: String(forumActionResult.resolved ?? 0), color: 'text-neon-green' },
+                    { label: 'Urgency', value: String(forumActionResult.urgency ?? '—'), color: (forumActionResult.urgency as string) === 'high' ? 'text-red-400' : (forumActionResult.urgency as string) === 'medium' ? 'text-yellow-400' : 'text-neon-green' },
+                  ].map(({ label, value, color }) => (
+                    <div key={label} className="bg-white/5 rounded-lg p-3 text-center">
+                      <p className={`text-lg font-bold ${color} capitalize`}>{value}</p>
+                      <p className="text-xs text-gray-400">{label}</p>
+                    </div>
+                  ))}
+                </div>
+                {forumActionResult.byReason && Object.keys(forumActionResult.byReason as object).length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {Object.entries(forumActionResult.byReason as Record<string,number>).map(([reason, count]) => (
+                      <span key={reason} className="text-xs px-2 py-1 rounded bg-red-400/10 border border-red-400/20 text-red-300 capitalize">{reason}: {count}</span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* communityHealth */}
+            {forumActionResult._action === 'communityHealth' && (
+              <div className="space-y-3">
+                <p className="text-xs text-gray-400 uppercase tracking-wider font-semibold">Community Health</p>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {[
+                    { label: 'Active Users', value: String(forumActionResult.activeUsers ?? 0), color: 'text-neon-green' },
+                    { label: 'Total Users', value: String(forumActionResult.totalUsers ?? 0), color: 'text-white' },
+                    { label: 'Activity Rate', value: `${forumActionResult.activityRate ?? 0}%`, color: 'text-neon-cyan' },
+                    { label: 'Growth', value: `${(forumActionResult.growthRate as number) > 0 ? '+' : ''}${forumActionResult.growthRate ?? 0}%`, color: (forumActionResult.growthRate as number) >= 0 ? 'text-neon-green' : 'text-red-400' },
+                  ].map(({ label, value, color }) => (
+                    <div key={label} className="bg-white/5 rounded-lg p-3 text-center">
+                      <p className={`text-lg font-bold ${color}`}>{value}</p>
+                      <p className="text-xs text-gray-400">{label}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className={`text-sm font-bold px-3 py-1 rounded-full ${(forumActionResult.health as string) === 'thriving' ? 'bg-neon-green/20 text-neon-green' : (forumActionResult.health as string) === 'healthy' ? 'bg-neon-cyan/20 text-neon-cyan' : (forumActionResult.health as string) === 'declining' ? 'bg-yellow-400/20 text-yellow-400' : 'bg-gray-500/20 text-gray-400'}`}>{forumActionResult.health as string}</span>
+                  <span className="text-xs text-gray-400">{forumActionResult.postsThisWeek as number} posts this week</span>
+                </div>
+                {Array.isArray(forumActionResult.recommendations) && (
+                  <div className="space-y-1">
+                    {(forumActionResult.recommendations as string[]).map((r, i) => (
+                      <p key={i} className="text-xs text-gray-400 bg-white/5 rounded px-3 py-1">{r}</p>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* topicClustering */}
+            {forumActionResult._action === 'topicClustering' && (
+              <div className="space-y-3">
+                <p className="text-xs text-gray-400 uppercase tracking-wider font-semibold">Topic Clusters</p>
+                {(forumActionResult.message as string) ? <p className="text-sm text-gray-400">{forumActionResult.message as string}</p> : (
+                  <>
+                    <div className="grid grid-cols-3 gap-3">
+                      {[
+                        { label: 'Total Threads', value: String(forumActionResult.totalThreads ?? 0), color: 'text-white' },
+                        { label: 'Top Topic', value: String(forumActionResult.topTopic ?? '—'), color: 'text-neon-purple' },
+                        { label: 'Uncategorized', value: String(forumActionResult.uncategorized ?? 0), color: 'text-gray-400' },
+                      ].map(({ label, value, color }) => (
+                        <div key={label} className="bg-white/5 rounded-lg p-3 text-center">
+                          <p className={`text-sm font-bold ${color} capitalize`}>{value}</p>
+                          <p className="text-xs text-gray-400">{label}</p>
+                        </div>
+                      ))}
+                    </div>
+                    {Array.isArray(forumActionResult.clusters) && (
+                      <div className="space-y-1">
+                        {(forumActionResult.clusters as {topic:string;threads:number;share:number}[]).map(c => (
+                          <div key={c.topic} className="flex items-center gap-3 text-xs">
+                            <span className="text-neon-purple w-24 truncate">#{c.topic}</span>
+                            <div className="flex-1 h-2 bg-white/5 rounded-full overflow-hidden">
+                              <div className="h-full bg-neon-purple/60 rounded-full" style={{ width: `${c.share}%` }} />
+                            </div>
+                            <span className="text-white w-8 text-right">{c.threads}</span>
+                            <span className="text-gray-400 w-12 text-right">{c.share}%</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
       {realtimeData && (
         <RealtimeDataPanel
           domain="forum"

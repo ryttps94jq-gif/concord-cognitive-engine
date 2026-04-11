@@ -5,13 +5,14 @@ import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
 import { useLensData } from '@/lib/hooks/use-lens-data';
+import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { useLensDTUs } from '@/hooks/useLensDTUs';
 import { useUIStore } from '@/store/ui';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Film, Plus, Search, Play, Users, Clock, Eye, TrendingUp, Clapperboard, Camera, Mic,
   Music, Layers, BarChart3, Share2, X, ChevronRight,
-  Monitor, Globe, Sparkles,
+  Monitor, Globe, Sparkles, Loader2, DollarSign, Calendar, Scale,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { UniversalActions } from '@/components/lens/UniversalActions';
@@ -49,6 +50,22 @@ export default function FilmStudiosPage() {
   const [showFeatures, setShowFeatures] = useState(true);
   const [partyCode, setPartyCode] = useState('');
   const [partyActive, setPartyActive] = useState(false);
+
+  // Backend action wiring
+  const runFilmAction = useRunArtifact('film-studios');
+  const [filmActionResult, setFilmActionResult] = useState<Record<string, unknown> | null>(null);
+  const [filmRunning, setFilmRunning] = useState<string | null>(null);
+
+  const handleFilmAction = useCallback(async (action: string) => {
+    const targetId = myFilmItems[0]?.id;
+    if (!targetId) return;
+    setFilmRunning(action);
+    try {
+      const res = await runFilmAction.mutateAsync({ id: targetId, action });
+      setFilmActionResult({ _action: action, ...(res.result as Record<string, unknown>) });
+    } catch (e) { console.error(`Film action ${action} failed:`, e); }
+    setFilmRunning(null);
+  }, [myFilmItems, runFilmAction]);
 
   // Form state
   const [newTitle, setNewTitle] = useState('');
@@ -200,6 +217,176 @@ export default function FilmStudiosPage() {
         {showFeatures && <LensFeaturePanel lensId="film_studios" />}
         <RealtimeDataPanel data={realtimeData} insights={realtimeInsights} />
       <UniversalActions domain="film-studios" artifactId={null} compact />
+
+        {/* Film Studio Actions */}
+        <div className="panel p-4 space-y-3">
+          <h2 className="font-semibold text-sm flex items-center gap-2">
+            <Clapperboard className="w-4 h-4 text-neon-purple" />
+            Production Actions
+          </h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+            {[
+              { action: 'budgetBreakdown',       label: 'Budget Breakdown',    icon: DollarSign, color: 'text-neon-green' },
+              { action: 'scheduleShoot',         label: 'Schedule Shoot',      icon: Calendar,   color: 'text-neon-cyan' },
+              { action: 'castAnalysis',          label: 'Cast Analysis',       icon: Users,      color: 'text-neon-purple' },
+              { action: 'postProductionTimeline',label: 'Post Timeline',       icon: Layers,     color: 'text-yellow-400' },
+            ].map(({ action, label, icon: Icon, color }) => (
+              <button
+                key={action}
+                onClick={() => handleFilmAction(action)}
+                disabled={!!filmRunning || !myFilmItems[0]?.id}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-sm hover:border-neon-purple/30 disabled:opacity-40 transition-colors"
+              >
+                {filmRunning === action ? <Loader2 className="w-4 h-4 animate-spin" /> : <Icon className={`w-4 h-4 ${color}`} />}
+                <span className="truncate text-xs">{label}</span>
+              </button>
+            ))}
+          </div>
+
+          {filmActionResult && (
+            <div className="mt-3 rounded-lg bg-black/30 border border-white/10 p-4 relative">
+              <button onClick={() => setFilmActionResult(null)} className="absolute top-3 right-3 text-gray-500 hover:text-white">
+                <X className="w-4 h-4" />
+              </button>
+
+              {/* budgetBreakdown */}
+              {filmActionResult._action === 'budgetBreakdown' && (
+                <div className="space-y-3">
+                  <p className="text-xs text-gray-400 uppercase tracking-wider font-semibold">Budget Breakdown</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-white/5 rounded-lg p-3">
+                      <p className="text-xs text-gray-400">Total Budget</p>
+                      <p className="text-xl font-bold text-neon-green">${(filmActionResult.totalBudget as number || 0).toLocaleString()}</p>
+                    </div>
+                    <div className="bg-white/5 rounded-lg p-3">
+                      <p className="text-xs text-gray-400">Tip</p>
+                      <p className="text-xs text-gray-300">{filmActionResult.tip as string}</p>
+                    </div>
+                  </div>
+                  {Array.isArray(filmActionResult.breakdown) && (
+                    <div className="space-y-1.5">
+                      {(filmActionResult.breakdown as {category:string;percentage:number;amount:number}[]).map(b => (
+                        <div key={b.category} className="flex items-center gap-3 text-xs">
+                          <span className="text-gray-400 w-40 capitalize">{b.category}</span>
+                          <div className="flex-1 h-2 bg-white/5 rounded-full overflow-hidden">
+                            <div className="h-full bg-neon-purple/60 rounded-full" style={{ width: `${b.percentage}%` }} />
+                          </div>
+                          <span className="text-white w-10 text-right">{b.percentage}%</span>
+                          <span className="text-neon-green w-20 text-right font-mono">${b.amount.toLocaleString()}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* scheduleShoot */}
+              {filmActionResult._action === 'scheduleShoot' && (
+                <div className="space-y-3">
+                  <p className="text-xs text-gray-400 uppercase tracking-wider font-semibold">Shoot Schedule</p>
+                  {(filmActionResult.message as string) ? <p className="text-sm text-gray-400">{filmActionResult.message as string}</p> : (
+                    <>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        {[
+                          { label: 'Total Scenes', value: String(filmActionResult.totalScenes ?? 0), color: 'text-white' },
+                          { label: 'Shoot Days', value: String(filmActionResult.totalShootDays ?? 0), color: 'text-neon-cyan' },
+                          { label: 'Weeks', value: String(filmActionResult.totalWeeks ?? 0), color: 'text-neon-purple' },
+                          { label: 'Scenes/Day', value: String(filmActionResult.avgScenesPerDay ?? 0), color: 'text-neon-green' },
+                        ].map(({ label, value, color }) => (
+                          <div key={label} className="bg-white/5 rounded-lg p-3 text-center">
+                            <p className={`text-lg font-bold ${color}`}>{value}</p>
+                            <p className="text-xs text-gray-400">{label}</p>
+                          </div>
+                        ))}
+                      </div>
+                      {Array.isArray(filmActionResult.locations) && (
+                        <div className="space-y-1">
+                          {(filmActionResult.locations as {location:string;scenes:number;estimatedDays:number}[]).map(loc => (
+                            <div key={loc.location} className="flex items-center gap-3 text-xs px-2 py-1.5 rounded bg-white/5">
+                              <span className="flex-1 text-white">{loc.location}</span>
+                              <span className="text-gray-400">{loc.scenes} scenes</span>
+                              <span className="text-neon-cyan">{loc.estimatedDays} days</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* castAnalysis */}
+              {filmActionResult._action === 'castAnalysis' && (
+                <div className="space-y-3">
+                  <p className="text-xs text-gray-400 uppercase tracking-wider font-semibold">Cast Analysis</p>
+                  {(filmActionResult.message as string) ? <p className="text-sm text-gray-400">{filmActionResult.message as string}</p> : (
+                    <>
+                      <div className="grid grid-cols-3 gap-3">
+                        {[
+                          { label: 'Total Cast', value: String(filmActionResult.totalCast ?? 0), color: 'text-white' },
+                          { label: 'Lead Roles', value: String(filmActionResult.leads ?? 0), color: 'text-neon-purple' },
+                          { label: 'Budget', value: `$${(filmActionResult.totalCastBudget as number || 0).toLocaleString()}`, color: 'text-neon-green' },
+                        ].map(({ label, value, color }) => (
+                          <div key={label} className="bg-white/5 rounded-lg p-3 text-center">
+                            <p className={`text-lg font-bold ${color}`}>{value}</p>
+                            <p className="text-xs text-gray-400">{label}</p>
+                          </div>
+                        ))}
+                      </div>
+                      {filmActionResult.topCost && <p className="text-xs text-gray-400">Highest cost: <span className="text-neon-cyan">{filmActionResult.topCost as string}</span></p>}
+                      {Array.isArray(filmActionResult.cast) && (
+                        <div className="space-y-1 max-h-32 overflow-y-auto">
+                          {(filmActionResult.cast as {name:string;role:string;scenes:number;totalCost:number}[]).map(c => (
+                            <div key={c.name} className="flex items-center gap-3 text-xs px-2 py-1 rounded bg-white/5">
+                              <span className="flex-1 text-white">{c.name}</span>
+                              <span className="text-gray-400 capitalize">{c.role}</span>
+                              <span className="text-neon-cyan">{c.scenes} scenes</span>
+                              <span className="text-neon-green font-mono">${c.totalCost.toLocaleString()}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* postProductionTimeline */}
+              {filmActionResult._action === 'postProductionTimeline' && (
+                <div className="space-y-3">
+                  <p className="text-xs text-gray-400 uppercase tracking-wider font-semibold">Post-Production Timeline</p>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                    {[
+                      { label: 'Runtime', value: `${filmActionResult.runtime ?? 0} min`, color: 'text-white' },
+                      { label: 'VFX Shots', value: String(filmActionResult.vfxShots ?? 0), color: 'text-neon-cyan' },
+                      { label: 'Total Weeks', value: String(filmActionResult.totalWeeks ?? 0), color: 'text-neon-green' },
+                    ].map(({ label, value, color }) => (
+                      <div key={label} className="bg-white/5 rounded-lg p-3 text-center">
+                        <p className={`text-lg font-bold ${color}`}>{value}</p>
+                        <p className="text-xs text-gray-400">{label}</p>
+                      </div>
+                    ))}
+                  </div>
+                  {Array.isArray(filmActionResult.phases) && (
+                    <div className="space-y-2">
+                      {(filmActionResult.phases as {phase:string;weeks:number}[]).map(ph => (
+                        <div key={ph.phase} className="flex items-center gap-3 text-xs">
+                          <span className="text-gray-400 w-36">{ph.phase}</span>
+                          <div className="flex-1 h-2 bg-white/5 rounded-full overflow-hidden">
+                            <div className="h-full bg-neon-purple/60 rounded-full" style={{ width: `${Math.min(100, ph.weeks / ((filmActionResult.totalWeeks as number) || 1) * 100)}%` }} />
+                          </div>
+                          <span className="text-neon-cyan w-16 text-right">{ph.weeks} weeks</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {filmActionResult.parallelizable && <p className="text-xs text-gray-500 italic">{filmActionResult.parallelizable as string}</p>}
+                  {filmActionResult.estimatedCompletion && <p className="text-xs text-neon-green">Completion: {filmActionResult.estimatedCompletion as string}</p>}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
 
         {/* Tabs */}
         <div className="flex gap-1 bg-white/5 p-1 rounded-lg border border-white/10">
