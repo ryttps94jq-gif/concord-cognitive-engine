@@ -1112,9 +1112,158 @@ export default function CryptoLensPage() {
               <XCircle className="w-4 h-4" />
             </button>
             <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">Result</p>
-            <pre className="text-sm font-mono text-neon-green whitespace-pre-wrap break-all">
-              {JSON.stringify(actionResult, null, 2)}
-            </pre>
+            {(() => {
+              const r = (actionResult as any)?.result ?? actionResult;
+              if (!r) return null;
+              return (
+                <div className="text-xs space-y-3 max-h-72 overflow-y-auto">
+                  {/* Error */}
+                  {(actionResult as any)?.error && (
+                    <p className="text-red-400">{(actionResult as any).error}</p>
+                  )}
+                  {r?.message && !r?.error && (
+                    <p className="text-gray-300">{r.message}</p>
+                  )}
+
+                  {/* portfolioAnalysis */}
+                  {r?.totalValue !== undefined && r?.allocations !== undefined && (
+                    <div className="space-y-2">
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="p-2 bg-lattice-bg rounded text-center">
+                          <p className="text-sm font-bold text-neon-green">${r.totalValue.toLocaleString()}</p>
+                          <p className="text-[10px] text-gray-500">Total Value</p>
+                        </div>
+                        <div className="p-2 bg-lattice-bg rounded text-center">
+                          <p className={`text-sm font-bold ${r.totalUnrealizedPnl >= 0 ? 'text-neon-green' : 'text-red-400'}`}>
+                            {r.totalUnrealizedPnl != null ? `${r.totalUnrealizedPnl >= 0 ? '+' : ''}$${r.totalUnrealizedPnl.toLocaleString()}` : '—'}
+                          </p>
+                          <p className="text-[10px] text-gray-500">Unrealized P&L</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-gray-500">Concentration:</span>
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${r.concentrationRisk === 'low' ? 'bg-neon-green/20 text-neon-green' : r.concentrationRisk === 'moderate' ? 'bg-yellow-500/20 text-yellow-400' : r.concentrationRisk === 'high' ? 'bg-orange-500/20 text-orange-400' : 'bg-red-500/20 text-red-400'}`}>
+                          {r.concentrationRisk}
+                        </span>
+                        <span className="ml-auto text-gray-500">HHI: {r.hhi}</span>
+                      </div>
+                      <div className="space-y-1">
+                        {(r.allocations as any[]).map((h: any) => (
+                          <div key={h.token} className="flex items-center gap-2">
+                            <span className="text-gray-300 w-12 font-mono">{h.token}</span>
+                            <div className="flex-1 bg-lattice-bg rounded-full h-1.5">
+                              <div className="bg-neon-green h-1.5 rounded-full" style={{ width: `${h.weight}%` }} />
+                            </div>
+                            <span className="text-gray-400 w-10 text-right">{h.weight}%</span>
+                          </div>
+                        ))}
+                      </div>
+                      {r.stablecoinExposure > 0 && (
+                        <p className="text-[10px] text-gray-500">Stablecoin exposure: {r.stablecoinExposure}%</p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* verifyTransaction */}
+                  {r?.checks !== undefined && (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${r.valid ? 'bg-neon-green/20 text-neon-green' : 'bg-red-500/20 text-red-400'}`}>
+                          {r.valid ? 'VALID' : 'INVALID'}
+                        </span>
+                        <span className="text-gray-400">{r.network}</span>
+                        <span className="ml-auto text-gray-500">Gas: {r.maxGasCostEth} ETH</span>
+                      </div>
+                      {r.warnings.length > 0 && (
+                        <div className="space-y-1">
+                          {(r.warnings as string[]).map((w: string, i: number) => (
+                            <div key={i} className="flex items-center gap-1.5 text-yellow-400 bg-yellow-500/10 px-2 py-1 rounded">
+                              <span className="text-[10px]">{w}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <div className="space-y-1">
+                        {(r.checks as any[]).map((c: any) => (
+                          <div key={c.field} className="flex items-center justify-between text-[10px]">
+                            <span className="text-gray-500 font-mono">{c.field}</span>
+                            <span className={c.valid ? 'text-neon-green' : 'text-red-400'}>{c.valid ? 'OK' : 'FAIL'}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* estimateGas */}
+                  {r?.recommendations !== undefined && r?.gasLimit !== undefined && (
+                    <div className="space-y-2">
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="p-2 bg-lattice-bg rounded text-center">
+                          <p className="font-bold text-neon-green">{r.gasLimit.toLocaleString()}</p>
+                          <p className="text-[10px] text-gray-500">Gas Limit</p>
+                        </div>
+                        <div className="p-2 bg-lattice-bg rounded text-center">
+                          <p className={`font-bold ${r.networkCongestion === 'low' ? 'text-neon-green' : r.networkCongestion === 'moderate' ? 'text-yellow-400' : 'text-red-400'}`}>{r.networkCongestion ?? 'N/A'}</p>
+                          <p className="text-[10px] text-gray-500">Congestion</p>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2">
+                        {(['slow', 'standard', 'fast'] as const).map(speed => (
+                          <div key={speed} className="p-2 bg-lattice-bg rounded text-center space-y-0.5">
+                            <p className="text-[10px] text-gray-500 capitalize">{speed}</p>
+                            <p className="font-bold text-neon-green text-sm">{(r.recommendations as any)[speed].maxFeeGwei} Gwei</p>
+                            <p className="text-[10px] text-gray-500">+{(r.recommendations as any)[speed].priorityFeeGwei} tip</p>
+                            <p className="text-[10px] text-gray-400">{(r.recommendations as any)[speed].waitBlocks} blocks</p>
+                          </div>
+                        ))}
+                      </div>
+                      {r.baseFeeStats && (
+                        <p className="text-[10px] text-gray-500">Avg base fee: {r.baseFeeStats.avg} Gwei · {r.blocksAnalyzed ?? 0} blocks</p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* detectPatterns */}
+                  {r?.patterns !== undefined && (
+                    <div className="space-y-2">
+                      <div className="grid grid-cols-3 gap-2">
+                        <div className="p-2 bg-lattice-bg rounded text-center">
+                          <p className="font-bold text-red-400">{r.riskSummary?.high ?? 0}</p>
+                          <p className="text-[10px] text-gray-500">High Risk</p>
+                        </div>
+                        <div className="p-2 bg-lattice-bg rounded text-center">
+                          <p className="font-bold text-yellow-400">{r.riskSummary?.moderate ?? 0}</p>
+                          <p className="text-[10px] text-gray-500">Moderate</p>
+                        </div>
+                        <div className="p-2 bg-lattice-bg rounded text-center">
+                          <p className="font-bold text-neon-green">{r.riskSummary?.informational ?? 0}</p>
+                          <p className="text-[10px] text-gray-500">Info</p>
+                        </div>
+                      </div>
+                      <p className="text-gray-500">Scanned {r.totalTransactions} transactions</p>
+                      {r.patterns.length === 0 && (
+                        <p className="text-neon-green text-[11px]">No suspicious patterns detected.</p>
+                      )}
+                      <div className="space-y-1">
+                        {(r.patterns as any[]).map((p: any, i: number) => (
+                          <div key={i} className="p-2 bg-lattice-bg rounded space-y-0.5">
+                            <div className="flex items-center justify-between">
+                              <span className="text-gray-200 font-mono text-[10px]">{p.type.replace(/_/g, ' ')}</span>
+                              <span className={`px-1.5 py-0.5 rounded text-[9px] font-medium ${p.risk === 'high' ? 'bg-red-500/20 text-red-400' : p.risk === 'moderate' ? 'bg-yellow-500/20 text-yellow-400' : 'bg-gray-500/20 text-gray-400'}`}>
+                                {p.risk}
+                              </span>
+                            </div>
+                            {p.hops && <p className="text-[10px] text-gray-500">{p.hops} hops</p>}
+                            {p.occurrences && <p className="text-[10px] text-gray-500">{p.occurrences} occurrences</p>}
+                            {p.count && p.type === 'whale_movement' && <p className="text-[10px] text-gray-500">{p.count} whale txs · largest: {p.largest}</p>}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         )}
       </div>

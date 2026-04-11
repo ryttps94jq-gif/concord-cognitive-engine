@@ -321,21 +321,208 @@ export default function CreativeWritingPage() {
                   Running action…
                 </div>
               )}
-              {actionResult && !isRunning && (
-                <div className="relative rounded-lg bg-black/30 border border-amber-500/20 p-3 text-xs space-y-1">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-amber-300 font-medium capitalize">{actionResult.action}</span>
-                    <button onClick={() => setActionResult(null)} className="text-gray-500 hover:text-gray-300">
-                      <XCircle className="w-3.5 h-3.5" />
-                    </button>
+              {actionResult && !isRunning && (() => {
+                const r = actionResult.result as Record<string, unknown> | null;
+                return (
+                  <div className="rounded-lg bg-black/30 border border-amber-500/20 p-3 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-amber-300 font-medium capitalize">{actionResult.action}</span>
+                      <button onClick={() => setActionResult(null)} className="text-gray-500 hover:text-gray-300">
+                        <XCircle className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
+                    {/* manuscriptAnalysis */}
+                    {actionResult.action === 'manuscriptAnalysis' && r && !r.message && (
+                      <div className="space-y-3">
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-[11px]">
+                          {[
+                            { label: 'Words', value: r.wordCount as number, color: 'text-amber-300' },
+                            { label: 'Sentences', value: r.sentenceCount as number, color: 'text-amber-300' },
+                            { label: 'Paragraphs', value: r.paragraphCount as number, color: 'text-amber-300' },
+                            { label: 'Read Time', value: r.estimatedReadTime as string, color: 'text-amber-300' },
+                          ].map(stat => (
+                            <div key={stat.label} className="bg-white/5 rounded p-2">
+                              <p className={`font-bold ${stat.color}`}>{stat.value}</p>
+                              <p className="text-gray-500">{stat.label}</p>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="grid grid-cols-3 gap-2 text-center text-[11px]">
+                          <div className="bg-white/5 rounded p-2">
+                            <p className="font-bold text-amber-300">{r.avgWordsPerSentence as number}</p>
+                            <p className="text-gray-500">Avg Words/Sentence</p>
+                          </div>
+                          <div className="bg-white/5 rounded p-2">
+                            <p className="font-bold text-amber-300">{r.vocabularyRichness as number}%</p>
+                            <p className="text-gray-500">Vocabulary Richness</p>
+                          </div>
+                          <div className="bg-white/5 rounded p-2">
+                            <p className="font-bold text-amber-300">{r.dialoguePercent as number}%</p>
+                            <p className="text-gray-500">Dialogue</p>
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {[
+                            { label: 'Reading Level', value: r.readingLevel as string },
+                            { label: 'Pacing', value: r.pacing as string },
+                          ].map(badge => (
+                            <span key={badge.label} className="text-[10px] px-2 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400">
+                              {badge.label}: <span className="font-semibold capitalize">{badge.value}</span>
+                            </span>
+                          ))}
+                        </div>
+                        <div>
+                          <div className="flex justify-between text-[10px] text-gray-500 mb-1">
+                            <span>Vocabulary richness</span><span>{r.vocabularyRichness as number}%</span>
+                          </div>
+                          <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
+                            <div className="h-full bg-amber-500/60 rounded-full" style={{ width: `${r.vocabularyRichness as number}%` }} />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* characterProfile */}
+                    {actionResult.action === 'characterProfile' && r && !r.message && (
+                      <div className="space-y-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <p className="text-sm font-semibold text-amber-300">{r.name as string}</p>
+                            <p className="text-[11px] text-gray-500 capitalize">{r.role as string}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-sm font-bold text-amber-400">{r.complexityScore as number}</p>
+                            <p className="text-[10px] text-gray-500">Complexity</p>
+                          </div>
+                        </div>
+                        <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
+                          <div className={`h-full rounded-full transition-all ${(r.complexityScore as number) >= 60 ? 'bg-amber-400/70' : (r.complexityScore as number) >= 30 ? 'bg-amber-500/50' : 'bg-gray-500/50'}`}
+                            style={{ width: `${r.complexityScore as number}%` }} />
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {[
+                            { label: 'Arc', value: r.arcType as string },
+                            { label: 'Dimensionality', value: r.dimensionality as string },
+                          ].map(badge => (
+                            <span key={badge.label} className="text-[10px] px-2 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 capitalize">
+                              {badge.label}: <span className="font-semibold">{badge.value}</span>
+                            </span>
+                          ))}
+                        </div>
+                        {[(r.traits as string[]), (r.motivations as string[]), (r.flaws as string[])].map((list, idx) => {
+                          const labels = ['Traits', 'Motivations', 'Flaws'];
+                          if (!list || list.length === 0) return null;
+                          return (
+                            <div key={idx}>
+                              <p className="text-[10px] text-gray-500 font-semibold uppercase tracking-wide mb-1">{labels[idx]}</p>
+                              <div className="flex flex-wrap gap-1">
+                                {list.map((item, i) => (
+                                  <span key={i} className="text-[10px] px-1.5 py-0.5 bg-white/5 border border-white/10 rounded text-gray-300">{item}</span>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })}
+                        {(r.suggestions as string[]).length > 0 && (
+                          <div className="flex items-center gap-2 text-[11px] bg-amber-500/10 border border-amber-500/20 rounded px-2 py-1.5 text-amber-300">
+                            <Sparkles className="w-3 h-3 shrink-0" />
+                            {(r.suggestions as string[])[0]}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* plotStructure */}
+                    {actionResult.action === 'plotStructure' && r && !r.message && (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="text-amber-400 font-semibold capitalize">{(r.structure as string).replace(/-/g, ' ')}</span>
+                          <span className="text-gray-400">{r.totalPlotPoints as number} plot points</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-[11px]">
+                          <div className="flex-1 h-2 bg-white/10 rounded-full overflow-hidden">
+                            <div className="h-full bg-amber-500/60 rounded-full transition-all" style={{ width: `${r.coveragePercent as number}%` }} />
+                          </div>
+                          <span className="text-amber-300 font-bold w-10 text-right">{r.coveragePercent as number}%</span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-1">
+                          {(r.beats as { beat: string; covered: boolean }[]).map((b, i) => (
+                            <div key={i} className={`flex items-center gap-1.5 text-[10px] px-2 py-1 rounded ${b.covered ? 'text-neon-green' : 'text-gray-600'}`}>
+                              {b.covered
+                                ? <Check className="w-2.5 h-2.5 text-neon-green shrink-0" />
+                                : <span className="w-2.5 h-2.5 rounded-full border border-gray-600 shrink-0" />
+                              }
+                              {b.beat}
+                            </div>
+                          ))}
+                        </div>
+                        {(r.missingBeats as string[]).length > 0 && (
+                          <div>
+                            <p className="text-[10px] text-gray-500 font-semibold uppercase tracking-wide mb-1">Missing Beats</p>
+                            <div className="flex flex-wrap gap-1">
+                              {(r.missingBeats as string[]).map((b, i) => (
+                                <span key={i} className="text-[10px] px-1.5 py-0.5 bg-amber-500/10 border border-amber-500/20 rounded text-amber-400">{b}</span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* dialogueCheck */}
+                    {actionResult.action === 'dialogueCheck' && r && !r.message && (
+                      <div className="space-y-3">
+                        <div className="grid grid-cols-3 gap-2 text-center text-[11px]">
+                          <div className="bg-white/5 rounded p-2">
+                            <p className="font-bold text-amber-300">{r.totalLines as number}</p>
+                            <p className="text-gray-500">Lines</p>
+                          </div>
+                          <div className="bg-white/5 rounded p-2">
+                            <p className="font-bold text-amber-300">{r.speakerCount as number}</p>
+                            <p className="text-gray-500">Speakers</p>
+                          </div>
+                          <div className="bg-white/5 rounded p-2">
+                            <p className="font-bold text-amber-300">{r.avgLineLength as number}</p>
+                            <p className="text-gray-500">Avg Length</p>
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {[
+                            { label: 'Balance', value: r.balance as string },
+                            { label: 'Pacing', value: r.pacing as string },
+                          ].map(badge => (
+                            <span key={badge.label} className="text-[10px] px-2 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 capitalize">
+                              {badge.label}: <span className="font-semibold">{badge.value?.replace(/-/g, ' ')}</span>
+                            </span>
+                          ))}
+                        </div>
+                        {(r.speakers as { name: string; lines: number; percent: number }[]).length > 0 && (
+                          <div className="space-y-1.5">
+                            <p className="text-[10px] text-gray-500 font-semibold uppercase tracking-wide">Speaker Breakdown</p>
+                            {(r.speakers as { name: string; lines: number; percent: number }[]).map((sp, i) => (
+                              <div key={i} className="space-y-0.5">
+                                <div className="flex justify-between text-[10px]">
+                                  <span className="text-gray-300">{sp.name}</span>
+                                  <span className="text-gray-500">{sp.lines} lines ({sp.percent}%)</span>
+                                </div>
+                                <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
+                                  <div className="h-full bg-amber-500/50 rounded-full" style={{ width: `${sp.percent}%` }} />
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Fallback */}
+                    {(r?.message || typeof actionResult.result === 'string') && (
+                      <p className="text-xs text-gray-400">{(r?.message as string) || (actionResult.result as string)}</p>
+                    )}
                   </div>
-                  <pre className="whitespace-pre-wrap text-gray-300 font-mono text-[11px] max-h-48 overflow-y-auto">
-                    {typeof actionResult.result === 'string'
-                      ? actionResult.result
-                      : JSON.stringify(actionResult.result, null, 2)}
-                  </pre>
-                </div>
-              )}
+                );
+              })()}
             </div>
 
             {/* Tabs */}

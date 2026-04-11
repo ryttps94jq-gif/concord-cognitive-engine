@@ -1398,11 +1398,22 @@ export default function CalendarLensPage() {
                     </div>
                   )}
 
-                  {/* Fallback: raw JSON for any other shape */}
+                  {/* Fallback */}
                   {!actionResult.conflicts && !actionResult.slots && !actionResult.expanded && !actionResult.suggestions && (
-                    <pre className="text-gray-300 whitespace-pre-wrap break-words">
-                      {JSON.stringify(actionResult, null, 2)}
-                    </pre>
+                    <div className="text-sm text-gray-400">
+                      {actionResult.message ? (
+                        <p>{actionResult.message as string}</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {Object.entries(actionResult).map(([key, val]) => (
+                            <div key={key} className="flex justify-between p-2 bg-lattice-deep rounded text-xs">
+                              <span className="text-gray-500 capitalize">{key.replace(/([A-Z])/g, ' $1')}</span>
+                              <span className="text-white font-medium">{typeof val === 'object' ? `${Object.keys(val as Record<string, unknown>).length} items` : String(val)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   )}
                 </motion.div>
               )}

@@ -602,9 +602,146 @@ export default function CollabLensPage() {
                 <XCircle className="w-3.5 h-3.5" />
               </button>
             </div>
-            <pre className="bg-lattice-surface p-3 rounded-lg whitespace-pre-wrap text-xs text-gray-300 font-mono max-h-48 overflow-y-auto">
-              {typeof actionResult === 'string' ? actionResult : JSON.stringify(actionResult, null, 2)}
-            </pre>
+            <div className="bg-lattice-surface p-3 rounded-lg text-xs space-y-3 max-h-72 overflow-y-auto">
+              {/* Error */}
+              {(actionResult as any)?.error && (
+                <p className="text-red-400">{(actionResult as any).error}</p>
+              )}
+              {/* Message-only result */}
+              {(actionResult as any)?.message && !(actionResult as any)?.error && (
+                <p className="text-gray-300">{(actionResult as any).message}</p>
+              )}
+
+              {/* sessionAnalytics */}
+              {(actionResult as any)?.totalMessages !== undefined && (
+                <div className="space-y-2">
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="p-2 bg-lattice-bg rounded text-center">
+                      <p className="text-sm font-bold text-neon-blue">{(actionResult as any).totalMessages}</p>
+                      <p className="text-[10px] text-gray-500">Messages</p>
+                    </div>
+                    <div className="p-2 bg-lattice-bg rounded text-center">
+                      <p className="text-sm font-bold text-neon-blue">{(actionResult as any).totalParticipants}</p>
+                      <p className="text-[10px] text-gray-500">Participants</p>
+                    </div>
+                    <div className="p-2 bg-lattice-bg rounded text-center">
+                      <p className="text-sm font-bold text-neon-blue">{(actionResult as any).messagesPerMinute}/m</p>
+                      <p className="text-[10px] text-gray-500">Msg/Min</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-gray-500">Balance:</span>
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${(actionResult as any).balanceRating === 'well-balanced' ? 'bg-neon-green/20 text-neon-green' : (actionResult as any).balanceRating === 'slightly-uneven' ? 'bg-yellow-500/20 text-yellow-400' : 'bg-red-500/20 text-red-400'}`}>
+                      {(actionResult as any).balanceRating}
+                    </span>
+                    <span className="text-gray-500 ml-auto">Gini: {(actionResult as any).participationBalance}</span>
+                  </div>
+                  {((actionResult as any).participantStats || []).length > 0 && (
+                    <div className="space-y-1">
+                      {((actionResult as any).participantStats as any[]).map((p: any) => (
+                        <div key={p.name} className="flex items-center gap-2">
+                          <span className="text-gray-300 w-24 truncate">{p.name}</span>
+                          <div className="flex-1 bg-lattice-bg rounded-full h-1.5">
+                            <div className="bg-neon-blue h-1.5 rounded-full" style={{ width: `${p.sharePercent}%` }} />
+                          </div>
+                          <span className="text-gray-500 w-10 text-right">{p.sharePercent}%</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* contributionScore */}
+              {(actionResult as any)?.rankings !== undefined && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 text-gray-400">
+                    <span>Top contributor:</span>
+                    <span className="text-neon-green font-medium">{(actionResult as any).topContributor ?? '—'}</span>
+                    <span className="ml-auto text-gray-500">{(actionResult as any).totalContributions} total</span>
+                  </div>
+                  <div className="space-y-1">
+                    {((actionResult as any).rankings as any[]).map((r: any, i: number) => (
+                      <div key={r.name} className="flex items-center gap-2 p-1.5 bg-lattice-bg rounded">
+                        <span className="text-gray-500 w-4">{i + 1}.</span>
+                        <span className="text-gray-200 flex-1">{r.name}</span>
+                        <span className="text-neon-blue font-bold">{r.totalScore}</span>
+                        <span className="text-gray-500 text-[10px]">{r.contributions} contribs</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* detectConsensus */}
+              {(actionResult as any)?.consensusPercent !== undefined && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${(actionResult as any).hasSupermajority ? 'bg-neon-green/20 text-neon-green' : (actionResult as any).hasConsensus ? 'bg-yellow-500/20 text-yellow-400' : 'bg-red-500/20 text-red-400'}`}>
+                      {(actionResult as any).status}
+                    </span>
+                    <span className="text-gray-400 ml-auto">{(actionResult as any).totalVotes} votes</span>
+                  </div>
+                  <div className="p-2 bg-lattice-bg rounded text-center">
+                    <p className="text-xl font-bold text-neon-blue">{(actionResult as any).consensusPercent}%</p>
+                    <p className="text-[10px] text-gray-500">for "{(actionResult as any).leadingPosition}"</p>
+                  </div>
+                  <div className="w-full bg-lattice-bg rounded-full h-2">
+                    <div className="bg-neon-blue h-2 rounded-full" style={{ width: `${(actionResult as any).consensusPercent}%` }} />
+                  </div>
+                  {((actionResult as any).dissenting || []).length > 0 && (
+                    <div className="space-y-1">
+                      <p className="text-[10px] text-gray-500 uppercase">Dissenting</p>
+                      {((actionResult as any).dissenting as any[]).map((d: any) => (
+                        <div key={d.position} className="flex items-center justify-between text-gray-400">
+                          <span>{d.position}</span>
+                          <span>{d.count} ({d.percent}%)</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* balanceWorkload */}
+              {(actionResult as any)?.members !== undefined && (
+                <div className="space-y-2">
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="p-2 bg-lattice-bg rounded text-center">
+                      <p className="text-sm font-bold text-neon-blue">{(actionResult as any).avgUtilization}%</p>
+                      <p className="text-[10px] text-gray-500">Avg Load</p>
+                    </div>
+                    <div className="p-2 bg-lattice-bg rounded text-center">
+                      <p className="text-sm font-bold text-red-400">{(actionResult as any).overloadedMembers}</p>
+                      <p className="text-[10px] text-gray-500">Overloaded</p>
+                    </div>
+                    <div className="p-2 bg-lattice-bg rounded text-center">
+                      <p className="text-sm font-bold text-yellow-400">{(actionResult as any).unassignedTasks}</p>
+                      <p className="text-[10px] text-gray-500">Unassigned</p>
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    {((actionResult as any).members as any[]).map((m: any) => (
+                      <div key={m.name} className="space-y-0.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-gray-300">{m.name}</span>
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded ${m.status === 'overloaded' ? 'bg-red-500/20 text-red-400' : m.status === 'near-capacity' ? 'bg-yellow-500/20 text-yellow-400' : 'bg-neon-green/20 text-neon-green'}`}>{m.status}</span>
+                        </div>
+                        <div className="w-full bg-lattice-bg rounded-full h-1.5">
+                          <div className={`h-1.5 rounded-full ${m.status === 'overloaded' ? 'bg-red-500' : m.status === 'near-capacity' ? 'bg-yellow-500' : 'bg-neon-green'}`} style={{ width: `${Math.min(m.utilization, 100)}%` }} />
+                        </div>
+                        <p className="text-[10px] text-gray-500">{m.totalHours}h / {m.capacity}h · {m.assignedTasks} tasks</p>
+                      </div>
+                    ))}
+                  </div>
+                  {((actionResult as any).suggestions || []).length > 0 && (
+                    <div className="p-2 bg-yellow-500/10 border border-yellow-500/20 rounded text-yellow-300 text-[11px]">
+                      {((actionResult as any).suggestions as string[]).join(' · ')}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>

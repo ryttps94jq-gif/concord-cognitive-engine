@@ -507,21 +507,182 @@ export default function CRILensPage() {
             Running action…
           </div>
         )}
-        {actionResult && !isRunning && (
-          <div className="relative rounded-lg bg-lattice-deep border border-neon-cyan/20 p-3 text-xs space-y-1">
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-neon-cyan font-medium capitalize">{actionResult.action}</span>
-              <button onClick={() => setActionResult(null)} className="text-gray-500 hover:text-gray-300">
-                <XCircle className="w-3.5 h-3.5" />
-              </button>
+        {actionResult && !isRunning && (() => {
+          const r = actionResult.result as Record<string, unknown> | null;
+          return (
+            <div className="rounded-lg bg-lattice-deep border border-neon-cyan/20 p-3 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-neon-cyan font-medium capitalize text-xs">{actionResult.action}</span>
+                <button onClick={() => setActionResult(null)} className="text-gray-500 hover:text-gray-300">
+                  <XCircle className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              {/* severityAssessment */}
+              {actionResult.action === 'severityAssessment' && r && !r.message && (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="bg-lattice-surface rounded-lg p-2 text-center">
+                      <p className={`text-2xl font-bold font-mono ${(r.severityScore as number) >= 80 ? 'text-red-400' : (r.severityScore as number) >= 60 ? 'text-orange-400' : (r.severityScore as number) >= 40 ? 'text-amber-400' : (r.severityScore as number) >= 20 ? 'text-blue-400' : 'text-neon-green'}`}>
+                        {r.severityScore as number}
+                      </p>
+                      <p className="text-[10px] text-gray-500 mt-0.5">Severity Score</p>
+                    </div>
+                    <div className="bg-lattice-surface rounded-lg p-2 text-center">
+                      <p className={`text-sm font-bold capitalize ${(r.severityScore as number) >= 80 ? 'text-red-400' : (r.severityScore as number) >= 60 ? 'text-orange-400' : (r.severityScore as number) >= 40 ? 'text-amber-400' : (r.severityScore as number) >= 20 ? 'text-blue-400' : 'text-neon-green'}`}>
+                        {r.severityLevel as string}
+                      </p>
+                      <p className="text-[10px] text-gray-500 mt-0.5">Level</p>
+                    </div>
+                  </div>
+                  <div className="w-full h-2 bg-lattice-surface rounded-full overflow-hidden">
+                    <div className={`h-full rounded-full transition-all ${(r.severityScore as number) >= 80 ? 'bg-red-500/70' : (r.severityScore as number) >= 60 ? 'bg-orange-500/70' : (r.severityScore as number) >= 40 ? 'bg-amber-400/70' : (r.severityScore as number) >= 20 ? 'bg-blue-500/70' : 'bg-neon-green/60'}`}
+                      style={{ width: `${r.severityScore as number}%` }} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-[11px]">
+                    {Object.entries(r.factors as Record<string, { score: number; label: string }>).map(([key, val]) => (
+                      <div key={key} className="bg-lattice-surface rounded p-2">
+                        <div className="flex justify-between mb-1">
+                          <span className="text-gray-400 capitalize">{key}</span>
+                          <span className="text-neon-cyan font-mono">{val.score}/5</span>
+                        </div>
+                        <div className="w-full h-1 bg-white/10 rounded-full overflow-hidden">
+                          <div className="h-full bg-neon-cyan/50 rounded-full" style={{ width: `${(val.score / 5) * 100}%` }} />
+                        </div>
+                        <p className="text-[10px] text-gray-600 mt-0.5 capitalize">{val.label}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="bg-lattice-surface rounded p-2 text-[11px] space-y-1">
+                    <p className="text-[10px] text-gray-500 font-semibold uppercase tracking-wide">Response Protocol</p>
+                    <p className="text-gray-300 leading-relaxed">{r.responseProtocol as string}</p>
+                  </div>
+                  {(r.escalationModifiers as { casualties: number; financialExposure: number; affectedSystemCount: number; totalModifier: number }).totalModifier > 0 && (
+                    <div className="grid grid-cols-3 gap-2 text-center text-[11px]">
+                      <div className="bg-lattice-surface rounded p-2">
+                        <p className="font-bold text-red-400">{(r.escalationModifiers as { casualties: number }).casualties}</p>
+                        <p className="text-gray-500">Casualties</p>
+                      </div>
+                      <div className="bg-lattice-surface rounded p-2">
+                        <p className="font-bold text-orange-400">{(r.escalationModifiers as { affectedSystemCount: number }).affectedSystemCount}</p>
+                        <p className="text-gray-500">Systems</p>
+                      </div>
+                      <div className="bg-lattice-surface rounded p-2">
+                        <p className="font-bold text-amber-400">+{(r.escalationModifiers as { totalModifier: number }).totalModifier}</p>
+                        <p className="text-gray-500">Escalation</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* responseTimeline */}
+              {actionResult.action === 'responseTimeline' && r && !r.message && (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-3 gap-2 text-center text-[11px]">
+                    <div className="bg-lattice-surface rounded p-2">
+                      <p className="font-bold text-neon-cyan">{r.totalDurationMinutes as number}m</p>
+                      <p className="text-gray-500">Total Duration</p>
+                    </div>
+                    <div className="bg-lattice-surface rounded p-2">
+                      <p className="font-bold text-neon-purple">{r.criticalPathLength as number}</p>
+                      <p className="text-gray-500">Critical Steps</p>
+                    </div>
+                    <div className="bg-lattice-surface rounded p-2">
+                      <p className={`font-bold ${(r.sla as { breaches: number }).breaches > 0 ? 'text-red-400' : 'text-neon-green'}`}>
+                        {(r.sla as { breaches: number }).breaches === 0 ? 'OK' : `${(r.sla as { breaches: number }).breaches} breach${(r.sla as { breaches: number }).breaches !== 1 ? 'es' : ''}`}
+                      </p>
+                      <p className="text-gray-500">SLA</p>
+                    </div>
+                  </div>
+                  {(r.criticalPath as string[]).length > 0 && (
+                    <div>
+                      <p className="text-[10px] text-gray-500 font-semibold uppercase tracking-wide mb-1">Critical Path</p>
+                      <div className="flex flex-wrap gap-1">
+                        {(r.criticalPath as string[]).map((step, i) => (
+                          <span key={i} className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/10 border border-red-500/20 text-red-400">{step}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <div className="space-y-1.5 max-h-36 overflow-y-auto">
+                    <p className="text-[10px] text-gray-500 font-semibold uppercase tracking-wide">Timeline</p>
+                    {(r.timeline as { name: string; duration: number; startMinute: number; isCritical: boolean; slaStatus: string }[]).map((step, i) => (
+                      <div key={i} className={`flex items-center gap-2 text-[11px] bg-lattice-surface rounded px-2 py-1 ${step.isCritical ? 'border-l-2 border-red-500/50' : ''}`}>
+                        <span className="text-gray-300 flex-1 truncate">{step.name}</span>
+                        <span className="text-gray-500 font-mono shrink-0">t+{step.startMinute}m</span>
+                        <span className="text-neon-cyan font-mono shrink-0">{step.duration}m</span>
+                        {step.slaStatus === 'sla_breach' && <span className="text-[9px] px-1 rounded bg-red-500/20 text-red-400 shrink-0">SLA!</span>}
+                      </div>
+                    ))}
+                  </div>
+                  {Object.keys(r.resourceAllocation as Record<string, unknown>).length > 0 && (
+                    <div>
+                      <p className="text-[10px] text-gray-500 font-semibold uppercase tracking-wide mb-1">Resource Allocation</p>
+                      <div className="space-y-1">
+                        {Object.entries(r.resourceAllocation as Record<string, { totalMinutes: number; steps: string[] }>).map(([res, data]) => (
+                          <div key={res} className="flex items-center gap-2 text-[11px]">
+                            <span className="text-gray-400 flex-1 truncate">{res}</span>
+                            <span className="text-neon-cyan font-mono shrink-0">{data.totalMinutes}m</span>
+                            <span className="text-gray-600 shrink-0">{data.steps.length} step{data.steps.length !== 1 ? 's' : ''}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* stakeholderImpact */}
+              {actionResult.action === 'stakeholderImpact' && r && !r.message && (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-3 gap-2 text-center text-[11px]">
+                    <div className="bg-lattice-surface rounded p-2">
+                      <p className="font-bold text-neon-cyan">{(r.metrics as { totalStakeholders: number }).totalStakeholders}</p>
+                      <p className="text-gray-500">Stakeholders</p>
+                    </div>
+                    <div className="bg-lattice-surface rounded p-2">
+                      <p className="font-bold text-amber-400">{(r.metrics as { avgImpactScore: number }).avgImpactScore.toFixed(1)}</p>
+                      <p className="text-gray-500">Avg Impact</p>
+                    </div>
+                    <div className="bg-lattice-surface rounded p-2">
+                      <p className="font-bold text-red-400">{(r.metrics as { tier1Count: number }).tier1Count}</p>
+                      <p className="text-gray-500">Tier 1 Notify</p>
+                    </div>
+                  </div>
+                  <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                    <p className="text-[10px] text-gray-500 font-semibold uppercase tracking-wide">Communication Priority</p>
+                    {(r.communicationPriority as { name: string; type: string; impactScore: number; communicationTier: number; communicationTimeframe: string; quadrant: string }[]).map((sh, i) => (
+                      <div key={i} className="flex items-center gap-2 text-[11px] bg-lattice-surface rounded px-2 py-1.5">
+                        <span className={`text-[9px] px-1.5 py-0.5 rounded font-semibold shrink-0 ${sh.communicationTier === 1 ? 'bg-red-500/20 text-red-400' : sh.communicationTier === 2 ? 'bg-orange-500/20 text-orange-400' : sh.communicationTier === 3 ? 'bg-amber-500/20 text-amber-400' : 'bg-gray-500/20 text-gray-400'}`}>
+                          T{sh.communicationTier}
+                        </span>
+                        <span className="text-gray-200 flex-1 truncate">{sh.name}</span>
+                        <span className="text-[10px] text-gray-500 capitalize shrink-0">{sh.type}</span>
+                        <span className="text-neon-cyan font-mono shrink-0">{sh.impactScore.toFixed(1)}</span>
+                      </div>
+                    ))}
+                  </div>
+                  {Object.keys(r.quadrantAnalysis as Record<string, unknown>).length > 0 && (
+                    <div className="grid grid-cols-2 gap-2 text-[11px]">
+                      {Object.entries(r.quadrantAnalysis as Record<string, { count: number; stakeholders: string[] }>).map(([quad, data]) => (
+                        <div key={quad} className="bg-lattice-surface rounded p-2">
+                          <p className="text-neon-purple font-bold">{data.count}</p>
+                          <p className="text-gray-500 capitalize">{quad.replace(/_/g, ' ')}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Fallback */}
+              {(typeof actionResult.result === 'string' || r?.message) && (
+                <p className="text-xs text-gray-400">{(r?.message as string) || (actionResult.result as string)}</p>
+              )}
             </div>
-            <pre className="whitespace-pre-wrap text-gray-300 font-mono text-[11px] max-h-48 overflow-y-auto">
-              {typeof actionResult.result === 'string'
-                ? actionResult.result
-                : JSON.stringify(actionResult.result, null, 2)}
-            </pre>
-          </div>
-        )}
+          );
+        })()}
       </div>
 
       {/* Lens Features */}

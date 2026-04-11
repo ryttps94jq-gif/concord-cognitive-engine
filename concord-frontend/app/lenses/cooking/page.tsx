@@ -281,11 +281,130 @@ export default function CookingLensPage() {
                 <XCircle className="w-3.5 h-3.5" />
               </button>
             </div>
-            <pre className="whitespace-pre-wrap text-gray-300 font-mono text-[11px] max-h-48 overflow-y-auto">
-              {typeof actionResult.result === 'string'
-                ? actionResult.result
-                : JSON.stringify(actionResult.result, null, 2)}
-            </pre>
+            <div className="text-[11px] space-y-2 max-h-64 overflow-y-auto">
+              {/* Error / plain message */}
+              {typeof actionResult.result === 'string' && (
+                <p className="text-gray-300">{actionResult.result}</p>
+              )}
+              {typeof actionResult.result === 'object' && (actionResult.result as any)?.message && (
+                <p className="text-gray-300">{(actionResult.result as any).message}</p>
+              )}
+
+              {/* scaleRecipe */}
+              {typeof actionResult.result === 'object' && (actionResult.result as any)?.scaleFactor !== undefined && (
+                <div className="space-y-2">
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="p-2 bg-lattice-bg rounded text-center">
+                      <p className="font-bold text-orange-400">{(actionResult.result as any).baseServings}</p>
+                      <p className="text-[10px] text-gray-500">Original</p>
+                    </div>
+                    <div className="p-2 bg-lattice-bg rounded text-center">
+                      <p className="font-bold text-neon-green">{(actionResult.result as any).targetServings}</p>
+                      <p className="text-[10px] text-gray-500">Target</p>
+                    </div>
+                    <div className="p-2 bg-lattice-bg rounded text-center">
+                      <p className="font-bold text-neon-cyan">{(actionResult.result as any).scaleFactor}×</p>
+                      <p className="text-[10px] text-gray-500">Factor</p>
+                    </div>
+                  </div>
+                  {(actionResult.result as any).recipe && (
+                    <p className="text-gray-400">Recipe: <span className="text-gray-200">{(actionResult.result as any).recipe}</span></p>
+                  )}
+                  <div className="space-y-1">
+                    {((actionResult.result as any).ingredients as any[]).map((ing: any) => (
+                      <div key={ing.name} className="flex items-center justify-between text-gray-300 bg-lattice-bg px-2 py-1 rounded">
+                        <span className="font-medium">{ing.name}</span>
+                        <span className="text-gray-500">{ing.original} → <span className="text-orange-400">{ing.scaled}</span></span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* nutritionEstimate */}
+              {typeof actionResult.result === 'object' && (actionResult.result as any)?.totalCalories !== undefined && (
+                <div className="space-y-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="p-2 bg-lattice-bg rounded text-center">
+                      <p className="text-lg font-bold text-orange-400">{(actionResult.result as any).totalCalories}</p>
+                      <p className="text-[10px] text-gray-500">Total kcal</p>
+                    </div>
+                    <div className="p-2 bg-lattice-bg rounded text-center">
+                      <p className="text-lg font-bold text-neon-cyan">{(actionResult.result as any).perServing}</p>
+                      <p className="text-[10px] text-gray-500">Per serving ({(actionResult.result as any).servings})</p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    {Object.entries((actionResult.result as any).macros || {}).map(([macro, val]) => (
+                      <div key={macro} className="p-1.5 bg-lattice-bg rounded text-center">
+                        <p className="font-bold text-neon-green">{val as string}</p>
+                        <p className="text-[10px] text-gray-500">{macro}</p>
+                      </div>
+                    ))}
+                  </div>
+                  {(actionResult.result as any).note && (
+                    <p className="text-[10px] text-gray-500 italic">{(actionResult.result as any).note}</p>
+                  )}
+                </div>
+              )}
+
+              {/* mealPlan */}
+              {typeof actionResult.result === 'object' && (actionResult.result as any)?.weeklyBudget !== undefined && (
+                <div className="space-y-2">
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="p-2 bg-lattice-bg rounded text-center">
+                      <p className="font-bold text-orange-400">{(actionResult.result as any).days}</p>
+                      <p className="text-[10px] text-gray-500">Days</p>
+                    </div>
+                    <div className="p-2 bg-lattice-bg rounded text-center">
+                      <p className="font-bold text-neon-green">${(actionResult.result as any).dailyBudget}</p>
+                      <p className="text-[10px] text-gray-500">Daily Budget</p>
+                    </div>
+                    <div className="p-2 bg-lattice-bg rounded text-center">
+                      <p className="font-bold text-neon-cyan">${(actionResult.result as any).weeklyBudget}</p>
+                      <p className="text-[10px] text-gray-500">Weekly Total</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 text-gray-400">
+                    <span>Meals to fill:</span>
+                    <span className="text-orange-300">{(actionResult.result as any).mealsToFill}</span>
+                    <span className="ml-auto text-[10px]">Diet: {(actionResult.result as any).dietaryNotes}</span>
+                  </div>
+                  <div className="grid grid-cols-7 gap-1">
+                    {((actionResult.result as any).plan as any[]).map((day: any) => (
+                      <div key={day.day} className="p-1 bg-lattice-bg rounded text-center">
+                        <p className="text-[10px] font-medium text-orange-400">{day.dayName}</p>
+                        <p className="text-[10px] text-gray-500">{day.meals.length}m</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* substitution */}
+              {typeof actionResult.result === 'object' && (actionResult.result as any)?.substitutions !== undefined && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-gray-400">Replacing:</span>
+                    <span className="text-orange-300 font-medium capitalize">{(actionResult.result as any).ingredient || '—'}</span>
+                    <span className={`ml-auto px-2 py-0.5 rounded-full text-[10px] ${(actionResult.result as any).found ? 'bg-neon-green/20 text-neon-green' : 'bg-gray-500/20 text-gray-400'}`}>
+                      {(actionResult.result as any).found ? 'Found' : 'Not found'}
+                    </span>
+                  </div>
+                  <div className="space-y-1">
+                    {((actionResult.result as any).substitutions as any[]).map((s: any, i: number) => (
+                      <div key={i} className="p-2 bg-lattice-bg rounded space-y-0.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-gray-200">{s.sub}</span>
+                          <span className="text-neon-cyan text-[10px] font-mono">{s.ratio}</span>
+                        </div>
+                        {s.note && <p className="text-[10px] text-gray-500">{s.note}</p>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>

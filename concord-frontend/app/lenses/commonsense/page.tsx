@@ -68,7 +68,7 @@ export default function CommonsenseLensPage() {
 
   // --- Backend action wiring ---
   const runAction = useRunArtifact('commonsense');
-  const [actionResult, setActionResult] = useState<unknown>(null);
+  const [actionResult, setActionResult] = useState<{ action: string; result: unknown } | null>(null);
   const [isRunning, setIsRunning] = useState(false);
 
   const { data: factsData, isLoading, isError, error, refetch } = useQuery({
@@ -117,9 +117,9 @@ export default function CommonsenseLensPage() {
     setActionResult(null);
     try {
       const res = await runAction.mutateAsync({ id: actionTargetId, action });
-      setActionResult((res as { result?: unknown }).result ?? res);
+      setActionResult({ action, result: (res as { result?: unknown }).result ?? res });
     } catch (err) {
-      setActionResult({ error: err instanceof Error ? err.message : 'Action failed' });
+      setActionResult({ action, result: { error: err instanceof Error ? err.message : 'Action failed' } });
     } finally {
       setIsRunning(false);
     }
@@ -438,9 +438,29 @@ export default function CommonsenseLensPage() {
                     Clear
                   </button>
                 </div>
-                <pre className="bg-lattice-surface p-3 rounded-lg whitespace-pre-wrap text-xs text-gray-300 font-mono max-h-48 overflow-y-auto">
-                  {JSON.stringify(results, null, 2)}
-                </pre>
+                {(() => {
+                  const qr = results as { ok?: boolean; results?: { id: string; fact: string; category: string; confidence: number; relevance: number }[]; query?: string } | null;
+                  const facts = qr?.results || [];
+                  if (facts.length === 0) {
+                    return <p className="text-xs text-gray-500 italic">No matching facts found.</p>;
+                  }
+                  return (
+                    <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                      {facts.map((f) => (
+                        <div key={f.id} className="flex items-start gap-2 bg-lattice-surface rounded-lg px-3 py-2">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs text-gray-200 leading-relaxed">{f.fact}</p>
+                            <div className="flex items-center gap-2 mt-1">
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-neon-cyan/10 text-neon-cyan border border-neon-cyan/20 capitalize">{f.category}</span>
+                              <span className="text-[10px] text-gray-500">conf: <span className="text-gray-400 font-mono">{(f.confidence * 100).toFixed(0)}%</span></span>
+                              <span className="text-[10px] text-gray-500">rel: <span className="text-neon-green font-mono">{(f.relevance * 100).toFixed(0)}%</span></span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
               </div>
             )}
           </div>
@@ -741,22 +761,195 @@ export default function CommonsenseLensPage() {
             </button>
           ))}
         </div>
-        {actionResult !== null && (
-          <div className="mt-2 space-y-1">
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-gray-400">Result</span>
-              <button
-                onClick={() => setActionResult(null)}
-                className="text-gray-500 hover:text-white transition-colors"
-              >
-                <XCircle className="w-3.5 h-3.5" />
-              </button>
+        {actionResult !== null && (() => {
+          const r = actionResult.result as Record<string, unknown> | null;
+          return (
+            <div className="mt-2 rounded-lg bg-lattice-surface border border-neon-yellow/20 p-3 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-neon-yellow capitalize">{actionResult.action}</span>
+                <button onClick={() => setActionResult(null)} className="text-gray-500 hover:text-white transition-colors">
+                  <XCircle className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              {/* plausibilityCheck */}
+              {actionResult.action === 'plausibilityCheck' && r && (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="bg-lattice-deep rounded-lg p-2 text-center">
+                      <p className={`text-xl font-bold font-mono ${(r.plausibilityScore as number) >= 80 ? 'text-neon-green' : (r.plausibilityScore as number) >= 50 ? 'text-amber-400' : 'text-red-400'}`}>
+                        {r.plausibilityScore as number}%
+                      </p>
+                      <p className="text-[10px] text-gray-500 mt-0.5">Plausibility Score</p>
+                    </div>
+                    <div className="bg-lattice-deep rounded-lg p-2 text-center">
+                      <p className={`text-xl font-bold capitalize ${(r.plausibilityScore as number) >= 80 ? 'text-neon-green' : (r.plausibilityScore as number) >= 50 ? 'text-amber-400' : 'text-red-400'}`}>
+                        {r.plausibilityLabel as string}
+                      </p>
+                      <p className="text-[10px] text-gray-500 mt-0.5">Label</p>
+                    </div>
+                  </div>
+                  <div className="w-full h-2 bg-lattice-deep rounded-full overflow-hidden">
+                    <div className={`h-full rounded-full transition-all ${(r.plausibilityScore as number) >= 80 ? 'bg-neon-green/60' : (r.plausibilityScore as number) >= 50 ? 'bg-amber-400/60' : 'bg-red-500/60'}`} style={{ width: `${r.plausibilityScore as number}%` }} />
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 text-center text-[11px]">
+                    <div className="bg-lattice-deep rounded p-2">
+                      <p className="font-bold text-neon-cyan">{r.eventsAnalyzed as number}</p>
+                      <p className="text-gray-500">Events Analyzed</p>
+                    </div>
+                    <div className="bg-lattice-deep rounded p-2">
+                      <p className="font-bold text-neon-green">{r.constraintsSatisfied as number}</p>
+                      <p className="text-gray-500">Satisfied</p>
+                    </div>
+                    <div className="bg-lattice-deep rounded p-2">
+                      <p className={`font-bold ${((r.violations as { count: number }).count) > 0 ? 'text-red-400' : 'text-neon-green'}`}>
+                        {(r.violations as { count: number }).count}
+                      </p>
+                      <p className="text-gray-500">Violations</p>
+                    </div>
+                  </div>
+                  {(r.violations as { items: { type: string; description: string; severity: string }[] }).items.length > 0 && (
+                    <div className="space-y-1">
+                      <p className="text-[10px] text-gray-500 font-semibold uppercase tracking-wide">Violations</p>
+                      {(r.violations as { items: { type: string; description: string; severity: string }[] }).items.map((v, i) => (
+                        <div key={i} className="flex items-start gap-2 text-[11px] bg-lattice-deep rounded p-2">
+                          <span className={`shrink-0 px-1.5 py-0.5 rounded text-[9px] font-semibold uppercase ${v.severity === 'high' ? 'bg-red-500/20 text-red-400' : 'bg-amber-500/20 text-amber-400'}`}>{v.severity}</span>
+                          <span className="text-gray-400">[{v.type}]</span>
+                          <span className="text-gray-300">{v.description}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* analogyMapping */}
+              {actionResult.action === 'analogyMapping' && r && !r.message && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="text-neon-cyan font-medium">{r.sourceDomain as string}</span>
+                    <ArrowRight className="w-3 h-3 text-gray-500" />
+                    <span className="text-neon-purple font-medium">{r.targetDomain as string}</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-center text-[11px]">
+                    <div className="bg-lattice-deep rounded p-2">
+                      <p className={`text-xl font-bold font-mono ${(r.systematicityScore as number) >= 70 ? 'text-neon-green' : (r.systematicityScore as number) >= 40 ? 'text-amber-400' : 'text-gray-400'}`}>
+                        {r.systematicityScore as number}%
+                      </p>
+                      <p className="text-gray-500">Systematicity</p>
+                      <p className="text-[10px] text-gray-600 capitalize">{r.systematicityLabel as string}</p>
+                    </div>
+                    <div className="bg-lattice-deep rounded p-2 space-y-1">
+                      {(() => { const cov = r.coverage as Record<string, number>; return (
+                        <>
+                          <p className="text-neon-cyan font-bold">{cov.entitiesMapped}/{cov.totalSourceEntities}</p>
+                          <p className="text-gray-500">Entities Mapped</p>
+                          <p className="text-neon-purple font-bold">{cov.relationsMapped}/{cov.totalSourceRelations}</p>
+                          <p className="text-gray-500">Relations Mapped</p>
+                        </>
+                      ); })()}
+                    </div>
+                  </div>
+                  {(r.entityMapping as { source: string; target: string; similarity: number }[]).length > 0 && (
+                    <div>
+                      <p className="text-[10px] text-gray-500 font-semibold uppercase tracking-wide mb-1">Entity Mappings</p>
+                      <div className="space-y-1">
+                        {(r.entityMapping as { source: string; target: string; similarity: number }[]).map((m, i) => (
+                          <div key={i} className="flex items-center gap-2 text-[11px] bg-lattice-deep rounded px-2 py-1">
+                            <span className="text-neon-cyan">{m.source}</span>
+                            <ArrowRight className="w-2.5 h-2.5 text-gray-600" />
+                            <span className="text-neon-purple">{m.target}</span>
+                            <span className="ml-auto text-gray-500 font-mono">{(m.similarity * 100).toFixed(0)}%</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {(r.candidateInferences as { predictedRelation: string; from: string; to: string }[]).length > 0 && (
+                    <div>
+                      <p className="text-[10px] text-gray-500 font-semibold uppercase tracking-wide mb-1">Candidate Inferences</p>
+                      <div className="space-y-1">
+                        {(r.candidateInferences as { predictedRelation: string; from: string; to: string }[]).map((inf, i) => (
+                          <div key={i} className="text-[11px] bg-lattice-deep rounded px-2 py-1 text-gray-300">
+                            <span className="text-neon-yellow">{inf.predictedRelation}</span>
+                            {': '}
+                            <span className="text-neon-cyan">{inf.from}</span>
+                            <ArrowRight className="w-2.5 h-2.5 inline mx-1 text-gray-500" />
+                            <span className="text-neon-purple">{inf.to}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* defaultReasoning */}
+              {actionResult.action === 'defaultReasoning' && r && !r.message && (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[10px] text-gray-500">Class:</span>
+                    <span className="text-xs font-mono text-neon-cyan">{r.instanceClass as string}</span>
+                    <span className="text-[10px] text-gray-500 ml-2">Chain:</span>
+                    {(r.inheritanceChain as string[]).map((c, i) => (
+                      <span key={i} className="flex items-center gap-1 text-[10px]">
+                        {i > 0 && <ArrowRight className="w-2.5 h-2.5 text-gray-600" />}
+                        <span className="text-neon-purple">{c}</span>
+                      </span>
+                    ))}
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 text-center text-[11px]">
+                    <div className="bg-lattice-deep rounded p-2">
+                      <p className="font-bold text-neon-cyan">{r.totalProperties as number}</p>
+                      <p className="text-gray-500">Properties</p>
+                    </div>
+                    <div className="bg-lattice-deep rounded p-2">
+                      <p className={`font-bold ${(r.conflicts as { inheritanceOverrides: number }).inheritanceOverrides > 0 ? 'text-amber-400' : 'text-neon-green'}`}>
+                        {(r.conflicts as { inheritanceOverrides: number }).inheritanceOverrides}
+                      </p>
+                      <p className="text-gray-500">Overrides</p>
+                    </div>
+                    <div className="bg-lattice-deep rounded p-2">
+                      <p className={`font-bold ${(r.conflicts as { siblingConflicts: number }).siblingConflicts > 0 ? 'text-red-400' : 'text-neon-green'}`}>
+                        {(r.conflicts as { siblingConflicts: number }).siblingConflicts}
+                      </p>
+                      <p className="text-gray-500">Sibling Conflicts</p>
+                    </div>
+                  </div>
+                  {Object.keys(r.resolvedProperties as Record<string, unknown>).length > 0 && (
+                    <div>
+                      <p className="text-[10px] text-gray-500 font-semibold uppercase tracking-wide mb-1">Resolved Properties</p>
+                      <div className="space-y-1 max-h-32 overflow-y-auto">
+                        {Object.entries(r.resolvedProperties as Record<string, unknown>).map(([key, val]) => (
+                          <div key={key} className="flex items-center justify-between text-[11px] bg-lattice-deep rounded px-2 py-1">
+                            <span className="text-neon-cyan">{key}</span>
+                            <span className="text-gray-300 font-mono">{String(val)}</span>
+                            <span className="text-gray-600 ml-2">← {(r.propertySources as Record<string, string>)[key]}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {(r.warnings as string[]).length > 0 && (
+                    <div className="space-y-1">
+                      {(r.warnings as string[]).map((w, i) => (
+                        <div key={i} className="flex items-center gap-2 text-[11px] bg-amber-500/10 border border-amber-500/20 rounded px-2 py-1 text-amber-300">
+                          <Shield className="w-3 h-3 shrink-0" />
+                          {w}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Fallback for message or unknown shape */}
+              {(r?.message || (!['plausibilityCheck', 'analogyMapping', 'defaultReasoning'].includes(actionResult.action))) && (
+                <p className="text-xs text-gray-400">{(r?.message as string) || 'Action completed.'}</p>
+              )}
             </div>
-            <pre className="bg-lattice-surface p-3 rounded-lg whitespace-pre-wrap text-xs text-gray-300 font-mono max-h-48 overflow-y-auto">
-              {typeof actionResult === 'string' ? actionResult : JSON.stringify(actionResult, null, 2)}
-            </pre>
-          </div>
-        )}
+          );
+        })()}
       </div>
 
       {/* Lens Features */}
