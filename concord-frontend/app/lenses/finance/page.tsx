@@ -191,7 +191,7 @@ export default function FinanceLensPage() {
     try {
       const res = await runFinanceAction.mutateAsync({ id: targetId, action });
       setFinanceActionResult({ _action: action, ...(res.result as Record<string, unknown>) });
-    } catch (e) { console.error(`Finance action ${action} failed:`, e); }
+    } catch (e) { console.error(`Finance action ${action} failed:`, e); setFinanceActionResult({ message: `Action failed: ${e instanceof Error ? e.message : 'Unknown error'}` }); }
     setFinanceRunning(null);
   }, [assetItems, runFinanceAction]);
 

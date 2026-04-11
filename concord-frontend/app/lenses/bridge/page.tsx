@@ -116,7 +116,7 @@ export default function BridgeLens() {
     try {
       const res = await runAction.mutateAsync({ id: targetId, action });
       setActionResult(res.result as Record<string, unknown>);
-    } catch (e) { console.error(`Action ${action} failed:`, e); }
+    } catch (e) { console.error(`Action ${action} failed:`, e); setActionResult({ message: `Action failed: ${e instanceof Error ? e.message : 'Unknown error'}` }); }
     setIsRunning(null);
   };
 

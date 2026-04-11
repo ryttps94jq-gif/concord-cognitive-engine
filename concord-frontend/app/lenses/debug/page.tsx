@@ -46,7 +46,7 @@ export default function DebugLensPage() {
     try {
       const res = await runAction.mutateAsync({ id: targetId, action });
       setActionResult(res.result as Record<string, unknown>);
-    } catch (e) { console.error(`Action ${action} failed:`, e); }
+    } catch (e) { console.error(`Action ${action} failed:`, e); setActionResult({ message: `Action failed: ${e instanceof Error ? e.message : 'Unknown error'}` }); }
     setActiveAction(null);
   }, [debugItems, runAction]);
   const [debugOutput, setDebugOutput] = useState<string[]>(['$ concord debug', 'Ready. Type command or click button above.']);

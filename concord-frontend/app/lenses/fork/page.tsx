@@ -56,7 +56,7 @@ export default function ForkLensPage() {
     try {
       const res = await runForkAction.mutateAsync({ id: targetId, action });
       setForkActionResult({ _action: action, ...(res.result as Record<string, unknown>) });
-    } catch (e) { console.error(`Fork action ${action} failed:`, e); }
+    } catch (e) { console.error(`Fork action ${action} failed:`, e); setForkActionResult({ message: `Action failed: ${e instanceof Error ? e.message : 'Unknown error'}` }); }
     setForkRunning(null);
   }, [forkItems, runForkAction]);
 

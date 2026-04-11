@@ -255,7 +255,7 @@ export default function PhysicsLensPage() {
     try {
       const res = await runAction.mutateAsync({ id: targetId, action });
       setPhysicsActionResult(res.result as Record<string, unknown>);
-    } catch (e) { console.error(`Action ${action} failed:`, e); }
+    } catch (e) { console.error(`Action ${action} failed:`, e); setPhysicsActionResult({ message: `Action failed: ${e instanceof Error ? e.message : 'Unknown error'}` }); }
     finally { setPhysicsIsRunning(null); }
   };
 

@@ -62,7 +62,7 @@ const FORWARDED_EVENTS: SocketEvent[] = [
   // MEGA SPEC: Chat streaming events
   'chat:status', 'chat:token', 'chat:web_results', 'chat:complete',
   // MEGA SPEC: Artifact & quality lifecycle events
-  'artifact:rendered', 'quality:approved', 'quality:rejected',
+  'artifact:rendered', 'quality:approved', 'quality:shadowed',
   // MEGA SPEC: Entity & pipeline events
   'entity:production_mode', 'pipeline:triggered',
   // 12 NEW CAPABILITIES events

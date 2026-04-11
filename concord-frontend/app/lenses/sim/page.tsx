@@ -482,12 +482,14 @@ export default function SimLensPage() {
       useUIStore.getState().addToast({ type: 'error', message: 'Mark at least one parameter as sensitive in the Parameter Space Explorer to run sensitivity analysis.' });
       return;
     }
-    await runArtifactAction.mutateAsync({
-      id: scenario.id,
-      action: 'sensitivityAnalysis',
-      params: { variables: sensitiveVars.map(v => v.name), iterations: scenario.iterations },
-    });
-    setActiveTab('results');
+    try {
+      await runArtifactAction.mutateAsync({
+        id: scenario.id,
+        action: 'sensitivityAnalysis',
+        params: { variables: sensitiveVars.map(v => v.name), iterations: scenario.iterations },
+      });
+      setActiveTab('results');
+    } catch (e) { console.error('Sensitivity analysis failed:', e); useUIStore.getState().addToast({ type: 'error', message: `Sensitivity analysis failed: ${e instanceof Error ? e.message : 'Unknown error'}` }); }
   }, [runArtifactAction]);
 
   const handleExportResults = useCallback((run: SimRun) => {

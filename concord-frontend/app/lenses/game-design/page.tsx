@@ -128,7 +128,7 @@ export default function GameDesignPage() {
     try {
       const res = await runDesignAction.mutateAsync({ id: targetId, action });
       setDesignActionResult({ _action: action, ...(res.result as Record<string, unknown>) });
-    } catch (e) { console.error(`Design action ${action} failed:`, e); }
+    } catch (e) { console.error(`Design action ${action} failed:`, e); setDesignActionResult({ message: `Action failed: ${e instanceof Error ? e.message : 'Unknown error'}` }); }
     setDesignRunning(null);
   }, [projectItems, runDesignAction]);
 

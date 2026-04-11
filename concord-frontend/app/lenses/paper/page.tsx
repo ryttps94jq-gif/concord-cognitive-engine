@@ -381,10 +381,12 @@ export default function PaperLensPage() {
 
   const handleDomainAction = useCallback(async (action: string) => {
     if (!selectedItemId) return;
-    const result = await runArtifact.mutateAsync({ id: selectedItemId, action });
-    if (action === 'generate_abstract' || action === 'synthesize') {
-      setSynthesisResult(typeof result.result === 'string' ? result.result : JSON.stringify(result.result, null, 2));
-    }
+    try {
+      const result = await runArtifact.mutateAsync({ id: selectedItemId, action });
+      if (action === 'generate_abstract' || action === 'synthesize') {
+        setSynthesisResult(typeof result.result === 'string' ? result.result : JSON.stringify(result.result, null, 2));
+      }
+    } catch (e) { console.error(`Paper action ${action} failed:`, e); }
   }, [selectedItemId, runArtifact]);
 
   const handleExportCSV = useCallback(() => {

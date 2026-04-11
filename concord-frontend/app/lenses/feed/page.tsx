@@ -362,7 +362,7 @@ export default function FeedLensPage() {
     try {
       const res = await runFeedAction.mutateAsync({ id: targetId, action });
       setFeedActionResult({ _action: action, ...(res.result as Record<string, unknown>) });
-    } catch (e) { console.error(`Feed action ${action} failed:`, e); }
+    } catch (e) { console.error(`Feed action ${action} failed:`, e); setFeedActionResult({ message: `Action failed: ${e instanceof Error ? e.message : 'Unknown error'}` }); }
     setFeedRunning(null);
   };
 

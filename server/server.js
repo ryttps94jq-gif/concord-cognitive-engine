@@ -6979,7 +6979,7 @@ function _c2repairDominance(){
     const cLoad = Number(g.functionalDecline?.contradictionLoad ?? 0);
     const score = clamp(rr - 0.25*clamp01(dl/10) - 0.25*clamp01(cLoad), 0, 1);
     return { ok: score > 0.01, score };
-  } catch { return { ok:true, score:0.5 }; }
+  } catch { return { ok: false, error: 'health_check_failed', score: 0 }; }
 }
 
 /**
@@ -27631,7 +27631,7 @@ register("lens", "create", (ctx, input={}) => {
     try {
       const tempArt = { data, meta: meta || {} };
       return ctx.macro.run("emergent", "bridge.lensScope", { artifact: tempArt, operation: "create", actorScope: ctx.actor?.scope || "local", STATE });
-    } catch { return { ok: true, allowed: true, warnings: [] }; }
+    } catch { return { ok: false, allowed: false, error: 'scope_check_error' }; }
   })();
   if (scopeCheck && !scopeCheck.allowed) {
     return { ok: false, error: "scope_denied", warnings: scopeCheck.warnings };
@@ -30942,6 +30942,19 @@ registerUniversalLensActions();
     ["manufacturing", "bomCostCalc", "bomCost"],
     ["manufacturing", "oeeCalculator", "oeeCalculate"],
     ["manufacturing", "safetyRateReport", "safetyRate"],
+
+    // Food lens: frontend uses snake_case, backend uses camelCase
+    ["food", "cost_plate", "costPlate"],
+    ["food", "scale_recipe", "scaleRecipe"],
+
+    // Aviation lens: frontend uses snake_case, backend uses camelCase
+    ["aviation", "currency_check", "currencyCheck"],
+
+    // Security lens: frontend calls accessAudit, backend registered as audit-access
+    ["security", "accessAudit", "audit-access"],
+
+    // Trades lens: frontend calls generateEstimate, backend registered as calculateEstimate
+    ["trades", "generateEstimate", "calculateEstimate"],
   ];
 
   let aliasCount = 0;

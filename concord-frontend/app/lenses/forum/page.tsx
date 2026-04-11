@@ -247,7 +247,7 @@ export default function ForumLensPage() {
     try {
       const res = await runForumAction.mutateAsync({ id: targetId, action });
       setForumActionResult({ _action: action, ...(res.result as Record<string, unknown>) });
-    } catch (e) { console.error(`Forum action ${action} failed:`, e); }
+    } catch (e) { console.error(`Forum action ${action} failed:`, e); setForumActionResult({ message: `Action failed: ${e instanceof Error ? e.message : 'Unknown error'}` }); }
     setForumRunning(null);
   }, [postItems, runForumAction]);
 

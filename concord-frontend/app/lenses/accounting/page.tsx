@@ -270,7 +270,7 @@ export default function AccountingLensPage() {
     try {
       const res = await runAction.mutateAsync({ id: targetId, action: 'trialBalance' });
       setTrialBalanceResult(res.result as Record<string, unknown>);
-    } catch (e) { console.error('trialBalance failed:', e); }
+    } catch (e) { console.error('trialBalance failed:', e); setActionResult({ message: `trialBalance failed: ${e instanceof Error ? e.message : 'Unknown error'}` }); }
     setTrialBalanceLoading(false);
   };
 
@@ -281,7 +281,7 @@ export default function AccountingLensPage() {
     try {
       const res = await runAction.mutateAsync({ id: targetId, action: 'profitLoss' });
       setProfitLossResult(res.result as Record<string, unknown>);
-    } catch (e) { console.error('profitLoss failed:', e); }
+    } catch (e) { console.error('profitLoss failed:', e); setActionResult({ message: `profitLoss failed: ${e instanceof Error ? e.message : 'Unknown error'}` }); }
     setProfitLossLoading(false);
   };
 
@@ -292,7 +292,7 @@ export default function AccountingLensPage() {
     try {
       const res = await runAction.mutateAsync({ id: targetId, action: 'invoiceAging' });
       setBackendAgingResult(res.result as Record<string, unknown>);
-    } catch (e) { console.error('invoiceAging failed:', e); }
+    } catch (e) { console.error('invoiceAging failed:', e); setActionResult({ message: `invoiceAging failed: ${e instanceof Error ? e.message : 'Unknown error'}` }); }
     setBackendAgingLoading(false);
   };
 
@@ -303,7 +303,7 @@ export default function AccountingLensPage() {
     try {
       const res = await runAction.mutateAsync({ id: targetId, action: 'budgetVariance' });
       setBackendVarianceResult(res.result as Record<string, unknown>);
-    } catch (e) { console.error('budgetVariance failed:', e); }
+    } catch (e) { console.error('budgetVariance failed:', e); setActionResult({ message: `budgetVariance failed: ${e instanceof Error ? e.message : 'Unknown error'}` }); }
     setBackendVarianceLoading(false);
   };
 
@@ -314,7 +314,7 @@ export default function AccountingLensPage() {
     try {
       const res = await runAction.mutateAsync({ id: targetId, action: 'rentRoll' });
       setRentRollResult(res.result as Record<string, unknown>);
-    } catch (e) { console.error('rentRoll failed:', e); }
+    } catch (e) { console.error('rentRoll failed:', e); setActionResult({ message: `rentRoll failed: ${e instanceof Error ? e.message : 'Unknown error'}` }); }
     setRentRollLoading(false);
   };
 
@@ -325,7 +325,7 @@ export default function AccountingLensPage() {
     try {
       const res = await runAction.mutateAsync({ id: targetId, action: 'validate-ledger' });
       setValidateLedgerResult(res.result as Record<string, unknown>);
-    } catch (e) { console.error('validate-ledger failed:', e); }
+    } catch (e) { console.error('validate-ledger failed:', e); setActionResult({ message: `validate-ledger failed: ${e instanceof Error ? e.message : 'Unknown error'}` }); }
     setValidateLedgerLoading(false);
   };
 
