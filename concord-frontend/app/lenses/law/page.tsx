@@ -4,7 +4,8 @@ import { useLensNav } from '@/hooks/useLensNav';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useState } from 'react';
-import { Scale, Gavel, FileText, CheckCircle, XCircle, AlertTriangle, Plus, Layers, ChevronDown, BookOpen, Shield, Users, Clock, Copy, Globe, Calendar, ChevronRight } from 'lucide-react';
+import { Scale, Gavel, FileText, CheckCircle, XCircle, AlertTriangle, Plus, Layers, ChevronDown, BookOpen, Shield, Users, Clock, Copy, Globe, Calendar, ChevronRight, Play, Loader2 } from 'lucide-react';
+import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ErrorState } from '@/components/common/EmptyState';
 import { api } from '@/lib/api/client';
@@ -85,6 +86,20 @@ export default function LawLensPage() {
     });
     setNewCaseTitle('');
     setNewCaseDeadline('');
+  };
+
+  const runAction = useRunArtifact('law');
+  const [actionResult, setActionResult] = useState<Record<string, unknown> | null>(null);
+  const [isRunning, setIsRunning] = useState<string | null>(null);
+  const handleAction = async (action: string) => {
+    const targetId = caseItems[0]?.id;
+    if (!targetId) { setActionResult({ message: 'Create a case file first to run analysis.' }); return; }
+    setIsRunning(action);
+    try {
+      const res = await runAction.mutateAsync({ id: targetId, action });
+      setActionResult(res.result as Record<string, unknown>);
+    } catch (e) { console.error(`Action ${action} failed:`, e); }
+    finally { setIsRunning(null); }
   };
 
   const handleGateCheck = () => {
@@ -543,6 +558,128 @@ export default function LawLensPage() {
             </button>
           </div>
         </div>
+      </div>
+
+      {/* Backend Action Panel */}
+      <div className="panel p-4 space-y-3">
+        <h2 className="font-semibold flex items-center gap-2">
+          <Scale className="w-4 h-4 text-neon-purple" />
+          Legal Analysis
+        </h2>
+        <div className="flex flex-wrap gap-2">
+          {[
+            { action: 'caseAnalysis', label: 'Case Analysis' },
+            { action: 'statuteLookup', label: 'Statute Lookup' },
+            { action: 'deadlineTracker', label: 'Deadline Tracker' },
+            { action: 'billingCalculator', label: 'Billing Calculator' },
+          ].map(({ action, label }) => (
+            <button key={action} onClick={() => handleAction(action)} disabled={!!isRunning}
+              className="btn-secondary text-sm flex items-center gap-1 disabled:opacity-50">
+              {isRunning === action ? <Loader2 className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
+              {label}
+            </button>
+          ))}
+        </div>
+        {actionResult && (
+          <div className="bg-lattice-deep rounded-lg p-4 space-y-3 text-sm">
+            {'totalCases' in actionResult && (
+              <div className="space-y-2">
+                <div className="flex gap-4">
+                  <span className="text-gray-400">Total Cases: <span className="text-neon-cyan font-bold">{String(actionResult.totalCases)}</span></span>
+                  <span className="text-gray-400">Open: <span className="text-yellow-400 font-bold">{String(actionResult.openCases)}</span></span>
+                  <span className="text-gray-400">Closed: <span className="text-neon-green font-bold">{String(actionResult.closedCases)}</span></span>
+                </div>
+                {'winRate' in actionResult && actionResult.winRate && typeof actionResult.winRate === 'object' && (
+                  <div className="flex gap-4 text-xs">
+                    {Object.entries(actionResult.winRate as Record<string, unknown>).map(([k, v]) => (
+                      <span key={k} className="text-gray-400">{k}: <span className="text-neon-green">{String(v)}</span></span>
+                    ))}
+                  </div>
+                )}
+                {'typeBreakdown' in actionResult && Array.isArray(actionResult.typeBreakdown) && actionResult.typeBreakdown.length > 0 && (
+                  <div className="space-y-1">
+                    <p className="text-xs text-gray-500 uppercase tracking-wider">By Type</p>
+                    {(actionResult.typeBreakdown as Array<Record<string, unknown>>).map((t, i) => (
+                      <div key={i} className="flex justify-between text-xs bg-lattice-surface rounded px-2 py-1">
+                        <span className="text-gray-300">{String(t.type)}</span>
+                        <span className="text-neon-cyan">{String(t.count)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            {'totalMatches' in actionResult && (
+              <div className="space-y-2">
+                <p className="text-gray-400">Query: <span className="text-white">{String(actionResult.query)}</span> — <span className="text-neon-cyan font-bold">{String(actionResult.totalMatches)}</span> matches</p>
+                {'matches' in actionResult && Array.isArray(actionResult.matches) && actionResult.matches.length > 0 && (
+                  <div className="space-y-1">
+                    {(actionResult.matches as Array<Record<string, unknown>>).map((m, i) => (
+                      <div key={i} className="bg-lattice-surface rounded px-3 py-2 text-xs">
+                        <p className="text-neon-cyan font-medium">{String(m.citation || m.id)}</p>
+                        <p className="text-gray-400 line-clamp-2">{String(m.text || m.summary || '')}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            {'overdue' in actionResult && Array.isArray(actionResult.overdue) && (
+              <div className="space-y-2">
+                {'summary' in actionResult && actionResult.summary && typeof actionResult.summary === 'object' && (
+                  <div className="flex gap-4 text-xs">
+                    {Object.entries(actionResult.summary as Record<string, unknown>).map(([k, v]) => (
+                      <span key={k} className="text-gray-400">{k}: <span className="text-neon-cyan">{String(v)}</span></span>
+                    ))}
+                  </div>
+                )}
+                {actionResult.overdue.length > 0 && (
+                  <div>
+                    <p className="text-xs text-red-400 font-semibold mb-1">Overdue ({actionResult.overdue.length})</p>
+                    {(actionResult.overdue as Array<Record<string, unknown>>).map((d, i) => (
+                      <div key={i} className="text-xs bg-red-400/10 border border-red-400/20 rounded px-2 py-1 mb-1">
+                        <span className="text-red-400">{String(d.title || d.name)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {'urgent' in actionResult && Array.isArray(actionResult.urgent) && actionResult.urgent.length > 0 && (
+                  <div>
+                    <p className="text-xs text-yellow-400 font-semibold mb-1">Urgent ({(actionResult.urgent as unknown[]).length})</p>
+                    {(actionResult.urgent as Array<Record<string, unknown>>).map((d, i) => (
+                      <div key={i} className="text-xs bg-yellow-400/10 border border-yellow-400/20 rounded px-2 py-1 mb-1">
+                        <span className="text-yellow-400">{String(d.title || d.name)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            {'adRevenue' in actionResult || 'totalMonthlyRevenue' in actionResult ? (
+              <div className="space-y-2">
+                {'totals' in actionResult && actionResult.totals && typeof actionResult.totals === 'object' && (
+                  <div className="flex gap-4">
+                    {Object.entries(actionResult.totals as Record<string, unknown>).map(([k, v]) => (
+                      <span key={k} className="text-gray-400 text-xs">{k}: <span className="text-neon-green font-bold">${String(v)}</span></span>
+                    ))}
+                  </div>
+                )}
+                {'attorneyBreakdown' in actionResult && Array.isArray(actionResult.attorneyBreakdown) && (
+                  <div className="space-y-1">
+                    <p className="text-xs text-gray-500 uppercase tracking-wider">By Attorney</p>
+                    {(actionResult.attorneyBreakdown as Array<Record<string, unknown>>).map((a, i) => (
+                      <div key={i} className="flex justify-between text-xs bg-lattice-surface rounded px-2 py-1">
+                        <span className="text-gray-300">{String(a.name || a.attorney)}</span>
+                        <span className="text-neon-green">${String(a.total || a.amount || 0)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : null}
+            {'message' in actionResult && <p className="text-gray-400">{String(actionResult.message)}</p>}
+          </div>
+        )}
       </div>
 
       <ConnectiveTissueBar lensId="ext_law" />

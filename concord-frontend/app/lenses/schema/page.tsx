@@ -5,7 +5,8 @@ import { useMutation } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useState } from 'react';
-import { FileCode, Plus, Check, X, Database, Code, FileJson, Tag } from 'lucide-react';
+import { FileCode, Plus, Check, X, Database, Code, FileJson, Tag, Zap, GitCompare } from 'lucide-react';
+import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { motion } from 'framer-motion';
 import { ErrorState } from '@/components/common/EmptyState';
 import { showToast } from '@/components/common/Toasts';
@@ -45,6 +46,21 @@ export default function SchemaLensPage() {
       setValidationResult({ valid: false, errors: [{ field: 'API', error: err instanceof Error ? err.message : 'Validation request failed' }] });
     },
   });
+
+  const runSchemaAction = useRunArtifact('schema');
+  const [schemaActionResult, setSchemaActionResult] = useState<Record<string, unknown> | null>(null);
+  const [schemaActiveAction, setSchemaActiveAction] = useState<string | null>(null);
+
+  const handleSchemaAction = async (action: string) => {
+    const id = schemaItems[0]?.id;
+    if (!id) return;
+    setSchemaActiveAction(action);
+    try {
+      const res = await runSchemaAction.mutateAsync({ id, action });
+      setSchemaActionResult({ action, ...(res.result as Record<string, unknown>) });
+    } catch (err) { console.error('Schema action failed:', err); }
+    finally { setSchemaActiveAction(null); }
+  };
 
   const handleValidate = () => {
     try {
@@ -224,6 +240,65 @@ export default function SchemaLensPage() {
       </div>
 
       <RealtimeDataPanel data={realtimeInsights} />
+
+      {/* Schema Domain Actions */}
+      <div className="panel p-4 space-y-3">
+        <h3 className="text-sm font-semibold text-neon-blue flex items-center gap-2"><Database className="w-4 h-4" /> Schema Operations</h3>
+        <div className="flex flex-wrap gap-2">
+          {[
+            { action: 'schemaValidate', label: 'Validate Schema' },
+            { action: 'schemaDiff', label: 'Schema Diff' },
+            { action: 'schemaEvolution', label: 'Schema Evolution' },
+          ].map(({ action, label }) => (
+            <button key={action} onClick={() => handleSchemaAction(action)} disabled={schemaActiveAction === action || !schemaItems[0]?.id}
+              className="px-3 py-1.5 text-xs bg-neon-blue/10 border border-neon-blue/20 rounded-lg hover:bg-neon-blue/20 disabled:opacity-50 flex items-center gap-1.5">
+              {schemaActiveAction === action ? <div className="w-3 h-3 border border-neon-blue border-t-transparent rounded-full animate-spin" /> : <Zap className="w-3 h-3 text-neon-blue" />}
+              {label}
+            </button>
+          ))}
+        </div>
+        {schemaActionResult && (
+          <div className="p-3 bg-black/40 rounded-lg border border-neon-blue/20 text-xs space-y-2">
+            {schemaActionResult.action === 'schemaValidate' && (
+              <div className="space-y-1">
+                <div className="flex gap-4 flex-wrap">
+                  <span className={`font-semibold ${schemaActionResult.valid ? 'text-green-400' : 'text-red-400'}`}>{schemaActionResult.valid ? '✓ Valid schema' : '✗ Invalid schema'}</span>
+                  <span className="text-gray-400">Errors: <span className="text-red-400 font-mono">{String(schemaActionResult.errorCount ?? 0)}</span></span>
+                  <span className="text-gray-400">Warnings: <span className="text-yellow-400 font-mono">{String(schemaActionResult.warningCount ?? 0)}</span></span>
+                </div>
+                {Array.isArray(schemaActionResult.errors) && schemaActionResult.errors.length > 0 && (
+                  <div className="space-y-0.5">{(schemaActionResult.errors as {field:string;message:string}[]).map((e, i) => <p key={i} className="text-red-300">✗ {e.field}: {e.message}</p>)}</div>
+                )}
+                {schemaActionResult.message && <p className="text-gray-400 italic">{String(schemaActionResult.message)}</p>}
+              </div>
+            )}
+            {schemaActionResult.action === 'schemaDiff' && (
+              <div className="space-y-1">
+                <div className="flex gap-4 flex-wrap">
+                  <span className="text-gray-400">Added: <span className="text-green-400 font-mono">{String(schemaActionResult.addedFields ?? 0)}</span></span>
+                  <span className="text-gray-400">Removed: <span className="text-red-400 font-mono">{String(schemaActionResult.removedFields ?? 0)}</span></span>
+                  <span className="text-gray-400">Modified: <span className="text-yellow-400 font-mono">{String(schemaActionResult.modifiedFields ?? 0)}</span></span>
+                  <span className={`${schemaActionResult.breakingChanges ? 'text-red-400' : 'text-green-400'}`}>{schemaActionResult.breakingChanges ? 'Breaking changes' : 'Non-breaking'}</span>
+                </div>
+                {schemaActionResult.message && <p className="text-gray-400 italic">{String(schemaActionResult.message)}</p>}
+              </div>
+            )}
+            {schemaActionResult.action === 'schemaEvolution' && (
+              <div className="space-y-1">
+                <div className="flex gap-4 flex-wrap">
+                  <span className="text-gray-400">Version: <span className="text-neon-blue font-mono">{String(schemaActionResult.version ?? '')}</span></span>
+                  <span className="text-gray-400">Strategy: <span className="text-white capitalize">{String(schemaActionResult.migrationStrategy ?? '')}</span></span>
+                </div>
+                {Array.isArray(schemaActionResult.steps) && schemaActionResult.steps.length > 0 && (
+                  <div className="space-y-0.5">{(schemaActionResult.steps as string[]).map((s, i) => <p key={i} className="text-gray-300">→ {s}</p>)}</div>
+                )}
+                {schemaActionResult.message && <p className="text-gray-400 italic">{String(schemaActionResult.message)}</p>}
+              </div>
+            )}
+            <button onClick={() => setSchemaActionResult(null)} className="text-gray-600 hover:text-gray-400 text-xs flex items-center gap-1"><X className="w-3 h-3" /> Dismiss</button>
+          </div>
+        )}
+      </div>
 
       {showCreate && (
         <CreateSchemaModal

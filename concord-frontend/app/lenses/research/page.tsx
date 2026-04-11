@@ -5,7 +5,8 @@ import { motion } from 'framer-motion';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api/client';
-import { Search, Filter, ArrowRight, BookOpen, Tag, Calendar, Layers, ChevronDown, RefreshCw, Beaker, Download, X, AlertCircle, Zap, Save, FileText, Microscope, CheckCircle } from 'lucide-react';
+import { Search, Filter, ArrowRight, BookOpen, Tag, Calendar, Layers, ChevronDown, RefreshCw, Beaker, Download, X, AlertCircle, Zap, Save, FileText, Microscope, CheckCircle, BarChart3 } from 'lucide-react';
+import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { cn } from '@/lib/utils';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import { ErrorState } from '@/components/common/EmptyState';
@@ -49,6 +50,24 @@ export default function ResearchLensPage() {
   const [sortBy, setSortBy] = useState<'relevance' | 'date' | 'tier'>('date');
   const [selectedDtu, setSelectedDtu] = useState<DTUResult | null>(null);
   const [showFeatures, setShowFeatures] = useState(true);
+
+  /* ---------- domain actions ---------- */
+  const { items: researchArtifacts } = useLensDTUs as unknown as { items: {id: string}[] };
+  const runResearchAction = useRunArtifact('research');
+  const [researchActionResult, setResearchActionResult] = useState<Record<string, unknown> | null>(null);
+  const [researchActiveAction, setResearchActiveAction] = useState<string | null>(null);
+
+  const handleResearchAction = useCallback(async (action: string) => {
+    const all = [...hyperDTUs, ...megaDTUs, ...regularDTUs];
+    const id = all[0]?.id;
+    if (!id) return;
+    setResearchActiveAction(action);
+    try {
+      const res = await runResearchAction.mutateAsync({ id, action });
+      setResearchActionResult({ action, ...(res.result as Record<string, unknown>) });
+    } catch (err) { console.error('Research action failed:', err); }
+    finally { setResearchActiveAction(null); }
+  }, [hyperDTUs, megaDTUs, regularDTUs, runResearchAction]);
 
   /* ---------- hypothesis / generate ---------- */
   const [hypothesis, setHypothesis] = useState('');
@@ -555,6 +574,62 @@ export default function ResearchLensPage() {
           />
         </>
       )}
+      </div>
+
+      {/* Research Domain Actions */}
+      <div className="panel p-4 space-y-3">
+        <h3 className="text-sm font-semibold text-neon-cyan flex items-center gap-2"><Microscope className="w-4 h-4" /> Research Analysis</h3>
+        <div className="flex flex-wrap gap-2">
+          {[
+            { action: 'citationNetwork', label: 'Citation Network' },
+            { action: 'methodologyScore', label: 'Methodology Score' },
+            { action: 'reproducibilityCheck', label: 'Reproducibility Check' },
+          ].map(({ action, label }) => (
+            <button key={action} onClick={() => handleResearchAction(action)} disabled={researchActiveAction === action}
+              className="px-3 py-1.5 text-xs bg-neon-cyan/10 border border-neon-cyan/20 rounded-lg hover:bg-neon-cyan/20 disabled:opacity-50 flex items-center gap-1.5">
+              {researchActiveAction === action ? <div className="w-3 h-3 border border-neon-cyan border-t-transparent rounded-full animate-spin" /> : <Zap className="w-3 h-3 text-neon-cyan" />}
+              {label}
+            </button>
+          ))}
+        </div>
+        {researchActionResult && (
+          <div className="p-3 bg-black/40 rounded-lg border border-neon-cyan/20 text-xs space-y-2">
+            {researchActionResult.action === 'citationNetwork' && (
+              <div className="space-y-1">
+                <div className="flex gap-4 flex-wrap">
+                  <span className="text-gray-400">Papers: <span className="text-white font-mono">{String(researchActionResult.totalPapers ?? '')}</span></span>
+                  <span className="text-gray-400">Citations: <span className="text-neon-cyan font-mono">{String(researchActionResult.totalCitations ?? '')}</span></span>
+                  <span className="text-gray-400">H-index: <span className="text-neon-blue font-mono">{String(researchActionResult.hIndex ?? '')}</span></span>
+                </div>
+                {researchActionResult.message && <p className="text-gray-400 italic">{String(researchActionResult.message)}</p>}
+              </div>
+            )}
+            {researchActionResult.action === 'methodologyScore' && (
+              <div className="space-y-1">
+                <div className="flex gap-4 flex-wrap">
+                  <span className="text-gray-400">Score: <span className={`font-mono font-bold ${(researchActionResult.score as number) >= 7 ? 'text-green-400' : (researchActionResult.score as number) >= 4 ? 'text-yellow-400' : 'text-red-400'}`}>{String(researchActionResult.score ?? '')}/10</span></span>
+                  <span className="text-gray-400">Quality: <span className="text-white">{String(researchActionResult.quality ?? '')}</span></span>
+                </div>
+                {Array.isArray(researchActionResult.strengths) && researchActionResult.strengths.length > 0 && (
+                  <div className="space-y-0.5">{(researchActionResult.strengths as string[]).map((s, i) => <p key={i} className="text-green-300">✓ {s}</p>)}</div>
+                )}
+                {researchActionResult.message && <p className="text-gray-400 italic">{String(researchActionResult.message)}</p>}
+              </div>
+            )}
+            {researchActionResult.action === 'reproducibilityCheck' && (
+              <div className="space-y-1">
+                <div className="flex gap-4 flex-wrap">
+                  <span className="text-gray-400">Score: <span className={`font-mono font-bold ${(researchActionResult.reproducibilityScore as number) >= 7 ? 'text-green-400' : (researchActionResult.reproducibilityScore as number) >= 4 ? 'text-yellow-400' : 'text-red-400'}`}>{String(researchActionResult.reproducibilityScore ?? '')}/10</span></span>
+                </div>
+                {Array.isArray(researchActionResult.issues) && researchActionResult.issues.length > 0 && (
+                  <div className="space-y-0.5">{(researchActionResult.issues as string[]).map((s, i) => <p key={i} className="text-yellow-300">⚠ {s}</p>)}</div>
+                )}
+                {researchActionResult.message && <p className="text-gray-400 italic">{String(researchActionResult.message)}</p>}
+              </div>
+            )}
+            <button onClick={() => setResearchActionResult(null)} className="text-gray-600 hover:text-gray-400 text-xs flex items-center gap-1"><X className="w-3 h-3" /> Dismiss</button>
+          </div>
+        )}
       </div>
 
       {/* Lens Features */}

@@ -3,8 +3,9 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useLensNav } from '@/hooks/useLensNav';
-import { Clock, Target, TrendingUp, Calendar, Milestone, Rocket, Loader2, Layers, ChevronDown, Database, Server, HardDrive, Cloud, RefreshCw, Archive, GitMerge } from 'lucide-react';
+import { Clock, Target, TrendingUp, Calendar, Milestone, Rocket, Loader2, Layers, ChevronDown, Database, Server, HardDrive, Cloud, RefreshCw, Archive, GitMerge, Play } from 'lucide-react';
 import { useLensData } from '@/lib/hooks/use-lens-data';
+import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { ErrorState } from '@/components/common/EmptyState';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -39,6 +40,20 @@ export default function LegacyLensPage() {
     status: item.data.status,
     confidence: item.data.confidence,
   })).sort((a, b) => a.year - b.year);
+
+  const runAction = useRunArtifact('legacy');
+  const [actionResult, setActionResult] = useState<Record<string, unknown> | null>(null);
+  const [isRunning, setIsRunning] = useState<string | null>(null);
+  const handleAction = async (action: string) => {
+    const targetId = milestoneItems[0]?.id;
+    if (!targetId) { setActionResult({ message: 'Add a legacy milestone first to run analysis.' }); return; }
+    setIsRunning(action);
+    try {
+      const res = await runAction.mutateAsync({ id: targetId, action });
+      setActionResult(res.result as Record<string, unknown>);
+    } catch (e) { console.error(`Action ${action} failed:`, e); }
+    finally { setIsRunning(null); }
+  };
 
   const currentYear = new Date().getFullYear();
   const bioAge = milestones.length > 0
@@ -340,6 +355,96 @@ export default function LegacyLensPage() {
             2,377 of 3,490 total components migrated across all legacy systems
           </p>
         </div>
+      </div>
+
+      {/* Backend Action Panel */}
+      <div className="panel p-4 space-y-3">
+        <h2 className="font-semibold flex items-center gap-2">
+          <Archive className="w-4 h-4 text-neon-purple" />
+          Legacy Analysis
+        </h2>
+        <div className="flex flex-wrap gap-2">
+          {[
+            { action: 'technicalDebt', label: 'Technical Debt' },
+            { action: 'migrationReadiness', label: 'Migration Readiness' },
+            { action: 'riskMap', label: 'Risk Map' },
+          ].map(({ action, label }) => (
+            <button key={action} onClick={() => handleAction(action)} disabled={!!isRunning}
+              className="btn-secondary text-sm flex items-center gap-1 disabled:opacity-50">
+              {isRunning === action ? <Loader2 className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
+              {label}
+            </button>
+          ))}
+        </div>
+        {actionResult && (
+          <div className="bg-lattice-deep rounded-lg p-4 space-y-3 text-sm">
+            {'modules' in actionResult && Array.isArray(actionResult.modules) && (
+              <div className="space-y-2">
+                {'summary' in actionResult && actionResult.summary && typeof actionResult.summary === 'object' && (
+                  <div className="flex flex-wrap gap-4 text-xs">
+                    {Object.entries(actionResult.summary as Record<string, unknown>).map(([k, v]) => (
+                      <span key={k} className="text-gray-400">{k}: <span className="text-neon-cyan font-bold">{String(v)}</span></span>
+                    ))}
+                  </div>
+                )}
+                {'topDebtSources' in actionResult && Array.isArray(actionResult.topDebtSources) && actionResult.topDebtSources.length > 0 && (
+                  <div className="space-y-1">
+                    <p className="text-xs text-gray-500 uppercase tracking-wider">Top Debt Sources</p>
+                    {(actionResult.topDebtSources as Array<Record<string, unknown>>).map((m, i) => (
+                      <div key={i} className="flex justify-between text-xs bg-lattice-surface rounded px-2 py-1">
+                        <span className="text-gray-300">{String(m.name || m.module)}</span>
+                        <span className="text-red-400">{String(m.debtScore || m.score || 0)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            {'moduleReadiness' in actionResult && Array.isArray(actionResult.moduleReadiness) && (
+              <div className="space-y-2">
+                {'summary' in actionResult && actionResult.summary && typeof actionResult.summary === 'object' && (
+                  <div className="flex flex-wrap gap-4 text-xs">
+                    {Object.entries(actionResult.summary as Record<string, unknown>).map(([k, v]) => (
+                      <span key={k} className="text-gray-400">{k}: <span className="text-neon-cyan">{String(v)}</span></span>
+                    ))}
+                  </div>
+                )}
+                {'migrationOrder' in actionResult && Array.isArray(actionResult.migrationOrder) && (
+                  <div>
+                    <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">Migration Order</p>
+                    <div className="flex flex-wrap gap-1">
+                      {(actionResult.migrationOrder as string[]).map((m, i) => (
+                        <span key={i} className="text-xs bg-neon-cyan/10 border border-neon-cyan/20 rounded px-2 py-0.5 text-neon-cyan">{i + 1}. {m}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+            {'components' in actionResult && Array.isArray(actionResult.components) && (
+              <div className="space-y-2">
+                {'summary' in actionResult && actionResult.summary && typeof actionResult.summary === 'object' && (
+                  <div className="flex flex-wrap gap-4 text-xs">
+                    {Object.entries(actionResult.summary as Record<string, unknown>).map(([k, v]) => (
+                      <span key={k} className="text-gray-400">{k}: <span className="text-yellow-400">{String(v)}</span></span>
+                    ))}
+                  </div>
+                )}
+                {'keyPersonRisks' in actionResult && Array.isArray(actionResult.keyPersonRisks) && actionResult.keyPersonRisks.length > 0 && (
+                  <div>
+                    <p className="text-xs text-red-400 font-semibold mb-1">Key Person Risks</p>
+                    {(actionResult.keyPersonRisks as Array<Record<string, unknown>>).map((r, i) => (
+                      <div key={i} className="text-xs bg-red-400/10 border border-red-400/20 rounded px-2 py-1 mb-1 text-red-400">
+                        {String(r.person || r.name)} — {String(r.risk || r.level || 'high')}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            {'message' in actionResult && <p className="text-gray-400">{String(actionResult.message)}</p>}
+          </div>
+        )}
       </div>
 
       <ConnectiveTissueBar lensId="legacy" />

@@ -12,8 +12,9 @@ import {
   FolderOpen, BarChart3, Trash2,
   Star, RotateCcw,
   Zap, Target, Award, Layers, Tag, Calendar, ArrowRight,
-  Play, XCircle,
+  Play, XCircle, X,
 } from 'lucide-react';
+import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
@@ -127,6 +128,21 @@ export default function SRSLensPage() {
   });
   const persistedCards: SRSItem[] = cardItems.map(i => ({ ...(i.data as unknown as SRSItem), id: i.id }));
   const persistedDecks: Deck[] = deckItems.map(i => ({ ...(i.data as unknown as Deck), id: i.id }));
+  const runSrsAction = useRunArtifact('srs');
+  const [srsActionResult, setSrsActionResult] = useState<Record<string, unknown> | null>(null);
+  const [srsActiveAction, setSrsActiveAction] = useState<string | null>(null);
+
+  const handleSrsAction = useCallback(async (action: string) => {
+    const id = cardItems[0]?.id;
+    if (!id) return;
+    setSrsActiveAction(action);
+    try {
+      const res = await runSrsAction.mutateAsync({ id, action });
+      setSrsActionResult({ action, ...(res.result as Record<string, unknown>) });
+    } catch (err) { console.error('SRS action failed:', err); }
+    finally { setSrsActiveAction(null); }
+  }, [cardItems, runSrsAction]);
+
   const [view, setView] = useState<ViewMode>('study');
   const [studyMode, setStudyMode] = useState<StudyMode>('normal');
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -1144,6 +1160,76 @@ export default function SRSLensPage() {
           />
         </>
       )}
+
+      {/* SRS Domain Actions */}
+      <div className="panel p-4 space-y-3">
+        <h3 className="text-sm font-semibold text-neon-blue flex items-center gap-2"><Brain className="w-4 h-4" /> SRS Analysis</h3>
+        <div className="flex flex-wrap gap-2">
+          {[
+            { action: 'spacedRepetitionSchedule', label: 'SRS Schedule' },
+            { action: 'retentionCurve', label: 'Retention Curve' },
+            { action: 'cardDifficulty', label: 'Card Difficulty' },
+            { action: 'deckStats', label: 'Deck Stats' },
+          ].map(({ action, label }) => (
+            <button key={action} onClick={() => handleSrsAction(action)} disabled={srsActiveAction === action || !cardItems[0]?.id}
+              className="px-3 py-1.5 text-xs bg-neon-blue/10 border border-neon-blue/20 rounded-lg hover:bg-neon-blue/20 disabled:opacity-50 flex items-center gap-1.5">
+              {srsActiveAction === action ? <div className="w-3 h-3 border border-neon-blue border-t-transparent rounded-full animate-spin" /> : <Zap className="w-3 h-3 text-neon-blue" />}
+              {label}
+            </button>
+          ))}
+        </div>
+        {srsActionResult && (
+          <div className="p-3 bg-black/40 rounded-lg border border-neon-blue/20 text-xs space-y-2">
+            {srsActionResult.action === 'spacedRepetitionSchedule' && (
+              <div className="space-y-1">
+                <div className="flex gap-4 flex-wrap">
+                  <span className="text-gray-400">Total: <span className="text-white font-mono">{String(srsActionResult.totalCards ?? '')}</span></span>
+                  <span className="text-gray-400">Due now: <span className="text-red-400 font-mono">{String(srsActionResult.dueNow ?? 0)}</span></span>
+                  <span className="text-gray-400">Due soon: <span className="text-yellow-400 font-mono">{String(srsActionResult.dueSoon ?? 0)}</span></span>
+                  <span className="text-gray-400">Avg ease: <span className="text-neon-blue font-mono">{String(srsActionResult.avgEase ?? '')}</span></span>
+                </div>
+                {srsActionResult.message && <p className="text-gray-400 italic">{String(srsActionResult.message)}</p>}
+              </div>
+            )}
+            {srsActionResult.action === 'retentionCurve' && (
+              <div className="space-y-1">
+                <div className="flex gap-4 flex-wrap">
+                  <span className="text-gray-400">Current retention: <span className={`font-mono font-bold ${(srsActionResult.currentRetention as number) >= 80 ? 'text-green-400' : 'text-yellow-400'}`}>{String(srsActionResult.currentRetention ?? '')}%</span></span>
+                  <span className="text-gray-400">Half-life: <span className="text-neon-blue font-mono">{String(srsActionResult.halfLifeDays ?? '')} days</span></span>
+                  <span className="text-gray-400">Correct rate: <span className="text-white font-mono">{String(srsActionResult.correctRate ?? '')}%</span></span>
+                </div>
+                <p className="text-gray-300">{String(srsActionResult.recommendation ?? '')}</p>
+                {srsActionResult.message && <p className="text-gray-400 italic">{String(srsActionResult.message)}</p>}
+              </div>
+            )}
+            {srsActionResult.action === 'cardDifficulty' && (
+              <div className="space-y-1">
+                <div className="flex gap-4 flex-wrap">
+                  <span className="text-gray-400">Easy: <span className="text-green-400 font-mono">{String((srsActionResult.distribution as Record<string,number>)?.easy ?? 0)}</span></span>
+                  <span className="text-gray-400">Medium: <span className="text-yellow-400 font-mono">{String((srsActionResult.distribution as Record<string,number>)?.medium ?? 0)}</span></span>
+                  <span className="text-gray-400">Hard: <span className="text-red-400 font-mono">{String((srsActionResult.distribution as Record<string,number>)?.hard ?? 0)}</span></span>
+                  <span className="text-gray-400">Avg accuracy: <span className="text-white font-mono">{String(srsActionResult.avgAccuracy ?? '')}%</span></span>
+                </div>
+                {srsActionResult.message && <p className="text-gray-400 italic">{String(srsActionResult.message)}</p>}
+              </div>
+            )}
+            {srsActionResult.action === 'deckStats' && (
+              <div className="space-y-1">
+                <p className="text-neon-blue font-semibold">{String(srsActionResult.deckName ?? '')}</p>
+                <div className="flex gap-4 flex-wrap">
+                  <span className="text-gray-400">Mastered: <span className="text-green-400 font-mono">{String(srsActionResult.mastered ?? 0)}</span></span>
+                  <span className="text-gray-400">Learning: <span className="text-yellow-400 font-mono">{String(srsActionResult.learning ?? 0)}</span></span>
+                  <span className="text-gray-400">New: <span className="text-neon-blue font-mono">{String(srsActionResult.new ?? 0)}</span></span>
+                  <span className="text-gray-400">Mastery: <span className="text-white font-mono">{String(srsActionResult.masteryRate ?? '')}%</span></span>
+                  <span className="text-gray-400">Health: <span className="text-neon-green">{String(srsActionResult.healthScore ?? '')}</span></span>
+                </div>
+                {srsActionResult.message && <p className="text-gray-400 italic">{String(srsActionResult.message)}</p>}
+              </div>
+            )}
+            <button onClick={() => setSrsActionResult(null)} className="text-gray-600 hover:text-gray-400 text-xs flex items-center gap-1"><X className="w-3 h-3" /> Dismiss</button>
+          </div>
+        )}
+      </div>
               </div>
             </motion.div>
           </motion.div>

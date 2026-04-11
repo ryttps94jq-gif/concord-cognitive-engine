@@ -5,7 +5,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api/client';
 import { useUIStore } from '@/store/ui';
 import { useState } from 'react';
-import { Inbox, Play, Trash2, Clock, Zap, Globe, FileText, Layers, ChevronDown, Activity, Bot, Coins, CheckCircle2, AlertCircle, RefreshCw, BarChart3, ListOrdered, Timer } from 'lucide-react';
+import { Inbox, Play, Trash2, Clock, Zap, Globe, FileText, Layers, ChevronDown, Activity, Bot, Coins, CheckCircle2, AlertCircle, RefreshCw, BarChart3, ListOrdered, Timer, X } from 'lucide-react';
+import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
+import { useLensData } from '@/lib/hooks/use-lens-data';
 import { motion } from 'framer-motion';
 import { ConnectiveTissueBar } from '@/components/lens/ConnectiveTissueBar';
 import { ErrorState } from '@/components/common/EmptyState';
@@ -30,6 +32,22 @@ export default function QueueLensPage() {
   const queryClient = useQueryClient();
   const [selectedQueue, setSelectedQueue] = useState<'ingest' | 'autocrawl' | 'terminal'>('ingest');
   const [showFeatures, setShowFeatures] = useState(true);
+
+  const { items: queueArtifacts } = useLensData('queue', 'queue', { seed: [] });
+  const runAction = useRunArtifact('queue');
+  const [queueActionResult, setQueueActionResult] = useState<Record<string, unknown> | null>(null);
+  const [queueActiveAction, setQueueActiveAction] = useState<string | null>(null);
+
+  const handleQueueAction = async (action: string) => {
+    const id = queueArtifacts[0]?.id;
+    if (!id) return;
+    setQueueActiveAction(action);
+    try {
+      const res = await runAction.mutateAsync({ id, action });
+      setQueueActionResult({ action, ...(res.result as Record<string, unknown>) });
+    } catch (err) { console.error('Queue action failed:', err); }
+    finally { setQueueActiveAction(null); }
+  };
 
   // Backend: GET /api/status for queue counts
   const { data: status, isLoading, isError: isError, error: error, refetch: refetch,} = useQuery({
@@ -512,6 +530,60 @@ export default function QueueLensPage() {
             ))}
           </div>
         </div>
+      </div>
+
+      {/* Queue Domain Actions */}
+      <div className="panel p-4 space-y-3">
+        <h3 className="text-sm font-semibold text-neon-cyan flex items-center gap-2"><BarChart3 className="w-4 h-4" /> Queue Analysis Actions</h3>
+        <div className="flex flex-wrap gap-2">
+          {[
+            { action: 'queueAnalytics', label: 'Queue Analytics' },
+            { action: 'prioritySchedule', label: 'Priority Schedule' },
+            { action: 'backpressure', label: 'Backpressure' },
+          ].map(({ action, label }) => (
+            <button key={action} onClick={() => handleQueueAction(action)} disabled={queueActiveAction === action || !queueArtifacts[0]?.id}
+              className="px-3 py-1.5 text-xs bg-neon-cyan/10 border border-neon-cyan/20 rounded-lg hover:bg-neon-cyan/20 disabled:opacity-50 flex items-center gap-1.5">
+              {queueActiveAction === action ? <div className="w-3 h-3 border border-neon-cyan border-t-transparent rounded-full animate-spin" /> : <Activity className="w-3 h-3 text-neon-cyan" />}
+              {label}
+            </button>
+          ))}
+        </div>
+        {queueActionResult && (
+          <div className="p-3 bg-black/40 rounded-lg border border-neon-cyan/20 text-xs space-y-2">
+            {queueActionResult.action === 'queueAnalytics' && (
+              <div className="space-y-1">
+                <div className="flex gap-4 flex-wrap">
+                  <span className="text-gray-400">Arrival rate: <span className="text-neon-cyan font-mono">{String((queueActionResult.arrivalRate as number)?.toFixed?.(3) ?? queueActionResult.arrivalRate ?? 'N/A')}/s</span></span>
+                  <span className="text-gray-400">Utilization: <span className={`font-mono ${(queueActionResult.utilization as number) > 0.8 ? 'text-red-400' : (queueActionResult.utilization as number) > 0.5 ? 'text-yellow-400' : 'text-green-400'}`}>{String(((queueActionResult.utilization as number) * 100)?.toFixed?.(1) ?? '')}%</span></span>
+                  <span className={`${queueActionResult.stable ? 'text-green-400' : 'text-red-400'}`}>{queueActionResult.stable ? 'Stable' : 'Unstable'}</span>
+                </div>
+                {queueActionResult.message && <p className="text-gray-400 italic">{String(queueActionResult.message)}</p>}
+              </div>
+            )}
+            {queueActionResult.action === 'prioritySchedule' && (
+              <div className="space-y-1">
+                {queueActionResult.message ? <p className="text-gray-400 italic">{String(queueActionResult.message)}</p> : (
+                  <div className="flex gap-4 flex-wrap">
+                    <span className="text-gray-400">High: <span className="text-red-400 font-mono">{String(queueActionResult.highPriorityCount ?? 0)}</span></span>
+                    <span className="text-gray-400">Normal: <span className="text-neon-blue font-mono">{String(queueActionResult.normalPriorityCount ?? 0)}</span></span>
+                    <span className="text-gray-400">Low: <span className="text-gray-400 font-mono">{String(queueActionResult.lowPriorityCount ?? 0)}</span></span>
+                  </div>
+                )}
+              </div>
+            )}
+            {queueActionResult.action === 'backpressure' && (
+              <div className="space-y-1">
+                {queueActionResult.message ? <p className="text-gray-400 italic">{String(queueActionResult.message)}</p> : (
+                  <div className="flex gap-4 flex-wrap">
+                    <span className="text-gray-400">Status: <span className={`font-mono ${queueActionResult.backpressureActive ? 'text-red-400' : 'text-green-400'}`}>{queueActionResult.backpressureActive ? 'Active' : 'Normal'}</span></span>
+                    <span className="text-gray-400">Load: <span className="text-neon-cyan font-mono">{String(queueActionResult.currentLoad ?? '')}</span></span>
+                  </div>
+                )}
+              </div>
+            )}
+            <button onClick={() => setQueueActionResult(null)} className="text-gray-600 hover:text-gray-400 text-xs flex items-center gap-1"><X className="w-3 h-3" /> Dismiss</button>
+          </div>
+        )}
       </div>
 
       {/* ConnectiveTissueBar */}

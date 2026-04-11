@@ -27,8 +27,12 @@ import {
   BarChart3,
   Play,
   Hash,
-  Activity
+  Activity,
+  Zap,
+  X,
 } from 'lucide-react';
+import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
+import { useLensData } from '@/lib/hooks/use-lens-data';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
 import { ErrorState } from '@/components/common/EmptyState';
@@ -78,6 +82,22 @@ type ActiveTab = 'code' | 'issues' | 'pulls' | 'actions' | 'projects' | 'wiki' |
 export default function ReposLensPage() {
   useLensNav('repos');
   const { latestData: realtimeData, alerts: realtimeAlerts, insights: realtimeInsights, isLive, lastUpdated } = useRealtimeLens('repos');
+
+  const { items: repoArtifacts } = useLensData('repos', 'repo', { seed: [] });
+  const runReposAction = useRunArtifact('repos');
+  const [reposActionResult, setReposActionResult] = useState<Record<string, unknown> | null>(null);
+  const [reposActiveAction, setReposActiveAction] = useState<string | null>(null);
+
+  const handleReposAction = async (action: string) => {
+    const id = repoArtifacts[0]?.id;
+    if (!id) return;
+    setReposActiveAction(action);
+    try {
+      const res = await runReposAction.mutateAsync({ id, action });
+      setReposActionResult({ action, ...(res.result as Record<string, unknown>) });
+    } catch (err) { console.error('Repos action failed:', err); }
+    finally { setReposActiveAction(null); }
+  };
 
   const [activeTab, setActiveTab] = useState<ActiveTab>('code');
   const [selectedRepo, setSelectedRepo] = useState<string | null>(null);
@@ -555,6 +575,59 @@ export default function ReposLensPage() {
           compact
         />
       )}
+
+      {/* Repos Domain Actions */}
+      <div className="panel p-4 space-y-3">
+        <h3 className="text-sm font-semibold text-neon-cyan flex items-center gap-2"><GitBranch className="w-4 h-4" /> Repository Analysis</h3>
+        <div className="flex flex-wrap gap-2">
+          {[
+            { action: 'codeComplexity', label: 'Code Complexity' },
+            { action: 'commitAnalysis', label: 'Commit Analysis' },
+            { action: 'dependencyAudit', label: 'Dependency Audit' },
+          ].map(({ action, label }) => (
+            <button key={action} onClick={() => handleReposAction(action)} disabled={reposActiveAction === action || !repoArtifacts[0]?.id}
+              className="px-3 py-1.5 text-xs bg-neon-cyan/10 border border-neon-cyan/20 rounded-lg hover:bg-neon-cyan/20 disabled:opacity-50 flex items-center gap-1.5">
+              {reposActiveAction === action ? <div className="w-3 h-3 border border-neon-cyan border-t-transparent rounded-full animate-spin" /> : <Zap className="w-3 h-3 text-neon-cyan" />}
+              {label}
+            </button>
+          ))}
+        </div>
+        {reposActionResult && (
+          <div className="p-3 bg-black/40 rounded-lg border border-neon-cyan/20 text-xs space-y-2">
+            {reposActionResult.action === 'codeComplexity' && (
+              <div className="space-y-1">
+                <div className="flex gap-4 flex-wrap">
+                  <span className="text-gray-400">Files: <span className="text-white font-mono">{String(reposActionResult.totalFiles ?? '')}</span></span>
+                  <span className="text-gray-400">Avg complexity: <span className={`font-mono ${(reposActionResult.avgComplexity as number) > 20 ? 'text-red-400' : (reposActionResult.avgComplexity as number) > 10 ? 'text-yellow-400' : 'text-green-400'}`}>{String(reposActionResult.avgComplexity ?? '')}</span></span>
+                  <span className="text-gray-400">High complexity: <span className="text-red-400 font-mono">{String(reposActionResult.highComplexityFiles ?? 0)}</span></span>
+                </div>
+                {reposActionResult.message && <p className="text-gray-400 italic">{String(reposActionResult.message)}</p>}
+              </div>
+            )}
+            {reposActionResult.action === 'commitAnalysis' && (
+              <div className="space-y-1">
+                <div className="flex gap-4 flex-wrap">
+                  <span className="text-gray-400">Commits: <span className="text-white font-mono">{String(reposActionResult.totalCommits ?? '')}</span></span>
+                  <span className="text-gray-400">Authors: <span className="text-neon-cyan font-mono">{String(reposActionResult.uniqueAuthors ?? '')}</span></span>
+                  <span className="text-gray-400">Avg/day: <span className="text-neon-green font-mono">{String(reposActionResult.avgCommitsPerDay ?? '')}</span></span>
+                </div>
+                {reposActionResult.message && <p className="text-gray-400 italic">{String(reposActionResult.message)}</p>}
+              </div>
+            )}
+            {reposActionResult.action === 'dependencyAudit' && (
+              <div className="space-y-1">
+                <div className="flex gap-4 flex-wrap">
+                  <span className="text-gray-400">Total deps: <span className="text-white font-mono">{String(reposActionResult.totalDependencies ?? '')}</span></span>
+                  <span className="text-gray-400">Outdated: <span className="text-yellow-400 font-mono">{String(reposActionResult.outdatedCount ?? 0)}</span></span>
+                  <span className="text-gray-400">Vulnerable: <span className="text-red-400 font-mono">{String(reposActionResult.vulnerableCount ?? 0)}</span></span>
+                </div>
+                {reposActionResult.message && <p className="text-gray-400 italic">{String(reposActionResult.message)}</p>}
+              </div>
+            )}
+            <button onClick={() => setReposActionResult(null)} className="text-gray-600 hover:text-gray-400 text-xs flex items-center gap-1"><X className="w-3 h-3" /> Dismiss</button>
+          </div>
+        )}
+      </div>
       </div>
     </div>
   );

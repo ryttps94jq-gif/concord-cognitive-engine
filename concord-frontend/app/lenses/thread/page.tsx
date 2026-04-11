@@ -28,8 +28,11 @@ import {
   ArrowUp,
   ArrowDown,
   Maximize2,
-  Link2
+  Link2,
+  Zap,
+  X
 } from 'lucide-react';
+import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
