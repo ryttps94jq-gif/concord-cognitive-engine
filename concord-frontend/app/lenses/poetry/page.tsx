@@ -9,7 +9,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Feather, Plus, Search, Edit2, Trash2, BookOpen, X, Save, Sparkles,
   AlignLeft, Globe,
-  Hash, Music, Layers, Moon, Zap, ChevronDown,
+  Hash, Music, Layers, Moon, Zap,
 } from 'lucide-react';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { cn } from '@/lib/utils';

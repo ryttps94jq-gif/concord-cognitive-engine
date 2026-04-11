@@ -8,7 +8,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import {
   Lightbulb,
-  Pen,
   ListTodo,
   SlidersHorizontal,
   CheckCircle,

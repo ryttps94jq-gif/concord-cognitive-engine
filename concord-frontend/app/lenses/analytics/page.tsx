@@ -23,8 +23,6 @@ import {
   Layers,
   AlertTriangle,
   XCircle,
-  Target,
-  Activity,
 } from 'lucide-react';
 import { cn, formatNumber } from '@/lib/utils';
 import { api, apiHelpers } from '@/lib/api/client';

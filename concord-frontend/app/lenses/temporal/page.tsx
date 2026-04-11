@@ -10,9 +10,8 @@ import { cn } from '@/lib/utils';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import {
   Clock, Calendar, Timer, GitBranch, Play, Layers, ChevronDown,
-  Plus, Search, Trash2, X, BarChart3, Zap, ArrowRight,
-  ScanLine, Rewind, FastForward, History, Milestone, Target,
-  AlertTriangle, Activity,
+  Plus, Search, Trash2, X, BarChart3, Zap,
+  ScanLine, History,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';

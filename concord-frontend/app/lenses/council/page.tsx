@@ -51,8 +51,6 @@ import {
   Target,
   Layers,
   CircleDot,
-  Loader2,
-  TrendingDown,
   ClipboardCheck,
   HeartHandshake as HandshakeIcon,
 } from 'lucide-react';

@@ -16,7 +16,7 @@ import {
   MapPin, ExternalLink, Filter, GripVertical,
   Lightbulb, BarChart3, Flame, ChevronRight, Layers, ChevronDown, Eye,
   Map, Gauge, ClipboardCheck, UserCircle, Loader2, AlertTriangle,
-  CheckCircle2, XCircle, ChevronUp, Activity, Smile, Frown, Meh
+  CheckCircle2, XCircle, Activity, Smile, Frown, Meh
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';

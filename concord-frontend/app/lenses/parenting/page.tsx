@@ -9,10 +9,10 @@ import { ds } from '@/lib/design-system';
 import { cn } from '@/lib/utils';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import {
-  Baby, Plus, Search, Trash2, Calendar, Heart, Layers, ChevronDown,
-  Milestone, Clock, BookOpen, X, BarChart3, Activity, TrendingUp,
-  Utensils, Moon, GraduationCap, Stethoscope, Users, Zap,
-  AlertTriangle, CheckCircle2, NotebookPen, Star, Ruler,
+  Baby, Plus, Search, Trash2, Calendar, Layers, ChevronDown,
+  Milestone, Clock, X, BarChart3, Activity, TrendingUp,
+  GraduationCap, Stethoscope, Zap,
+  Star,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';

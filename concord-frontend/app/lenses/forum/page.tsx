@@ -29,7 +29,6 @@ import {
   ChevronDown,
   ExternalLink,
   Copy,
-  Flag,
   Shield,
   Eye,
   ArrowLeft,

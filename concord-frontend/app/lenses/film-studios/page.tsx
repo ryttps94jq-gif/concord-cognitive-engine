@@ -12,7 +12,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Film, Plus, Search, Play, Users, Clock, Eye, TrendingUp, Clapperboard, Camera, Mic,
   Music, Layers, BarChart3, Share2, X, ChevronRight,
-  Monitor, Globe, Sparkles, Loader2, DollarSign, Calendar, Scale,
+  Monitor, Globe, Sparkles, Loader2, DollarSign, Calendar,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { UniversalActions } from '@/components/lens/UniversalActions';

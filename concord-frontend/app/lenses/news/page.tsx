@@ -11,7 +11,7 @@ import {
   Newspaper, Clock, Tag, TrendingUp, Bookmark, Share2,
   Search, RefreshCw, ChevronDown, ChevronUp, ExternalLink,
   Filter, X, Eye, BarChart3, ArrowUpRight, Bell, Globe, Rss,
-  Download, Quote, GitFork, Play, Loader2,
+  Download, Quote, Play, Loader2,
 } from 'lucide-react';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { motion } from 'framer-motion';

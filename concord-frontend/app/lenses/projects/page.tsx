@@ -13,7 +13,7 @@ import {
   Plus, Search, X, Trash2, BarChart3,
   AlertTriangle, Milestone,
   Layers, ChevronDown, Gauge, Activity, CircleDot, Zap,
-  Loader2, TrendingDown, TrendingUp, CheckCircle2,
+  Loader2, TrendingDown, TrendingUp,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';

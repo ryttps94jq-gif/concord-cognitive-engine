@@ -5,7 +5,7 @@ import { useMutation } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useState } from 'react';
-import { FileCode, Plus, Check, X, Database, Code, FileJson, Tag, Zap, GitCompare } from 'lucide-react';
+import { FileCode, Plus, Check, X, Database, Code, FileJson, Tag, Zap } from 'lucide-react';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { motion } from 'framer-motion';
 import { ErrorState } from '@/components/common/EmptyState';

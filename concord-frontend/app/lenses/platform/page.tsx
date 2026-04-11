@@ -503,8 +503,8 @@ export default function PlatformPage() {
                   <div>
                     <p className="text-xs text-red-400 font-semibold mb-1">Single Points of Failure</p>
                     <div className="flex flex-wrap gap-1">
-                      {(actionResult.singlePointsOfFailure as string[]).map((s, i) => (
-                        <span key={i} className="text-xs bg-red-400/10 border border-red-400/20 rounded px-2 py-0.5 text-red-400">{s}</span>
+                      {(actionResult.singlePointsOfFailure as Array<{service: string; dependentCount: number; dependents: string[]; tier: string}>).map((s, i) => (
+                        <span key={i} className="text-xs bg-red-400/10 border border-red-400/20 rounded px-2 py-0.5 text-red-400">{s.service} ({s.dependentCount})</span>
                       ))}
                     </div>
                   </div>

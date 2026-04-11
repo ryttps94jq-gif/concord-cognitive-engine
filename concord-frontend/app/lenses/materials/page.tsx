@@ -9,9 +9,9 @@ import { ds } from '@/lib/design-system';
 import { cn } from '@/lib/utils';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import {
-  Box, Layers, Plus, Trash2, Search, ChevronDown, Thermometer,
+  Box, Layers, Plus, Trash2, Search, ChevronDown,
   Zap, Shield, FlaskConical, Microscope, X, BarChart3,
-  Database, Beaker, Scale, Activity, Settings2,
+  Database, Beaker, Scale,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';

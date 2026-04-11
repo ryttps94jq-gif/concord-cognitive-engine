@@ -10,8 +10,8 @@ import { cn } from '@/lib/utils';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import {
   Layers, GitBranch, Infinity, Plus, Search, Trash2, X,
-  BarChart3, Zap, ChevronDown, ZoomIn, ZoomOut, RotateCcw,
-  Maximize, Sparkles, Eye, Settings2, Activity, Target,
+  BarChart3, Zap, ChevronDown,
+  Sparkles, Eye, Settings2, Activity,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';

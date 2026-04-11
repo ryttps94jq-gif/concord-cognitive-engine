@@ -280,8 +280,8 @@ export default function PhotographyPage() {
                 <div className="flex items-center gap-3">
                   <span className="text-neon-cyan font-bold text-lg">{String(actionResult.score)}</span>
                   <span className={`text-xs px-2 py-0.5 rounded ${
-                    actionResult.strength === 'strong' ? 'bg-neon-green/20 text-neon-green' :
-                    actionResult.strength === 'moderate' ? 'bg-yellow-400/20 text-yellow-400' : 'bg-gray-500/20 text-gray-400'
+                    actionResult.strength === 'strong-composition' ? 'bg-neon-green/20 text-neon-green' :
+                    actionResult.strength === 'basic-composition' ? 'bg-yellow-400/20 text-yellow-400' : 'bg-gray-500/20 text-gray-400'
                   }`}>{String(actionResult.strength)}</span>
                 </div>
                 {'suggestions' in actionResult && Array.isArray(actionResult.suggestions) && actionResult.suggestions.length > 0 && (

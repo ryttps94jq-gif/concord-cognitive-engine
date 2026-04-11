@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Trophy, Plus, Search, Trash2, Calendar,
   Target, Clock, TrendingUp, Layers, ChevronDown, Zap,
-  Medal, Swords, MapPin, X, BarChart3, Loader2, Activity,
+  Medal, Swords, MapPin, X, BarChart3, Loader2,
 } from 'lucide-react';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { cn } from '@/lib/utils';

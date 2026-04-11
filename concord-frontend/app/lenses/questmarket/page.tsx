@@ -9,9 +9,9 @@ import { ds } from '@/lib/design-system';
 import { cn } from '@/lib/utils';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import {
-  Target, Trophy, Coins, Clock, Users, Layers, ChevronDown, Swords,
-  Award, Plus, Search, Trash2, X, BarChart3, Zap, Star,
-  Shield, Flag, TrendingUp, Gift,
+  Target, Trophy, Coins, Layers, ChevronDown, Swords,
+  Plus, Search, Trash2, X, BarChart3, Zap, Star,
+  Shield, TrendingUp, Gift,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';

@@ -8,7 +8,7 @@ import type { CreateWebhookRequest } from '@/lib/api/generated-types';
 import { useUIStore } from '@/store/ui';
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Plug, Webhook, Zap, Code, FileText, Plus, Trash2, Play, ToggleLeft, ToggleRight, Layers, ChevronDown, Link, AlertCircle, Loader2, Activity, GitMerge, CheckCircle } from 'lucide-react';
+import { Plug, Webhook, Zap, Code, FileText, Plus, Trash2, Play, ToggleLeft, ToggleRight, Layers, ChevronDown, Link, AlertCircle, Loader2, Activity, CheckCircle } from 'lucide-react';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { ErrorState } from '@/components/common/EmptyState';

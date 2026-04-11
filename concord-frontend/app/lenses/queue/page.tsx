@@ -553,9 +553,9 @@ export default function QueueLensPage() {
             {queueActionResult.action === 'queueAnalytics' && (
               <div className="space-y-1">
                 <div className="flex gap-4 flex-wrap">
-                  <span className="text-gray-400">Arrival rate: <span className="text-neon-cyan font-mono">{String((queueActionResult.arrivalRate as number)?.toFixed?.(3) ?? queueActionResult.arrivalRate ?? 'N/A')}/s</span></span>
-                  <span className="text-gray-400">Utilization: <span className={`font-mono ${(queueActionResult.utilization as number) > 0.8 ? 'text-red-400' : (queueActionResult.utilization as number) > 0.5 ? 'text-yellow-400' : 'text-green-400'}`}>{String(((queueActionResult.utilization as number) * 100)?.toFixed?.(1) ?? '')}%</span></span>
-                  <span className={`${queueActionResult.stable ? 'text-green-400' : 'text-red-400'}`}>{queueActionResult.stable ? 'Stable' : 'Unstable'}</span>
+                  <span className="text-gray-400">Arrival rate: <span className="text-neon-cyan font-mono">{String(((queueActionResult.rates as Record<string,unknown>)?.arrivalRate as number)?.toFixed?.(3) ?? 'N/A')}/s</span></span>
+                  <span className="text-gray-400">Utilization: <span className={`font-mono ${((queueActionResult.utilization as Record<string,unknown>)?.rho as number) > 0.8 ? 'text-red-400' : ((queueActionResult.utilization as Record<string,unknown>)?.rho as number) > 0.5 ? 'text-yellow-400' : 'text-green-400'}`}>{String((((queueActionResult.utilization as Record<string,unknown>)?.rho as number) * 100)?.toFixed?.(1) ?? '')}%</span></span>
+                  <span className={`${(queueActionResult.utilization as Record<string,unknown>)?.stable ? 'text-green-400' : 'text-red-400'}`}>{(queueActionResult.utilization as Record<string,unknown>)?.stable ? 'Stable' : 'Unstable'}</span>
                 </div>
                 {!!queueActionResult.message && <p className="text-gray-400 italic">{String(queueActionResult.message)}</p>}
               </div>
@@ -564,9 +564,9 @@ export default function QueueLensPage() {
               <div className="space-y-1">
                 {queueActionResult.message ? <p className="text-gray-400 italic">{String(queueActionResult.message)}</p> : (
                   <div className="flex gap-4 flex-wrap">
-                    <span className="text-gray-400">High: <span className="text-red-400 font-mono">{String(queueActionResult.highPriorityCount ?? 0)}</span></span>
-                    <span className="text-gray-400">Normal: <span className="text-neon-blue font-mono">{String(queueActionResult.normalPriorityCount ?? 0)}</span></span>
-                    <span className="text-gray-400">Low: <span className="text-gray-400 font-mono">{String(queueActionResult.lowPriorityCount ?? 0)}</span></span>
+                    <span className="text-gray-400">Algorithm: <span className="text-neon-cyan font-mono">{String(queueActionResult.algorithm ?? '')}</span></span>
+                    <span className="text-gray-400">Jobs: <span className="text-neon-green font-mono">{String((queueActionResult.metrics as Record<string,unknown>)?.totalJobs ?? 0)}</span></span>
+                    <span className="text-gray-400">Starvation: <span className={`font-mono ${(queueActionResult.starvation as Record<string,unknown>)?.detected ? 'text-red-400' : 'text-green-400'}`}>{(queueActionResult.starvation as Record<string,unknown>)?.detected ? 'Detected' : 'None'}</span></span>
                   </div>
                 )}
               </div>
@@ -575,8 +575,8 @@ export default function QueueLensPage() {
               <div className="space-y-1">
                 {queueActionResult.message ? <p className="text-gray-400 italic">{String(queueActionResult.message)}</p> : (
                   <div className="flex gap-4 flex-wrap">
-                    <span className="text-gray-400">Status: <span className={`font-mono ${queueActionResult.backpressureActive ? 'text-red-400' : 'text-green-400'}`}>{queueActionResult.backpressureActive ? 'Active' : 'Normal'}</span></span>
-                    <span className="text-gray-400">Load: <span className="text-neon-cyan font-mono">{String(queueActionResult.currentLoad ?? '')}</span></span>
+                    <span className="text-gray-400">Status: <span className={`font-mono ${(queueActionResult.backpressure as Record<string,unknown>)?.level === 'critical' || (queueActionResult.backpressure as Record<string,unknown>)?.level === 'high' ? 'text-red-400' : 'text-green-400'}`}>{String((queueActionResult.backpressure as Record<string,unknown>)?.level ?? 'normal')}</span></span>
+                    <span className="text-gray-400">Fill: <span className="text-neon-cyan font-mono">{String((queueActionResult.currentState as Record<string,unknown>)?.fillRatio ?? '')}%</span></span>
                   </div>
                 )}
               </div>

@@ -16,7 +16,7 @@ import {
   CheckCircle, XCircle,
   Workflow, Database,
   Layers, TrendingUp, ChevronDown, Trash2,
-  Gauge, Route, Radio, Timer, Loader2, Award, AlertTriangle, RefreshCw,
+  Gauge, Route, Radio, Timer, Loader2, AlertTriangle,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
