@@ -4,12 +4,14 @@ import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensData } from '@/lib/hooks/use-lens-data';
+import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api/client';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import {
   Scale, Plus, Search, Users, MessageSquare,
   ThumbsUp, ThumbsDown, Layers, ChevronDown, Zap, Send, Timer, Trophy, TrendingUp, Loader2, Trash2,
+  AlertTriangle, CheckCircle, XCircle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ErrorState } from '@/components/common/EmptyState';
@@ -278,6 +280,23 @@ export default function DebateLensPage() {
   const [newArgument, setNewArgument] = useState('');
   const [argumentSide, setArgumentSide] = useState<'pro' | 'con'>('pro');
 
+  // --- Domain action state ---
+  const runAction = useRunArtifact('debate');
+  const [actionResult, setActionResult] = useState<Record<string, unknown> | null>(null);
+  const [activeAction, setActiveAction] = useState<string | null>(null);
+
+  const handleDebateAction = useCallback(async (action: string) => {
+    const targetId = items[0]?.id;
+    if (!targetId) return;
+    setActiveAction(action);
+    setActionResult(null);
+    try {
+      const res = await runAction.mutateAsync({ id: targetId, action });
+      setActionResult(res.result as Record<string, unknown>);
+    } catch (e) { console.error(`Action ${action} failed:`, e); }
+    setActiveAction(null);
+  }, [items, runAction]);
+
   // Wire to social groups API for community features
   const { data: trendingTopics } = useQuery({
     queryKey: ['social-trending-topics'],
@@ -364,6 +383,188 @@ export default function DebateLensPage() {
       </header>
 
       <UniversalActions domain="debate" artifactId={items[0]?.id} compact />
+
+      {/* ── Domain Action Panel ─────────────────────────────────── */}
+      <div className="panel p-4 space-y-3">
+        <h3 className="text-sm font-semibold text-gray-300 flex items-center gap-2">
+          <Zap className="w-4 h-4 text-neon-purple" /> AI Analysis Actions
+        </h3>
+        <div className="flex flex-wrap gap-2">
+          {(['evaluateArgument','steelmanPosition','scoreDebate','fallacyCheck'] as const).map(action => (
+            <button
+              key={action}
+              onClick={() => handleDebateAction(action)}
+              disabled={activeAction !== null || !items[0]?.id}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded bg-neon-purple/10 border border-neon-purple/30 text-neon-purple hover:bg-neon-purple/20 disabled:opacity-50 transition-colors"
+            >
+              {activeAction === action ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />}
+              {action === 'evaluateArgument' ? 'Evaluate Argument' : action === 'steelmanPosition' ? 'Steelman Position' : action === 'scoreDebate' ? 'Score Debate' : 'Fallacy Check'}
+            </button>
+          ))}
+        </div>
+
+        {/* evaluateArgument result */}
+        {actionResult && actionResult.overallScore !== undefined && (
+          <div className="space-y-3 pt-2 border-t border-white/5">
+            <div className="grid grid-cols-4 gap-2">
+              <div className="p-2 bg-lattice-surface rounded text-center">
+                <p className={`text-lg font-bold ${Number(actionResult.overallScore) >= 70 ? 'text-neon-green' : Number(actionResult.overallScore) >= 40 ? 'text-yellow-400' : 'text-red-400'}`}>{String(actionResult.overallScore)}</p>
+                <p className="text-[10px] text-gray-500">Overall Score</p>
+              </div>
+              <div className="p-2 bg-lattice-surface rounded text-center">
+                <p className="text-lg font-bold text-neon-cyan">{String(actionResult.evidenceScore ?? 0)}</p>
+                <p className="text-[10px] text-gray-500">Evidence</p>
+              </div>
+              <div className="p-2 bg-lattice-surface rounded text-center">
+                <p className="text-lg font-bold text-neon-purple">{String(actionResult.reasoningScore ?? 0)}</p>
+                <p className="text-[10px] text-gray-500">Reasoning</p>
+              </div>
+              <div className="p-2 bg-lattice-surface rounded text-center">
+                <p className={`text-xs font-bold uppercase ${actionResult.strength === 'strong' ? 'text-neon-green' : actionResult.strength === 'moderate' ? 'text-yellow-400' : 'text-red-400'}`}>{String(actionResult.strength ?? '—')}</p>
+                <p className="text-[10px] text-gray-500">Strength</p>
+              </div>
+            </div>
+            <div className="space-y-1">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-gray-500">Score</span>
+                <span className="text-gray-400">{String(actionResult.overallScore ?? 0)}/100</span>
+              </div>
+              <div className="h-2 bg-white/5 rounded-full overflow-hidden">
+                <div className="h-full bg-neon-purple rounded-full transition-all" style={{ width: `${actionResult.overallScore ?? 0}%` }} />
+              </div>
+            </div>
+            {Array.isArray(actionResult.fallaciesDetected) && (actionResult.fallaciesDetected as string[]).length > 0 && (
+              <div>
+                <p className="text-xs text-yellow-400 mb-1 flex items-center gap-1"><AlertTriangle className="w-3 h-3" /> Fallacies Detected</p>
+                <div className="flex flex-wrap gap-1">
+                  {(actionResult.fallaciesDetected as string[]).map((f, i) => (
+                    <span key={i} className="px-2 py-0.5 text-[10px] rounded bg-yellow-400/10 text-yellow-400 border border-yellow-400/20">{f}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {actionResult.addressesCounterpoints !== undefined && (
+              <p className="text-xs flex items-center gap-1">
+                {actionResult.addressesCounterpoints ? <CheckCircle className="w-3 h-3 text-neon-green" /> : <XCircle className="w-3 h-3 text-gray-500" />}
+                <span className="text-gray-400">{actionResult.addressesCounterpoints ? 'Addresses counterpoints' : 'No counterpoint addressed'}</span>
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* steelmanPosition result */}
+        {actionResult && actionResult.steelmanSteps !== undefined && (
+          <div className="space-y-3 pt-2 border-t border-white/5">
+            <div className="grid grid-cols-2 gap-2">
+              <div className="p-2 bg-lattice-surface rounded text-center">
+                <p className="text-lg font-bold text-neon-cyan">{String((actionResult.originalPosition as string)?.split(/\s+/)?.length ?? actionResult.originalLength ?? 0)}</p>
+                <p className="text-[10px] text-gray-500">Original Words</p>
+              </div>
+              <div className="p-2 bg-lattice-surface rounded text-center">
+                <p className="text-lg font-bold text-neon-purple">{Array.isArray(actionResult.steelmanSteps) ? (actionResult.steelmanSteps as unknown[]).length : 0}</p>
+                <p className="text-[10px] text-gray-500">Improvements</p>
+              </div>
+            </div>
+            {Array.isArray(actionResult.steelmanSteps) && (
+              <ul className="space-y-1">
+                {(actionResult.steelmanSteps as string[]).map((step, i) => (
+                  <li key={i} className="text-xs text-gray-300 flex items-start gap-2">
+                    <span className="text-neon-purple shrink-0 mt-0.5">{i + 1}.</span>
+                    <span>{step}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {actionResult.framework && (
+              <div className="bg-neon-purple/5 border border-neon-purple/20 rounded p-3 space-y-1">
+                <p className="text-[10px] text-gray-500 uppercase tracking-wider">Framework</p>
+                {Object.entries(actionResult.framework as Record<string, string>).map(([k, v]) => (
+                  <p key={k} className="text-xs text-gray-300"><span className="text-neon-purple capitalize">{k}: </span>{v}</p>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* scoreDebate result */}
+        {actionResult && actionResult.winner !== undefined && actionResult.margin !== undefined && (
+          <div className="space-y-3 pt-2 border-t border-white/5">
+            <div className="grid grid-cols-3 gap-2">
+              <div className="p-2 bg-neon-green/5 border border-neon-green/20 rounded text-center">
+                <p className="text-xs font-bold text-neon-green uppercase truncate">{String(actionResult.winner ?? '—')}</p>
+                <p className="text-[10px] text-gray-500">Winner</p>
+              </div>
+              <div className="p-2 bg-lattice-surface rounded text-center">
+                <p className="text-lg font-bold text-yellow-400">{String(actionResult.margin ?? 0)}</p>
+                <p className="text-[10px] text-gray-500">Margin</p>
+              </div>
+              <div className="p-2 bg-lattice-surface rounded text-center">
+                <p className={`text-xs font-bold ${actionResult.close ? 'text-yellow-400' : 'text-neon-green'}`}>{actionResult.close ? 'Close' : 'Clear'}</p>
+                <p className="text-[10px] text-gray-500">Result</p>
+              </div>
+            </div>
+            {Array.isArray(actionResult.sides) && (
+              <div className="space-y-2">
+                {(actionResult.sides as Array<{side:string;arguments:number;evidencePoints:number;rebuttals:number;score:number;highlights:string[]}>).map((s, i) => (
+                  <div key={i} className={`p-2 rounded border ${i === 0 ? 'border-neon-green/30 bg-neon-green/5' : 'border-white/5 bg-white/[0.02]'}`}>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-semibold text-gray-200">{s.side}</span>
+                      <span className={`text-sm font-bold ${i === 0 ? 'text-neon-green' : 'text-gray-400'}`}>{s.score} pts</span>
+                    </div>
+                    <div className="flex gap-3 text-[10px] text-gray-500 mt-1">
+                      <span>{s.arguments} args</span>
+                      <span>{s.evidencePoints} evidence</span>
+                      <span>{s.rebuttals} rebuttals</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* fallacyCheck result */}
+        {actionResult && actionResult.logicalSoundness !== undefined && (
+          <div className="space-y-3 pt-2 border-t border-white/5">
+            <div className="grid grid-cols-3 gap-2">
+              <div className="p-2 bg-lattice-surface rounded text-center">
+                <p className={`text-lg font-bold ${Number(actionResult.count) === 0 ? 'text-neon-green' : Number(actionResult.count) <= 2 ? 'text-yellow-400' : 'text-red-400'}`}>{String(actionResult.count ?? 0)}</p>
+                <p className="text-[10px] text-gray-500">Fallacies</p>
+              </div>
+              <div className="p-2 bg-lattice-surface rounded text-center">
+                <p className="text-sm font-bold text-neon-cyan">{String(actionResult.textLength ?? 0)}</p>
+                <p className="text-[10px] text-gray-500">Chars</p>
+              </div>
+              <div className="p-2 bg-lattice-surface rounded text-center">
+                <p className={`text-[10px] font-bold uppercase ${actionResult.logicalSoundness === 'appears-sound' ? 'text-neon-green' : actionResult.logicalSoundness === 'minor-issues' ? 'text-yellow-400' : 'text-red-400'}`}>
+                  {String(actionResult.logicalSoundness).replace(/-/g, ' ')}
+                </p>
+                <p className="text-[10px] text-gray-500">Soundness</p>
+              </div>
+            </div>
+            {Array.isArray(actionResult.fallaciesDetected) && (actionResult.fallaciesDetected as Array<{fallacy:string;description:string}>).length > 0 && (
+              <div className="space-y-1">
+                {(actionResult.fallaciesDetected as Array<{fallacy:string;description:string}>).map((f, i) => (
+                  <div key={i} className="flex items-start gap-2 p-2 bg-yellow-400/5 border border-yellow-400/20 rounded text-xs">
+                    <AlertTriangle className="w-3 h-3 text-yellow-400 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-yellow-400 font-semibold">{f.fallacy}</p>
+                      <p className="text-gray-400">{f.description}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {Number(actionResult.count) === 0 && (
+              <p className="text-xs text-neon-green flex items-center gap-1"><CheckCircle className="w-3 h-3" /> No logical fallacies detected</p>
+            )}
+          </div>
+        )}
+
+        {actionResult && actionResult.message && (
+          <p className="text-xs text-gray-400 italic pt-1">{String(actionResult.message)}</p>
+        )}
+      </div>
 
       {showCreate && (
         <div className="panel p-4 space-y-3">

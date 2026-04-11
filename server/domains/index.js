@@ -114,6 +114,7 @@ import creativewriting from './creativewriting.js';
 import custom from './custom.js';
 import daily from './daily.js';
 import database from './database.js';
+import dtus from './dtus.js';
 import debate from './debate.js';
 import defense from './defense.js';
 import desert from './desert.js';
@@ -289,6 +290,7 @@ export default [
   custom,
   daily,
   database,
+  dtus,
   debate,
   defense,
   desert,

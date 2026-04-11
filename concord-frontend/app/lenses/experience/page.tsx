@@ -8,12 +8,15 @@ import { useState, useMemo } from 'react';
 import { useUIStore } from '@/store/ui';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLensData } from '@/lib/hooks/use-lens-data';
+import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import {
   Brain, Share2, Edit3, Plus, Play, Sparkles, Compass,
   Palette, Trophy, Star, TrendingUp, Users, Heart,
   Clock, Target, Zap, Award, ShoppingBag, Calendar,
   MapPin, ExternalLink, Filter, GripVertical,
-  Lightbulb, BarChart3, Flame, ChevronRight, Layers, ChevronDown, Eye
+  Lightbulb, BarChart3, Flame, ChevronRight, Layers, ChevronDown, Eye,
+  Map, Gauge, ClipboardCheck, UserCircle, Loader2, AlertTriangle,
+  CheckCircle2, XCircle, ChevronUp, Activity, Smile, Frown, Meh
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -217,6 +220,26 @@ export default function ExperienceLensPage() {
   const [activeTab, setActiveTab] = useState<TabId>('portfolio');
   const [portfolioFilter, setPortfolioFilter] = useState<PortfolioFilter>('all');
   const [showFeatures, setShowFeatures] = useState(true);
+  const [expActionResult, setExpActionResult] = useState<Record<string, unknown> | null>(null);
+  const [expRunning, setExpRunning] = useState<string | null>(null);
+  const [activeExpAction, setActiveExpAction] = useState<string | null>(null);
+
+  // Backend action runner
+  const runExpAction = useRunArtifact('experience');
+  const { items: expArtifacts } = useLensData<Record<string, unknown>>('experience', 'experience', { seed: [] });
+
+  const handleExpAction = async (action: string) => {
+    const targetId = expArtifacts[0]?.id;
+    if (!targetId) return;
+    setExpRunning(action);
+    setActiveExpAction(action);
+    setExpActionResult(null);
+    try {
+      const res = await runExpAction.mutateAsync({ id: targetId, action });
+      setExpActionResult(res.result as Record<string, unknown>);
+    } catch (e) { console.error(`Experience action ${action} failed:`, e); }
+    setExpRunning(null);
+  };
 
   const { isLoading, isError: isError, error: error, refetch: refetch, items: portfolioItems } = useLensData('experience', 'portfolio', {
     seed: INITIAL_PORTFOLIO.map(p => ({ title: p.title, data: p as unknown as Record<string, unknown> })),
