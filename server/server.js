@@ -30886,8 +30886,8 @@ registerUniversalLensActions();
     // Entity lens: frontend calls terminal
     ["entity", "terminal", "entityResolution"],
 
-    // Code lens: frontend calls forge-generate
-    ["code", "forge-generate", "complexityAnalysis"],
+    // Code lens: frontend calls forge-generate (app generation, map to generate universal action)
+    ["code", "forge-generate", "generate"],
 
     // Integrations lens: frontend calls run
     ["integrations", "run", "apiHealthCheck"],
@@ -30906,12 +30906,13 @@ registerUniversalLensActions();
     ["events", "registration_report", "settlementCalc"],
     ["events", "event_summary", "budgetReconcile"],
 
-    // Creative lens: frontend calls generate_shot_list, asset_report, budget_analysis, distribution_checklist, project_summary
+    // Creative lens: frontend calls generate_shot_list, asset_report, budget_analysis, distribution_checklist, project_summary, revision_summary
     ["creative", "generate_shot_list", "shotListGenerate"],
     ["creative", "asset_report", "assetOrganize"],
     ["creative", "budget_analysis", "budgetTrack"],
     ["creative", "distribution_checklist", "distributionChecklist"],
     ["creative", "project_summary", "assetOrganize"],
+    ["creative", "revision_summary", "assetOrganize"],
 
     // Pharmacy lens: frontend calls checkInteractions
     ["pharmacy", "checkInteractions", "analyze"],
@@ -30921,6 +30922,24 @@ registerUniversalLensActions();
 
     // Projects lens: frontend calls analyze-risks
     ["projects", "analyze-risks", "analyze"],
+
+    // Animation lens: frontend calls play, pause, reset (playback transport controls)
+    ["animation", "play", "interpolateKeyframes"],
+    ["animation", "pause", "timingAnalysis"],
+    ["animation", "reset", "optimizeFPS"],
+
+    // Fork lens: frontend calls merge, cherry-pick (version control operations)
+    ["fork", "merge", "mergeComplexity"],
+    ["fork", "cherry-pick", "divergenceAnalysis"],
+
+    // Ingest lens: frontend calls batch-ingest
+    ["ingest", "batch-ingest", "batchStatus"],
+
+    // Manufacturing lens: frontend uses camelCase names differing from backend snake_case
+    ["manufacturing", "scheduleOptimizer", "scheduleOptimize"],
+    ["manufacturing", "bomCostCalc", "bomCost"],
+    ["manufacturing", "oeeCalculator", "oeeCalculate"],
+    ["manufacturing", "safetyRateReport", "safetyRate"],
   ];
 
   let aliasCount = 0;
@@ -31112,6 +31131,9 @@ const DOMAIN_ACTION_MANIFEST = {
     { action: "analyze-mix", brain: "U", desc: "Analyze frequency balance, dynamic range, stereo width of a mix" },
     { action: "auto-arrange", brain: "S", desc: "Generate song structure arrangements from pattern blocks" },
     { action: "validate-track", brain: "R", desc: "Check for clipping, phase issues, format problems" },
+    { action: "generate-drums", brain: "U", desc: "Generate drum patterns at the project BPM and genre" },
+    { action: "sound-design", brain: "U", desc: "Generate synthesizer preset parameters for a requested sound character" },
+    { action: "reference-match", brain: "U", desc: "Analyze a reference track and suggest EQ/compression settings to match its tone" },
   ],
   music: [
     { action: "analyze-lyrics", brain: "U", desc: "Identify verse/chorus structure, rhyme scheme, syllable patterns" },
@@ -31308,6 +31330,9 @@ const DOMAIN_ACTION_MANIFEST = {
     { action: "check-compliance", brain: "U", desc: "Evaluate against regulatory framework, flag gaps" },
     { action: "alert-deadlines", brain: "S", desc: "Generate countdown alerts for legal deadlines" },
     { action: "validate-clauses", brain: "R", desc: "Validate clause library entries for consistency" },
+    { action: "add-clause", brain: "U", desc: "Add a named clause to the contract artifact by category" },
+    { action: "preview-contract", brain: "U", desc: "Render a formatted contract preview from all added clauses" },
+    { action: "generate-document", brain: "U", desc: "Generate a complete contract document from the clause set" },
   ],
   legal: [
     { action: "organize-discovery", brain: "U", desc: "Categorize and tag documents for litigation" },
@@ -31593,6 +31618,11 @@ const DOMAIN_ACTION_MANIFEST = {
     { action: "optimize-production", brain: "U", desc: "Optimize production schedule for orders and capacity" },
     { action: "monitor-quality", brain: "R", desc: "Monitor QC pass/fail rates and alert on degradation" },
     { action: "predict-maintenance", brain: "S", desc: "Predict maintenance needs from equipment data" },
+    { action: "advanceStep", brain: "U", desc: "Advance the work order to the next production step" },
+    { action: "generateTraveler", brain: "U", desc: "Generate a production traveler document for a work order" },
+    { action: "scheduleMaintenance", brain: "U", desc: "Schedule a preventive maintenance task for a machine" },
+    { action: "logDowntime", brain: "U", desc: "Log machine downtime event with reason and duration" },
+    { action: "defectAnalysis", brain: "U", desc: "Analyze defect data and suggest root cause corrective actions" },
   ],
   retail: [
     { action: "analyze-sales", brain: "S", desc: "Generate daily/weekly sales trends and top products" },
@@ -31781,6 +31811,14 @@ const DOMAIN_ACTION_MANIFEST = {
 
 // Supplement existing domains with frontend-manifest actions that aren't already registered
 const FRONTEND_MANIFEST_SUPPLEMENTS = {
+  animation: [
+    { action: "play", brain: "U", desc: "Start playback of the animation timeline from the current frame" },
+    { action: "pause", brain: "U", desc: "Pause playback of the animation timeline at the current frame" },
+    { action: "reset", brain: "U", desc: "Reset the animation timeline to frame 0" },
+  ],
+  ingest: [
+    { action: "batch-ingest", brain: "U", desc: "Initiate batch ingestion for multiple files, returning job status" },
+  ],
   board: [
     { action: "move_card", brain: "U", desc: "Move card between board columns" },
     { action: "assign", brain: "U", desc: "Assign card to team member" },
