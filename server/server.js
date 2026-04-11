@@ -24203,6 +24203,10 @@ app.use("/api/lens-compliance", createLensComplianceRouter({ db }));
 import createLegalLiabilityRouter from "./routes/legal-liability.js";
 app.use("/api/legal", createLegalLiabilityRouter({ db }));
 
+// ===== LENS DEVELOPER KIT (LDK) =====
+import createLDKRouter from "./routes/ldk.js";
+app.use("/api/ldk", createLDKRouter({ ALL_LENS_DOMAINS, registerLensAction }));
+
 // ===== MARKETPLACE LENS REGISTRY (112 LENSES) =====
 import createMarketplaceLensRegistryRouter from "./routes/marketplace-lens-registry.js";
 app.use("/api/marketplace-lens-registry", createMarketplaceLensRegistryRouter(db, requireAuth));
