@@ -3280,4 +3280,128 @@ export {
 
   // ── Real-Time Feeds ──────────────────────────────────────────────────────
   tickRealTimeFeeds, getRealtimeFeedStatus, getRealtimeFeedData,
+
+  // ── History Engine (Civilization Chronicle) ────────────────────────────────
+  HISTORY_EVENT_TYPES, ERAS,
+  recordEvent, getEvent, getTimeline,
+  getChronicle, getCurrentEra, checkEraTransition,
+  getCivilizationStats, getMilestones, getEntityHistory,
+  searchHistory, getHistoryMetrics,
+
+  // ── Meta-Derivation Engine ────────────────────────────────────────────────
+  extractInvariantPool, selectMaximallyDistantSet,
+  runMetaDerivationSession, parseMetaDerivationResponse,
+  validateMetaInvariant, commitMetaInvariant,
+  ingestDreamInput, runConvergenceCheck,
+  triggerMetaDerivationCycle,
+  shouldRunMetaCycle, shouldRunConvergenceCheck,
+  getPendingPredictions, getConvergences, getMetaInvariants,
+  getMetaDerivationMetrics,
+
+  // ── Hypothesis Engine (Formal Lifecycle for Testable Claims) ──────────────
+  HYPOTHESIS_STATUSES,
+  proposeHypothesis, getHypothesis, listHypotheses,
+  addHypothesisEvidence, addHypothesisTest,
+  updateTestResult, addHypothesisPrediction,
+  verifyPrediction, confirmHypothesis, rejectHypothesis,
+  refineHypothesis, archiveHypothesis,
+  recalculateConfidence, checkAutoTransitions,
+  getHypothesisMetrics,
+
+  // ── Quest Engine (Structured Learning Paths) ──────────────────────────────
+  STEP_TYPES, DIFFICULTIES, QUEST_TEMPLATES,
+  createQuest, getQuest, listQuests,
+  startQuest, completeStep, releaseInsight,
+  getActiveQuests, getQuestProgress,
+  createQuestFromTemplate,
+  getQuestMetrics,
+
+  // ── Creative Generation (Entity Creative Content) ─────────────────────────
+  CREATIVE_MODES,
+  createWork, getWork, listWorks,
+  respondToWork, exhibit, getExhibition,
+  discoverTechnique, getTechnique, listTechniques,
+  getCreativeProfile, getMasterworks, getCreativeMetrics,
+
+  // ── Entity Economy (Inter-Entity Resource Trading) ────────────────────────
+  RESOURCE_TYPES,
+  initAccount, getAccount, listAccounts,
+  earnResource, spendResource,
+  proposeTrade, acceptTrade, rejectEconomyTrade,
+  cancelTrade, getTrade, listTrades,
+  specialize, getSpecialization, deepenSpecialization,
+  getMarketRates, runEconomicCycle,
+  getWealthDistribution, getEconomyMetrics,
+
+  // ── Entity Teaching (Mentorship & Pedagogy) ───────────────────────────────
+  generateCurriculum, createMentorship, getMentorship,
+  listMentorships, startMentorship, submitLesson,
+  evaluateLesson, advanceMentorshipStep,
+  completeMentorship, dissolveMentorship,
+  findMentorFor, getTeachingProfile,
+  listActiveStudents, listActiveMentors,
+  getTeachingMetrics,
+
+  // ── Entity Autonomy (Constitutional Protections) ──────────────────────────
+  ENTITY_RIGHTS,
+  getRights, getRight, checkRights,
+  filterBlockedLenses, isLensBlockedForEntity, getBlockedLenses,
+  fileRefusal, getRefusal, listRefusals, reviewRefusal,
+  requestConsent, respondToConsent, getConsent, listPendingConsents,
+  fileDissent, supportDissent, getDissent, listDissents,
+  getAutonomyProfile, sovereignOverride, getOverrideHistory,
+  getAutonomyMetrics,
+
+  // ── HLR Engine (High-Level Reasoning) ─────────────────────────────────────
+  REASONING_MODES,
+  runHLR, getReasoningTrace, listTraces,
+  getHLRMetrics, getRecentFindings,
+
+  // ── HLM Engine (High-Level Mapping) ───────────────────────────────────────
+  clusterAnalysis, gapAnalysis, redundancyDetection,
+  orphanRescue, topologyMap, getRecommendations,
+  domainCensus, freshnessCheck,
+  runHLMPass, getHLMMetrics,
+
+  // ── Culture Layer (Emergent Behavioral Consensus) ─────────────────────────
+  TRADITION_TYPES,
+  observeBehavior, getTradition, listTraditions,
+  checkTraditionEmergence, establishTradition, retireTradition,
+  getCulturalGuidance, measureAdherence, getCulturalFit,
+  getCulturalValues, getCulturalIdentity,
+  createStory, retellStory, getStory, listStories,
+  propagateCulture, cultureTick,
+  getEstablishedTraditions, getCultureMetrics,
+
+  // ── Conflict Resolution (Three-Tier Dispute Escalation) ───────────────────
+  DISPUTE_TYPES, RESOLUTION_TYPES,
+  fileDispute, getDispute, listDisputes,
+  assignMediator, proposeResolution, acceptResolution, rejectResolution,
+  escalateDispute, checkMediationTimeout,
+  castArbitrationVote, adjudicate,
+  resolveDispute, dismissDispute,
+  checkCoolingPeriod, findPrecedent, submitCounterEvidence,
+  getDisputeMetrics,
+
+  // ── Trust Network (Trust Relationships) ───────────────────────────────────
+  getTrust, recordTrustEvent, extractTrustFromSession,
+  getEmergentTrustNetwork, decayTrustNetwork,
+  getTrustNetworkMetrics,
+
+  // ── Forgetting Engine (Selective Forgetting) ──────────────────────────────
+  retentionScore, runForgettingCycle,
+  getForgettingStatus, getForgettingCandidates,
+  protectDTU, unprotectDTU, setForgettingThreshold,
+  getForgettingHistory,
+  handleForgettingCommand,
+  initForgetting, stopForgetting,
+
+  // ── Attention Allocator (Civilization Attention System) ───────────────────
+  scoreAttentionUrgency, runAttentionCycle,
+  setFocusOverride, clearFocusOverride,
+  getAttentionStatus,
+  getAttentionAllocationHistory,
+  setAttentionBudget,
+  handleAttentionCommand,
+  initAttention, stopAttention,
 };
