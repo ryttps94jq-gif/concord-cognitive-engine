@@ -70,7 +70,22 @@ export default function ThreadLensPage() {
 
   // --- Lens Bridge ---
   const bridge = useLensBridge('thread', 'conversation');
-  const { create: createThread, remove: deleteThread } = useLensData<Record<string, unknown>>('thread', 'conversation');
+  const { create: createThread, remove: deleteThread, items: threadItems } = useLensData<Record<string, unknown>>('thread', 'conversation');
+  const runThreadAction = useRunArtifact('thread');
+  const [threadActionResult, setThreadActionResult] = useState<{ action: string; result: Record<string, unknown> } | null>(null);
+  const [threadActiveAction, setThreadActiveAction] = useState<string | null>(null);
+
+  const handleThreadAction = useCallback(async (action: string) => {
+    const id = threadItems[0]?.id;
+    if (!id) return;
+    setThreadActiveAction(action);
+    try {
+      const res = await runThreadAction.mutateAsync({ id, action });
+      if (res.ok) setThreadActionResult({ action, result: res.result as Record<string, unknown> });
+    } finally {
+      setThreadActiveAction(null);
+    }
+  }, [threadItems, runThreadAction]);
   const queryClient = useQueryClient();
 
   const [selectedNode, setSelectedNode] = useState<ThreadNode | null>(null);
@@ -642,6 +657,116 @@ export default function ThreadLensPage() {
           compact
         />
       )}
+
+      {/* Thread Actions Panel */}
+      <div className="p-4 border-t border-lattice-border bg-lattice-surface/30">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold text-gray-300 flex items-center gap-2">
+            <Zap className="w-4 h-4 text-neon-purple" />
+            Thread Actions
+          </h3>
+          {threadActionResult && (
+            <button onClick={() => setThreadActionResult(null)} className="p-1 rounded hover:bg-lattice-elevated text-gray-400">
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+        <div className="flex flex-wrap gap-2 mb-3">
+          {(['threadAnalyze', 'sentimentMap', 'participantStats', 'topicExtract'] as const).map((action) => (
+            <button
+              key={action}
+              onClick={() => handleThreadAction(action)}
+              disabled={!threadItems[0]?.id || threadActiveAction !== null}
+              className="px-3 py-1.5 text-sm rounded-lg bg-neon-purple/10 text-neon-purple border border-neon-purple/30 hover:bg-neon-purple/20 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              {threadActiveAction === action ? (
+                <div className="w-3 h-3 border border-neon-purple border-t-transparent rounded-full animate-spin" />
+              ) : null}
+              {action === 'threadAnalyze' ? 'Thread Analyze' : action === 'sentimentMap' ? 'Sentiment Map' : action === 'participantStats' ? 'Participant Stats' : 'Topic Extract'}
+            </button>
+          ))}
+        </div>
+
+        {threadActionResult && (
+          <div className="panel p-3 space-y-2 text-sm">
+            {threadActionResult.action === 'threadAnalyze' && (() => {
+              const r = threadActionResult.result;
+              return (
+                <div className="space-y-2">
+                  <div className="flex flex-wrap gap-4 text-xs">
+                    <span className="text-gray-400">Messages: <span className="text-white font-medium">{String(r.messageCount ?? 0)}</span></span>
+                    <span className="text-gray-400">Participants: <span className="text-white font-medium">{String(r.participants ?? 0)}</span></span>
+                    <span className="text-gray-400">Avg Length: <span className="text-white font-medium">{String(r.avgMessageLength ?? 0)} chars</span></span>
+                    <span className="text-gray-400">Avg Response: <span className="text-white font-medium">{String(r.avgResponseMinutes ?? 0)} min</span></span>
+                    <span className="text-gray-400">Peak Hour: <span className="text-white font-medium">{String(r.peakActivityHour ?? '-')}:00</span></span>
+                    <span className="text-gray-400">Duration: <span className="text-white font-medium">{String(r.threadDuration ?? '-')}</span></span>
+                  </div>
+                </div>
+              );
+            })()}
+            {threadActionResult.action === 'sentimentMap' && (() => {
+              const r = threadActionResult.result;
+              const tone = String(r.overallTone ?? 'neutral');
+              const toneColor = tone === 'positive' ? 'text-neon-green' : tone === 'negative' ? 'text-red-400' : 'text-gray-300';
+              return (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-gray-400 text-xs">Overall Tone:</span>
+                    <span className={`text-xs font-semibold uppercase ${toneColor}`}>{tone}</span>
+                    <span className="text-gray-400 text-xs ml-2">Avg Sentiment: <span className="text-white">{String(r.avgSentiment ?? 0)}</span></span>
+                  </div>
+                  <div className="flex gap-4 text-xs">
+                    <span className="text-neon-green">Positive: {String(r.positiveMessages ?? 0)}</span>
+                    <span className="text-red-400">Negative: {String(r.negativeMessages ?? 0)}</span>
+                    <span className="text-gray-400">Neutral: {String(r.neutralMessages ?? 0)}</span>
+                  </div>
+                </div>
+              );
+            })()}
+            {threadActionResult.action === 'participantStats' && (() => {
+              const r = threadActionResult.result;
+              const participants = Array.isArray(r.participants) ? r.participants as Array<Record<string, unknown>> : [];
+              return (
+                <div className="space-y-2">
+                  <div className="text-xs text-gray-400">Total Participants: <span className="text-white font-medium">{String(r.totalParticipants ?? 0)}</span> · Total Messages: <span className="text-white font-medium">{String(r.totalMessages ?? 0)}</span></div>
+                  <div className="space-y-1 max-h-32 overflow-y-auto">
+                    {participants.slice(0, 5).map((p, i) => (
+                      <div key={i} className="flex items-center justify-between text-xs bg-lattice-elevated px-2 py-1 rounded">
+                        <span className="text-gray-300">{String(p.name ?? p.id ?? `P${i + 1}`)}</span>
+                        <div className="flex gap-3">
+                          <span className="text-gray-400">msgs: <span className="text-white">{String(p.messageCount ?? 0)}</span></span>
+                          <span className="text-neon-cyan">{String(p.share ?? p.percentage ?? 0)}%</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  {r.mostActive && <div className="text-xs text-gray-400">Most Active: <span className="text-neon-cyan">{String(r.mostActive)}</span></div>}
+                </div>
+              );
+            })()}
+            {threadActionResult.action === 'topicExtract' && (() => {
+              const r = threadActionResult.result;
+              const topics = Array.isArray(r.topics) ? r.topics as Array<Record<string, unknown>> : [];
+              const bigrams = Array.isArray(r.topBigrams) ? r.topBigrams as string[] : [];
+              return (
+                <div className="space-y-2">
+                  <div className="text-xs text-gray-400">Dominant Topic: <span className="text-neon-purple font-medium">{String(r.dominantTopic ?? '-')}</span> · Diversity: <span className="text-white">{String(r.topicDiversity ?? 0)}</span></div>
+                  <div className="flex flex-wrap gap-1">
+                    {topics.slice(0, 6).map((t, i) => (
+                      <span key={i} className="text-xs bg-neon-purple/20 text-neon-purple px-2 py-0.5 rounded-full">
+                        {String(t.name ?? t.topic ?? t)} ({String(t.mentions ?? t.count ?? 0)})
+                      </span>
+                    ))}
+                  </div>
+                  {bigrams.length > 0 && (
+                    <div className="text-xs text-gray-400">Top phrases: {bigrams.slice(0, 4).map((b, i) => <span key={i} className="text-gray-300 ml-1">"{b}"</span>)}</div>
+                  )}
+                </div>
+              );
+            })()}
+          </div>
+        )}
+      </div>
       </div>
     </div>
   );

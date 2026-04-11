@@ -38,6 +38,7 @@ import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
+import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 
 type RecordingStatus = 'ready' | 'recording' | 'processing';
 type ExportFormat = 'wav' | 'mp3' | 'flac';
@@ -155,6 +156,22 @@ export default function VoiceLensPage() {
   // Level meters
   const [levelL, setLevelL] = useState(0);
   const [levelR, setLevelR] = useState(0);
+
+  const runVoiceAction = useRunArtifact('voice');
+  const [voiceActionResult, setVoiceActionResult] = useState<{ action: string; result: Record<string, unknown> } | null>(null);
+  const [voiceActiveAction, setVoiceActiveAction] = useState<string | null>(null);
+
+  const handleVoiceAction = useCallback(async (action: string) => {
+    const id = takeItems[0]?.id;
+    if (!id) return;
+    setVoiceActiveAction(action);
+    try {
+      const res = await runVoiceAction.mutateAsync({ id, action });
+      if (res.ok) setVoiceActionResult({ action, result: res.result as Record<string, unknown> });
+    } finally {
+      setVoiceActiveAction(null);
+    }
+  }, [takeItems, runVoiceAction]);
 
   // Real recording refs
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -933,6 +950,92 @@ export default function VoiceLensPage() {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Voice Actions Panel */}
+      <div className="px-4 py-3 border-t border-lattice-border bg-black/40">
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="text-xs font-semibold text-gray-300 flex items-center gap-2">
+            <Zap className="w-3 h-3 text-neon-purple" />
+            Voice Actions
+          </h3>
+          {voiceActionResult && (
+            <button onClick={() => setVoiceActionResult(null)} className="p-0.5 rounded hover:bg-lattice-elevated text-gray-400">
+              <X className="w-3 h-3" />
+            </button>
+          )}
+        </div>
+        <div className="flex flex-wrap gap-2 mb-2">
+          {(['transcriptAnalyze', 'speakerDiarize', 'sentimentScore', 'keywordSpot'] as const).map((action) => (
+            <button
+              key={action}
+              onClick={() => handleVoiceAction(action)}
+              disabled={!takeItems[0]?.id || voiceActiveAction !== null}
+              className="px-2.5 py-1 text-xs rounded-lg bg-neon-purple/10 text-neon-purple border border-neon-purple/30 hover:bg-neon-purple/20 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"
+            >
+              {voiceActiveAction === action ? (
+                <div className="w-2.5 h-2.5 border border-neon-purple border-t-transparent rounded-full animate-spin" />
+              ) : null}
+              {action === 'transcriptAnalyze' ? 'Transcript' : action === 'speakerDiarize' ? 'Diarize' : action === 'sentimentScore' ? 'Sentiment' : 'Keywords'}
+            </button>
+          ))}
+        </div>
+        {voiceActionResult && (
+          <div className="bg-lattice-surface border border-lattice-border rounded p-2 space-y-1 text-xs">
+            {voiceActionResult.action === 'transcriptAnalyze' && (() => {
+              const r = voiceActionResult.result;
+              return (
+                <div className="flex flex-wrap gap-3">
+                  <span className="text-gray-400">Words: <span className="text-white">{String(r.wordCount ?? 0)}</span></span>
+                  <span className="text-gray-400">WPM: <span className="text-white">{String(r.wpm ?? 0)}</span></span>
+                  <span className="text-gray-400">Sentences: <span className="text-white">{String(r.sentences ?? 0)}</span></span>
+                  <span className="text-gray-400">Filler Words: <span className="text-white">{String(r.fillerWords ?? 0)}</span></span>
+                  <span className="text-gray-400">Duration: <span className="text-white">{String(r.durationSeconds ?? 0)}s</span></span>
+                </div>
+              );
+            })()}
+            {voiceActionResult.action === 'speakerDiarize' && (() => {
+              const r = voiceActionResult.result;
+              const speakers = Array.isArray(r.speakers) ? r.speakers as Array<Record<string, unknown>> : [];
+              return (
+                <div className="space-y-1">
+                  <span className="text-gray-400">Speakers: <span className="text-white">{String(r.speakerCount ?? 0)}</span></span>
+                  {speakers.slice(0, 3).map((s, i) => (
+                    <div key={i} className="flex justify-between bg-lattice-elevated px-2 py-0.5 rounded">
+                      <span className="text-gray-300">{String(s.label ?? `Speaker ${i + 1}`)}</span>
+                      <span className="text-gray-400">{String(s.duration ?? 0)}s ({String(s.share ?? 0)}%)</span>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+            {voiceActionResult.action === 'sentimentScore' && (() => {
+              const r = voiceActionResult.result;
+              const score = Number(r.score ?? 0);
+              const scoreColor = score > 0.3 ? 'text-neon-green' : score < -0.3 ? 'text-red-400' : 'text-gray-300';
+              return (
+                <div className="flex flex-wrap gap-3">
+                  <span className="text-gray-400">Overall: <span className={`font-semibold ${scoreColor}`}>{String(r.label ?? 'neutral')}</span></span>
+                  <span className="text-gray-400">Score: <span className="text-white">{score.toFixed(2)}</span></span>
+                  <span className="text-gray-400">Confidence: <span className="text-white">{String(r.confidence ?? 0)}</span></span>
+                </div>
+              );
+            })()}
+            {voiceActionResult.action === 'keywordSpot' && (() => {
+              const r = voiceActionResult.result;
+              const keywords = Array.isArray(r.keywords) ? r.keywords as Array<Record<string, unknown>> : [];
+              return (
+                <div className="flex flex-wrap gap-1">
+                  {keywords.slice(0, 8).map((kw, i) => (
+                    <span key={i} className="bg-neon-purple/20 text-neon-purple px-1.5 py-0.5 rounded text-xs">
+                      {String(kw.word ?? kw)} ({String(kw.count ?? kw.frequency ?? 1)})
+                    </span>
+                  ))}
+                </div>
+              );
+            })()}
+          </div>
+        )}
       </div>
 
       {/* Stats bar */}

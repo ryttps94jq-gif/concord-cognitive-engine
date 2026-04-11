@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
@@ -29,8 +29,12 @@ import {
   Users2,
   Bookmark,
   CalendarDays,
-  Flag
+  Flag,
+  Zap,
+  X
 } from 'lucide-react';
+import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
+import { useLensData } from '@/lib/hooks/use-lens-data';
 import { cn } from '@/lib/utils';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -98,6 +102,23 @@ export default function TimelineLensPage() {
   const [limit, setLimit] = useState(30);
   const [showPostModal, setShowPostModal] = useState(false);
   const [postContent, setPostContent] = useState('');
+
+  const { items: timelineItems } = useLensData<Record<string, unknown>>('timeline', 'event');
+  const runTimelineAction = useRunArtifact('timeline');
+  const [timelineActionResult, setTimelineActionResult] = useState<{ action: string; result: Record<string, unknown> } | null>(null);
+  const [timelineActiveAction, setTimelineActiveAction] = useState<string | null>(null);
+
+  const handleTimelineAction = useCallback(async (action: string) => {
+    const id = timelineItems[0]?.id;
+    if (!id) return;
+    setTimelineActiveAction(action);
+    try {
+      const res = await runTimelineAction.mutateAsync({ id, action });
+      if (res.ok) setTimelineActionResult({ action, result: res.result as Record<string, unknown> });
+    } finally {
+      setTimelineActiveAction(null);
+    }
+  }, [timelineItems, runTimelineAction]);
 
 
   const { data: postsData, isLoading, isError: isError, error: error, refetch: refetch,} = useQuery({
@@ -667,6 +688,112 @@ export default function TimelineLensPage() {
           compact
         />
       )}
+
+      {/* Timeline Actions Panel */}
+      <div className="p-4 border-t border-[#3a3b3c] bg-[#18191a]">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold text-gray-300 flex items-center gap-2">
+            <Zap className="w-4 h-4 text-blue-400" />
+            Timeline Actions
+          </h3>
+          {timelineActionResult && (
+            <button onClick={() => setTimelineActionResult(null)} className="p-1 rounded hover:bg-[#3a3b3c] text-gray-400">
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+        <div className="flex flex-wrap gap-2 mb-3">
+          {(['criticalPath', 'ganttSchedule', 'temporalClustering', 'trendAnalysis'] as const).map((action) => (
+            <button
+              key={action}
+              onClick={() => handleTimelineAction(action)}
+              disabled={!timelineItems[0]?.id || timelineActiveAction !== null}
+              className="px-3 py-1.5 text-sm rounded-lg bg-blue-600/10 text-blue-400 border border-blue-600/30 hover:bg-blue-600/20 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              {timelineActiveAction === action ? (
+                <div className="w-3 h-3 border border-blue-400 border-t-transparent rounded-full animate-spin" />
+              ) : null}
+              {action === 'criticalPath' ? 'Critical Path' : action === 'ganttSchedule' ? 'Gantt Schedule' : action === 'temporalClustering' ? 'Temporal Cluster' : 'Trend Analysis'}
+            </button>
+          ))}
+        </div>
+        {timelineActionResult && (
+          <div className="bg-[#242526] border border-[#3a3b3c] rounded-lg p-3 space-y-2 text-sm">
+            {timelineActionResult.action === 'criticalPath' && (() => {
+              const r = timelineActionResult.result;
+              const path = Array.isArray(r.criticalPath) ? r.criticalPath as Array<Record<string, unknown>> : [];
+              return (
+                <div className="space-y-2">
+                  <div className="flex gap-4 text-xs">
+                    <span className="text-gray-400">Duration: <span className="text-white font-medium">{String(r.projectDuration ?? 0)}</span></span>
+                    <span className="text-gray-400">Critical Tasks: <span className="text-white font-medium">{String(r.criticalTaskCount ?? 0)}</span></span>
+                    <span className="text-gray-400">Total Tasks: <span className="text-white font-medium">{String(r.totalTasks ?? 0)}</span></span>
+                    <span className="text-gray-400">Avg Slack: <span className="text-white font-medium">{String(r.averageSlack ?? 0)}</span></span>
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {path.slice(0, 6).map((t, i) => (
+                      <span key={i} className="text-xs bg-red-500/20 text-red-400 px-2 py-0.5 rounded-full">
+                        {String(t.name ?? t.id)} ({String(t.duration ?? 0)})
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
+            {timelineActionResult.action === 'ganttSchedule' && (() => {
+              const r = timelineActionResult.result;
+              const schedule = Array.isArray(r.schedule) ? r.schedule as Array<Record<string, unknown>> : [];
+              return (
+                <div className="space-y-2">
+                  <div className="flex gap-4 text-xs">
+                    <span className="text-gray-400">Duration: <span className="text-white font-medium">{String(r.projectDuration ?? 0)}</span></span>
+                    <span className="text-gray-400">Peak Parallel: <span className="text-white font-medium">{String(r.peakParallelism ?? 0)}</span></span>
+                    <span className="text-gray-400">Avg Duration: <span className="text-white font-medium">{String(r.averageDuration ?? 0)}</span></span>
+                  </div>
+                  <div className="space-y-1 max-h-24 overflow-y-auto">
+                    {schedule.slice(0, 4).map((t, i) => (
+                      <div key={i} className="flex items-center gap-2 text-xs">
+                        <span className="text-gray-300 truncate flex-1">{String(t.name ?? t.id)}</span>
+                        <span className="text-gray-500">start: {String(t.start ?? 0)}</span>
+                        <span className="text-gray-500">end: {String(t.end ?? 0)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
+            {timelineActionResult.action === 'temporalClustering' && (() => {
+              const r = timelineActionResult.result;
+              return (
+                <div className="space-y-2">
+                  <div className="flex gap-4 text-xs">
+                    <span className="text-gray-400">Clusters: <span className="text-white font-medium">{String(r.totalClusters ?? 0)}</span></span>
+                    <span className="text-gray-400">Events: <span className="text-white font-medium">{String(r.totalEvents ?? 0)}</span></span>
+                    <span className="text-gray-400">Periodic: <span className={(r.periodicity as Record<string, unknown>)?.detected ? 'text-green-400' : 'text-gray-400'}>
+                      {(r.periodicity as Record<string, unknown>)?.detected ? 'Yes' : 'No'}
+                    </span></span>
+                  </div>
+                </div>
+              );
+            })()}
+            {timelineActionResult.action === 'trendAnalysis' && (() => {
+              const r = timelineActionResult.result;
+              const trend = r.trend as Record<string, unknown> | undefined;
+              const dir = String(trend?.direction ?? 'flat');
+              const dirColor = dir === 'increasing' ? 'text-neon-green' : dir === 'decreasing' ? 'text-red-400' : 'text-gray-300';
+              return (
+                <div className="space-y-2">
+                  <div className="flex gap-4 text-xs">
+                    <span className="text-gray-400">Trend: <span className={`font-semibold ${dirColor}`}>{dir}</span></span>
+                    <span className="text-gray-400">R²: <span className="text-white">{String(trend?.rSquared ?? 0)}</span></span>
+                    <span className="text-gray-400">Anomalies: <span className="text-white">{String(r.anomalyCount ?? 0)}</span></span>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        )}
+      </div>
               </div>
             </motion.div>
           </motion.div>

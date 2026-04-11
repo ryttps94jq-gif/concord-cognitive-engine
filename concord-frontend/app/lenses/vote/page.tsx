@@ -6,13 +6,14 @@ import { apiHelpers } from '@/lib/api/client';
 
 import { Loading } from '@/components/common/Loading';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { UniversalActions } from '@/components/lens/UniversalActions';
 import {
   Check, X, Users, Scale, Plus, Clock, MessageSquare,
   ThumbsUp, ThumbsDown, Minus, BarChart3, ChevronDown,
-  ChevronUp, Send, AlertCircle, Vote, Layers, TrendingUp, Percent,
+  ChevronUp, Send, AlertCircle, Vote, Layers, TrendingUp, Percent, Zap,
 } from 'lucide-react';
+import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { motion } from 'framer-motion';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 import { ErrorState } from '@/components/common/EmptyState';
@@ -97,6 +98,22 @@ export default function VoteLensPage() {
   const {
     items: proposalItems, isLoading, isError, error, refetch, create,
   } = useLensData<ProposalData>('vote', 'proposal', { seed: [] });
+
+  const runVoteAction = useRunArtifact('vote');
+  const [voteActionResult, setVoteActionResult] = useState<{ action: string; result: Record<string, unknown> } | null>(null);
+  const [voteActiveAction, setVoteActiveAction] = useState<string | null>(null);
+
+  const handleVoteAction = useCallback(async (action: string) => {
+    const id = proposalItems[0]?.id;
+    if (!id) return;
+    setVoteActiveAction(action);
+    try {
+      const res = await runVoteAction.mutateAsync({ id, action });
+      if (res.ok) setVoteActionResult({ action, result: res.result as Record<string, unknown> });
+    } finally {
+      setVoteActiveAction(null);
+    }
+  }, [proposalItems, runVoteAction]);
 
   // Map lens items to proposals
   const proposals = useMemo(() =>
@@ -956,6 +973,95 @@ function ResultsDashboard({
             );
           })}
         </div>
+      </div>
+
+      {/* Vote Actions Panel */}
+      <div className="panel p-4">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-semibold flex items-center gap-2">
+            <Zap className="w-4 h-4 text-neon-purple" />
+            Vote Actions
+          </h3>
+          {voteActionResult && (
+            <button onClick={() => setVoteActionResult(null)} className="p-1 rounded hover:bg-lattice-elevated text-gray-400">
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+        <div className="flex flex-wrap gap-2 mb-3">
+          {(['tallyVotes', 'fairnessCheck', 'consensusMeasure'] as const).map((action) => (
+            <button
+              key={action}
+              onClick={() => handleVoteAction(action)}
+              disabled={!proposalItems[0]?.id || voteActiveAction !== null}
+              className="px-3 py-1.5 text-sm rounded-lg bg-neon-purple/10 text-neon-purple border border-neon-purple/30 hover:bg-neon-purple/20 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              {voteActiveAction === action ? (
+                <div className="w-3 h-3 border border-neon-purple border-t-transparent rounded-full animate-spin" />
+              ) : null}
+              {action === 'tallyVotes' ? 'Tally Votes' : action === 'fairnessCheck' ? 'Fairness Check' : 'Consensus Measure'}
+            </button>
+          ))}
+        </div>
+        {voteActionResult && (
+          <div className="bg-lattice-deep border border-lattice-border rounded-lg p-3 space-y-2 text-sm">
+            {voteActionResult.action === 'tallyVotes' && (() => {
+              const r = voteActionResult.result;
+              const outcome = String(r.outcome ?? 'pending');
+              const outcomeColor = outcome === 'passed' ? 'text-neon-green' : outcome === 'rejected' ? 'text-red-400' : 'text-yellow-400';
+              return (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-gray-400 text-xs">Outcome:</span>
+                    <span className={`text-sm font-semibold uppercase ${outcomeColor}`}>{outcome}</span>
+                  </div>
+                  <div className="flex gap-4 text-xs">
+                    <span className="text-neon-green">For: {String(r.votesFor ?? 0)} ({String(r.forPercent ?? 0)}%)</span>
+                    <span className="text-red-400">Against: {String(r.votesAgainst ?? 0)} ({String(r.againstPercent ?? 0)}%)</span>
+                    <span className="text-gray-400">Abstain: {String(r.votesAbstain ?? 0)}</span>
+                    <span className="text-gray-400">Total: {String(r.totalVotes ?? 0)}</span>
+                  </div>
+                </div>
+              );
+            })()}
+            {voteActionResult.action === 'fairnessCheck' && (() => {
+              const r = voteActionResult.result;
+              const isFair = r.isFair as boolean | undefined;
+              const issues = Array.isArray(r.issues) ? r.issues as string[] : [];
+              return (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="text-gray-400">Fairness:</span>
+                    <span className={`font-semibold px-2 py-0.5 rounded ${isFair ? 'bg-neon-green/20 text-neon-green' : 'bg-yellow-500/20 text-yellow-400'}`}>
+                      {isFair ? 'Fair' : 'Issues Detected'}
+                    </span>
+                    <span className="text-gray-400">Score: <span className="text-white">{String(r.fairnessScore ?? 0)}</span></span>
+                  </div>
+                  {issues.length > 0 && (
+                    <div className="text-xs space-y-0.5">
+                      {issues.slice(0, 3).map((issue, i) => <div key={i} className="text-yellow-400">⚠ {issue}</div>)}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+            {voteActionResult.action === 'consensusMeasure' && (() => {
+              const r = voteActionResult.result;
+              const level = String(r.consensusLevel ?? 'low');
+              const levelColor = level === 'high' ? 'text-neon-green' : level === 'medium' ? 'text-yellow-400' : 'text-red-400';
+              return (
+                <div className="space-y-2">
+                  <div className="flex gap-4 text-xs">
+                    <span className="text-gray-400">Consensus: <span className={`font-semibold ${levelColor}`}>{level}</span></span>
+                    <span className="text-gray-400">Score: <span className="text-white">{String(r.consensusScore ?? 0)}</span></span>
+                    <span className="text-gray-400">Polarization: <span className="text-white">{String(r.polarization ?? 0)}</span></span>
+                  </div>
+                  {r.recommendation && <div className="text-xs text-gray-400">Recommendation: <span className="text-gray-300">{String(r.recommendation)}</span></div>}
+                </div>
+              );
+            })()}
+          </div>
+        )}
       </div>
     </div>
   );

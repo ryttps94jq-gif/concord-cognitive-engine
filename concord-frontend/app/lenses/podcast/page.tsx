@@ -8,8 +8,9 @@ import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Mic2, Play, Pause, Plus, Search, Rss, BarChart3,
-  Clock, Users, X, Headphones, ListMusic, Trash2, Check,
+  Clock, Users, X, Headphones, ListMusic, Trash2, Check, Loader2,
 } from 'lucide-react';
+import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import { showToast } from '@/components/common/Toasts';
@@ -71,6 +72,20 @@ export default function PodcastLensPage() {
   } = useLensDTUs({ lens: 'podcast' });
 
   const { items: subscriberItems } = useLensData<Record<string, unknown>>('podcast', 'subscriber');
+
+  const runAction = useRunArtifact('podcast');
+  const [actionResult, setActionResult] = useState<Record<string, unknown> | null>(null);
+  const [isRunning, setIsRunning] = useState<string | null>(null);
+  const handleAction = async (action: string) => {
+    const targetId = episodeItems[0]?.id;
+    if (!targetId) { setActionResult({ message: 'Create an episode first to run analytics.' }); return; }
+    setIsRunning(action);
+    try {
+      const res = await runAction.mutateAsync({ id: targetId, action });
+      setActionResult(res.result as Record<string, unknown>);
+    } catch (e) { console.error(`Action ${action} failed:`, e); }
+    finally { setIsRunning(null); }
+  };
 
   // ---- State ----
   const [activeTab, setActiveTab] = useState<ViewTab>('episodes');
@@ -561,6 +576,88 @@ export default function PodcastLensPage() {
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* Backend Action Panel */}
+        <div className="panel p-4 space-y-3 mx-auto">
+          <h2 className="font-semibold flex items-center gap-2">
+            <Mic2 className="w-4 h-4 text-neon-purple" />
+            Podcast Analysis
+          </h2>
+          <div className="flex flex-wrap gap-2">
+            {[
+              { action: 'episodeAnalytics', label: 'Episode Analytics' },
+              { action: 'guestResearch', label: 'Guest Research' },
+              { action: 'productionChecklist', label: 'Production Checklist' },
+              { action: 'monetizationCalc', label: 'Monetization Calc' },
+            ].map(({ action, label }) => (
+              <button key={action} onClick={() => handleAction(action)} disabled={!!isRunning}
+                className="btn-secondary text-sm flex items-center gap-1 disabled:opacity-50">
+                {isRunning === action ? <Loader2 className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
+                {label}
+              </button>
+            ))}
+          </div>
+          {actionResult && (
+            <div className="bg-lattice-deep rounded-lg p-4 space-y-3 text-sm">
+              {'totalListens' in actionResult && (
+                <div className="space-y-1">
+                  <div className="flex flex-wrap gap-4 text-xs">
+                    <span className="text-gray-400">Episodes: <span className="text-neon-cyan font-bold">{String(actionResult.episodes)}</span></span>
+                    <span className="text-gray-400">Total Listens: <span className="text-neon-cyan font-bold">{String(actionResult.totalListens)}</span></span>
+                    <span className="text-gray-400">Avg: <span className="text-neon-green">{String(actionResult.avgListensPerEpisode)}</span></span>
+                    <span className="text-gray-400">Completion: <span className="text-yellow-400">{String(actionResult.completionRate)}%</span></span>
+                  </div>
+                  <p className="text-xs text-gray-400">Top: <span className="text-white">{String(actionResult.topEpisode)}</span></p>
+                  <span className={`text-xs px-2 py-0.5 rounded ${actionResult.growth === 'established' ? 'bg-neon-green/20 text-neon-green' : 'bg-yellow-400/20 text-yellow-400'}`}>{String(actionResult.growth)}</span>
+                </div>
+              )}
+              {'topics' in actionResult && Array.isArray(actionResult.topics) && (
+                <div className="space-y-2">
+                  <p className="text-xs text-gray-400">Guest: <span className="text-white">{String(actionResult.name)}</span></p>
+                  {actionResult.topics.length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      {(actionResult.topics as string[]).map((t, i) => (
+                        <span key={i} className="text-xs bg-neon-cyan/10 border border-neon-cyan/20 rounded px-2 py-0.5 text-neon-cyan">{t}</span>
+                      ))}
+                    </div>
+                  )}
+                  {'questionSuggestions' in actionResult && Array.isArray(actionResult.questionSuggestions) && (
+                    <div className="space-y-1">
+                      <p className="text-xs text-gray-500 uppercase tracking-wider">Questions</p>
+                      {(actionResult.questionSuggestions as string[]).slice(0, 3).map((q, i) => (
+                        <p key={i} className="text-xs text-gray-300">• {q}</p>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+              {'totalSteps' in actionResult && (
+                <div className="space-y-1">
+                  <div className="flex gap-4 text-xs text-gray-400">
+                    <span>Steps: <span className="text-neon-cyan">{String(actionResult.totalSteps)}</span></span>
+                    <span>Done: <span className="text-neon-green">{String(actionResult.completed)}</span></span>
+                    <span>Progress: <span className="text-yellow-400">{String(actionResult.progress)}%</span></span>
+                  </div>
+                  {'nextStep' in actionResult && <p className="text-xs text-gray-300">Next: <span className="text-neon-cyan">{String(actionResult.nextStep)}</span></p>}
+                </div>
+              )}
+              {'adRevenue' in actionResult && (
+                <div className="space-y-1">
+                  <div className="flex flex-wrap gap-4 text-xs text-gray-400">
+                    <span>Ad Revenue: <span className="text-neon-green font-bold">${String(actionResult.adRevenue)}</span></span>
+                    <span>Premium: <span className="text-neon-green">${String(actionResult.premiumRevenue)}</span></span>
+                    <span>Total: <span className="text-neon-cyan font-bold">${String(actionResult.totalMonthlyRevenue)}/mo</span></span>
+                  </div>
+                  <div className="flex gap-4 text-xs">
+                    <span className="text-gray-400">Tier: <span className="text-neon-purple">{String(actionResult.tier)}</span></span>
+                  </div>
+                  {'nextMilestone' in actionResult && <p className="text-xs text-gray-400">{String(actionResult.nextMilestone)}</p>}
+                </div>
+              )}
+              {'message' in actionResult && <p className="text-gray-400">{String(actionResult.message)}</p>}
+            </div>
+          )}
+        </div>
       </main>
     </div>
   );

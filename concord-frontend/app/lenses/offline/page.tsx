@@ -5,7 +5,8 @@ import { useState, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
 import { useLensData } from '@/lib/hooks/use-lens-data';
-import { Wifi, WifiOff, Database, RefreshCw, Upload, Download, Trash2, Loader2, Layers, ChevronDown, CloudOff, HardDrive } from 'lucide-react';
+import { Wifi, WifiOff, Database, RefreshCw, Upload, Download, Trash2, Loader2, Layers, ChevronDown, CloudOff, HardDrive, Play } from 'lucide-react';
+import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ErrorState } from '@/components/common/EmptyState';
 import { UniversalActions } from '@/components/lens/UniversalActions';
@@ -70,6 +71,20 @@ export default function OfflineLensPage() {
   } = useLensData<SyncItem>('offline', 'sync-item', {
     seed: SEED_SYNC_ITEMS,
   });
+
+  const runAction = useRunArtifact('offline');
+  const [actionResult, setActionResult] = useState<Record<string, unknown> | null>(null);
+  const [isRunning, setIsRunning] = useState<string | null>(null);
+  const handleAction = async (action: string) => {
+    const targetId = syncItems[0]?.id;
+    if (!targetId) { setActionResult({ message: 'No sync items found. Add sync data first.' }); return; }
+    setIsRunning(action);
+    try {
+      const res = await runAction.mutateAsync({ id: targetId, action });
+      setActionResult(res.result as Record<string, unknown>);
+    } catch (e) { console.error(`Action ${action} failed:`, e); }
+    finally { setIsRunning(null); }
+  };
 
   const pendingSync: SyncItem[] = syncItems.map((item) => {
     const d = item.data as unknown as SyncItem;
@@ -382,6 +397,84 @@ export default function OfflineLensPage() {
           compact
         />
       )}
+      </div>
+
+      {/* Backend Action Panel */}
+      <div className="panel p-4 space-y-3">
+        <h2 className="font-semibold flex items-center gap-2">
+          <CloudOff className="w-4 h-4 text-neon-cyan" />
+          Offline Analysis
+        </h2>
+        <div className="flex flex-wrap gap-2">
+          {[
+            { action: 'syncConflict', label: 'Sync Conflict' },
+            { action: 'cacheStrategy', label: 'Cache Strategy' },
+            { action: 'deltaCompute', label: 'Delta Compute' },
+          ].map(({ action, label }) => (
+            <button key={action} onClick={() => handleAction(action)} disabled={!!isRunning}
+              className="btn-secondary text-sm flex items-center gap-1 disabled:opacity-50">
+              {isRunning === action ? <Loader2 className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
+              {label}
+            </button>
+          ))}
+        </div>
+        {actionResult && (
+          <div className="bg-lattice-deep rounded-lg p-4 space-y-3 text-sm">
+            {'conflicts' in actionResult && Array.isArray(actionResult.conflicts) && (
+              <div className="space-y-2">
+                <div className="flex gap-4 text-xs text-gray-400">
+                  <span>Conflicts: <span className="text-neon-cyan font-bold">{String((actionResult.conflicts as unknown[]).length)}</span></span>
+                  <span>Strategy: <span className="text-neon-purple">{String(actionResult.strategy)}</span></span>
+                </div>
+                {'summary' in actionResult && actionResult.summary && typeof actionResult.summary === 'object' && (
+                  <div className="flex flex-wrap gap-3 text-xs">
+                    {Object.entries(actionResult.summary as Record<string, unknown>).map(([k, v]) => (
+                      <span key={k} className="text-gray-400">{k}: <span className="text-neon-cyan">{String(v)}</span></span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            {'hotColdSplit' in actionResult && (
+              <div className="space-y-2">
+                {'hotColdSplit' in actionResult && actionResult.hotColdSplit && typeof actionResult.hotColdSplit === 'object' && (
+                  <div className="flex flex-wrap gap-3 text-xs">
+                    {Object.entries(actionResult.hotColdSplit as Record<string, unknown>).map(([k, v]) => (
+                      <span key={k} className="text-gray-400">{k}: <span className="text-neon-cyan">{String(v)}</span></span>
+                    ))}
+                  </div>
+                )}
+                {'evictionPolicy' in actionResult && actionResult.evictionPolicy && typeof actionResult.evictionPolicy === 'object' && (
+                  <div className="flex flex-wrap gap-3 text-xs">
+                    {Object.entries(actionResult.evictionPolicy as Record<string, unknown>).map(([k, v]) => (
+                      <span key={k} className="text-gray-400">{k}: <span className="text-neon-green">{String(v)}</span></span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            {'changes' in actionResult && (
+              <div className="space-y-2">
+                {'changes' in actionResult && actionResult.changes && typeof actionResult.changes === 'object' && (
+                  <div className="flex flex-wrap gap-3 text-xs">
+                    {Object.entries(actionResult.changes as Record<string, unknown>).map(([k, v]) => (
+                      <span key={k} className="text-gray-400">{k}: <span className="text-neon-cyan">{String(v)}</span></span>
+                    ))}
+                  </div>
+                )}
+                {'bandwidth' in actionResult && actionResult.bandwidth && typeof actionResult.bandwidth === 'object' && (
+                  <div className="flex flex-wrap gap-3 text-xs">
+                    {Object.entries(actionResult.bandwidth as Record<string, unknown>).map(([k, v]) => (
+                      <span key={k} className="text-gray-400">{k}: <span className="text-neon-green">{String(v)}</span></span>
+                    ))}
+                  </div>
+                )}
+                {'recommendation' in actionResult && <p className="text-xs text-gray-300">{String(actionResult.recommendation)}</p>}
+              </div>
+            )}
+            {'message' in actionResult && <p className="text-gray-400">{String(actionResult.message)}</p>}
+          </div>
+        )}
       </div>
 
       {/* Lens Features */}
