@@ -5187,8 +5187,31 @@ function startAutoBackup(intervalHours = 24) {
   structuredLog("info", "autobackup_enabled", { intervalHours });
 }
 if (String(process.env.AUTO_BACKUP || "true").toLowerCase() === "true") {
-  startAutoBackup(Number(process.env.BACKUP_INTERVAL_HOURS || 24));
+  startAutoBackup(Number(process.env.BACKUP_INTERVAL_HOURS || 2));
 }
+
+// Periodic state save safety net — catches mutations if debounced save somehow missed
+// Runs every 5 minutes, no-op if no changes since last save
+let _lastPeriodicSaveHash = "";
+trackedInterval(() => {
+  try {
+    const data = JSON.stringify(_serializeState());
+    const hash = data.length.toString(); // cheap change detection
+    if (hash === _lastPeriodicSaveHash) return; // no changes
+    _lastPeriodicSaveHash = hash;
+    if (USE_SQLITE_STATE && db) {
+      const stmt = db.prepare("INSERT OR REPLACE INTO state_snapshots (id, data, version, saved_at) VALUES (1, ?, ?, ?)");
+      stmt.run(data, VERSION, new Date().toISOString());
+    } else if (typeof STATE_PATH === "string") {
+      const tmpPath = STATE_PATH + ".tmp";
+      fs.writeFileSync(tmpPath, data, "utf-8");
+      fs.renameSync(tmpPath, STATE_PATH);
+    }
+    structuredLog("debug", "periodic_state_save", { sizeKb: Math.round(data.length / 1024) });
+  } catch (e) {
+    structuredLog("error", "periodic_state_save_failed", { error: String(e?.message || e) });
+  }
+}, 5 * 60 * 1000);
 
 // Export for CLI
 export { createBackup, restoreBackup, listBackups };
@@ -27343,6 +27366,13 @@ register("lens", "get", (ctx, input={}) => {
   const artifact = STATE.lensArtifacts.get(id);
   if (!artifact) return { ok: false, error: "not found" };
   if (domain && artifact.domain !== domain) return { ok: false, error: "domain mismatch" };
+  // User sovereignty: private artifacts only visible to owner
+  const currentUserId = ctx.actor?.userId || "anon";
+  const vis = artifact.meta?.visibility;
+  const SOCIAL_DOMAINS = new Set(["forum", "feed", "marketplace", "collab", "thread", "vote", "alliance", "global", "news", "questmarket"]);
+  if (!SOCIAL_DOMAINS.has(artifact.domain) && artifact.ownerId && artifact.ownerId !== "anon" && artifact.ownerId !== currentUserId && vis !== "published" && vis !== "public") {
+    return { ok: false, error: "not found" }; // Don't reveal existence
+  }
   return { ok: true, artifact };
 });
 
@@ -31535,6 +31565,48 @@ const FRONTEND_MANIFEST_SUPPLEMENTS = {
     { action: "temporal_query", brain: "U", desc: "Query substrate at a specific point in time" },
     { action: "truth_at_time", brain: "U", desc: "Determine what was known at a given time" },
     { action: "version_compare", brain: "U", desc: "Compare DTU versions across time" },
+  ],
+  artistry: [
+    { action: "colorPaletteAnalysis", brain: "U", desc: "Analyze artwork colors, calculate harmony scores, detect dominant hues" },
+    { action: "compositionScore", brain: "U", desc: "Evaluate layout balance using rule-of-thirds grid positioning" },
+    { action: "styleClassify", brain: "U", desc: "Classify art style from tags, medium, era, and technique attributes" },
+    { action: "mediaInventory", brain: "U", desc: "Track art supplies inventory with cost totals and reorder alerts" },
+  ],
+  atlas: [
+    { action: "geocode", brain: "U", desc: "Resolve place names to coordinates with distance calculations" },
+    { action: "distanceMatrix", brain: "U", desc: "Compute distances between multiple points using Haversine formula" },
+    { action: "regionStats", brain: "U", desc: "Aggregate demographic and economic stats for regions" },
+    { action: "routeOptimize", brain: "U", desc: "Find optimal visiting order for waypoints (nearest-neighbor TSP)" },
+  ],
+  import: [
+    { action: "validateImport", brain: "U", desc: "Check required fields, data types, detect malformed rows" },
+    { action: "mapFields", brain: "U", desc: "Suggest source-to-target field mappings using name similarity" },
+    { action: "detectDuplicates", brain: "U", desc: "Find duplicate rows by key fields using hash comparison" },
+    { action: "transformPreview", brain: "U", desc: "Preview first N rows with applied type coercion and trimming" },
+  ],
+  world: [
+    { action: "countryCompare", brain: "U", desc: "Compare countries on GDP, population, area, HDI with rankings" },
+    { action: "indicatorTrack", brain: "U", desc: "Track development indicators over time, compute growth rates" },
+    { action: "tradeFlow", brain: "U", desc: "Analyze import/export data, compute trade balance and top partners" },
+    { action: "demographicProfile", brain: "U", desc: "Analyze population data: age distribution, urbanization, growth" },
+  ],
+  wallet: [
+    { action: "portfolioBalance", brain: "U", desc: "Compute portfolio allocation percentages, gains/losses per asset" },
+    { action: "transactionCategorize", brain: "U", desc: "Auto-categorize transactions by merchant name patterns" },
+    { action: "budgetCheck", brain: "U", desc: "Compare spending by category against budget limits, flag overages" },
+    { action: "spendingTrend", brain: "U", desc: "Analyze spending over time, compute month-over-month changes" },
+  ],
+  thread: [
+    { action: "threadAnalyze", brain: "U", desc: "Analyze thread: message count, avg length, response times" },
+    { action: "sentimentMap", brain: "U", desc: "Score sentiment per message, track flow through conversation" },
+    { action: "participantStats", brain: "U", desc: "Compute per-participant metrics: messages, response time, activity" },
+    { action: "topicExtract", brain: "U", desc: "Extract top topics from messages using word frequency analysis" },
+  ],
+  welding: [
+    { action: "jointStrength", brain: "U", desc: "Calculate theoretical joint strength from material and weld type" },
+    { action: "rodSelection", brain: "U", desc: "Recommend welding rod/wire based on metals, position, joint type" },
+    { action: "heatInput", brain: "U", desc: "Calculate heat input in kJ/mm from voltage, amperage, travel speed" },
+    { action: "inspectionChecklist", brain: "U", desc: "Generate inspection checklist based on weld type and code" },
   ],
 };
 
@@ -57648,7 +57720,14 @@ app.get("/api/search", (req, res) => {
     }
     if (searchScope !== "local") {
       for (const [id, dtu] of STATE.dtus) {
-        if (!pool.has(id)) pool.set(id, dtu);
+        if (pool.has(id)) continue;
+        // User sovereignty: only include own, system, or published DTUs in global search
+        const dtuOwner = dtu.ownerId || "system";
+        const vis = dtu.visibility || dtu.meta?.visibility;
+        if (dtuOwner === "system" || dtuOwner === "anon" || dtuOwner === userId ||
+            vis === "published" || vis === "public") {
+          pool.set(id, dtu);
+        }
       }
     }
 
