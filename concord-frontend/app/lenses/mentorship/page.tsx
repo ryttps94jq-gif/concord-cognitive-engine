@@ -557,8 +557,8 @@ export default function MentorshipLensPage() {
                 </div>
                 {'topThemes' in actionResult && Array.isArray(actionResult.topThemes) && actionResult.topThemes.length > 0 && (
                   <div className="flex flex-wrap gap-1">
-                    {(actionResult.topThemes as string[]).map((t, i) => (
-                      <span key={i} className="text-xs bg-neon-cyan/10 border border-neon-cyan/20 rounded px-2 py-0.5 text-neon-cyan">{t}</span>
+                    {(actionResult.topThemes as Array<{theme: string; count: number}>).map((t, i) => (
+                      <span key={i} className="text-xs bg-neon-cyan/10 border border-neon-cyan/20 rounded px-2 py-0.5 text-neon-cyan">{t.theme}</span>
                     ))}
                   </div>
                 )}

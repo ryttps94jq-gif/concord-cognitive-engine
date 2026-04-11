@@ -484,8 +484,8 @@ export default function MetalearningLensPage() {
                   <div>
                     <p className="text-xs text-neon-green font-semibold mb-1">Strengths</p>
                     <div className="flex flex-wrap gap-1">
-                      {(actionResult.strengths as string[]).map((s, i) => (
-                        <span key={i} className="text-xs bg-neon-green/10 border border-neon-green/20 rounded px-2 py-0.5 text-neon-green">{s}</span>
+                      {(actionResult.strengths as Array<{skill: string; score: number}>).map((s, i) => (
+                        <span key={i} className="text-xs bg-neon-green/10 border border-neon-green/20 rounded px-2 py-0.5 text-neon-green">{s.skill}</span>
                       ))}
                     </div>
                   </div>
@@ -494,8 +494,8 @@ export default function MetalearningLensPage() {
                   <div>
                     <p className="text-xs text-red-400 font-semibold mb-1">Weaknesses</p>
                     <div className="flex flex-wrap gap-1">
-                      {(actionResult.weaknesses as string[]).map((w, i) => (
-                        <span key={i} className="text-xs bg-red-400/10 border border-red-400/20 rounded px-2 py-0.5 text-red-400">{w}</span>
+                      {(actionResult.weaknesses as Array<{skill: string; score: number}>).map((w, i) => (
+                        <span key={i} className="text-xs bg-red-400/10 border border-red-400/20 rounded px-2 py-0.5 text-red-400">{w.skill}</span>
                       ))}
                     </div>
                   </div>
