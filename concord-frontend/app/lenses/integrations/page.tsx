@@ -8,8 +8,9 @@ import type { CreateWebhookRequest } from '@/lib/api/generated-types';
 import { useUIStore } from '@/store/ui';
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Plug, Webhook, Zap, Code, FileText, Plus, Trash2, Play, ToggleLeft, ToggleRight, Layers, ChevronDown, Link, AlertCircle } from 'lucide-react';
+import { Plug, Webhook, Zap, Code, FileText, Plus, Trash2, Play, ToggleLeft, ToggleRight, Layers, ChevronDown, Link, AlertCircle, Loader2, Activity, GitMerge, CheckCircle } from 'lucide-react';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
+import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
@@ -23,6 +24,23 @@ export default function IntegrationsLensPage() {
   const [activeTab, setActiveTab] = useState<'webhooks' | 'automations' | 'services'>('webhooks');
   const [showCreate, setShowCreate] = useState(false);
   const [showFeatures, setShowFeatures] = useState(true);
+
+  // Action wiring
+  const runAction = useRunArtifact('integrations');
+  const { items: actionItems } = useLensData('integrations', 'integration', { noSeed: true });
+  const [actionResult, setActionResult] = useState<Record<string, unknown> | null>(null);
+  const [isRunning, setIsRunning] = useState<string | null>(null);
+
+  const handleAction = async (action: string) => {
+    const targetId = actionItems[0]?.id;
+    if (!targetId) return;
+    setIsRunning(action);
+    try {
+      const res = await runAction.mutateAsync({ id: targetId, action });
+      setActionResult(res.result as Record<string, unknown>);
+    } catch (e) { console.error(`Action ${action} failed:`, e); }
+    finally { setIsRunning(null); }
+  };
 
   const { data: webhooks, isLoading, isError: isError, error: error, refetch: refetch,} = useQuery({
     queryKey: ['webhooks'],
@@ -262,6 +280,107 @@ export default function IntegrationsLensPage() {
       )}
 
       <RealtimeDataPanel data={realtimeInsights} />
+
+      {/* Backend Action Panel */}
+      <div className="panel p-4 space-y-3">
+        <h2 className="font-semibold flex items-center gap-2">
+          <Activity className="w-4 h-4 text-neon-green" />
+          Integration Analysis
+        </h2>
+        <div className="flex flex-wrap gap-2">
+          {['apiHealthCheck', 'dataFlowMapping', 'compatibilityCheck'].map((action) => (
+            <button
+              key={action}
+              onClick={() => handleAction(action)}
+              disabled={!!isRunning || !actionItems[0]}
+              className="btn-secondary text-sm flex items-center gap-1 disabled:opacity-50"
+            >
+              {isRunning === action ? <Loader2 className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
+              {action === 'apiHealthCheck' ? 'API Health Check' : action === 'dataFlowMapping' ? 'Data Flow Map' : 'Compatibility Check'}
+            </button>
+          ))}
+        </div>
+        {!actionItems[0] && <p className="text-xs text-gray-500">Create an integration artifact to run analysis actions.</p>}
+        {actionResult && (
+          <div className="bg-lattice-deep rounded-lg p-4 space-y-3 text-sm">
+            {'overallStatus' in actionResult && (
+              <>
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="w-4 h-4 text-neon-green" />
+                  <span className="font-semibold">Overall Status: <span className={String(actionResult.overallStatus) === 'healthy' ? 'text-neon-green' : 'text-yellow-400'}>{String(actionResult.overallStatus)}</span></span>
+                  <span className="text-gray-400">Score: {String(actionResult.overallHealthScore)}</span>
+                </div>
+                {actionResult.summary && (
+                  <div className="grid grid-cols-4 gap-2 text-xs">
+                    {Object.entries(actionResult.summary as Record<string,unknown>).map(([k,v]) => (
+                      <div key={k} className="bg-lattice-surface rounded p-2 text-center">
+                        <div className="font-bold">{String(v)}</div>
+                        <div className="text-gray-400 capitalize">{k}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {Array.isArray(actionResult.endpoints) && (
+                  <div className="space-y-1">
+                    {(actionResult.endpoints as Record<string,unknown>[]).slice(0,5).map((ep, i) => (
+                      <div key={i} className="flex items-center justify-between bg-lattice-surface rounded p-2 text-xs">
+                        <span className="font-mono">{String(ep.name)}</span>
+                        <span className={String(ep.status) === 'healthy' ? 'text-neon-green' : 'text-yellow-400'}>{String(ep.status)}</span>
+                        <span className="text-gray-400">Score: {String(ep.healthScore)}</span>
+                        <span className="text-gray-400">Avail: {String(ep.availability)}%</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+            {'nodes' in actionResult && Array.isArray(actionResult.nodes) && (
+              <>
+                <div className="font-semibold text-neon-cyan">Data Flow Analysis</div>
+                {actionResult.metrics && (
+                  <div className="grid grid-cols-3 gap-2 text-xs">
+                    {Object.entries(actionResult.metrics as Record<string,unknown>).map(([k,v]) => (
+                      <div key={k} className="bg-lattice-surface rounded p-2">
+                        <div className="text-gray-400 capitalize">{k.replace(/([A-Z])/g,' $1').toLowerCase()}</div>
+                        <div className="font-bold">{String(v)}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {Array.isArray(actionResult.bottlenecks) && actionResult.bottlenecks.length > 0 && (
+                  <div>
+                    <div className="text-xs text-yellow-400 font-semibold mb-1">Bottlenecks:</div>
+                    {(actionResult.bottlenecks as Record<string,unknown>[]).map((b, i) => (
+                      <div key={i} className="text-xs text-gray-300">{String(b.node)} — score: {String(b.bottleneckScore)}</div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+            {'apis' in actionResult && Array.isArray(actionResult.apis) && (
+              <>
+                <div className="font-semibold text-neon-cyan">Compatibility Report</div>
+                {actionResult.summary && (
+                  <div className="text-xs text-gray-400">
+                    {String((actionResult.summary as Record<string,unknown>).totalApis)} APIs · {String((actionResult.summary as Record<string,unknown>).compatible)} compatible · {String((actionResult.summary as Record<string,unknown>).totalEstimatedHours)}h estimated migration
+                  </div>
+                )}
+                <div className="space-y-1">
+                  {(actionResult.apis as Record<string,unknown>[]).map((api, i) => (
+                    <div key={i} className="flex items-center justify-between bg-lattice-surface rounded p-2 text-xs">
+                      <span>{String(api.name)}</span>
+                      <span className="text-gray-400">{String(api.currentVersion)} → {String(api.targetVersion)}</span>
+                      <span className={api.backwardCompatible ? 'text-neon-green' : 'text-red-400'}>{api.backwardCompatible ? 'Compatible' : 'Breaking'}</span>
+                      <span className="text-gray-400">{String((api.migration as Record<string,unknown>)?.level)}</span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+            {'message' in actionResult && <p className="text-gray-400">{String(actionResult.message)}</p>}
+          </div>
+        )}
+      </div>
 
       {/* Lens Features */}
       <div className="border-t border-white/10">

@@ -3,7 +3,8 @@
 import { useLensNav } from '@/hooks/useLensNav';
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Atom, Zap, Waves, RotateCcw, Play, Shuffle, Loader2, Layers, ChevronDown } from 'lucide-react';
+import { Atom, Zap, Waves, RotateCcw, Play, Shuffle, Loader2, Layers, ChevronDown, X } from 'lucide-react';
+import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { apiHelpers } from '@/lib/api/client';
 import { useMutation } from '@tanstack/react-query';
@@ -59,6 +60,20 @@ export default function QuantumLensPage() {
   const [qubits, setQubits] = useState(4);
   const [result, setResult] = useState<string | null>(null);
   const [showFeatures, setShowFeatures] = useState(true);
+  const runAction = useRunArtifact('quantum');
+  const [quantumActionResult, setQuantumActionResult] = useState<Record<string, unknown> | null>(null);
+  const [quantumActiveAction, setQuantumActiveAction] = useState<string | null>(null);
+
+  const handleQuantumAction = async (action: string) => {
+    const id = circuitItems[0]?.id;
+    if (!id) return;
+    setQuantumActiveAction(action);
+    try {
+      const res = await runAction.mutateAsync({ id, action });
+      setQuantumActionResult({ action, ...(res.result as Record<string, unknown>) });
+    } catch (err) { console.error('Quantum action failed:', err); }
+    finally { setQuantumActiveAction(null); }
+  };
   const { latestData: realtimeData, isLive, lastUpdated, insights } = useRealtimeLens('quantum');
 
   const { items: circuitItems, isLoading: circuitsLoading, isError: isError, error: error, refetch: refetch, create: saveResult } = useLensData<SimResultData>('quantum', 'sim-result', {
