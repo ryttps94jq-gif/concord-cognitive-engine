@@ -313,8 +313,9 @@ export default function ImportLens() {
         } as unknown as Partial<ImportJob>,
         meta: { tags: ['import', action], status: 'active' },
       });
-    } catch {
-      // Error handled silently -- job creation will reflect failure
+    } catch (e) {
+      console.error('Import job creation failed:', e);
+      useUIStore.getState().addToast({ type: 'error', message: 'Import job creation failed' });
     } finally {
       setImporting(false);
     }

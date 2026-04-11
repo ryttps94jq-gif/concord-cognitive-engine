@@ -240,7 +240,7 @@ import { selectGlobalSynthesisCandidates } from "./emergent/scope-separation.js"
 import { isSummaryDue, compressConversation, getSessionSummary, getSummaryText } from "./lib/conversation-summarizer.js";
 import { runContextHarvest, harvestEntityState, formatEntityStateBlock } from "./lib/chat-context-pipeline.js";
 import { assembleWithTokenBudget, computeBudgetBreakdown } from "./lib/token-budget-assembler.js";
-import { createInputDTU, createOutputDTU, isConsolidationDue, consolidationCheck, forgeFromMessage } from "./lib/conversation-enrichment.js";
+import { createInputDTU, createOutputDTU, isConsolidationDue, consolidationCheck, isAcceleratedPromotionDue, acceleratedChatPromotion, forgeFromMessage } from "./lib/conversation-enrichment.js";
 import { runParallelBrains, recordParallelMetrics } from "./lib/chat-parallel-brains.js";
 
 // ---- Entity Growth, Web Exploration & Hive Communication ----
@@ -1206,10 +1206,10 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
 const OPENAI_BASE_URL = process.env.OPENAI_BASE_URL || "https://api.openai.com/v1";
 const OPENAI_MODEL_FAST = process.env.OPENAI_MODEL_FAST || process.env.OPENAI_MODEL || "gpt-4o-mini";
 const OPENAI_MODEL_SMART = process.env.OPENAI_MODEL_SMART || "gpt-4.1";
-let LLM_READY = Boolean(OPENAI_API_KEY) || Boolean((process.env.BRAIN_CONSCIOUS_URL || process.env.OLLAMA_HOST || "").trim());
+let LLM_READY = Boolean(OPENAI_API_KEY); // Only true if OpenAI key is set; Ollama readiness verified by initThreeBrains() probe
 // Also mark LLM ready if conscious brain becomes available (updated in initThreeBrains)
 function _refreshLlmReady() {
-  LLM_READY = Boolean(OPENAI_API_KEY) || Boolean((process.env.BRAIN_CONSCIOUS_URL || process.env.OLLAMA_HOST || "").trim()) || (BRAIN && BRAIN.conscious && BRAIN.conscious.enabled);
+  LLM_READY = Boolean(OPENAI_API_KEY) || (BRAIN && BRAIN.conscious && BRAIN.conscious.enabled);
 }
 // LLM toggle: default ON only when a key is present
 const __envBool = (v) => String(v ?? "").toLowerCase().trim();
@@ -6263,6 +6263,10 @@ function saveStateDebounced() {
         if (global.gc) global.gc();
       } catch (e) {
         structuredLog("error", "state_save_failed", { error: String(e?.message || e) });
+        STATE._saveFailures = (STATE._saveFailures || 0) + 1;
+        if (typeof realtimeEmit === "function") {
+          realtimeEmit("health:pulse", { component: "state_save", status: "critical", score: 0, metrics: { failures: STATE._saveFailures, error: String(e?.message || e) }, timestamp: Date.now() });
+        }
         if (!USE_SQLITE_STATE) {
           try { fs.unlinkSync(STATE_PATH + ".tmp"); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
         }
@@ -6293,6 +6297,10 @@ function saveStateSync() {
     if (global.gc) global.gc();
   } catch (e) {
     structuredLog("error", "state_sync_save_failed", { error: String(e?.message || e) });
+    STATE._saveFailures = (STATE._saveFailures || 0) + 1;
+    if (typeof realtimeEmit === "function") {
+      realtimeEmit("health:pulse", { component: "state_save", status: "critical", score: 0, metrics: { failures: STATE._saveFailures, error: String(e?.message || e) }, timestamp: Date.now() });
+    }
   }
 }
 
@@ -17445,9 +17453,10 @@ let localReply = formatCrispResponse({
 
   // ===== TOOL CALLING INFRASTRUCTURE =====
   // Determine whether tools are available for this session.
-  // Guarded by Chicken3 toolsEnabled (global) + session toolsOptIn (per-session).
+  // Auto-enable tools for chat sessions (no explicit opt-in needed).
   const _toolFlags = _c3sessionFlags(ctx);
-  const _toolsAvailable = Boolean(STATE.__chicken3?.toolsEnabled && _toolFlags.toolsOptIn);
+  // Auto-enable tools for chat sessions (no explicit opt-in needed)
+  const _toolsAvailable = Boolean(STATE.__chicken3?.toolsEnabled !== false);
 
   // Tool descriptions injected into the system prompt when tools are enabled
   const _toolSystemPrompt = _toolsAvailable ? `
@@ -17804,6 +17813,24 @@ Rules for tool use:
   }
   // ===== END TOOL CALL EXECUTION LOOP =====
 
+  // If LLM failed, make the fallback response conversational instead of a DTU dump
+  if (!llmUsed && localReply && finalReply === localReply) {
+    // Extract the user's actual question
+    const userQuestion = messages?.[messages.length - 1]?.content || prompt || '';
+    // Build a helpful response from the DTU context
+    const topDtus = relevant.slice(0, 5);
+    if (topDtus.length > 0) {
+      finalReply = `Based on what I know, here's what I can share about "${userQuestion.slice(0, 80)}":\n\n` +
+        topDtus.map(d => {
+          const summary = d.human?.summary || d.content || d.title;
+          return `\u2022 ${summary.slice(0, 300)}`;
+        }).join('\n\n') +
+        `\n\nI'm currently running without my full AI capabilities (LLM offline), so my responses are based on stored knowledge. Once my brain is back online, I can have much deeper conversations about this.`;
+    } else {
+      finalReply = `I'd love to help with "${userQuestion.slice(0, 80)}", but I'm currently running in limited mode (my AI brain is offline). I don't have stored knowledge on this topic yet. Once my brain comes back online, I'll be able to have a full conversation about this. In the meantime, try creating some DTUs about this topic so I can learn!`;
+    }
+  }
+
   const _qpMeta = _fusedContext ? { patternsApplied: _fusedContext.meta.patternsApplied, queryIntent: _qualityPipelineResult?.queryIntent, tokenEstimate: _fusedContext.meta.tokenEstimate } : null;
   sess.messages.push({ role: "assistant", content: finalReply, ts: nowISO(), meta: { llmUsed, semanticUsed, mode, relevant: relevant.map(d=>d.id), qualityPipeline: _qpMeta, dtuCount: _pipelineDtuCount, toolCalls: _toolCallsExecuted.length > 0 ? _toolCallsExecuted.map(t => ({ tool: t.tool, ok: t.ok })) : undefined } });
   ctx.log("chat", "Chat response generated", { sessionId, mode, llmUsed, semanticUsed, relevant: relevant.map(d=>d.id), qualityPipeline: _qpMeta, pipelineDtuCount: _pipelineDtuCount });
@@ -17829,6 +17856,20 @@ Rules for tool use:
         });
       }
       sess._lastConsolidationCheck = Math.floor(sess.messages.length / 2);
+    }
+  } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
+  // Accelerated chat DTU promotion every 5 exchanges
+  try {
+    if (isAcceleratedPromotionDue(sess)) {
+      const _promoResult = acceleratedChatPromotion(STATE, sessionId);
+      if (_promoResult.promoted > 0 || _promoResult.megaCreated) {
+        ctx.log("chat_enrichment", "Accelerated chat DTU promotion", {
+          sessionId, promoted: _promoResult.promoted,
+          megaCreated: _promoResult.megaCreated, megaId: _promoResult.megaId,
+        });
+        saveStateDebounced();
+      }
+      sess._lastAcceleratedPromotionCheck = Math.floor(sess.messages.length / 2);
     }
   } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
   // ===== END DTU ENRICHMENT =====
@@ -22642,6 +22683,7 @@ registerSystemRoutes(app, {
   _inferQueryIntent, CRETI_PROJECTION_RULES, searchIndexed, paginateResults,
   auditLog, AUDIT_LOG,
   computeSubstrateStats,
+  getDbStatus: () => ({ pgPool: !!pgPool, redisClient: !!redisClient }),
 });
 
 // ---- Auth Endpoints (extracted to routes/auth.js) ----
@@ -31178,6 +31220,12 @@ registerUniversalLensActions();
 
     // Services lens: frontend calls inventoryCheck, backend registered as supplyCheck
     ["services", "inventoryCheck", "supplyCheck"],
+
+    // Education lens: frontend calls schedule_conflict_check, backend registered as scheduleConflict
+    ["education", "schedule_conflict_check", "scheduleConflict"],
+
+    // Real estate lens: frontend calls vacancy_report, backend registered as vacancyReport
+    ["realestate", "vacancy_report", "vacancyReport"],
   ];
 
   let aliasCount = 0;
@@ -34971,13 +35019,37 @@ function initChatSocketHandlers(io) {
               }
             } catch (_e) { /* web search is best-effort */ }
 
+            // Build DTU context for the streaming path
+            let _streamDtuContext = '';
+            try {
+              const userMsg = (prompt || '').toLowerCase();
+              const relevantDtus = [];
+              for (const [, dtu] of STATE.dtus) {
+                if (relevantDtus.length >= 15) break;
+                const title = (dtu.title || '').toLowerCase();
+                const content = (dtu.content || '').toLowerCase();
+                const tags = (dtu.tags || []).join(' ').toLowerCase();
+                // Simple keyword overlap scoring
+                const words = userMsg.split(/\s+/).filter(w => w.length > 3);
+                const matchScore = words.filter(w => title.includes(w) || content.includes(w) || tags.includes(w)).length;
+                if (matchScore > 0) relevantDtus.push({ dtu, score: matchScore });
+              }
+              relevantDtus.sort((a, b) => b.score - a.score);
+              if (relevantDtus.length > 0) {
+                _streamDtuContext = '\n\nRelevant knowledge from your substrate:\n' +
+                  relevantDtus.slice(0, 10).map(({ dtu }) =>
+                    `- ${dtu.title}: ${(dtu.content || dtu.human?.summary || '').slice(0, 200)}`
+                  ).join('\n');
+              }
+            } catch (_e) { /* context building is best-effort */ }
+
             // Build system prompt for streaming
             const _streamConsciousParams = getConsciousParams({ exchange_count: (_streamSess.messages || []).length });
             const _streamSystem = buildConsciousPrompt({
               dtu_count: STATE.dtus?.size || 0,
               domain_count: Object.keys(STATE.domains || {}).length,
               lens: lens || "general",
-              context: "",
+              context: _streamDtuContext + (_webContext ? `\n\nWeb search results (use to inform your answer, cite sources naturally):\n${_webContext}` : ""),
               conversation_history: (_streamSess.messages || []).slice(-20),
               personality_state: STATE.personality || null,
               active_wants: STATE.wants?.active || [],
@@ -35055,17 +35127,59 @@ function initChatSocketHandlers(io) {
         }
         // ===== END STREAMING PATH =====
 
+        // ── Web Search Integration for macro path (best-effort) ──────
+        let _macroWebContext = "";
+        try {
+          const webSearchMod = await import("./emergent/conscious-web-search.js").catch(() => null);
+          if (webSearchMod?.webSearchForChat && needsWebSearch(prompt)) {
+            const webResults = await webSearchMod.webSearchForChat([String(prompt)]);
+            if (webResults && webResults.length > 0) {
+              socket.emit("chat:web_results", { results: webResults, query: prompt, sessionId });
+              _macroWebContext = webResults.map(r => `[${r.title}]: ${r.snippet || (r.content || "").slice(0, 300)}`).join("\n");
+            }
+          }
+        } catch (_e) { /* web search is best-effort */ }
+
         // Run through the existing chat.respond macro (non-streaming fallback)
         const ctx = {
           state: STATE,
           log: (...args) => structuredLog("info", "chat:socket", ...args),
           reqMeta: { sessionId },
           affect: {},
+          llm: {
+            enabled: LLM_READY,
+            chat: async (opts) => {
+              const brainUrl = BRAIN.conscious?.url || process.env.OLLAMA_HOST || process.env.BRAIN_CONSCIOUS_URL;
+              if (!brainUrl) return { ok: false, error: 'no_llm' };
+              try {
+                const _model = opts.model || BRAIN.conscious?.model || 'llama3';
+                const _messages = [
+                  ...(opts.system ? [{ role: 'system', content: opts.system }] : []),
+                  ...(opts.messages || [])
+                ];
+                const _ac = new AbortController();
+                const _timeout = setTimeout(() => _ac.abort(), 120000);
+                const _res = await fetch(`${brainUrl}/api/chat`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ model: _model, messages: _messages, stream: false, options: { temperature: opts.temperature || 0.7, num_predict: opts.maxTokens || 700 } }),
+                  signal: _ac.signal,
+                }).finally(() => clearTimeout(_timeout));
+                const _json = await _res.json().catch(() => ({}));
+                if (_res.ok && _json.message?.content) {
+                  return { ok: true, content: _json.message.content };
+                }
+                return { ok: false, error: _json?.error || `status ${_res.status}` };
+              } catch (e) { return { ok: false, error: e.message }; }
+            },
+          },
         };
 
         const result = await runMacro("chat", "respond", {
           sessionId,
-          prompt: String(prompt),
+          prompt: _macroWebContext
+            ? `${String(prompt)}\n\n[Web search context:\n${_macroWebContext}]`
+            : String(prompt),
           lens: lens || null,
           llm: true,
         }, ctx);
@@ -35589,6 +35703,9 @@ app.get("/api/observability/health", (req, res) => {
     wsConnections: REALTIME.clients?.size || 0,
     eventSeq: _eventSeqCounter,
     idempotencyEntries: _IDEMPOTENCY.store.size,
+    postgres: { connected: !!pgPool, status: pgPool ? 'connected' : 'in-memory-fallback' },
+    redis: { connected: !!redisClient, status: redisClient ? 'connected' : 'in-memory-fallback' },
+    saveFailures: STATE._saveFailures || 0,
   });
 });
 
@@ -36066,6 +36183,9 @@ app.get("/api/system/health", (_req, res) => {
         sessionCount: sessions,
         brains: brainStatus,
         memory: { rss: process.memoryUsage().rss, heap: process.memoryUsage().heapUsed },
+        postgres: { connected: !!pgPool, status: pgPool ? 'connected' : 'in-memory-fallback' },
+        redis: { connected: !!redisClient, status: redisClient ? 'connected' : 'in-memory-fallback' },
+        saveFailures: STATE._saveFailures || 0,
         growth: {
           dtusLast24h: dtus.filter(d => {
             const ts = d.createdAt;

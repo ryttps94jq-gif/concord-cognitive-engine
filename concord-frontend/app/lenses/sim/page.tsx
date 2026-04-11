@@ -644,7 +644,7 @@ export default function SimLensPage() {
     try {
       const artifactId = scenarioArtifacts[0]?.id || 'sim';
       const res = await runArtifactAction.mutateAsync({ id: artifactId, action });
-      setter((res.result as Record<string, unknown>) || null);
+      if (res.ok === false) { setter({ message: `Action failed: ${(res as Record<string, unknown>).error || 'Unknown error'}` } as Record<string, unknown>); } else { setter((res.result as Record<string, unknown>) || null); }
     } catch (e) {
       console.error(`Sim action ${action} failed:`, e);
     }

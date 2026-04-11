@@ -331,7 +331,11 @@ export default function CollabLensPage() {
     setActionResult(null);
     try {
       const res = await runAction.mutateAsync({ id: targetId, action });
-      setActionResult((res.result ?? res) as ActionResult);
+      if (res.ok === false) {
+        setActionResult({ error: (res as Record<string, unknown>).error || 'Unknown error' } as ActionResult);
+      } else {
+        setActionResult((res.result ?? res) as ActionResult);
+      }
     } catch (err) {
       setActionResult({ error: err instanceof Error ? err.message : 'Action failed' });
     } finally {

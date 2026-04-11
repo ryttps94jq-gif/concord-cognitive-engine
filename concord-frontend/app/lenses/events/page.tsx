@@ -121,7 +121,7 @@ function pct(a: number, b: number): number {
 
 function parseJsonSafe<T>(val: unknown, fallback: T): T {
   if (typeof val === 'string') {
-    try { return JSON.parse(val) as T; } catch { return fallback; }
+    try { return JSON.parse(val) as T; } catch (e) { console.warn('JSON parse failed, using fallback:', e); return fallback; }
   }
   if (Array.isArray(val)) return val as T;
   return fallback;
@@ -249,7 +249,7 @@ export default function EventsLensPage() {
           },
           meta: { status: 'confirmed' },
         });
-      } catch { /* calendar sync optional */ }
+      } catch (e) { console.warn('Calendar sync failed (optional):', e); }
       // Announce event RSVP via social post
       try {
         const { api: apiClient } = await import('@/lib/api/client');
@@ -258,7 +258,7 @@ export default function EventsLensPage() {
           mediaType: 'text',
           tags: ['event', 'rsvp'],
         });
-      } catch { /* social post optional */ }
+      } catch (e) { console.warn('Social post failed (optional):', e); }
       setRsvpSuccess(eventItem.id);
     } catch (err) {
       console.error('RSVP failed:', err);
@@ -350,7 +350,7 @@ export default function EventsLensPage() {
             mediaType: 'text',
             tags: ['event', 'new-event', String(data.eventType || 'social')],
           });
-        } catch { /* social announcement optional */ }
+        } catch (e) { console.warn('Social announcement failed (optional):', e); }
       }
     }
     resetForm();
@@ -361,7 +361,7 @@ export default function EventsLensPage() {
     if (!targetId) return;
     try {
       const result = await runAction.mutateAsync({ id: targetId, action });
-      setActionResult(result.result as Record<string, unknown>);
+      if (result.ok === false) { setActionResult({ message: `Action failed: ${(result as Record<string, unknown>).error || 'Unknown error'}` }); } else { setActionResult(result.result as Record<string, unknown>); }
     } catch (err) {
       console.error('Action failed:', err);
     }

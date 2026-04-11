@@ -377,7 +377,7 @@ export default function CouncilLensPage() {
     try {
       const artifactId = proposalLensItems[0]?.id || 'council';
       const res = await runArtifact.mutateAsync({ id: artifactId, action, params: params || {} });
-      setter((res.result as Record<string, unknown>) || null);
+      if (res.ok === false) { setter({ message: `Action failed: ${(res as Record<string, unknown>).error || 'Unknown error'}` } as Record<string, unknown>); } else { setter((res.result as Record<string, unknown>) || null); }
     } catch (e) {
       console.error(`Council action ${action} failed:`, e);
     }

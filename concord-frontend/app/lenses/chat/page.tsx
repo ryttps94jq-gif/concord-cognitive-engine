@@ -566,10 +566,17 @@ export default function ChatLensPage() {
     setChatActionRunning(action);
     try {
       const res = await runChatAction.mutateAsync({ id: targetId, action });
-      const result = res.result as Record<string, unknown>;
-      if (action === 'threadSummarize') setThreadSummarizeResult(result);
-      else if (action === 'participantAnalysis') setParticipantAnalysisResult(result);
-      else if (action === 'topicDetection') setTopicDetectionResult(result);
+      if (res.ok === false) {
+        const errResult = { message: `Action failed: ${(res as Record<string, unknown>).error || 'Unknown error'}` };
+        if (action === 'threadSummarize') setThreadSummarizeResult(errResult);
+        else if (action === 'participantAnalysis') setParticipantAnalysisResult(errResult);
+        else if (action === 'topicDetection') setTopicDetectionResult(errResult);
+      } else {
+        const result = res.result as Record<string, unknown>;
+        if (action === 'threadSummarize') setThreadSummarizeResult(result);
+        else if (action === 'participantAnalysis') setParticipantAnalysisResult(result);
+        else if (action === 'topicDetection') setTopicDetectionResult(result);
+      }
     } catch (e) {
       console.error(`Chat action ${action} failed:`, e);
     }

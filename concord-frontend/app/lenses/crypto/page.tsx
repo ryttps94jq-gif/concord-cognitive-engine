@@ -18,6 +18,7 @@ import { cn } from '@/lib/utils';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
+import { useUIStore } from '@/store/ui';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 
@@ -340,8 +341,9 @@ export default function CryptoLensPage() {
       setSendTo('');
       setSendDescription('');
       setShowSendModal(false);
-    } catch {
-      // Errors handled silently
+    } catch (e) {
+      console.error('Send transaction failed:', e);
+      useUIStore.getState().addToast({ type: 'error', message: 'Transaction failed' });
     } finally {
       setTransacting(false);
     }
@@ -364,8 +366,9 @@ export default function CryptoLensPage() {
       setWalletAddress('');
       setWalletChainId('');
       setShowAddWallet(false);
-    } catch {
-      // Errors handled silently
+    } catch (e) {
+      console.error('Add wallet failed:', e);
+      useUIStore.getState().addToast({ type: 'error', message: 'Failed to add wallet' });
     }
   }, [walletName, walletAddress, walletChainId, wallets.length, createWallet]);
 
@@ -387,8 +390,9 @@ export default function CryptoLensPage() {
       setChainName('');
       setChainSymbol('');
       setShowAddChain(false);
-    } catch {
-      // Errors handled silently
+    } catch (e) {
+      console.error('Add chain failed:', e);
+      useUIStore.getState().addToast({ type: 'error', message: 'Failed to add chain' });
     }
   }, [chainName, chainSymbol, createChain]);
 
@@ -401,8 +405,9 @@ export default function CryptoLensPage() {
   const handleDeleteWallet = useCallback(async (id: string) => {
     try {
       await removeWallet(id);
-    } catch {
-      // Errors handled silently
+    } catch (e) {
+      console.error('Delete wallet failed:', e);
+      useUIStore.getState().addToast({ type: 'error', message: 'Failed to delete wallet' });
     }
   }, [removeWallet]);
 

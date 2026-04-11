@@ -236,7 +236,7 @@ export default function ExperienceLensPage() {
     setExpActionResult(null);
     try {
       const res = await runExpAction.mutateAsync({ id: targetId, action });
-      setExpActionResult(res.result as Record<string, unknown>);
+      if (res.ok === false) { setExpActionResult({ message: `Action failed: ${(res as Record<string, unknown>).error || 'Unknown error'}` }); } else { setExpActionResult(res.result as Record<string, unknown>); }
     } catch (e) { console.error(`Experience action ${action} failed:`, e); setExpActionResult({ message: `Action failed: ${e instanceof Error ? e.message : 'Unknown error'}` }); }
     setExpRunning(null);
   };

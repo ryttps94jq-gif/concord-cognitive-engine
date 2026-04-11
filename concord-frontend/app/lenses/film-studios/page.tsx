@@ -65,7 +65,7 @@ export default function FilmStudiosPage() {
     setFilmRunning(action);
     try {
       const res = await runFilmAction.mutateAsync({ id: targetId, action });
-      setFilmActionResult({ _action: action, ...(res.result as Record<string, unknown>) });
+      if (res.ok === false) { setFilmActionResult({ _action: action, message: `Action failed: ${(res as Record<string, unknown>).error || 'Unknown error'}` }); } else { setFilmActionResult({ _action: action, ...(res.result as Record<string, unknown>) }); }
     } catch (e) { console.error(`Film action ${action} failed:`, e); setFilmActionResult({ message: `Action failed: ${e instanceof Error ? e.message : 'Unknown error'}` }); }
     setFilmRunning(null);
   }, [myFilmItems, runFilmAction]);

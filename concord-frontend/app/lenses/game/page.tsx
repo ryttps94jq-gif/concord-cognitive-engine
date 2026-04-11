@@ -242,7 +242,7 @@ export default function GameLensPage() {
     setGameRunning(action);
     try {
       const res = await runGameAction.mutateAsync({ id: targetId, action });
-      setGameActionResult({ _action: action, ...(res.result as Record<string, unknown>) });
+      if (res.ok === false) { setGameActionResult({ _action: action, message: `Action failed: ${(res as Record<string, unknown>).error || 'Unknown error'}` }); } else { setGameActionResult({ _action: action, ...(res.result as Record<string, unknown>) }); }
     } catch (e) { console.error(`Game action ${action} failed:`, e); setGameActionResult({ message: `Action failed: ${e instanceof Error ? e.message : 'Unknown error'}` }); }
     setGameRunning(null);
   }, [shopLensItems, runGameAction]);

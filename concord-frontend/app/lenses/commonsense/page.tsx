@@ -117,7 +117,11 @@ export default function CommonsenseLensPage() {
     setActionResult(null);
     try {
       const res = await runAction.mutateAsync({ id: actionTargetId, action });
-      setActionResult({ action, result: (res as { result?: unknown }).result ?? res });
+      if (res.ok === false) {
+        setActionResult({ action, result: { message: `Action failed: ${(res as Record<string, unknown>).error || 'Unknown error'}` } });
+      } else {
+        setActionResult({ action, result: (res as { result?: unknown }).result ?? res });
+      }
     } catch (err) {
       setActionResult({ action, result: { error: err instanceof Error ? err.message : 'Action failed' } });
     } finally {

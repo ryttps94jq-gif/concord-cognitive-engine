@@ -713,7 +713,7 @@ export default function HealthcareLensPage() {
     if (!targetId) return;
     try {
       const result = await runAction.mutateAsync({ id: targetId, action });
-      setActionResult(result.result as Record<string, unknown>);
+      if (result.ok === false) { setActionResult({ message: `Action failed: ${(result as Record<string, unknown>).error || 'Unknown error'}` }); } else { setActionResult(result.result as Record<string, unknown>); }
     } catch (err) {
       console.error('Action failed:', err);
     }

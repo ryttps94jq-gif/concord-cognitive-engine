@@ -1764,7 +1764,11 @@ export default function CommandCenterPage() {
     setActionResult(null);
     try {
       const res = await runAction.mutateAsync({ id: ccTargetId, action });
-      setActionResult(res.result ?? res);
+      if (res.ok === false) {
+        setActionResult({ message: `Action failed: ${(res as Record<string, unknown>).error || 'Unknown error'}` });
+      } else {
+        setActionResult(res.result ?? res);
+      }
     } catch (err) {
       setActionResult({ error: err instanceof Error ? err.message : 'Action failed' });
     } finally {

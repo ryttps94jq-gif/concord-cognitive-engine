@@ -157,7 +157,7 @@ self.addEventListener('fetch', (event) => {
           self.registration.sync.register('concord-mutation-sync').catch(() => {});
         }
         return new Response(
-          JSON.stringify({ ok: true, queued: true, message: 'Mutation queued for background sync' }),
+          JSON.stringify({ ok: false, queued: true, message: 'Offline — will retry when connected' }),
           { status: 202, headers: { 'Content-Type': 'application/json' } }
         );
       })

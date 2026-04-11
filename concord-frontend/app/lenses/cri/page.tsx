@@ -63,7 +63,11 @@ export default function CRILensPage() {
     setActionResult(null);
     try {
       const res = await runAction.mutateAsync({ id: targetId, action });
-      setActionResult({ action, result: res.result });
+      if (res.ok === false) {
+        setActionResult({ action, result: { message: `Action failed: ${(res as Record<string, unknown>).error || 'Unknown error'}` } });
+      } else {
+        setActionResult({ action, result: res.result });
+      }
     } catch (err) {
       setActionResult({ action, result: `Error: ${err instanceof Error ? err.message : String(err)}` });
     } finally {

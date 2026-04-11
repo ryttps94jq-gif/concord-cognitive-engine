@@ -94,7 +94,7 @@ export default function ReposLensPage() {
     setReposActiveAction(action);
     try {
       const res = await runReposAction.mutateAsync({ id, action });
-      setReposActionResult({ action, ...(res.result as Record<string, unknown>) });
+      if (res.ok === false) { setReposActionResult({ action, message: `Action failed: ${(res as Record<string, unknown>).error || 'Unknown error'}` }); } else { setReposActionResult({ action, ...(res.result as Record<string, unknown>) }); }
     } catch (err) { console.error('Repos action failed:', err); }
     finally { setReposActiveAction(null); }
   };

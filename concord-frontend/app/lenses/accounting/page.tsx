@@ -256,7 +256,7 @@ export default function AccountingLensPage() {
     if (!targetId) return;
     try {
       const result = await runAction.mutateAsync({ id: targetId, action });
-      setActionResult(result.result as Record<string, unknown>);
+      if (result.ok === false) { setActionResult({ message: `Action failed: ${(result as Record<string, unknown>).error || 'Unknown error'}` }); } else { setActionResult(result.result as Record<string, unknown>); }
     } catch (err) {
       console.error('Action failed:', err);
     }
@@ -269,7 +269,7 @@ export default function AccountingLensPage() {
     setTrialBalanceLoading(true);
     try {
       const res = await runAction.mutateAsync({ id: targetId, action: 'trialBalance' });
-      setTrialBalanceResult(res.result as Record<string, unknown>);
+      if (res.ok === false) { setTrialBalanceResult({ message: `Action failed: ${(res as Record<string, unknown>).error || 'Unknown error'}` }); } else { setTrialBalanceResult(res.result as Record<string, unknown>); }
     } catch (e) { console.error('trialBalance failed:', e); setActionResult({ message: `trialBalance failed: ${e instanceof Error ? e.message : 'Unknown error'}` }); }
     setTrialBalanceLoading(false);
   };
@@ -280,7 +280,7 @@ export default function AccountingLensPage() {
     setProfitLossLoading(true);
     try {
       const res = await runAction.mutateAsync({ id: targetId, action: 'profitLoss' });
-      setProfitLossResult(res.result as Record<string, unknown>);
+      if (res.ok === false) { setProfitLossResult({ message: `Action failed: ${(res as Record<string, unknown>).error || 'Unknown error'}` }); } else { setProfitLossResult(res.result as Record<string, unknown>); }
     } catch (e) { console.error('profitLoss failed:', e); setActionResult({ message: `profitLoss failed: ${e instanceof Error ? e.message : 'Unknown error'}` }); }
     setProfitLossLoading(false);
   };
@@ -291,7 +291,7 @@ export default function AccountingLensPage() {
     setBackendAgingLoading(true);
     try {
       const res = await runAction.mutateAsync({ id: targetId, action: 'invoiceAging' });
-      setBackendAgingResult(res.result as Record<string, unknown>);
+      if (res.ok === false) { setBackendAgingResult({ message: `Action failed: ${(res as Record<string, unknown>).error || 'Unknown error'}` }); } else { setBackendAgingResult(res.result as Record<string, unknown>); }
     } catch (e) { console.error('invoiceAging failed:', e); setActionResult({ message: `invoiceAging failed: ${e instanceof Error ? e.message : 'Unknown error'}` }); }
     setBackendAgingLoading(false);
   };
@@ -302,7 +302,7 @@ export default function AccountingLensPage() {
     setBackendVarianceLoading(true);
     try {
       const res = await runAction.mutateAsync({ id: targetId, action: 'budgetVariance' });
-      setBackendVarianceResult(res.result as Record<string, unknown>);
+      if (res.ok === false) { setBackendVarianceResult({ message: `Action failed: ${(res as Record<string, unknown>).error || 'Unknown error'}` }); } else { setBackendVarianceResult(res.result as Record<string, unknown>); }
     } catch (e) { console.error('budgetVariance failed:', e); setActionResult({ message: `budgetVariance failed: ${e instanceof Error ? e.message : 'Unknown error'}` }); }
     setBackendVarianceLoading(false);
   };
@@ -313,7 +313,7 @@ export default function AccountingLensPage() {
     setRentRollLoading(true);
     try {
       const res = await runAction.mutateAsync({ id: targetId, action: 'rentRoll' });
-      setRentRollResult(res.result as Record<string, unknown>);
+      if (res.ok === false) { setRentRollResult({ message: `Action failed: ${(res as Record<string, unknown>).error || 'Unknown error'}` }); } else { setRentRollResult(res.result as Record<string, unknown>); }
     } catch (e) { console.error('rentRoll failed:', e); setActionResult({ message: `rentRoll failed: ${e instanceof Error ? e.message : 'Unknown error'}` }); }
     setRentRollLoading(false);
   };
@@ -324,7 +324,7 @@ export default function AccountingLensPage() {
     setValidateLedgerLoading(true);
     try {
       const res = await runAction.mutateAsync({ id: targetId, action: 'validate-ledger' });
-      setValidateLedgerResult(res.result as Record<string, unknown>);
+      if (res.ok === false) { setValidateLedgerResult({ message: `Action failed: ${(res as Record<string, unknown>).error || 'Unknown error'}` }); } else { setValidateLedgerResult(res.result as Record<string, unknown>); }
     } catch (e) { console.error('validate-ledger failed:', e); setActionResult({ message: `validate-ledger failed: ${e instanceof Error ? e.message : 'Unknown error'}` }); }
     setValidateLedgerLoading(false);
   };

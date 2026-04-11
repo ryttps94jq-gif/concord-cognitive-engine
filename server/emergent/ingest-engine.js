@@ -193,32 +193,87 @@ function validateDomain(url, tier) {
   return { valid: true, hostname };
 }
 
-// ── Content Fetching (Simulated) ────────────────────────────────────────────
+// ── Content Fetching ────────────────────────────────────────────────────────
 
 /**
- * Simulate fetching URL content. In production this would use fetch() with
- * tier-appropriate timeout and size limits. Returns simulated content object.
+ * Fetch URL content with tier-appropriate timeout and size limits.
+ * Returns content object with fetchSuccess boolean indicating outcome.
  */
-function fetchContent(url, tier) {
+async function fetchContent(url, tier) {
   const limits = TIER_LIMITS[tier] || TIER_LIMITS[TIERS.FREE];
   const hostname = extractDomain(url);
 
-  // Simulate content extraction results
-  return {
-    url,
-    hostname,
-    fetchedAt: nowISO(),
-    timeoutMs: limits.timeoutMs,
-    maxSizeBytes: limits.maxSizeBytes,
-    rawLength: Math.floor(Math.random() * limits.maxSizeBytes * 0.3) + 1000,
-    title: `Content from ${hostname}`,
-    text: `Extracted text content from ${url}`,
-    format: url.endsWith(".pdf") ? "pdf" : "html",
-    headers: {
-      contentType: url.endsWith(".pdf") ? "application/pdf" : "text/html",
-    },
-    fetchSuccess: true,
-  };
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), limits.timeoutMs);
+    const response = await fetch(url, {
+      headers: { 'User-Agent': 'Concord/1.0 (Research Bot; +https://concord.app/bot)' },
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+
+    if (!response.ok) {
+      return {
+        url, hostname, fetchedAt: nowISO(), fetchSuccess: false,
+        error: `HTTP ${response.status}`,
+      };
+    }
+
+    const contentType = response.headers.get('content-type') || '';
+    if (!contentType.includes('text') && !contentType.includes('json') && !contentType.includes('xml')) {
+      return {
+        url, hostname, fetchedAt: nowISO(), fetchSuccess: false,
+        error: `Unsupported content type: ${contentType}`,
+      };
+    }
+
+    const raw = await response.text();
+    const rawLength = raw.length;
+
+    if (rawLength > limits.maxSizeBytes) {
+      return {
+        url, hostname, fetchedAt: nowISO(), fetchSuccess: false,
+        error: `Content too large: ${rawLength} bytes exceeds ${limits.maxSizeBytes} limit`,
+      };
+    }
+
+    // Strip scripts, styles, and HTML tags for web pages
+    const cleaned = raw
+      .replace(/<script[\s\S]*?<\/script>/gi, '')
+      .replace(/<style[\s\S]*?<\/style>/gi, '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 50000); // Cap at 50k chars
+
+    // Extract title from HTML if present
+    const titleMatch = raw.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+    const title = titleMatch ? titleMatch[1].trim() : `Content from ${hostname}`;
+
+    const format = contentType.includes('pdf') ? 'pdf'
+      : contentType.includes('json') ? 'json'
+      : contentType.includes('xml') ? 'xml'
+      : 'html';
+
+    return {
+      url,
+      hostname,
+      fetchedAt: nowISO(),
+      timeoutMs: limits.timeoutMs,
+      maxSizeBytes: limits.maxSizeBytes,
+      rawLength,
+      title,
+      text: cleaned,
+      format,
+      headers: { contentType },
+      fetchSuccess: true,
+    };
+  } catch (e) {
+    return {
+      url, hostname, fetchedAt: nowISO(), fetchSuccess: false,
+      error: e.name === 'AbortError' ? `Timeout after ${limits.timeoutMs}ms` : e.message,
+    };
+  }
 }
 
 // ── Content Extraction ──────────────────────────────────────────────────────
@@ -705,7 +760,7 @@ function installDTU(dtu, contentHash) {
 
 // ── Full Pipeline Processing ────────────────────────────────────────────────
 
-function processIngestJob(job) {
+async function processIngestJob(job) {
   const startTime = Date.now();
 
   try {
@@ -713,7 +768,7 @@ function processIngestJob(job) {
     job.processingStartedAt = nowISO();
 
     // Step 1: Content fetch
-    const fetched = fetchContent(job.url, job.tier);
+    const fetched = await fetchContent(job.url, job.tier);
     if (!fetched.fetchSuccess) {
       job.status = "failed";
       job.error = "fetch_failed";
@@ -846,7 +901,7 @@ function insertIntoQueue(job) {
  * @param {string} tier - One of: free, paid, researcher, sovereign
  * @returns {{ ok: boolean, ingestId?: string, error?: string, status?: string }}
  */
-export function submitUrl(userId, url, tier) {
+export async function submitUrl(userId, url, tier) {
   try {
     const effectiveTier = tier || TIERS.FREE;
     const ingestId = uid("ingest");
@@ -892,7 +947,7 @@ export function submitUrl(userId, url, tier) {
 
     // Sovereign tier: immediate processing, bypass queue
     if (effectiveTier === TIERS.SOVEREIGN) {
-      processIngestJob(job);
+      await processIngestJob(job);
       return { ok: true, ingestId, status: job.status, immediate: true };
     }
 
@@ -1047,7 +1102,7 @@ export function addToBlocklist(domain) {
  *
  * @returns {{ ok: boolean, processed: number, results: object[] }}
  */
-export function flushQueue() {
+export async function flushQueue() {
   try {
     const results = [];
     let processed = 0;
@@ -1055,7 +1110,7 @@ export function flushQueue() {
     while (_queue.length > 0) {
       const job = _queue.shift();
       if (job.status === "queued") {
-        processIngestJob(job);
+        await processIngestJob(job);
         processed++;
       }
       results.push({
@@ -1077,7 +1132,7 @@ export function flushQueue() {
  *
  * @returns {{ ok: boolean, job?: object, empty?: boolean }}
  */
-export function processNextItem() {
+export async function processNextItem() {
   try {
     if (_queue.length === 0) {
       return { ok: true, empty: true };
@@ -1085,7 +1140,7 @@ export function processNextItem() {
 
     const job = _queue.shift();
     if (job.status === "queued") {
-      processIngestJob(job);
+      await processIngestJob(job);
     }
 
     return {

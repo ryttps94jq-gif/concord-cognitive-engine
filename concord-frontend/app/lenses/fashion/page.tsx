@@ -101,7 +101,7 @@ export default function FashionLensPage() {
     setIsRunning(action);
     try {
       const res = await runAction.mutateAsync({ id: targetId, action });
-      setActionResult({ _action: action, ...(res.result as Record<string, unknown>) });
+      if (res.ok === false) { setActionResult({ _action: action, message: `Action failed: ${(res as Record<string, unknown>).error || 'Unknown error'}` }); } else { setActionResult({ _action: action, ...(res.result as Record<string, unknown>) }); }
     } catch (e) { console.error(`Action ${action} failed:`, e); setActionResult({ message: `Action failed: ${e instanceof Error ? e.message : 'Unknown error'}` }); }
     setIsRunning(null);
   }, [items, runAction]);

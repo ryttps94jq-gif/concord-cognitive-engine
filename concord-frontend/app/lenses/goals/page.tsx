@@ -289,7 +289,8 @@ export default function GoalsLensPage() {
       try {
         await apiHelpers.goals.create({ title: newTitle, description: newDescription, priority: newPriority });
         queryClient.invalidateQueries({ queryKey: ['goals'] });
-      } catch {
+      } catch (e) {
+        console.warn('Goals backend unavailable, using lens data fallback:', e);
         await createGoalItem({
           title: newTitle,
           data: {
@@ -309,7 +310,7 @@ export default function GoalsLensPage() {
 
   const autoPropose = useMutation({
     mutationFn: async () => {
-      try { await apiHelpers.goals.autoPropose(); } catch { /* backend may not support this */ }
+      try { await apiHelpers.goals.autoPropose(); } catch (e) { console.warn('Goals auto-propose not available:', e); }
       queryClient.invalidateQueries({ queryKey: ['goals'] });
     },
     onError: (err) => {

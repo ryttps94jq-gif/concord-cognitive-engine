@@ -696,7 +696,7 @@ export default function ResonanceBoundaryPage() {
     setResonanceActiveAction(action);
     try {
       const res = await runResonanceAction.mutateAsync({ id, action });
-      setResonanceActionResult({ action, ...(res.result as Record<string, unknown>) });
+      if (res.ok === false) { setResonanceActionResult({ action, message: `Action failed: ${(res as Record<string, unknown>).error || 'Unknown error'}` }); } else { setResonanceActionResult({ action, ...(res.result as Record<string, unknown>) }); }
     } catch (err) { console.error('Resonance action failed:', err); }
     finally { setResonanceActiveAction(null); }
   };

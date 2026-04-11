@@ -138,7 +138,7 @@ export default function SRSLensPage() {
     setSrsActiveAction(action);
     try {
       const res = await runSrsAction.mutateAsync({ id, action });
-      setSrsActionResult({ action, ...(res.result as Record<string, unknown>) });
+      if (res.ok === false) { setSrsActionResult({ action, message: `Action failed: ${(res as Record<string, unknown>).error || 'Unknown error'}` }); } else { setSrsActionResult({ action, ...(res.result as Record<string, unknown>) }); }
     } catch (err) { console.error('SRS action failed:', err); }
     finally { setSrsActiveAction(null); }
   }, [cardItems, runSrsAction]);

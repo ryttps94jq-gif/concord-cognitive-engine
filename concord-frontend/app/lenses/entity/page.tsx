@@ -57,7 +57,7 @@ export default function EntityLensPage() {
     setEntityActionResult(null);
     try {
       const res = await runEntityAction.mutateAsync({ id: targetId, action });
-      setEntityActionResult(res.result as Record<string, unknown>);
+      if (res.ok === false) { setEntityActionResult({ message: `Action failed: ${(res as Record<string, unknown>).error || 'Unknown error'}` }); } else { setEntityActionResult(res.result as Record<string, unknown>); }
     } catch (e) { console.error(`Entity action ${action} failed:`, e); setEntityActionResult({ message: `Action failed: ${e instanceof Error ? e.message : 'Unknown error'}` }); }
     setEntityRunning(null);
   };

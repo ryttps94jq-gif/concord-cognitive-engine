@@ -111,7 +111,7 @@ export default function ProjectsLensPage() {
     try {
       const artifactId = items[0]?.id || 'projects';
       const res = await runAction.mutateAsync({ id: artifactId, action });
-      setter((res.result as Record<string, unknown>) || null);
+      if (res.ok === false) { setter({ message: `Action failed: ${(res as Record<string, unknown>).error || 'Unknown error'}` } as Record<string, unknown>); } else { setter((res.result as Record<string, unknown>) || null); }
     } catch (e) {
       console.error(`Projects action ${action} failed:`, e);
     }

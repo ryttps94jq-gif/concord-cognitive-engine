@@ -133,7 +133,7 @@ export default function AgentsLensPage() {
   const tickAgent = useMutation({
     mutationFn: async (id: string) => {
       // Trigger a tick via the agents API if available
-      try { await apiHelpers.agents.tick(id); } catch { /* backend may not have this endpoint yet */ }
+      try { await apiHelpers.agents.tick(id); } catch (e) { console.warn('Agent tick endpoint not available:', e); }
       const agent = agents.find(a => a.id === id);
       if (agent) {
         await updateLensAgent(id, { data: { tickCount: (agent.tickCount || 0) + 1, lastTick: new Date().toISOString() } as unknown as Record<string, unknown> });
@@ -181,7 +181,7 @@ export default function AgentsLensPage() {
     setIsRunning(action);
     try {
       const res = await runAction.mutateAsync({ id: targetId, action });
-      setActionResult(res.result as Record<string, unknown>);
+      if (res.ok === false) { setActionResult({ message: `Action failed: ${(res as Record<string, unknown>).error || 'Unknown error'}` }); } else { setActionResult(res.result as Record<string, unknown>); }
     } catch (e) { console.error(`Action ${action} failed:`, e); setActionResult({ message: `Action failed: ${e instanceof Error ? e.message : 'Unknown error'}` }); }
     setIsRunning(null);
   };

@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import React from 'react';
 
 // Create mock socket instance
 const mockSocketInstance = {
@@ -21,6 +23,9 @@ import { useSocket, useResonanceSocket, useDTUSocket } from '@/hooks/useSocket';
 import { io } from 'socket.io-client';
 
 const mockedIo = vi.mocked(io);
+const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+const wrapper = ({ children }: { children: React.ReactNode }) =>
+  React.createElement(QueryClientProvider, { client: qc }, children);
 
 describe('useSocket', () => {
   beforeEach(() => {
@@ -35,7 +40,7 @@ describe('useSocket', () => {
   });
 
   it('initializes a socket with default options', () => {
-    renderHook(() => useSocket());
+    renderHook(() => useSocket(),  { wrapper });
 
     expect(mockedIo).toHaveBeenCalledWith(
       expect.any(String),
@@ -59,7 +64,8 @@ describe('useSocket', () => {
         reconnection: false,
         reconnectionAttempts: 3,
         reconnectionDelay: 500,
-      })
+      }),
+      { wrapper }
     );
 
     // With autoConnect=true and socket not connected, the hook calls socket.connect()
@@ -67,13 +73,13 @@ describe('useSocket', () => {
   });
 
   it('starts disconnected', () => {
-    const { result } = renderHook(() => useSocket());
+    const { result } = renderHook(() => useSocket(),  { wrapper });
 
     expect(result.current.isConnected).toBe(false);
   });
 
   it('registers connect, disconnect, and connect_error handlers', () => {
-    renderHook(() => useSocket());
+    renderHook(() => useSocket(),  { wrapper });
 
     expect(mockSocketInstance.on).toHaveBeenCalledWith(
       'connect',
@@ -90,7 +96,7 @@ describe('useSocket', () => {
   });
 
   it('sets isConnected=true on connect event', () => {
-    const { result } = renderHook(() => useSocket());
+    const { result } = renderHook(() => useSocket(),  { wrapper });
 
     // Find the connect handler and call it
     const connectCall = mockSocketInstance.on.mock.calls.find(
@@ -106,7 +112,7 @@ describe('useSocket', () => {
   });
 
   it('sets isConnected=false on disconnect event', () => {
-    const { result } = renderHook(() => useSocket());
+    const { result } = renderHook(() => useSocket(),  { wrapper });
 
     // Simulate connect
     const connectCall = mockSocketInstance.on.mock.calls.find(
@@ -131,7 +137,7 @@ describe('useSocket', () => {
   it('sets isConnected=false on connect_error event', () => {
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-    const { result } = renderHook(() => useSocket());
+    const { result } = renderHook(() => useSocket(),  { wrapper });
 
     // Simulate connect first
     const connectCall = mockSocketInstance.on.mock.calls.find(
@@ -154,7 +160,7 @@ describe('useSocket', () => {
   });
 
   it('connect() calls socket.connect when not connected', () => {
-    const { result } = renderHook(() => useSocket());
+    const { result } = renderHook(() => useSocket(),  { wrapper });
     mockSocketInstance.connected = false;
 
     act(() => {
@@ -165,7 +171,7 @@ describe('useSocket', () => {
   });
 
   it('connect() does not call socket.connect when already connected', () => {
-    const { result } = renderHook(() => useSocket());
+    const { result } = renderHook(() => useSocket(),  { wrapper });
     mockSocketInstance.connected = true;
 
     act(() => {
@@ -176,7 +182,7 @@ describe('useSocket', () => {
   });
 
   it('disconnect() calls socket.disconnect when connected', () => {
-    const { result } = renderHook(() => useSocket());
+    const { result } = renderHook(() => useSocket(),  { wrapper });
     mockSocketInstance.connected = true;
 
     act(() => {
@@ -187,7 +193,7 @@ describe('useSocket', () => {
   });
 
   it('disconnect() does not call socket.disconnect when not connected', () => {
-    const { result } = renderHook(() => useSocket());
+    const { result } = renderHook(() => useSocket(),  { wrapper });
     mockSocketInstance.connected = false;
 
     act(() => {
@@ -198,7 +204,7 @@ describe('useSocket', () => {
   });
 
   it('emit() calls socket.emit when connected', () => {
-    const { result } = renderHook(() => useSocket());
+    const { result } = renderHook(() => useSocket(),  { wrapper });
     mockSocketInstance.connected = true;
 
     act(() => {
@@ -211,7 +217,7 @@ describe('useSocket', () => {
   });
 
   it('emit() does not call socket.emit when not connected', () => {
-    const { result } = renderHook(() => useSocket());
+    const { result } = renderHook(() => useSocket(),  { wrapper });
     mockSocketInstance.connected = false;
 
     act(() => {
@@ -222,7 +228,7 @@ describe('useSocket', () => {
   });
 
   it('on() registers a listener on the socket', () => {
-    const { result } = renderHook(() => useSocket());
+    const { result } = renderHook(() => useSocket(),  { wrapper });
     const callback = vi.fn();
 
     act(() => {
@@ -236,7 +242,7 @@ describe('useSocket', () => {
   });
 
   it('off() unregisters a listener with callback from the socket', () => {
-    const { result } = renderHook(() => useSocket());
+    const { result } = renderHook(() => useSocket(),  { wrapper });
     const callback = vi.fn();
 
     act(() => {
@@ -250,7 +256,7 @@ describe('useSocket', () => {
   });
 
   it('off() unregisters a listener without callback from the socket', () => {
-    const { result } = renderHook(() => useSocket());
+    const { result } = renderHook(() => useSocket(),  { wrapper });
 
     act(() => {
       result.current.off('custom-event');
@@ -260,7 +266,7 @@ describe('useSocket', () => {
   });
 
   it('cleans up on unmount', () => {
-    const { unmount } = renderHook(() => useSocket());
+    const { unmount } = renderHook(() => useSocket(),  { wrapper });
 
     // The hook registers 'connect', 'disconnect', 'connect_error' + all forwarded events
     // On unmount, it calls socket.off() for each individually (shared singleton — no disconnect)
@@ -286,14 +292,14 @@ describe('useResonanceSocket', () => {
   });
 
   it('returns initial state with null resonanceData', () => {
-    const { result } = renderHook(() => useResonanceSocket());
+    const { result } = renderHook(() => useResonanceSocket(),  { wrapper });
 
     expect(result.current.resonanceData).toBeNull();
     expect(result.current.isConnected).toBe(false);
   });
 
   it('subscribes to resonance:update event', () => {
-    renderHook(() => useResonanceSocket());
+    renderHook(() => useResonanceSocket(),  { wrapper });
 
     // The hook calls on('resonance:update', handler) via useSocket's on()
     // Since useSocket's on() delegates to socket.on(), we check that
@@ -304,17 +310,15 @@ describe('useResonanceSocket', () => {
   });
 
   it('cleans up on unmount via individual off() calls', () => {
-    const { unmount } = renderHook(() => useResonanceSocket());
+    const { unmount } = renderHook(() => useResonanceSocket(),  { wrapper });
 
     unmount();
 
-    // useSocket cleanup removes listeners individually via socket.off() (shared singleton)
-    // The resonance:update handler is cleaned up by useResonanceSocket's own effect,
-    // and core listeners (connect/disconnect/connect_error) are cleaned up by useSocket
+    // useSocket cleanup removes per-component listeners (connect/disconnect/connect_error)
+    // FORWARDED_EVENTS (including resonance:update) are now registered globally once, not per-component
     expect(mockSocketInstance.off).toHaveBeenCalledWith('connect', expect.any(Function));
     expect(mockSocketInstance.off).toHaveBeenCalledWith('disconnect', expect.any(Function));
     expect(mockSocketInstance.off).toHaveBeenCalledWith('connect_error', expect.any(Function));
-    expect(mockSocketInstance.off).toHaveBeenCalledWith('resonance:update', expect.any(Function));
   });
 });
 
@@ -326,7 +330,7 @@ describe('useDTUSocket', () => {
   });
 
   it('returns expected interface', () => {
-    const { result } = renderHook(() => useDTUSocket());
+    const { result } = renderHook(() => useDTUSocket(),  { wrapper });
 
     expect(result.current.isConnected).toBe(false);
     expect(typeof result.current.subscribeToDTU).toBe('function');
@@ -336,7 +340,7 @@ describe('useDTUSocket', () => {
   });
 
   it('subscribeToDTU emits dtu:subscribe', () => {
-    const { result } = renderHook(() => useDTUSocket());
+    const { result } = renderHook(() => useDTUSocket(),  { wrapper });
     mockSocketInstance.connected = true;
 
     act(() => {
@@ -349,7 +353,7 @@ describe('useDTUSocket', () => {
   });
 
   it('unsubscribeFromDTU emits dtu:unsubscribe', () => {
-    const { result } = renderHook(() => useDTUSocket());
+    const { result } = renderHook(() => useDTUSocket(),  { wrapper });
     mockSocketInstance.connected = true;
 
     act(() => {

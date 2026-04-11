@@ -76,7 +76,7 @@ export default function MusicLensPage() {
     setIsRunning(action);
     try {
       const res = await runAction.mutateAsync({ id: targetId, action });
-      setActionResult(res.result as Record<string, unknown>);
+      if (res.ok === false) { setActionResult({ message: `Action failed: ${(res as Record<string, unknown>).error || 'Unknown error'}` }); } else { setActionResult(res.result as Record<string, unknown>); }
     } catch (e) { console.error(`Action ${action} failed:`, e); setActionResult({ message: `Action failed: ${e instanceof Error ? e.message : 'Unknown error'}` }); }
     finally { setIsRunning(null); }
   };
@@ -994,7 +994,7 @@ export default function MusicLensPage() {
                       marketplaceBeats.map(beat => (
                         <div key={beat.listingId} className="flex items-center justify-between p-4 rounded-xl bg-white/[0.03] border border-white/5 hover:border-white/10 transition-colors group">
                           <div className="flex items-center gap-4 min-w-0 flex-1">
-                            <button onClick={async () => { if (beat.previewAssetId) { try { const { api: apiClient } = await import('@/lib/api/client'); const r = await apiClient.get(`/api/artistry/blobs/${beat.previewAssetId}`); if (r.data?.url) { const a = new Audio(r.data.url); a.play().catch(() => {}); } } catch {} } else { showToast('info', `Playing ${beat.title}`); } }} className="w-10 h-10 rounded-lg bg-neon-cyan/10 flex items-center justify-center flex-shrink-0 group-hover:bg-neon-cyan/20 transition-colors">
+                            <button onClick={async () => { if (beat.previewAssetId) { try { const { api: apiClient } = await import('@/lib/api/client'); const r = await apiClient.get(`/api/artistry/blobs/${beat.previewAssetId}`); if (r.data?.url) { const a = new Audio(r.data.url); a.play().catch((e) => { console.warn('Audio playback failed:', e); }); } } catch (e) { console.warn('Failed to load beat preview:', e); } } else { showToast('info', `Playing ${beat.title}`); } }} className="w-10 h-10 rounded-lg bg-neon-cyan/10 flex items-center justify-center flex-shrink-0 group-hover:bg-neon-cyan/20 transition-colors">
                               <Play className="w-4 h-4 text-neon-cyan" />
                             </button>
                             <div className="min-w-0">

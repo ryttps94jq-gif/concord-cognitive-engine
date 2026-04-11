@@ -138,7 +138,7 @@ describe('useCreativeRegistry', () => {
   });
 
   describe('return shape', () => {
-    it('returns refetch, on, off, and handleRegistryUpdate functions', async () => {
+    it('returns refetch function and data fields', async () => {
       mockedApi.post.mockResolvedValue({
         data: { ok: true, domain: 'art', entries: [], total: 0, hasMore: false },
       });
@@ -150,48 +150,29 @@ describe('useCreativeRegistry', () => {
       await waitFor(() => expect(result.current.isLoading).toBe(false));
 
       expect(typeof result.current.refetch).toBe('function');
-      expect(typeof result.current.on).toBe('function');
-      expect(typeof result.current.off).toBe('function');
-      expect(typeof result.current.handleRegistryUpdate).toBe('function');
+      expect(result.current).toHaveProperty('entries');
+      expect(result.current).toHaveProperty('total');
+      expect(result.current).toHaveProperty('hasMore');
     });
   });
 
-  describe('handleRegistryUpdate', () => {
-    it('handleRegistryUpdate is a callable function', async () => {
+  describe('socket subscription', () => {
+    it('subscribes to creative_registry:update on mount and unsubscribes on unmount', async () => {
       mockedApi.post.mockResolvedValue({
         data: { ok: true, domain: 'art', entries: [], total: 0, hasMore: false },
       });
 
-      const { result } = renderHook(() => useCreativeRegistry('art'), {
+      const { unmount } = renderHook(() => useCreativeRegistry('art'), {
         wrapper: createWrapper(),
       });
 
-      await waitFor(() => expect(result.current.isLoading).toBe(false));
+      // Should have subscribed to creative_registry:update
+      expect(mockOn).toHaveBeenCalledWith('creative_registry:update', expect.any(Function));
 
-      // Should not throw when called with a matching domain event
-      expect(() => {
-        result.current.handleRegistryUpdate({ domain: 'art' });
-      }).not.toThrow();
-    });
+      unmount();
 
-    it('handleRegistryUpdate is stable across rerenders for the same domain', async () => {
-      mockedApi.post.mockResolvedValue({
-        data: { ok: true, domain: 'art', entries: [], total: 0, hasMore: false },
-      });
-
-      const { result, rerender } = renderHook(
-        ({ domain }: { domain: string }) => useCreativeRegistry(domain),
-        { initialProps: { domain: 'art' }, wrapper: createWrapper() }
-      );
-
-      await waitFor(() => expect(result.current.isLoading).toBe(false));
-
-      const firstHandler = result.current.handleRegistryUpdate;
-
-      rerender({ domain: 'art' });
-
-      // Handler should remain stable (same reference) since domain did not change
-      expect(result.current.handleRegistryUpdate).toBe(firstHandler);
+      // Should have unsubscribed on unmount
+      expect(mockOff).toHaveBeenCalledWith('creative_registry:update', expect.any(Function));
     });
   });
 });

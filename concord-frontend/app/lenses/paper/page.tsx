@@ -383,7 +383,9 @@ export default function PaperLensPage() {
     if (!selectedItemId) return;
     try {
       const result = await runArtifact.mutateAsync({ id: selectedItemId, action });
-      if (action === 'generate_abstract' || action === 'synthesize') {
+      if (result.ok === false) {
+        setSynthesisResult(`Action failed: ${(result as Record<string, unknown>).error || 'Unknown error'}`);
+      } else if (action === 'generate_abstract' || action === 'synthesize') {
         setSynthesisResult(typeof result.result === 'string' ? result.result : JSON.stringify(result.result, null, 2));
       }
     } catch (e) { console.error(`Paper action ${action} failed:`, e); }

@@ -44,7 +44,7 @@ export default function QueueLensPage() {
     setQueueActiveAction(action);
     try {
       const res = await runAction.mutateAsync({ id, action });
-      setQueueActionResult({ action, ...(res.result as Record<string, unknown>) });
+      if (res.ok === false) { setQueueActionResult({ action, message: `Action failed: ${(res as Record<string, unknown>).error || 'Unknown error'}` }); } else { setQueueActionResult({ action, ...(res.result as Record<string, unknown>) }); }
     } catch (err) { console.error('Queue action failed:', err); }
     finally { setQueueActiveAction(null); }
   };

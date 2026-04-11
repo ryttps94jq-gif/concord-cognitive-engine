@@ -17,6 +17,7 @@ import {
   ChevronRight
 } from 'lucide-react';
 import { cn, formatRelativeTime } from '@/lib/utils';
+import { getSocket } from '@/lib/realtime/socket';
 
 type EventType = 'create' | 'update' | 'connect' | 'synthesis' | 'ai' | 'alert' | 'consolidate';
 
@@ -61,48 +62,40 @@ export function ThoughtStream({
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const streamRef = useRef<HTMLDivElement>(null);
 
-  // Listen for real-time DTU events via WebSocket
+  // Listen for real-time DTU events via shared WebSocket singleton
   useEffect(() => {
     if (!realtime || isPaused) return;
 
-    const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || process.env.NEXT_PUBLIC_API_URL || '';
-    let socket: ReturnType<typeof import('socket.io-client').io> | null = null;
-    let disposed = false;
+    const socket = getSocket();
+    if (!socket.connected) socket.connect();
 
-    import('socket.io-client').then(({ io }) => {
-      if (disposed) return;
-      socket = io(SOCKET_URL, {
-        autoConnect: true,
-        reconnection: true,
-        reconnectionAttempts: 3,
-        transports: ['websocket', 'polling'],
-        withCredentials: true,
-      });
-
-      const push = (eventType: EventType, data: Record<string, unknown>) => {
-        const newEvent: ThoughtEvent = {
-          id: Date.now().toString(),
-          type: eventType,
-          title: (data.title as string) || getRandomTitle(eventType),
-          description: (data.content as string)?.slice(0, 120) || getRandomDescription(eventType),
-          timestamp: new Date(),
-          dtuId: (data.id as string) || (data.dtuId as string),
-        };
-        setEvents(prev => [newEvent, ...prev].slice(0, maxEvents));
+    const push = (eventType: EventType, data: Record<string, unknown>) => {
+      const newEvent: ThoughtEvent = {
+        id: Date.now().toString(),
+        type: eventType,
+        title: (data.title as string) || getRandomTitle(eventType),
+        description: (data.content as string)?.slice(0, 120) || getRandomDescription(eventType),
+        timestamp: new Date(),
+        dtuId: (data.id as string) || (data.dtuId as string),
       };
+      setEvents(prev => [newEvent, ...prev].slice(0, maxEvents));
+    };
 
-      socket.on('dtu:created', (d: Record<string, unknown>) => push('create', d));
-      socket.on('dtu:updated', (d: Record<string, unknown>) => push('update', d));
-      socket.on('dtu:deleted', (d: Record<string, unknown>) => push('consolidate', d));
-      socket.on('pipeline:completed', (d: Record<string, unknown>) => push('synthesis', d));
-    }).catch(() => {
-      // WebSocket unavailable — stream shows "No activity yet" naturally
-    });
+    const onCreated = (d: Record<string, unknown>) => push('create', d);
+    const onUpdated = (d: Record<string, unknown>) => push('update', d);
+    const onDeleted = (d: Record<string, unknown>) => push('consolidate', d);
+    const onPipeline = (d: Record<string, unknown>) => push('synthesis', d);
+
+    socket.on('dtu:created', onCreated);
+    socket.on('dtu:updated', onUpdated);
+    socket.on('dtu:deleted', onDeleted);
+    socket.on('pipeline:completed', onPipeline);
 
     return () => {
-      disposed = true;
-      socket?.removeAllListeners();
-      socket?.disconnect();
+      socket.off('dtu:created', onCreated);
+      socket.off('dtu:updated', onUpdated);
+      socket.off('dtu:deleted', onDeleted);
+      socket.off('pipeline:completed', onPipeline);
     };
   }, [realtime, isPaused, maxEvents]);
 
