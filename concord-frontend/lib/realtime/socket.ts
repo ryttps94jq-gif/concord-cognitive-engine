@@ -189,7 +189,15 @@ export type SocketEvent =
   | 'feed:new-dtu'
   // City / World lens events
   | 'city:positions' | 'city:stream-started' | 'city:stream-ended'
-  | 'city:stream-dtu-created' | 'city:stream-sale';
+  | 'city:stream-dtu-created' | 'city:stream-sale'
+  // Comments
+  | 'comment:added'
+  // Activity feed
+  | 'activity:new'
+  // Collaborative editing (Yjs)
+  | 'yjs:update'
+  // Server health checks
+  | 'health:pulse';
 
 // ---- Enriched Event Payload (Category 2+5: Concurrency + Observability) ----
 interface EnrichedPayload {

@@ -13,6 +13,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Socket } from 'socket.io-client';
+import { useQueryClient, QueryClient } from '@tanstack/react-query';
 import { getSocket } from '@/lib/realtime/socket';
 import { emitEvent } from '@/lib/realtime/event-bus';
 import { useLatticeStore } from '@/store/lattice';
@@ -111,6 +112,14 @@ const FORWARDED_EVENTS: SocketEvent[] = [
   // City / World lens events
   'city:positions', 'city:stream-started', 'city:stream-ended',
   'city:stream-dtu-created', 'city:stream-sale',
+  // Comments
+  'comment:added',
+  // Activity feed
+  'activity:new',
+  // Collaborative editing (Yjs)
+  'yjs:update',
+  // Server health checks
+  'health:pulse',
 ];
 
 interface UseSocketOptions {

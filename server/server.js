@@ -34887,6 +34887,36 @@ app.get("/api/shared-session/:id", requireAuth(), (req, res) => {
 // MEGA SPEC: WebSocket Chat Streaming Handler
 // ============================================================================
 
+// ── Web Search Helper ─────────────────────────────────────────────────────
+// Lightweight check: does the user message look like it would benefit from
+// a web search?  Covers explicit requests ("search for", "look up") and
+// common question patterns that imply the need for current/external info.
+function needsWebSearch(msg) {
+  if (!msg || typeof msg !== "string") return false;
+  const m = msg.toLowerCase();
+  const patterns = [
+    /\bsearch (for|the web|online|internet)\b/,
+    /\blook up\b/,
+    /\bfind (me )?(a )?source\b/,
+    /\bwhat('s| is) the latest\b/,
+    /\bcurrent (news|status|price|situation)\b/,
+    /\bwho (won|died|resigned|was elected)\b/,
+    /\bwhat happened (today|yesterday|recently|this week)\b/,
+    /\bfact.?check\b/,
+    /\bcan you verify\b/,
+    /\bcite (your )?source\b/,
+    /\bwhat is\b/,
+    /\bwhat are\b/,
+    /\bwho is\b/,
+    /\bhow (much|many|does|do)\b/,
+    /\bwhen (did|was|is|will)\b/,
+    /\bwhere (is|are|can|do)\b/,
+    /\bwhy (did|does|is|are)\b/,
+    /\bis (it|that|this) (true|real|accurate|correct)\b/,
+  ];
+  return patterns.some((p) => p.test(m));
+}
+
 function initChatSocketHandlers(io) {
   if (!io) return;
   io.on("connection", (socket) => {
@@ -34927,6 +34957,19 @@ function initChatSocketHandlers(io) {
             // Record user message in session
             _streamSess.messages.push({ role: "user", content: String(prompt), ts: nowISO() });
             if (_streamSess.messages.length > 60) _streamSess.messages.splice(0, _streamSess.messages.length - 60);
+
+            // ── Web Search Integration (best-effort) ──────────────────────
+            let _webContext = "";
+            try {
+              const webSearchMod = await import("./emergent/conscious-web-search.js").catch(() => null);
+              if (webSearchMod?.webSearchForChat && needsWebSearch(prompt)) {
+                const webResults = await webSearchMod.webSearchForChat([String(prompt)]);
+                if (webResults && webResults.length > 0) {
+                  socket.emit("chat:web_results", { results: webResults, query: prompt, sessionId });
+                  _webContext = webResults.map(r => `[${r.title}]: ${r.snippet || (r.content || "").slice(0, 300)}`).join("\n");
+                }
+              }
+            } catch (_e) { /* web search is best-effort */ }
 
             // Build system prompt for streaming
             const _streamConsciousParams = getConsciousParams({ exchange_count: (_streamSess.messages || []).length });
