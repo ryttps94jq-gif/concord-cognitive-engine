@@ -54,7 +54,7 @@ import {
   Loader2,
   TrendingDown,
   ClipboardCheck,
-  HandshakeIcon,
+  Handshake as HandshakeIcon,
 } from 'lucide-react';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
