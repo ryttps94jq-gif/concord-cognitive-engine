@@ -781,6 +781,71 @@ import {
   extractUrls, recordChatWebMetrics, getChatWebMetrics,
 } from "./conscious-web-search.js";
 
+// ── Event-to-DTU Bridge (7-Layer Event→DTU Architecture) ────────────────────
+
+import {
+  DTU_WORTHY_EVENTS,
+  classify as classifyEvent, eventToDTU, deduplicationGate,
+  registerExternalSource, unregisterExternalSource, getExternalSources,
+  classifyExternal, computeEventCRETI, crossReference,
+  bridgeEventToDTU, notifySubscribers,
+  getBridgeMetrics, resetBridgeMetrics,
+} from "./event-to-dtu-bridge.js";
+
+// ── Ingest Engine (Planetary Ingest Engine) ─────────────────────────────────
+
+import {
+  TIERS as INGEST_TIERS, TIER_LIMITS, DOMAIN_ALLOWLIST, DOMAIN_BLOCKLIST,
+  computeReliabilityScore,
+  submitUrl, getQueue as getIngestQueue, getIngestStatus, getIngestStats,
+  getAllowlist, addToAllowlist, removeFromAllowlist, addToBlocklist,
+  flushQueue as flushIngestQueue, processNextItem,
+  getIngestMetrics,
+} from "./ingest-engine.js";
+
+// ── Research Jobs (Directed Investigation System) ───────────────────────────
+
+import {
+  RESEARCH_STATUSES, RESEARCH_DEPTHS,
+  submitResearchJob, getResearchJob, listResearchJobs,
+  cancelResearchJob, getResearchResults, getResearchReport,
+  runResearchStep, processResearchQueue,
+  getResearchMetrics,
+} from "./research-jobs.js";
+
+// ── Breakthrough Clusters (Idea Breakthrough Detection) ─────────────────────
+
+import {
+  BREAKTHROUGH_CLUSTERS,
+  initCluster, getClusterStatus, triggerClusterResearch,
+  listClusters, getClusterDTUs, addSeedDTU,
+  getBreakthroughMetrics,
+} from "./breakthrough-clusters.js";
+
+// ── Agent System (Lattice Immune System) ────────────────────────────────────
+
+import {
+  AGENT_TYPES,
+  createAgent, runAgent, pauseAgent, resumeAgent, destroyAgent,
+  getAgent, listAgents, getAgentFindings, getAllFindings,
+  freezeAllAgents, thawAllAgents, agentTickJob,
+  getAgentMetrics,
+} from "./agent-system.js";
+
+// ── Ghost Threads (Cross-Domain Insight Generator) ──────────────────────────
+
+import {
+  CONNECTION_PATTERNS, GHOST_THREAD_CONFIG,
+  runGhostThread, surfaceInsight, queryInsights,
+  getGhostThreadMetrics, findRelevantInsights,
+} from "./ghost-threads.js";
+
+// ── Real-Time Feeds (Real-Time Feed System) ─────────────────────────────────
+
+import {
+  tickRealTimeFeeds, getRealtimeFeedStatus, getRealtimeFeedData,
+} from "./realtime-feeds.js";
+
 const EMERGENT_VERSION = "5.5.0";
 
 /**
@@ -3092,4 +3157,127 @@ function init({ register, STATE, helpers }) {
 export {
   EMERGENT_VERSION,
   init,
+
+  // ── Microbond Governance ──────────────────────────────────────────────────
+  GOVERNANCE_SCOPES, VOTING_STATUSES,
+  createBond, getBond, listBonds, voteBond, simulateBond,
+  completeMilestone, checkQuorum, fundBond, pledgeToBond,
+  openBondForVoting, activateBond, completeBond, failBond,
+  getSpilloverFund, getAllSpilloverFunds, getBondMetrics,
+
+  // ── CRI System ────────────────────────────────────────────────────────────
+  CRI_ROLES,
+  createCRI, getCRI, listCRIs,
+  addMember, removeMember,
+  createProgram, getProgramStatus,
+  scheduleSummit, runSummit, completeSummit,
+  getCRIStatus, getCRIMetrics,
+
+  // ── C-NET Federation ──────────────────────────────────────────────────────
+  FEDERATION_EVENTS,
+  initFederation, getFederationStatus,
+  publishDTU, unpublishDTU, getPublishedDTUs,
+  subscribeDomain, unsubscribeDomain, getSubscriptions,
+  registerCNetPeer, getPeers, removePeer,
+  pollGlobal, enqueueGlobalDTU, getIncomingQueue,
+  acceptGlobalDTU, rejectGlobalDTU,
+  getFederationMetrics,
+
+  // ── Scenario Engine ───────────────────────────────────────────────────────
+  VARIABLE_TYPES, SCENARIO_STATES, CONFIDENCE_LEVELS,
+  createScenario, getScenario, listUserScenarios,
+  addBranch, removeBranch, runScenario,
+  compareBranches, getScenarioMetrics,
+
+  // ── State Migration ───────────────────────────────────────────────────────
+  COMPATIBLE_VERSIONS,
+  computeChecksum, validatePackage,
+  exportFull, exportPartial,
+  createMigrationPlan, importFull, importPartial,
+  getMigrationHistory, getMigration, getMigrationMetrics,
+
+  // ── Spam Prevention ───────────────────────────────────────────────────────
+  checkSpamLimit, adjustSpamReputation,
+  getSpamMetrics, spamGuard,
+
+  // ── News Lens Hub ─────────────────────────────────────────────────────────
+  queryNewsLens, getNewsLensSummary, getNewsTrending,
+  compressNewsEvents, decompressNewsDTU,
+
+  // ── Lens Learning ─────────────────────────────────────────────────────────
+  runLensLearningCycle, getLensLearningStatus, getLensPatterns,
+
+  // ── Dream Capture ─────────────────────────────────────────────────────────
+  captureDream, getDreamHistory,
+  getDreamConvergences,
+  getDreamQueue, countDreams, countDreamConvergences,
+  handleDreamCommand, initDreamCapture,
+
+  // ── Promotion Pipeline ────────────────────────────────────────────────────
+  requestPromotion, approvePromotion, rejectPromotion,
+  getPromotionQueue,
+  getPromoPipelineHistory,
+  getPromotionProposal,
+  handlePromotionCommand, initPromotionPipeline,
+
+  // ── Cognitive Fingerprint ─────────────────────────────────────────────────
+  COGNITIVE_BIASES, STYLE_DIMENSIONS,
+  getFingerprint, recordFingerprintQuery,
+  recordFingerprintDTUCreation,
+  recordFingerprintPrediction,
+  recordFingerprintSession,
+  getFingerprintSummary, deleteFingerprint,
+
+  // ── Reality Explorer ──────────────────────────────────────────────────────
+  exploreAdjacent, saveExploration, getExplorationHistory,
+  handleExploreCommand, initRealityExplorer,
+
+  // ── Conscious Web Search ──────────────────────────────────────────────────
+  requiresWebSearch, webSearchForChat, fetchPublicPage,
+  buildEvaluationPrompt, buildQueryGenerationPrompt, buildResponsePrompt,
+  extractUrls, recordChatWebMetrics, getChatWebMetrics,
+
+  // ── Event-to-DTU Bridge ──────────────────────────────────────────────────
+  DTU_WORTHY_EVENTS,
+  classifyEvent, eventToDTU, deduplicationGate,
+  registerExternalSource, unregisterExternalSource, getExternalSources,
+  classifyExternal, computeEventCRETI, crossReference,
+  bridgeEventToDTU, notifySubscribers,
+  getBridgeMetrics, resetBridgeMetrics,
+
+  // ── Ingest Engine ────────────────────────────────────────────────────────
+  INGEST_TIERS, TIER_LIMITS, DOMAIN_ALLOWLIST, DOMAIN_BLOCKLIST,
+  computeReliabilityScore,
+  submitUrl, getIngestQueue, getIngestStatus, getIngestStats,
+  getAllowlist, addToAllowlist, removeFromAllowlist, addToBlocklist,
+  flushIngestQueue, processNextItem,
+  getIngestMetrics,
+
+  // ── Research Jobs ────────────────────────────────────────────────────────
+  RESEARCH_STATUSES, RESEARCH_DEPTHS,
+  submitResearchJob, getResearchJob, listResearchJobs,
+  cancelResearchJob, getResearchResults, getResearchReport,
+  runResearchStep, processResearchQueue,
+  getResearchMetrics,
+
+  // ── Breakthrough Clusters ────────────────────────────────────────────────
+  BREAKTHROUGH_CLUSTERS,
+  initCluster, getClusterStatus, triggerClusterResearch,
+  listClusters, getClusterDTUs, addSeedDTU,
+  getBreakthroughMetrics,
+
+  // ── Agent System ─────────────────────────────────────────────────────────
+  AGENT_TYPES,
+  createAgent, runAgent, pauseAgent, resumeAgent, destroyAgent,
+  getAgent, listAgents, getAgentFindings, getAllFindings,
+  freezeAllAgents, thawAllAgents, agentTickJob,
+  getAgentMetrics,
+
+  // ── Ghost Threads ────────────────────────────────────────────────────────
+  CONNECTION_PATTERNS, GHOST_THREAD_CONFIG,
+  runGhostThread, surfaceInsight, queryInsights,
+  getGhostThreadMetrics, findRelevantInsights,
+
+  // ── Real-Time Feeds ──────────────────────────────────────────────────────
+  tickRealTimeFeeds, getRealtimeFeedStatus, getRealtimeFeedData,
 };
