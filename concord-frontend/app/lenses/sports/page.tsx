@@ -65,17 +65,6 @@ export default function SportsLensPage() {
   const [sportsActionResult, setSportsActionResult] = useState<Record<string, unknown> | null>(null);
   const [sportsActiveAction, setSportsActiveAction] = useState<string | null>(null);
 
-  const handleSportsAction = useCallback(async (action: string) => {
-    const id = items[0]?.id;
-    if (!id) return;
-    setSportsActiveAction(action);
-    try {
-      const res = await runSportsAction.mutateAsync({ id, action });
-      setSportsActionResult({ action, ...(res.result as Record<string, unknown>) });
-    } catch (err) { console.error('Sports action failed:', err); }
-    finally { setSportsActiveAction(null); }
-  }, [items, runSportsAction]);
-
   const [tab, setTab] = useState<Tab>('games');
   const [search, setSearch] = useState('');
   const [showCreate, setShowCreate] = useState(false);
@@ -91,6 +80,17 @@ export default function SportsLensPage() {
     items, isLoading, isError, error, refetch,
     create, createMut, remove, deleteMut,
   } = useLensData<GameData>('sports', 'game', { seed: [] });
+
+  const handleSportsAction = useCallback(async (action: string) => {
+    const id = items[0]?.id;
+    if (!id) return;
+    setSportsActiveAction(action);
+    try {
+      const res = await runSportsAction.mutateAsync({ id, action });
+      setSportsActionResult({ action, ...(res.result as Record<string, unknown>) });
+    } catch (err) { console.error('Sports action failed:', err); }
+    finally { setSportsActiveAction(null); }
+  }, [items, runSportsAction]);
 
   const games = useMemo(() =>
     items.map(item => ({ id: item.id, ...item.data, title: item.title || item.data?.title || 'Untitled Game' }))

@@ -493,7 +493,7 @@ export default function VoteLensPage() {
 
       {/* ============ DASHBOARD TAB ============ */}
       {activeTab === 'dashboard' && (
-        <ResultsDashboard proposals={proposals} stats={stats} />
+        <ResultsDashboard proposals={proposals} stats={stats} proposalItemId={proposalItems[0]?.id} />
       )}
 
       {/* ============ CREATE PROPOSAL MODAL ============ */}
@@ -816,6 +816,7 @@ function DiscussionThread({
 function ResultsDashboard({
   proposals,
   stats,
+  proposalItemId,
 }: {
   proposals: Array<{
     id: string;
@@ -837,7 +838,24 @@ function ResultsDashboard({
     passRate: number;
     avgParticipation: number;
   };
+  proposalItemId?: string;
 }) {
+  const runVoteAction = useRunArtifact('vote');
+  const [voteActionResult, setVoteActionResult] = useState<{ action: string; result: Record<string, unknown> } | null>(null);
+  const [voteActiveAction, setVoteActiveAction] = useState<string | null>(null);
+
+  const handleVoteAction = useCallback(async (action: string) => {
+    const id = proposalItemId;
+    if (!id) return;
+    setVoteActiveAction(action);
+    try {
+      const res = await runVoteAction.mutateAsync({ id, action });
+      if (res.ok) setVoteActionResult({ action, result: res.result as Record<string, unknown> });
+    } finally {
+      setVoteActiveAction(null);
+    }
+  }, [proposalItemId, runVoteAction]);
+
   // Recent decisions (passed or rejected, sorted by date)
   const recentDecisions = useMemo(() =>
     proposals
@@ -993,7 +1011,7 @@ function ResultsDashboard({
             <button
               key={action}
               onClick={() => handleVoteAction(action)}
-              disabled={!proposalItems[0]?.id || voteActiveAction !== null}
+              disabled={!proposalItemId || voteActiveAction !== null}
               className="px-3 py-1.5 text-sm rounded-lg bg-neon-purple/10 text-neon-purple border border-neon-purple/30 hover:bg-neon-purple/20 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
             >
               {voteActiveAction === action ? (
