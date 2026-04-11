@@ -597,9 +597,9 @@ export default function ReposLensPage() {
             {reposActionResult.action === 'codeComplexity' && (
               <div className="space-y-1">
                 <div className="flex gap-4 flex-wrap">
-                  <span className="text-gray-400">Files: <span className="text-white font-mono">{String(reposActionResult.totalFiles ?? '')}</span></span>
-                  <span className="text-gray-400">Avg complexity: <span className={`font-mono ${(reposActionResult.avgComplexity as number) > 20 ? 'text-red-400' : (reposActionResult.avgComplexity as number) > 10 ? 'text-yellow-400' : 'text-green-400'}`}>{String(reposActionResult.avgComplexity ?? '')}</span></span>
-                  <span className="text-gray-400">High complexity: <span className="text-red-400 font-mono">{String(reposActionResult.highComplexityFiles ?? 0)}</span></span>
+                  <span className="text-gray-400">Modules: <span className="text-white font-mono">{String(reposActionResult.totalModules ?? '')}</span></span>
+                  <span className="text-gray-400">Avg complexity: <span className={`font-mono ${(reposActionResult.overallAvgComplexity as number) > 20 ? 'text-red-400' : (reposActionResult.overallAvgComplexity as number) > 10 ? 'text-yellow-400' : 'text-green-400'}`}>{String(reposActionResult.overallAvgComplexity ?? '')}</span></span>
+                  <span className="text-gray-400">Critical: <span className="text-red-400 font-mono">{String((reposActionResult.riskDistribution as Record<string,number>)?.critical ?? 0)}</span></span>
                 </div>
                 {!!reposActionResult.message && <p className="text-gray-400 italic">{String(reposActionResult.message)}</p>}
               </div>
@@ -608,8 +608,8 @@ export default function ReposLensPage() {
               <div className="space-y-1">
                 <div className="flex gap-4 flex-wrap">
                   <span className="text-gray-400">Commits: <span className="text-white font-mono">{String(reposActionResult.totalCommits ?? '')}</span></span>
-                  <span className="text-gray-400">Authors: <span className="text-neon-cyan font-mono">{String(reposActionResult.uniqueAuthors ?? '')}</span></span>
-                  <span className="text-gray-400">Avg/day: <span className="text-neon-green font-mono">{String(reposActionResult.avgCommitsPerDay ?? '')}</span></span>
+                  <span className="text-gray-400">Authors: <span className="text-neon-cyan font-mono">{String(Array.isArray(reposActionResult.authors) ? (reposActionResult.authors as unknown[]).length : '')}</span></span>
+                  <span className="text-gray-400">Avg/day: <span className="text-neon-green font-mono">{String((reposActionResult.frequency as Record<string,unknown>)?.commitsPerDay ?? '')}</span></span>
                 </div>
                 {!!reposActionResult.message && <p className="text-gray-400 italic">{String(reposActionResult.message)}</p>}
               </div>
@@ -618,8 +618,8 @@ export default function ReposLensPage() {
               <div className="space-y-1">
                 <div className="flex gap-4 flex-wrap">
                   <span className="text-gray-400">Total deps: <span className="text-white font-mono">{String(reposActionResult.totalDependencies ?? '')}</span></span>
-                  <span className="text-gray-400">Outdated: <span className="text-yellow-400 font-mono">{String(reposActionResult.outdatedCount ?? 0)}</span></span>
-                  <span className="text-gray-400">Vulnerable: <span className="text-red-400 font-mono">{String(reposActionResult.vulnerableCount ?? 0)}</span></span>
+                  <span className="text-gray-400">Conflicts: <span className="text-yellow-400 font-mono">{String((reposActionResult.duplicates as Record<string,unknown>)?.versionConflicts ?? 0)}</span></span>
+                  <span className="text-gray-400">Vulnerable: <span className="text-red-400 font-mono">{String((reposActionResult.vulnerabilities as Record<string,unknown>)?.affectedDeps ?? 0)}</span></span>
                 </div>
                 {!!reposActionResult.message && <p className="text-gray-400 italic">{String(reposActionResult.message)}</p>}
               </div>

@@ -1161,9 +1161,9 @@ export default function ResonanceBoundaryPage() {
             {resonanceActionResult.action === 'engagementScore' && (
               <div className="space-y-1">
                 <div className="flex gap-4 flex-wrap">
-                  <span className="text-gray-400">Score: <span className={`font-mono font-bold ${(resonanceActionResult.score as number) >= 70 ? 'text-green-400' : (resonanceActionResult.score as number) >= 40 ? 'text-yellow-400' : 'text-red-400'}`}>{String(resonanceActionResult.score ?? '')}</span></span>
-                  <span className="text-gray-400">Level: <span className="text-neon-purple capitalize">{String(resonanceActionResult.engagementLevel ?? '')}</span></span>
-                  <span className="text-gray-400">Trend: <span className="text-white">{String(resonanceActionResult.trend ?? '')}</span></span>
+                  <span className="text-gray-400">Score: <span className={`font-mono font-bold ${(resonanceActionResult.engagementScore as number) >= 70 ? 'text-green-400' : (resonanceActionResult.engagementScore as number) >= 40 ? 'text-yellow-400' : 'text-red-400'}`}>{String(resonanceActionResult.engagementScore ?? '')}</span></span>
+                  <span className="text-gray-400">Tier: <span className="text-neon-purple capitalize">{String(resonanceActionResult.tier ?? '')}</span></span>
+                  <span className="text-gray-400">Trend: <span className="text-white">{String((resonanceActionResult.trend as Record<string,unknown>)?.direction ?? 'N/A')}</span></span>
                 </div>
                 {!!resonanceActionResult.message && <p className="text-gray-400 italic">{String(resonanceActionResult.message)}</p>}
               </div>
@@ -1171,8 +1171,8 @@ export default function ResonanceBoundaryPage() {
             {resonanceActionResult.action === 'audienceMatch' && (
               <div className="space-y-1">
                 <div className="flex gap-4 flex-wrap">
-                  <span className="text-gray-400">Match: <span className={`font-mono font-bold ${(resonanceActionResult.matchScore as number) >= 70 ? 'text-green-400' : 'text-yellow-400'}`}>{String(resonanceActionResult.matchScore ?? '')}%</span></span>
-                  <span className="text-gray-400">Primary: <span className="text-neon-purple">{String(resonanceActionResult.primaryAudience ?? '')}</span></span>
+                  <span className="text-gray-400">Match: <span className={`font-mono font-bold ${(resonanceActionResult.alignmentScore as number) >= 70 ? 'text-green-400' : 'text-yellow-400'}`}>{String(resonanceActionResult.alignmentScore ?? '')}%</span></span>
+                  <span className="text-gray-400">Quality: <span className="text-neon-purple capitalize">{String(resonanceActionResult.quality ?? '')}</span></span>
                 </div>
                 {!!resonanceActionResult.message && <p className="text-gray-400 italic">{String(resonanceActionResult.message)}</p>}
               </div>
@@ -1180,8 +1180,8 @@ export default function ResonanceBoundaryPage() {
             {resonanceActionResult.action === 'impactPrediction' && (
               <div className="space-y-1">
                 <div className="flex gap-4 flex-wrap">
-                  <span className="text-gray-400">Predicted reach: <span className="text-neon-purple font-mono">{String(resonanceActionResult.predictedReach ?? '')}</span></span>
-                  <span className="text-gray-400">Impact: <span className="text-white capitalize">{String(resonanceActionResult.impactLevel ?? '')}</span></span>
+                  <span className="text-gray-400">Predicted score: <span className="text-neon-purple font-mono">{String((resonanceActionResult.prediction as Record<string,unknown>)?.predicted ?? '')}</span></span>
+                  <span className="text-gray-400">Tier: <span className="text-white capitalize">{String(resonanceActionResult.predictedTier ?? '')}</span></span>
                 </div>
                 {!!resonanceActionResult.message && <p className="text-gray-400 italic">{String(resonanceActionResult.message)}</p>}
               </div>
