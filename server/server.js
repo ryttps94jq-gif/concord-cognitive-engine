@@ -5233,7 +5233,7 @@ if (String(process.env.AUTO_BACKUP || "true").toLowerCase() === "true") {
 // Periodic state save safety net — catches mutations if debounced save somehow missed
 // Runs every 5 minutes, no-op if no changes since last save
 let _lastPeriodicSaveHash = "";
-trackedInterval(() => {
+trackedSetInterval(() => {
   try {
     const data = JSON.stringify(_serializeState());
     const hash = data.length.toString(); // cheap change detection
