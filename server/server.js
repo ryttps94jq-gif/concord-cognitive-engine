@@ -24230,6 +24230,10 @@ app.locals.verifyToken = verifyToken;
 app.locals.db = db;
 app.use("/", mobileCheckoutRouter);
 
+// ===== CODEBASE INVENTORY & WIRING MAP =====
+import createInventoryRouter from "./routes/inventory.js";
+app.use("/api/inventory", createInventoryRouter());
+
 // ===== OPENAPI DOCUMENTATION =====
 import createOpenAPIRouter from "./routes/openapi.js";
 app.use("/api", createOpenAPIRouter());
