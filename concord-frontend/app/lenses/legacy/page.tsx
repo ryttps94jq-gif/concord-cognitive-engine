@@ -380,7 +380,7 @@ export default function LegacyLensPage() {
           <div className="bg-lattice-deep rounded-lg p-4 space-y-3 text-sm">
             {'modules' in actionResult && Array.isArray(actionResult.modules) && (
               <div className="space-y-2">
-                {!!'summary' in actionResult && actionResult.summary && typeof actionResult.summary === 'object' && (
+                {'summary' in actionResult && actionResult.summary !== null && typeof actionResult.summary === 'object' && (
                   <div className="flex flex-wrap gap-4 text-xs">
                     {Object.entries(actionResult.summary as Record<string, unknown>).map(([k, v]) => (
                       <span key={k} className="text-gray-400">{k}: <span className="text-neon-cyan font-bold">{String(v)}</span></span>
@@ -402,7 +402,7 @@ export default function LegacyLensPage() {
             )}
             {'moduleReadiness' in actionResult && Array.isArray(actionResult.moduleReadiness) && (
               <div className="space-y-2">
-                {!!'summary' in actionResult && actionResult.summary && typeof actionResult.summary === 'object' && (
+                {'summary' in actionResult && actionResult.summary !== null && typeof actionResult.summary === 'object' && (
                   <div className="flex flex-wrap gap-4 text-xs">
                     {Object.entries(actionResult.summary as Record<string, unknown>).map(([k, v]) => (
                       <span key={k} className="text-gray-400">{k}: <span className="text-neon-cyan">{String(v)}</span></span>
@@ -423,7 +423,7 @@ export default function LegacyLensPage() {
             )}
             {'components' in actionResult && Array.isArray(actionResult.components) && (
               <div className="space-y-2">
-                {!!'summary' in actionResult && actionResult.summary && typeof actionResult.summary === 'object' && (
+                {'summary' in actionResult && actionResult.summary !== null && typeof actionResult.summary === 'object' && (
                   <div className="flex flex-wrap gap-4 text-xs">
                     {Object.entries(actionResult.summary as Record<string, unknown>).map(([k, v]) => (
                       <span key={k} className="text-gray-400">{k}: <span className="text-yellow-400">{String(v)}</span></span>

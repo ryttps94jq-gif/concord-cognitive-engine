@@ -426,7 +426,7 @@ export default function OfflineLensPage() {
                   <span>Conflicts: <span className="text-neon-cyan font-bold">{String((actionResult.conflicts as unknown[]).length)}</span></span>
                   <span>Strategy: <span className="text-neon-purple">{String(actionResult.strategy)}</span></span>
                 </div>
-                {!!'summary' in actionResult && actionResult.summary && typeof actionResult.summary === 'object' && (
+                {'summary' in actionResult && actionResult.summary !== null && typeof actionResult.summary === 'object' && (
                   <div className="flex flex-wrap gap-3 text-xs">
                     {Object.entries(actionResult.summary as Record<string, unknown>).map(([k, v]) => (
                       <span key={k} className="text-gray-400">{k}: <span className="text-neon-cyan">{String(v)}</span></span>
@@ -437,14 +437,14 @@ export default function OfflineLensPage() {
             )}
             {'hotColdSplit' in actionResult && (
               <div className="space-y-2">
-                {!!'hotColdSplit' in actionResult && actionResult.hotColdSplit && typeof actionResult.hotColdSplit === 'object' && (
+                {'hotColdSplit' in actionResult && actionResult.hotColdSplit !== null && typeof actionResult.hotColdSplit === 'object' && (
                   <div className="flex flex-wrap gap-3 text-xs">
                     {Object.entries(actionResult.hotColdSplit as Record<string, unknown>).map(([k, v]) => (
                       <span key={k} className="text-gray-400">{k}: <span className="text-neon-cyan">{String(v)}</span></span>
                     ))}
                   </div>
                 )}
-                {!!'evictionPolicy' in actionResult && actionResult.evictionPolicy && typeof actionResult.evictionPolicy === 'object' && (
+                {'evictionPolicy' in actionResult && actionResult.evictionPolicy !== null && typeof actionResult.evictionPolicy === 'object' && (
                   <div className="flex flex-wrap gap-3 text-xs">
                     {Object.entries(actionResult.evictionPolicy as Record<string, unknown>).map(([k, v]) => (
                       <span key={k} className="text-gray-400">{k}: <span className="text-neon-green">{String(v)}</span></span>
@@ -455,14 +455,14 @@ export default function OfflineLensPage() {
             )}
             {'changes' in actionResult && (
               <div className="space-y-2">
-                {!!'changes' in actionResult && actionResult.changes && typeof actionResult.changes === 'object' && (
+                {'changes' in actionResult && actionResult.changes !== null && typeof actionResult.changes === 'object' && (
                   <div className="flex flex-wrap gap-3 text-xs">
                     {Object.entries(actionResult.changes as Record<string, unknown>).map(([k, v]) => (
                       <span key={k} className="text-gray-400">{k}: <span className="text-neon-cyan">{String(v)}</span></span>
                     ))}
                   </div>
                 )}
-                {!!'bandwidth' in actionResult && actionResult.bandwidth && typeof actionResult.bandwidth === 'object' && (
+                {'bandwidth' in actionResult && actionResult.bandwidth !== null && typeof actionResult.bandwidth === 'object' && (
                   <div className="flex flex-wrap gap-3 text-xs">
                     {Object.entries(actionResult.bandwidth as Record<string, unknown>).map(([k, v]) => (
                       <span key={k} className="text-gray-400">{k}: <span className="text-neon-green">{String(v)}</span></span>

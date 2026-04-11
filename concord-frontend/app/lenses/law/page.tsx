@@ -589,7 +589,7 @@ export default function LawLensPage() {
                   <span className="text-gray-400">Open: <span className="text-yellow-400 font-bold">{String(actionResult.openCases)}</span></span>
                   <span className="text-gray-400">Closed: <span className="text-neon-green font-bold">{String(actionResult.closedCases)}</span></span>
                 </div>
-                {!!'winRate' in actionResult && actionResult.winRate && typeof actionResult.winRate === 'object' && (
+                {'winRate' in actionResult && actionResult.winRate !== null && typeof actionResult.winRate === 'object' && (
                   <div className="flex gap-4 text-xs">
                     {Object.entries(actionResult.winRate as Record<string, unknown>).map(([k, v]) => (
                       <span key={k} className="text-gray-400">{k}: <span className="text-neon-green">{String(v)}</span></span>
@@ -626,7 +626,7 @@ export default function LawLensPage() {
             )}
             {'overdue' in actionResult && Array.isArray(actionResult.overdue) && (
               <div className="space-y-2">
-                {!!'summary' in actionResult && actionResult.summary && typeof actionResult.summary === 'object' && (
+                {'summary' in actionResult && actionResult.summary !== null && typeof actionResult.summary === 'object' && (
                   <div className="flex gap-4 text-xs">
                     {Object.entries(actionResult.summary as Record<string, unknown>).map(([k, v]) => (
                       <span key={k} className="text-gray-400">{k}: <span className="text-neon-cyan">{String(v)}</span></span>
@@ -657,7 +657,7 @@ export default function LawLensPage() {
             )}
             {'adRevenue' in actionResult || 'totalMonthlyRevenue' in actionResult ? (
               <div className="space-y-2">
-                {!!'totals' in actionResult && actionResult.totals && typeof actionResult.totals === 'object' && (
+                {'totals' in actionResult && actionResult.totals !== null && typeof actionResult.totals === 'object' && (
                   <div className="flex gap-4">
                     {Object.entries(actionResult.totals as Record<string, unknown>).map(([k, v]) => (
                       <span key={k} className="text-gray-400 text-xs">{k}: <span className="text-neon-green font-bold">${String(v)}</span></span>

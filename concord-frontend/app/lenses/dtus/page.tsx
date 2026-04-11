@@ -506,7 +506,7 @@ export default function DTUBrowserPage() {
               )}
 
               {/* Citation Network */}
-              {!!actionResult.influenceScore !== undefined && actionResult.inDegree !== undefined && (
+              {actionResult.influenceScore !== undefined && actionResult.inDegree !== undefined && (
                 <div className="space-y-3">
                   <div className="flex items-center gap-3">
                     <span className="text-3xl font-bold text-neon-purple">{actionResult.influenceScore as number}</span>

@@ -1605,14 +1605,14 @@ export default function PhysicsLensPage() {
             )}
             {'elements' in physicsActionResult && (
               <div className="space-y-2">
-                {!!'elements' in physicsActionResult && physicsActionResult.elements && typeof physicsActionResult.elements === 'object' && (
+                {'elements' in physicsActionResult && physicsActionResult.elements !== null && typeof physicsActionResult.elements === 'object' && (
                   <div className="flex flex-wrap gap-3 text-xs">
                     {Object.entries(physicsActionResult.elements as Record<string, unknown>).slice(0, 4).map(([k, v]) => (
                       <span key={k} className="text-gray-400">{k}: <span className="text-neon-cyan">{String(v)}</span></span>
                     ))}
                   </div>
                 )}
-                {!!'hohmannTransfer' in physicsActionResult && physicsActionResult.hohmannTransfer && typeof physicsActionResult.hohmannTransfer === 'object' && (
+                {'hohmannTransfer' in physicsActionResult && physicsActionResult.hohmannTransfer !== null && typeof physicsActionResult.hohmannTransfer === 'object' && (
                   <div className="flex flex-wrap gap-3 text-xs">
                     {Object.entries(physicsActionResult.hohmannTransfer as Record<string, unknown>).slice(0, 3).map(([k, v]) => (
                       <span key={k} className="text-gray-400">{k}: <span className="text-neon-green">{String(v)}</span></span>
@@ -1634,14 +1634,14 @@ export default function PhysicsLensPage() {
                 <div className="flex flex-wrap gap-4 text-xs">
                   <span className="text-gray-400">Process: <span className="text-neon-purple">{String(physicsActionResult.process)}</span></span>
                 </div>
-                {!!'energetics' in physicsActionResult && physicsActionResult.energetics && typeof physicsActionResult.energetics === 'object' && (
+                {'energetics' in physicsActionResult && physicsActionResult.energetics !== null && typeof physicsActionResult.energetics === 'object' && (
                   <div className="flex flex-wrap gap-3 text-xs">
                     {Object.entries(physicsActionResult.energetics as Record<string, unknown>).map(([k, v]) => (
                       <span key={k} className="text-gray-400">{k}: <span className="text-neon-cyan">{String(v)}</span></span>
                     ))}
                   </div>
                 )}
-                {!!'efficiency' in physicsActionResult && physicsActionResult.efficiency && typeof physicsActionResult.efficiency === 'object' && (
+                {'efficiency' in physicsActionResult && physicsActionResult.efficiency !== null && typeof physicsActionResult.efficiency === 'object' && (
                   <div className="flex flex-wrap gap-3 text-xs">
                     {Object.entries(physicsActionResult.efficiency as Record<string, unknown>).map(([k, v]) => (
                       <span key={k} className="text-gray-400">{k}: <span className="text-neon-green">{String(v)}</span></span>

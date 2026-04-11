@@ -577,7 +577,7 @@ export default function CRILensPage() {
               )}
 
               {/* responseTimeline */}
-              {!!actionResult.action === 'responseTimeline' && r && !r.message && (
+              {actionResult.action === 'responseTimeline' && r && !r.message && (
                 <div className="space-y-3">
                   <div className="grid grid-cols-3 gap-2 text-center text-[11px]">
                     <div className="bg-lattice-surface rounded p-2">

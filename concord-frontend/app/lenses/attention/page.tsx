@@ -344,7 +344,7 @@ export default function AttentionLensPage() {
           )}
 
           {/* Priority Matrix Result */}
-          {!!actionResult.quadrants !== undefined && (
+          {actionResult.quadrants !== undefined && (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-sm text-gray-300">{actionResult.taskCount as number} tasks ranked</span>

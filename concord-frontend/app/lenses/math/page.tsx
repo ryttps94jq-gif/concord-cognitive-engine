@@ -1063,18 +1063,18 @@ export default function MathLensPage() {
               <div className="space-y-2">
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   {'n' in actionResult && <span className="text-gray-400">n: <span className="text-neon-cyan font-bold">{String(actionResult.n)}</span></span>}
-                  {!!'centralTendency' in actionResult && actionResult.centralTendency && typeof actionResult.centralTendency === 'object' && (
+                  {'centralTendency' in actionResult && actionResult.centralTendency !== null && typeof actionResult.centralTendency === 'object' && (
                     Object.entries(actionResult.centralTendency as Record<string, unknown>).map(([k, v]) => (
                       <span key={k} className="text-gray-400">{k}: <span className="text-white">{String(v)}</span></span>
                     ))
                   )}
-                  {!!'spread' in actionResult && actionResult.spread && typeof actionResult.spread === 'object' && (
+                  {'spread' in actionResult && actionResult.spread !== null && typeof actionResult.spread === 'object' && (
                     Object.entries(actionResult.spread as Record<string, unknown>).map(([k, v]) => (
                       <span key={k} className="text-gray-400">{k}: <span className="text-neon-cyan">{String(v)}</span></span>
                     ))
                   )}
                 </div>
-                {!!'outliers' in actionResult && actionResult.outliers && typeof actionResult.outliers === 'object' && (
+                {'outliers' in actionResult && actionResult.outliers !== null && typeof actionResult.outliers === 'object' && (
                   <div className="text-xs text-gray-400">
                     Outliers: <span className="text-yellow-400">{String((actionResult.outliers as Record<string, unknown>).count || 0)}</span>
                   </div>
@@ -1091,7 +1091,7 @@ export default function MathLensPage() {
               <div className="space-y-1 text-xs">
                 <p className="text-gray-400">Degree: <span className="text-neon-cyan">{String(actionResult.degree)}</span></p>
                 <p className="font-mono text-white bg-lattice-surface rounded px-2 py-1">{String(actionResult.equation)}</p>
-                {!!'roots' in actionResult && actionResult.roots && typeof actionResult.roots === 'object' && (
+                {'roots' in actionResult && actionResult.roots !== null && typeof actionResult.roots === 'object' && (
                   <p className="text-gray-400">Roots: <span className="text-neon-green">{String((actionResult.roots as Record<string, unknown>).real || 'none')}</span></p>
                 )}
               </div>

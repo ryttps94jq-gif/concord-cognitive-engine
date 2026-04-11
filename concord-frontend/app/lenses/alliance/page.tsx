@@ -479,7 +479,7 @@ export default function AllianceLensPage() {
                     )}
 
                     {/* Network Analysis Result */}
-                    {!!actionResult.nodeCount !== undefined && actionResult.density !== undefined && (
+                    {actionResult.nodeCount !== undefined && actionResult.density !== undefined && (
                       <div className="space-y-3">
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                           <div className="p-2 bg-lattice-surface rounded text-center">

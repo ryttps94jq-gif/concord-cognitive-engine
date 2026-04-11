@@ -248,7 +248,7 @@ export default function AppMakerLens() {
             )}
 
             {/* UI Complexity Result */}
-            {!!actionResult.complexityScore !== undefined && actionResult.complexityLevel !== undefined && (
+            {actionResult.complexityScore !== undefined && actionResult.complexityLevel !== undefined && (
               <div className="space-y-3">
                 <div className="flex items-center gap-3">
                   <div className={`text-3xl font-bold ${(actionResult.complexityLevel as string) === 'simple' ? 'text-green-400' : (actionResult.complexityLevel as string) === 'moderate' ? 'text-yellow-400' : 'text-red-400'}`}>

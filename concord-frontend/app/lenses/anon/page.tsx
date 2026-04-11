@@ -199,7 +199,7 @@ export default function AnonLensPage() {
             )}
 
             {/* Privacy Risk Result */}
-            {!!actionResult.overallRisk !== undefined && actionResult.reidentificationRisk !== undefined && (
+            {actionResult.overallRisk !== undefined && actionResult.reidentificationRisk !== undefined && (
               <div className="space-y-3">
                 <div className="flex items-center gap-3">
                   <div className={`text-3xl font-bold ${(actionResult.riskLevel as string) === 'critical' || (actionResult.riskLevel as string) === 'high' ? 'text-red-400' : (actionResult.riskLevel as string) === 'moderate' ? 'text-yellow-400' : 'text-green-400'}`}>

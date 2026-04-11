@@ -336,7 +336,7 @@ export default function DocsLensPage() {
         )}
 
         {/* crossReference result */}
-        {!!actionResult && actionResult.graphDensity !== undefined && actionResult.totalPages !== undefined && (
+        {actionResult && actionResult.graphDensity !== undefined && actionResult.totalPages !== undefined && (
           <div className="space-y-3 pt-2 border-t border-white/5">
             <div className="grid grid-cols-4 gap-2">
               <div className="p-2 bg-lattice-surface rounded text-center">
