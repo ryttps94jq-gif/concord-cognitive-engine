@@ -10,6 +10,7 @@
 
 import crypto from "crypto";
 import logger from '../logger.js';
+import securityHeaders from './security-headers.js';
 
 /**
  * Configure all middleware on the Express app.
@@ -54,6 +55,9 @@ export default function configureMiddleware(app, deps) {
     csrfMiddleware,
     NODE_ENV,
   } = deps;
+
+  // ---- Security Headers (standalone, runs before Helmet) ----
+  app.use(securityHeaders);
 
   // ---- CSP Nonce Generation ----
   // Generate a per-request nonce for Content-Security-Policy script integrity

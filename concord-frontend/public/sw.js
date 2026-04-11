@@ -219,12 +219,76 @@ self.addEventListener('fetch', (event) => {
 });
 
 // ---------------------------------------------------------------------------
+// Push Notifications — display push messages and handle notification clicks
+// ---------------------------------------------------------------------------
+
+self.addEventListener('push', (event) => {
+  if (!event.data) return;
+
+  let payload;
+  try {
+    payload = event.data.json();
+  } catch {
+    payload = { title: 'Concord', body: event.data.text() };
+  }
+
+  const title = payload.title || 'Concord';
+  const options = {
+    body: payload.body || '',
+    icon: '/icons/icon-192x192.svg',
+    badge: '/icons/icon-192x192.svg',
+    tag: payload.tag || 'concord-notification',
+    data: {
+      url: payload.url || '/',
+      ...payload.data,
+    },
+    actions: payload.actions || [],
+    vibrate: [100, 50, 100],
+    renotify: !!payload.tag,
+  };
+
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+
+  const targetUrl = event.notification.data?.url || '/';
+  const actionUrl = event.action
+    ? event.notification.data?.actionUrls?.[event.action] || targetUrl
+    : targetUrl;
+
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      // Focus an existing tab if one is open at the target URL
+      for (const client of clientList) {
+        if (client.url.includes(actionUrl) && 'focus' in client) {
+          return client.focus();
+        }
+      }
+      // Otherwise focus any existing window and navigate it
+      for (const client of clientList) {
+        if ('focus' in client && 'navigate' in client) {
+          return client.focus().then((c) => c.navigate(actionUrl));
+        }
+      }
+      // Last resort: open a new window
+      return self.clients.openWindow(actionUrl);
+    })
+  );
+});
+
+// ---------------------------------------------------------------------------
 // Background Sync — replay queued mutations when connectivity is restored
 // ---------------------------------------------------------------------------
 
 // Browser Background Sync API (fired by the browser when it detects connectivity)
 self.addEventListener('sync', (event) => {
   if (event.tag === 'concord-mutation-sync') {
+    event.waitUntil(replayMutations());
+  }
+  // Background sync for offline DTU creation
+  if (event.tag === 'concord-dtu-sync') {
     event.waitUntil(replayMutations());
   }
 });

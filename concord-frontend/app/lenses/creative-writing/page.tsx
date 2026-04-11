@@ -21,6 +21,9 @@ import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
+import dynamic from 'next/dynamic';
+
+const BlockEditor = dynamic(() => import('@/components/editor/BlockEditor'), { ssr: false, loading: () => <div className="animate-pulse bg-white/5 rounded-lg h-64" /> });
 
 type WritingTab = 'works' | 'editor' | 'prompts' | 'workshop';
 type WritingGenre = 'fiction' | 'nonfiction' | 'screenplay' | 'short-story' | 'novel' | 'essay' | 'blog' | 'other';
@@ -681,16 +684,18 @@ export default function CreativeWritingPage() {
               </div>
             )}
 
-            <textarea
-              value={editorContent}
-              onChange={e => setEditorContent(e.target.value)}
+            <BlockEditor
+              content={editorContent}
+              onChange={(html: string) => setEditorContent(html)}
+              onSave={(html: string) => { setEditorContent(html); saveWork(); }}
               placeholder="Begin writing..."
+              editable
+              autoFocus
               className={cn(
-                'w-full px-6 py-4 border border-white/10 rounded-lg leading-relaxed focus:outline-none focus:border-amber-500/30 resize-none font-mono transition-all',
-                focusMode
-                  ? 'h-[80vh] bg-black/80 text-base text-gray-200'
-                  : 'h-[60vh] bg-white/5 text-sm'
+                'border border-white/10 rounded-lg focus-within:border-amber-500/30 transition-all',
+                focusMode ? 'bg-black/80' : 'bg-white/5'
               )}
+              minHeight={focusMode ? '80vh' : '60vh'}
             />
           </div>
         )}

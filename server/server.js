@@ -88,6 +88,7 @@ import createSovereignRouter from "./routes/sovereign.js";
 import createSovereignEmergentRouter from "./routes/sovereign-emergent.js";
 import createFederationRouter from "./routes/federation.js";
 import registerOAuthRoutes from "./routes/oauth.js";
+import createAuditRouter from "./routes/audit.js";
 import { QualiaEngine, hooks as qualiaHooks } from "./existential/index.js";
 import { rateLimitMiddleware as perEndpointRateLimit } from "./rateLimit.js";
 import { detectVulnerability, chooseDeliveryMode, hookVulnerability, assessAndAdapt } from "./emergent/vulnerability-engine.js";
@@ -22782,6 +22783,9 @@ registerSystemRoutes(app, {
   computeSubstrateStats,
   getDbStatus: () => ({ pgPool: !!pgPool, redisClient: !!redisClient }),
 });
+
+// ---- Audit Log Endpoints (extracted to routes/audit.js) ----
+app.use("/api/audit", createAuditRouter({ requireRole }));
 
 // ---- Auth Endpoints (extracted to routes/auth.js) ----
 app.use("/api/auth", createAuthRouter({

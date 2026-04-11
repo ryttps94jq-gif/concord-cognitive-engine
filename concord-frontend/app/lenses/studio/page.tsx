@@ -365,6 +365,59 @@ export default function StudioLensPage() {
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ---- Web MIDI input wiring ----
+  useEffect(() => {
+    let midiAccess: MIDIAccess | null = null;
+    const handleMIDIMessage = (e: MIDIMessageEvent) => {
+      const data = e.data;
+      if (!data || data.length < 2) return;
+      const status = data[0] & 0xf0;
+      const note = data[1];
+      const velocity = data.length > 2 ? data[2] : 0;
+
+      // Route to the synth on the selected track (or first available)
+      const trackId = selectedTrackId || projectRef.current?.tracks.find(t => t.type === 'midi')?.id;
+      if (!trackId) return;
+
+      let synth = synthEnginesRef.current.get(trackId);
+      if (!synth) {
+        synth = new SynthEngine(DEFAULT_SYNTH_PRESETS[0]);
+        const mixerInput = mixerRef.current?.getChannelInput(trackId);
+        if (mixerInput) synth.connect(mixerInput);
+        synthEnginesRef.current.set(trackId, synth);
+      }
+
+      if (status === 0x90 && velocity > 0) {
+        synth.noteOn(note, velocity);
+      } else if (status === 0x80 || (status === 0x90 && velocity === 0)) {
+        synth.noteOff(note);
+      }
+    };
+
+    const onMIDIInput = (input: MIDIInput) => {
+      input.onmidimessage = handleMIDIMessage;
+    };
+
+    if (typeof navigator !== 'undefined' && navigator.requestMIDIAccess) {
+      navigator.requestMIDIAccess().then((access) => {
+        midiAccess = access;
+        access.inputs.forEach(onMIDIInput);
+        access.onstatechange = () => {
+          access.inputs.forEach(onMIDIInput);
+        };
+      }).catch((err) => {
+        console.warn('[Studio] Web MIDI not available:', err);
+      });
+    }
+
+    return () => {
+      if (midiAccess) {
+        midiAccess.inputs.forEach(input => { input.onmidimessage = null; });
+      }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedTrackId]);
+
   // ---- Project operations ----
   const selectedTrack = useMemo(
     () => project?.tracks.find(t => t.id === selectedTrackId) ?? null,
