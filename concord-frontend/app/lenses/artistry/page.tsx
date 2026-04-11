@@ -12,9 +12,12 @@ import {
   Eye, ShoppingBag, DollarSign, Sparkles,
   Paintbrush, X,
   BarChart3, Globe, Layers,
+  Loader2, XCircle, Zap, Ruler, Tag,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { UniversalActions } from '@/components/lens/UniversalActions';
+import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
+import { useLensData } from '@/lib/hooks/use-lens-data';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
@@ -30,6 +33,23 @@ export default function ArtistryLensPage() {
   const queryClient = useQueryClient();
   const { latestData: realtimeData, insights: realtimeInsights, isLive, lastUpdated } = useRealtimeLens('artistry');
   const { contextDTUs, isLoading: dtusLoading } = useLensDTUs({ lens: 'artistry' });
+
+  // Backend action wiring
+  const runAction = useRunArtifact('artistry');
+  const { items: artistryItems } = useLensData<Record<string, unknown>>('artistry', 'artwork', { seed: [] });
+  const [actionResult, setActionResult] = useState<Record<string, unknown> | null>(null);
+  const [isRunning, setIsRunning] = useState<string | null>(null);
+
+  const handleArtistryAction = async (action: string) => {
+    const targetId = artistryItems[0]?.id;
+    if (!targetId) return;
+    setIsRunning(action);
+    try {
+      const res = await runAction.mutateAsync({ id: targetId, action });
+      setActionResult(res.result as Record<string, unknown>);
+    } catch (e) { console.error(`Action ${action} failed:`, e); }
+    setIsRunning(null);
+  };
 
   const [tab, setTab] = useState<ArtistryTab>('feed');
   const [searchQuery, setSearchQuery] = useState('');
@@ -131,6 +151,72 @@ export default function ArtistryLensPage() {
         {showFeatures && <LensFeaturePanel lensId="artistry" />}
         <RealtimeDataPanel data={realtimeData} insights={realtimeInsights} />
       <UniversalActions domain="artistry" artifactId={null} compact />
+
+        {/* ── Backend Action Panels ── */}
+        <div className="bg-white/5 border border-white/10 rounded-lg p-4">
+          <h3 className="text-sm font-semibold mb-3 flex items-center gap-2"><Zap className="w-4 h-4 text-neon-pink" /> Artistry Compute Actions</h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <button onClick={() => handleArtistryAction('colorPaletteAnalysis')} disabled={isRunning !== null} className="flex flex-col items-center gap-2 p-3 bg-white/5 rounded-lg border border-white/10 hover:border-neon-pink/50 transition-colors disabled:opacity-50">
+              {isRunning === 'colorPaletteAnalysis' ? <Loader2 className="w-5 h-5 text-neon-pink animate-spin" /> : <Palette className="w-5 h-5 text-neon-pink" />}
+              <span className="text-xs text-gray-300">Color Palette</span>
+            </button>
+            <button onClick={() => handleArtistryAction('compositionScore')} disabled={isRunning !== null} className="flex flex-col items-center gap-2 p-3 bg-white/5 rounded-lg border border-white/10 hover:border-neon-cyan/50 transition-colors disabled:opacity-50">
+              {isRunning === 'compositionScore' ? <Loader2 className="w-5 h-5 text-neon-cyan animate-spin" /> : <Ruler className="w-5 h-5 text-neon-cyan" />}
+              <span className="text-xs text-gray-300">Composition Score</span>
+            </button>
+            <button onClick={() => handleArtistryAction('styleClassify')} disabled={isRunning !== null} className="flex flex-col items-center gap-2 p-3 bg-white/5 rounded-lg border border-white/10 hover:border-purple-400/50 transition-colors disabled:opacity-50">
+              {isRunning === 'styleClassify' ? <Loader2 className="w-5 h-5 text-purple-400 animate-spin" /> : <Eye className="w-5 h-5 text-purple-400" />}
+              <span className="text-xs text-gray-300">Style Classify</span>
+            </button>
+            <button onClick={() => handleArtistryAction('mediaInventory')} disabled={isRunning !== null} className="flex flex-col items-center gap-2 p-3 bg-white/5 rounded-lg border border-white/10 hover:border-yellow-400/50 transition-colors disabled:opacity-50">
+              {isRunning === 'mediaInventory' ? <Loader2 className="w-5 h-5 text-yellow-400 animate-spin" /> : <Tag className="w-5 h-5 text-yellow-400" />}
+              <span className="text-xs text-gray-300">Media Inventory</span>
+            </button>
+          </div>
+          {actionResult && (
+            <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mt-4 p-3 bg-white/5 rounded-lg border border-white/10">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="text-sm font-semibold flex items-center gap-2"><BarChart3 className="w-4 h-4 text-neon-pink" /> Result</h4>
+                <button onClick={() => setActionResult(null)} className="text-gray-400 hover:text-white"><XCircle className="w-4 h-4" /></button>
+              </div>
+              {/* Color Palette Analysis */}
+              {actionResult.harmonyScore !== undefined && actionResult.dominantHue !== undefined && (
+                <div className="space-y-2">
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="p-2 bg-white/5 rounded text-center"><p className="text-sm font-bold text-neon-pink">{actionResult.harmonyScore as number}</p><p className="text-[10px] text-gray-500">Harmony</p></div>
+                    <div className="p-2 bg-white/5 rounded text-center"><p className="text-sm font-bold text-neon-cyan capitalize">{actionResult.dominantHue as string}</p><p className="text-[10px] text-gray-500">Dominant</p></div>
+                    <div className="p-2 bg-white/5 rounded text-center"><p className="text-sm font-bold text-yellow-400">{actionResult.contrastRatio as number}</p><p className="text-[10px] text-gray-500">Contrast</p></div>
+                  </div>
+                  {(actionResult.colors as Array<{ hex: string }>)?.slice(0, 8).map((c, i) => (
+                    <span key={i} className="inline-block w-6 h-6 rounded-sm border border-white/20 mr-1" style={{ backgroundColor: c.hex }} title={c.hex} />
+                  ))}
+                </div>
+              )}
+              {/* Composition Score */}
+              {actionResult.overallScore !== undefined && !actionResult.dominantHue && (
+                <div className="text-3xl font-bold text-neon-cyan">{actionResult.overallScore as number}<span className="text-sm text-gray-400">/100</span></div>
+              )}
+              {/* Style Classify */}
+              {actionResult.classification !== undefined && (
+                <div className="flex items-center gap-3"><span className="text-xl font-bold text-purple-400 capitalize">{actionResult.classification as string}</span>{actionResult.confidence && <span className="text-xs text-gray-400">{actionResult.confidence as number}%</span>}</div>
+              )}
+              {/* Media Inventory */}
+              {actionResult.totalItems !== undefined && actionResult.byType !== undefined && (
+                <div className="space-y-2">
+                  <div className="text-lg font-bold text-yellow-400">{actionResult.totalItems as number} items</div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {Object.entries(actionResult.byType as Record<string, number>).map(([type, count]) => (
+                      <div key={type} className="p-2 bg-white/5 rounded flex justify-between text-xs"><span className="text-white capitalize">{type}</span><span className="text-gray-400">{count}</span></div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {actionResult.message && !actionResult.harmonyScore && !actionResult.overallScore && !actionResult.classification && !actionResult.totalItems && (
+                <p className="text-sm text-gray-400">{actionResult.message as string}</p>
+              )}
+            </motion.div>
+          )}
+        </div>
 
         {/* Stat Cards — creative palette feel */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
