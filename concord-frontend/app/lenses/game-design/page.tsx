@@ -12,7 +12,7 @@ import {
   Gamepad2, Plus, Trash2, X, Save,
   BookOpen, Users, Map,
   BarChart3, Search, Loader2,
-  FileText, Settings, Zap, TrendingUp, Network, DollarSign, GitBranch,
+  FileText, Settings, Zap, TrendingUp, DollarSign, GitBranch,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useUIStore } from '@/store/ui';

@@ -13,7 +13,7 @@ import {
   ChevronRight, ChevronDown, Plus, X, Check, Clock,
   BarChart3, Sparkles, Gem, Gamepad2, Joystick,
   GitBranch, BookOpen, Cpu,
-  Activity, ArrowUp, Loader2, Scale, Percent,
+  Activity, ArrowUp, Loader2, Scale, BarChart2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { showToast } from '@/components/common/Toasts';
@@ -1062,7 +1062,7 @@ export default function GameLensPage() {
             { action: 'balanceCheck',    label: 'Balance Check',     icon: Scale,      color: 'text-neon-green' },
             { action: 'economySimulate', label: 'Economy Simulate',  icon: TrendingUp, color: 'text-neon-cyan' },
             { action: 'levelCurve',      label: 'Level Curve',       icon: Activity,   color: 'text-neon-purple' },
-            { action: 'dropRateCalc',    label: 'Drop Rate Calc',    icon: Percent,    color: 'text-yellow-400' },
+            { action: 'dropRateCalc',    label: 'Drop Rate Calc',    icon: BarChart2,  color: 'text-yellow-400' },
           ].map(({ action, label, icon: Icon, color }) => (
             <button
               key={action}
