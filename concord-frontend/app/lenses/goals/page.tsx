@@ -386,7 +386,13 @@ export default function GoalsLensPage() {
     if (!artifactId) return;
     runAction.mutate(
       { id: artifactId, action, params: {} },
-      { onSuccess: (res) => setGoalsActionResult({ action, data: res.result }) }
+      {
+        onSuccess: (res) => setGoalsActionResult({ action, data: res.result }),
+        onError: (e) => {
+          console.error(`Action failed:`, e);
+          setGoalsActionResult({ action, data: { error: `Action failed: ${e instanceof Error ? e.message : 'Unknown error'}` } });
+        },
+      }
     );
   }, [goalItems, runAction]);
 

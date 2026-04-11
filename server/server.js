@@ -15827,6 +15827,11 @@ async function pipelineCommitDTU(ctx, dtu, opts={}) {
     STATE.dtus.set(dtu.id, dtu);
     saveStateDebounced();
 
+    // Broadcast DTU birth so LiveDTUFeed, ActivityFeed, and lens views see pipeline-committed DTUs
+    realtimeEmit("dtu:created", {
+      id: dtu.id, title: dtu.title, tier: dtu.tier, tags: dtu.tags, updatedAt: dtu.updatedAt,
+    });
+
     // Sync DTU to lens artifacts for domain-based lens views
     try { if (typeof syncDTUToLensArtifacts === "function") syncDTUToLensArtifacts(dtu); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
@@ -21224,6 +21229,8 @@ register("market","listingCreate", (ctx, input) => {
   dtu.meta = dtu.meta || {};
   dtu.meta.marketplaceListed = true;
   dtu.meta.lastListingId = id;
+  // Broadcast listing creation so marketplace lens gets real-time updates
+  realtimeEmit("market:listing", { listingId: id, dtuId, price, currency, license, title: dtu.title });
   saveStateDebounced();
   return { ok:true, listing };
 }, { summary:"Create a marketplace listing for a DTU (scope-validated)." });
@@ -27565,6 +27572,10 @@ function _lensEmitDTU(ctx, domain, action, artifactType, artifact, extra={}) {
     realtimeEmit("artifact:rendered", {
       dtuId, domain, action, fileType: artifact.type || artifactType,
     });
+    // Broadcast DTU birth so LiveDTUFeed and ActivityFeed see lens-generated DTUs
+    realtimeEmit("dtu:created", {
+      id: dtuId, title: dtu.title, tier: dtu.tier, tags: dtu.tags, updatedAt: dtu.updatedAt,
+    });
 
     saveStateDebounced();
     return dtuId;
@@ -30955,6 +30966,22 @@ registerUniversalLensActions();
 
     // Trades lens: frontend calls generateEstimate, backend registered as calculateEstimate
     ["trades", "generateEstimate", "calculateEstimate"],
+
+    // Aviation lens: frontend uses wb_calculate, backend uses calculate-wb
+    ["aviation", "wb_calculate", "calculate-wb"],
+
+    // Education lens: frontend uses snake_case, backend uses camelCase
+    ["education", "attendance_report", "attendanceReport"],
+    ["education", "calculate_grades", "gradeCalculation"],
+
+    // Fitness lens: calculateProgression alias to progressionCalc
+    ["fitness", "calculateProgression", "progressionCalc"],
+
+    // Insurance lens: coverageGapCheck alias to coverageGap
+    ["insurance", "coverageGapCheck", "coverageGap"],
+
+    // Services lens: frontend calls inventoryCheck, backend registered as supplyCheck
+    ["services", "inventoryCheck", "supplyCheck"],
   ];
 
   let aliasCount = 0;

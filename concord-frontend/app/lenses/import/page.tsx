@@ -116,7 +116,13 @@ export default function ImportLens() {
     if (!artifactId) return;
     runAction.mutate(
       { id: artifactId, action, params: {} },
-      { onSuccess: (res) => setImportActionResult({ action, data: res.result }) }
+      {
+        onSuccess: (res) => setImportActionResult({ action, data: res.result }),
+        onError: (e) => {
+          console.error(`Action failed:`, e);
+          setImportActionResult({ action, data: { error: `Action failed: ${e instanceof Error ? e.message : 'Unknown error'}` } });
+        },
+      }
     );
   }, [importJobItems, runAction]);
 

@@ -44,6 +44,53 @@ export default function registerRealEstateActions(registerLensAction) {
     return { ok: true, result: { timeline, totalDays: 30 } };
   });
 
+  registerLensAction("realestate", "vacancyReport", (ctx, artifact, params) => {
+    const units = artifact.data?.units || [];
+    const avgRent = params.avgMarketRent || artifact.data?.avgMarketRent || 0;
+    const now = new Date();
+    const unitDetails = units.map(u => {
+      const isVacant = u.status === 'vacant' || !u.tenant;
+      const vacantSince = u.vacantSince ? new Date(u.vacantSince) : null;
+      const daysVacant = isVacant && vacantSince ? Math.floor((now - vacantSince) / 86400000) : isVacant ? null : 0;
+      const unitRent = u.rentAmount || avgRent || 0;
+      const lostRevenue = isVacant && daysVacant != null ? Math.round((unitRent / 30) * daysVacant * 100) / 100 : 0;
+      return {
+        unit: u.unit || u.unitId || u.name,
+        status: isVacant ? 'vacant' : 'occupied',
+        tenant: isVacant ? null : (u.tenant || 'Unknown'),
+        rentAmount: unitRent,
+        vacantSince: isVacant ? (u.vacantSince || null) : null,
+        daysVacant,
+        lostRevenue,
+      };
+    });
+
+    const vacantUnits = unitDetails.filter(u => u.status === 'vacant');
+    const totalLostRevenue = Math.round(vacantUnits.reduce((s, u) => s + u.lostRevenue, 0) * 100) / 100;
+    const vacancyRate = units.length > 0 ? Math.round((vacantUnits.length / units.length) * 100) : 0;
+
+    const recommendations = [];
+    if (vacancyRate > 20) recommendations.push('High vacancy rate — consider rent reduction or incentives');
+    if (vacancyRate > 10) recommendations.push('Review marketing strategy and listing platforms');
+    const longVacant = vacantUnits.filter(u => u.daysVacant != null && u.daysVacant > 60);
+    if (longVacant.length > 0) recommendations.push(`${longVacant.length} unit(s) vacant over 60 days — consider property improvements or staging`);
+    if (vacantUnits.length > 0) recommendations.push('Ensure all vacant units are listed on major rental platforms');
+
+    return {
+      ok: true,
+      result: {
+        generatedAt: new Date().toISOString(),
+        totalUnits: units.length,
+        occupiedCount: units.length - vacantUnits.length,
+        vacantCount: vacantUnits.length,
+        vacancyRate,
+        totalLostRevenue,
+        units: unitDetails,
+        recommendations,
+      },
+    };
+  });
+
   registerLensAction("realestate", "vacancyRate", (ctx, artifact, _params) => {
     const units = artifact.data?.units || [];
     if (units.length === 0) return { ok: true, result: { vacancyRate: 0, occupied: 0, vacant: 0, total: 0 } };

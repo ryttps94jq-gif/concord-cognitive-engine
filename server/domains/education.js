@@ -268,6 +268,88 @@ export default function registerEducationActions(registerLensAction) {
   });
 
   /**
+   * generateReportCard
+   * Aggregate grades by subject, compute GPA, and determine honor roll status.
+   * artifact.data.grades: [{ subject, assignment, score, maxScore, credits }]
+   * artifact.data.studentName — student name
+   * params.honorRollThreshold (default 3.5), params.highHonorsThreshold (default 3.8)
+   */
+  registerLensAction("education", "generateReportCard", (_ctx, artifact, params) => {
+    const grades = artifact.data.grades || [];
+    const honorRollThreshold = params.honorRollThreshold || 3.5;
+    const highHonorsThreshold = params.highHonorsThreshold || 3.8;
+
+    const gradeScale = [
+      { min: 93, letter: "A", gpa: 4.0 }, { min: 90, letter: "A-", gpa: 3.7 },
+      { min: 87, letter: "B+", gpa: 3.3 }, { min: 83, letter: "B", gpa: 3.0 }, { min: 80, letter: "B-", gpa: 2.7 },
+      { min: 77, letter: "C+", gpa: 2.3 }, { min: 73, letter: "C", gpa: 2.0 }, { min: 70, letter: "C-", gpa: 1.7 },
+      { min: 67, letter: "D+", gpa: 1.3 }, { min: 63, letter: "D", gpa: 1.0 }, { min: 60, letter: "D-", gpa: 0.7 },
+      { min: 0, letter: "F", gpa: 0.0 },
+    ];
+
+    function toLetterAndGpa(pct) {
+      for (const g of gradeScale) {
+        if (pct >= g.min) return { letter: g.letter, gpa: g.gpa };
+      }
+      return { letter: "F", gpa: 0.0 };
+    }
+
+    // Aggregate by subject
+    const bySubject = {};
+    for (const g of grades) {
+      const subj = g.subject || "General";
+      if (!bySubject[subj]) bySubject[subj] = { earned: 0, possible: 0, credits: g.credits || 1, count: 0 };
+      bySubject[subj].earned += parseFloat(g.score) || 0;
+      bySubject[subj].possible += parseFloat(g.maxScore) || 100;
+      bySubject[subj].count++;
+      if (g.credits != null) bySubject[subj].credits = parseFloat(g.credits) || 1;
+    }
+
+    let totalGpaPoints = 0;
+    let totalCredits = 0;
+    const subjects = [];
+
+    for (const [name, data] of Object.entries(bySubject)) {
+      const pct = data.possible > 0 ? (data.earned / data.possible) * 100 : 0;
+      const roundedPct = Math.round(pct * 100) / 100;
+      const { letter, gpa } = toLetterAndGpa(roundedPct);
+      const credits = data.credits;
+      totalGpaPoints += gpa * credits;
+      totalCredits += credits;
+
+      subjects.push({
+        subject: name,
+        assignments: data.count,
+        earnedPoints: Math.round(data.earned * 100) / 100,
+        possiblePoints: Math.round(data.possible * 100) / 100,
+        percentage: roundedPct,
+        letterGrade: letter,
+        gpa,
+        credits,
+      });
+    }
+
+    const cumulativeGpa = totalCredits > 0 ? Math.round((totalGpaPoints / totalCredits) * 100) / 100 : 0;
+    let honorRoll = "none";
+    if (cumulativeGpa >= highHonorsThreshold) honorRoll = "high-honors";
+    else if (cumulativeGpa >= honorRollThreshold) honorRoll = "honor-roll";
+
+    const result = {
+      generatedAt: new Date().toISOString(),
+      studentName: artifact.data.studentName || artifact.title,
+      totalSubjects: subjects.length,
+      totalAssignments: grades.length,
+      cumulativeGpa,
+      honorRoll,
+      subjects: subjects.sort((a, b) => b.gpa - a.gpa),
+    };
+
+    artifact.data.reportCard = result;
+
+    return { ok: true, result };
+  });
+
+  /**
    * scheduleConflict
    * Detect overlapping schedule entries.
    * artifact.data.schedules: [{ id, title, day, startTime, endTime, room, instructor }]

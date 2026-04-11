@@ -58,8 +58,19 @@ export default function GeologyLensPage() {
   const { items: siteItems, create: createSite, remove: removeSite } = useLensData<Record<string, unknown>>('geology', 'site', { seed: [] });
   const runAction = useRunArtifact('geology');
 
+  const [actionError, setActionError] = useState<string | null>(null);
+
   const handleAction = useCallback((artifactId: string) => {
-    runAction.mutate({ id: artifactId, action: 'analyze' });
+    setActionError(null);
+    runAction.mutate(
+      { id: artifactId, action: 'analyze' },
+      {
+        onError: (e) => {
+          console.error('Action failed:', e);
+          setActionError(`Action failed: ${e instanceof Error ? e.message : 'Unknown error'}`);
+        },
+      }
+    );
   }, [runAction]);
 
   const samples = sampleItems.map(i => ({ id: i.id, title: i.title, ...(i.data || {}) })) as unknown as (Sample & { id: string; title: string })[];
@@ -120,6 +131,13 @@ export default function GeologyLensPage() {
           </div>
         </div>
       </header>
+
+      {actionError && (
+        <div className="bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-2 text-sm text-red-400 flex items-center justify-between">
+          <span>{actionError}</span>
+          <button onClick={() => setActionError(null)} className="text-red-400 hover:text-red-300 ml-2">&times;</button>
+        </div>
+      )}
 
       <RealtimeDataPanel domain="geology" data={realtimeData} isLive={isLive} lastUpdated={lastUpdated} insights={insights} compact />
       <UniversalActions domain="geology" artifactId={undefined} compact />
