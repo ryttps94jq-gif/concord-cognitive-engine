@@ -17,6 +17,7 @@
 import { Router } from "express";
 import { asyncHandler } from "../lib/async-handler.js";
 import { browserEngine } from "../lib/browser-engine.js";
+import { validateSafeFetchUrl } from "../lib/ssrf-guard.js";
 import logger from "../logger.js";
 
 /**
@@ -37,19 +38,23 @@ export default function createBrowserRoutes({ requireAuth } = {}) {
 
   // ── Validation helpers ────────────────────────────────────────────────
 
-  function requireUrl(req, res) {
+  // SECURITY: browser automation was previously only validating URL FORMAT,
+  // letting an authenticated caller point playwright at any internal
+  // service — localhost, cloud metadata (169.254.169.254), private
+  // RFC1918, etc. We now run the shared SSRF guard that normalizes and
+  // rejects private ranges, CGNAT, IPv6 v4-mapped, and decimal-encoded IPs.
+  async function requireUrl(req, res) {
     const url = req.body?.url;
     if (!url || typeof url !== "string") {
       res.status(400).json({ ok: false, error: "url (string) is required" });
       return null;
     }
-    try {
-      new URL(url); // validate URL format
-    } catch (_e) {
-      res.status(400).json({ ok: false, error: "url must be a valid URL" });
+    const check = await validateSafeFetchUrl(url);
+    if (!check.ok) {
+      res.status(400).json({ ok: false, error: check.error });
       return null;
     }
-    return url;
+    return check.url; // canonicalized
   }
 
   // ── GET /api/browser/status — Engine health ───────────────────────────
@@ -69,7 +74,7 @@ export default function createBrowserRoutes({ requireAuth } = {}) {
     "/fetch",
     auth,
     asyncHandler(async (req, res) => {
-      const url = requireUrl(req, res);
+      const url = await requireUrl(req, res);
       if (!url) return;
 
       const { waitFor, timeout } = req.body;
@@ -114,7 +119,7 @@ export default function createBrowserRoutes({ requireAuth } = {}) {
     "/screenshot",
     auth,
     asyncHandler(async (req, res) => {
-      const url = requireUrl(req, res);
+      const url = await requireUrl(req, res);
       if (!url) return;
 
       const { fullPage, waitFor, timeout, viewport } = req.body;
@@ -169,7 +174,7 @@ export default function createBrowserRoutes({ requireAuth } = {}) {
     "/extract",
     auth,
     asyncHandler(async (req, res) => {
-      const url = requireUrl(req, res);
+      const url = await requireUrl(req, res);
       if (!url) return;
 
       const { selectors, waitFor, timeout } = req.body;
@@ -205,7 +210,7 @@ export default function createBrowserRoutes({ requireAuth } = {}) {
     "/form",
     auth,
     asyncHandler(async (req, res) => {
-      const url = requireUrl(req, res);
+      const url = await requireUrl(req, res);
       if (!url) return;
 
       const { fields, submitSelector, timeout } = req.body;
@@ -241,7 +246,7 @@ export default function createBrowserRoutes({ requireAuth } = {}) {
     "/scroll",
     auth,
     asyncHandler(async (req, res) => {
-      const url = requireUrl(req, res);
+      const url = await requireUrl(req, res);
       if (!url) return;
 
       const { maxScrolls, scrollPauseMs, itemSelector, timeout } = req.body;
@@ -268,7 +273,7 @@ export default function createBrowserRoutes({ requireAuth } = {}) {
     "/scrape-feed",
     auth,
     asyncHandler(async (req, res) => {
-      const url = requireUrl(req, res);
+      const url = await requireUrl(req, res);
       if (!url) return;
 
       const {
