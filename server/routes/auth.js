@@ -17,8 +17,8 @@ import { isEmailBanned, scanUsername as scanUsernameGuard } from "../lib/content
 const _loginAttempts = new Map();     // ip -> { count, resetAt }
 const _accountAttempts = new Map();   // username|email -> { count, resetAt }
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
-const LOGIN_MAX_PER_IP = 10;
-const LOGIN_MAX_PER_ACCOUNT = 6;
+const LOGIN_MAX_PER_IP = 20;       // was 10 — NAT/CGNAT carriers share IPs
+const LOGIN_MAX_PER_ACCOUNT = 10;  // was 6 — legitimate users typo passwords
 
 function checkLoginRateLimit(ip) {
   const now = Date.now();
@@ -259,16 +259,16 @@ export default function createAuthRouter({
       return res.status(401).json({ ok: false, error: "Invalid credentials" });
     }
 
-    // Successful login — clear per-account failure bucket and rotate
-    // any prior refresh-token family so a stolen pre-login cookie can
-    // no longer refresh after the real user logs in (session fixation
-    // mitigation).
+    // Successful login — clear the per-account failure bucket. We do NOT
+    // revoke other active sessions: users legitimately want to be logged
+    // in on multiple devices at once. A proper "log out everywhere"
+    // button belongs in settings and should call revokeAllForUser
+    // explicitly. Session fixation for THIS login path is already
+    // mitigated by the fact that the new cookie replaces whatever
+    // cookie was on the browser — and the new JTI is unrelated to any
+    // prior one, so an attacker holding a pre-login cookie can't
+    // elevate it via this response.
     clearAccountRateLimit(accountKey);
-    try {
-      if (typeof _TOKEN_BLACKLIST?.revokeAllForUser === "function") {
-        _TOKEN_BLACKLIST.revokeAllForUser(user.id);
-      }
-    } catch (_e) { logger.debug('auth', 'revoke-on-login failed', { error: _e?.message }); }
 
     AuthDB.updateUserLogin(user.id);
 

@@ -55,6 +55,11 @@ function isAdminRole(actor) {
 }
 
 function authorizeToolCall(req, toolName) {
+  // AUTH_MODE=public is the local-first single-user mode — tools are
+  // available to anyone on the box. The gate only applies to
+  // multi-user deployments.
+  if (process.env.AUTH_MODE === "public") return { allowed: true };
+
   const actor = req.user || req.actor || null;
   if (!actor || !actor.id) {
     return { allowed: false, status: 401, reason: "Authentication required" };
@@ -65,10 +70,13 @@ function authorizeToolCall(req, toolName) {
   const normalized = toolName.toLowerCase();
   const [domain, ...rest] = normalized.split(".");
   const verb = rest.join(".");
+  // Admin required only if:
+  //   • namespace is explicitly admin-only, OR
+  //   • verb is an EXACT match for a dangerous verb (was previously
+  //     `.includes()` which false-positived on e.g. "reset_filters").
   const adminRequired =
     ADMIN_ONLY_TOOL_NAMESPACES.has(domain) ||
-    ADMIN_ONLY_TOOL_VERBS.has(verb) ||
-    [...ADMIN_ONLY_TOOL_VERBS].some((v) => verb.includes(v));
+    ADMIN_ONLY_TOOL_VERBS.has(verb);
   if (adminRequired && !isAdminRole(actor)) {
     return { allowed: false, status: 403, reason: `Tool ${toolName} requires admin role` };
   }

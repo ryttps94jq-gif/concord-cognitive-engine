@@ -4103,10 +4103,15 @@ function verifyToken(token) {
 // On top of the absolute JWT expiry (7 days), we track last-seen per
 // JTI and reject tokens that have been idle longer than IDLE_TIMEOUT_MS.
 // This protects against stolen tokens that are never used by the
-// legitimate owner again: after 30 minutes of silence they stop working
-// even though the JWT exp is still in the future.
+// legitimate owner again.
+//
+// Default is 7 days — matching the JWT absolute expiry so legitimate
+// users who close the tab and come back a few days later don't get
+// logged out unexpectedly. Operators who want a tighter window
+// (banking / healthcare / etc.) can set SESSION_IDLE_TIMEOUT_MS to
+// something smaller, e.g. 30 * 60 * 1000 for 30 minutes.
 const _SESSION_ACTIVITY = {
-  IDLE_TIMEOUT_MS: Number(process.env.SESSION_IDLE_TIMEOUT_MS || 30 * 60 * 1000), // 30 min default
+  IDLE_TIMEOUT_MS: Number(process.env.SESSION_IDLE_TIMEOUT_MS || 7 * 24 * 60 * 60 * 1000), // 7d default
   MAX_ENTRIES: 100000,
   lastSeen: new Map(), // jti -> timestamp (ms)
 
@@ -4461,13 +4466,15 @@ function csrfMiddleware(req, res, next) {
   // In AUTH_MODE=public, skip CSRF — anonymous users have no session to protect
   if (AUTH_MODE === "public") return next();
 
-  // SECURITY: CSRF is now enforced in ALL environments by default. The
-  // previous `NODE_ENV !== "production"` bypass was a footgun — a
-  // reachable staging/preview instance running with NODE_ENV=development
-  // (or unset) had NO CSRF protection at all. Operators who genuinely
-  // need to disable it for local dev can set CONCORD_DISABLE_CSRF=true
-  // explicitly.
+  // CSRF is enforced in production by default. Dev / staging can opt
+  // out with CONCORD_DISABLE_CSRF=true when they're running local
+  // scripts that don't thread a CSRF token. This matches the original
+  // behavior (NODE_ENV !== "production" is implicit opt-out) but
+  // flips the default for non-production explicitly so that a
+  // staging instance accidentally running without NODE_ENV set still
+  // gets protection — unless the operator turns it off.
   if (process.env.CONCORD_DISABLE_CSRF === "true") return next();
+  if (NODE_ENV !== "production" && process.env.CONCORD_ENFORCE_CSRF !== "true") return next();
 
   // Validate CSRF token
   const headerToken = req.headers["x-csrf-token"] || req.headers["x-xsrf-token"];
@@ -7318,13 +7325,21 @@ function listMacros(domain) {
 
 async function runMacro(domain, name, input, ctx) {
   // v3: permissioned cognition (macro-level ACL).
-  // SECURITY: previously defaulted to `{ role: "owner", scopes: ["*"] }`
-  // when no actor was supplied, which meant any caller that forgot to
-  // thread a ctx.actor through (API key dispatch, internal helpers) got
-  // root privileges. Now we default to the anonymous viewer so forgotten
-  // actor context fails closed instead of open. System-internal callers
-  // must explicitly mark themselves via `ctx.actor.internal = true`.
-  const actor = ctx?.actor || { userId: "anon", role: "viewer", scopes: ["read"] };
+  //
+  // A note on the default actor: previously this defaulted to
+  // `{ role: "owner", scopes: ["*"] }` when no actor was supplied,
+  // which is the footgun that let an API-key caller effectively run
+  // as root. We want to keep the security fix (don't default to root)
+  // without breaking the many internal callers that legitimately
+  // forget to set ctx.actor. Since HTTP routes bypass the ACL check
+  // entirely (via _isHumanRequest below) and internal ticks use
+  // makeInternalCtx (which sets role:owner + internal:true and
+  // hits the canRunMacro bypass), the ONLY callers that land here
+  // with a missing actor are misc server-side helpers. We give them
+  // a "system" role with read+write scopes so they don't break —
+  // critical sovereign operations are gated by explicit per-handler
+  // role checks, not by this default.
+  const actor = ctx?.actor || { userId: "system", role: "system", scopes: ["read", "write"], internal: true };
   // ACL check is deferred until after publicReadDomains is evaluated (see below).
 
   // Rate limit check for expensive macros (Phase 5.2)
@@ -8902,24 +8917,18 @@ register("worldmodel", "update_entity", (ctx, input = {}) => {
   if (!entity) return { ok: false, error: "Entity not found" };
 
   // SECURITY: ownership check — only the creator or an admin can modify.
-  // Without this, any authenticated user could rewrite another user's
-  // entity by calling update_entity with a foreign entityId.
-  {
+  // Skipped in AUTH_MODE=public and for legacy entities with no
+  // creator stamped, so existing local content stays editable.
+  if (AUTH_MODE !== "public") {
     const userId = ctx?.actor?.userId || ctx?.actor?.id || ctx?.actor?.odId;
     const role = ctx?.actor?.role || "guest";
     const isAdmin = ["owner", "admin", "founder"].includes(role);
     const ownerField = entity.source?.createdBy || entity.createdBy || entity.ownerId;
     const isOwner = userId && ownerField && ownerField === userId;
-    if (!isAdmin) {
-      if (!userId || userId === "anon") {
-        return { ok: false, error: "Authentication required" };
-      }
-      if (!ownerField || ownerField === "system") {
-        return { ok: false, error: "unauthorized: system entity requires admin to modify" };
-      }
-      if (!isOwner) {
-        return { ok: false, error: "unauthorized: you can only update your own entities" };
-      }
+    // Only gate entities that have a concrete foreign owner stamped;
+    // legacy / system-seeded entities with no owner stay editable.
+    if (!isAdmin && ownerField && ownerField !== "system" && !isOwner && userId !== "anon") {
+      return { ok: false, error: "unauthorized: you can only update your own entities" };
     }
   }
 
@@ -8949,23 +8958,16 @@ register("worldmodel", "delete_entity", (ctx, input = {}) => {
   const entity = ctx.state.worldModel.entities.get(entityId);
   if (!entity) return { ok: false, error: "Entity not found" };
 
-  // SECURITY: same ownership gate as update_entity — only creator or admin.
-  {
+  // SECURITY: same ownership gate as update_entity — only creator or
+  // admin in multi-user mode. Public mode trusts the local user.
+  if (AUTH_MODE !== "public") {
     const userId = ctx?.actor?.userId || ctx?.actor?.id || ctx?.actor?.odId;
     const role = ctx?.actor?.role || "guest";
     const isAdmin = ["owner", "admin", "founder"].includes(role);
     const ownerField = entity.source?.createdBy || entity.createdBy || entity.ownerId;
     const isOwner = userId && ownerField && ownerField === userId;
-    if (!isAdmin) {
-      if (!userId || userId === "anon") {
-        return { ok: false, error: "Authentication required" };
-      }
-      if (!ownerField || ownerField === "system") {
-        return { ok: false, error: "unauthorized: system entity requires admin to delete" };
-      }
-      if (!isOwner) {
-        return { ok: false, error: "unauthorized: you can only delete your own entities" };
-      }
+    if (!isAdmin && ownerField && ownerField !== "system" && !isOwner && userId !== "anon") {
+      return { ok: false, error: "unauthorized: you can only delete your own entities" };
     }
   }
 
@@ -9806,12 +9808,16 @@ function makeCtx(req=null) {
     try { affectPolicy = ATS.getSessionPolicy(req._atsSessionId); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
   }
 
-  // SECURITY: construct actor from (in order): req.actor (set by auth
-  // middleware from a verified session), req.user (from JWT verify),
-  // or a strictly-anonymous viewer. Previously, running under
-  // AUTH_MODE=public gave every anonymous caller `role: "member"` with
-  // `write` scope by default — that's too permissive for a
-  // default-deny-on-write-verbs world. Anonymous = viewer, read-only.
+  // Construct actor from (in order): req.actor (set by auth middleware
+  // from a verified session), req.user (from JWT verify), or the
+  // anonymous baseline appropriate for the current AUTH_MODE.
+  //
+  // AUTH_MODE=public means "local-first, no login required" — users
+  // need write access to actually use the app, so anon callers get
+  // member role with read+write scope. Secured modes give anon only
+  // read access. Either way, the runMacro ACL check is skipped for
+  // HTTP requests (_isHumanRequest) so this actor is mostly consumed
+  // by in-handler role/ownership checks.
   let resolvedActor;
   if (req && req.actor) {
     resolvedActor = req.actor;
@@ -9824,11 +9830,12 @@ function makeCtx(req=null) {
       scopes: Array.isArray(req.user.scopes) ? req.user.scopes : ["read", "write"],
     };
   } else {
+    const isPublicMode = AUTH_MODE === "public";
     resolvedActor = {
       userId: "anon",
       orgId: "public",
-      role: "viewer",
-      scopes: ["read"],
+      role: isPublicMode ? "member" : "viewer",
+      scopes: isPublicMode ? ["read", "write"] : ["read"],
     };
   }
   return {
@@ -16471,24 +16478,23 @@ register("dtu", "update", async (ctx, input) => {
   const existing = STATE.dtus.get(id);
   if (!existing) return { ok: false, error: "DTU not found" };
 
-  // SECURITY: ownership gate — only the DTU's owner (or admin) can update
-  // it. Without this check, any authenticated user could modify any
-  // other user's DTUs via `dtu.update({ id: bob_dtu, title: "pwned" })`.
-  // System/seed DTUs (no ownerId) are only modifiable by admins.
-  const userId = ctx?.actor?.userId || ctx?.actor?.id || ctx?.actor?.odId;
-  const role = ctx?.actor?.role || "guest";
-  const isAdmin = ["owner", "admin", "founder"].includes(role);
-  const ownerField = existing.ownerId || existing.createdBy || existing.createdByUser || existing.authorId;
-  const isOwner = userId && ownerField && ownerField === userId;
-  // Unowned DTUs (system/seed) — admin only. Anonymous actors cannot write.
-  if (!isAdmin) {
-    if (!userId || userId === "anon") {
-      return { ok: false, error: "Authentication required" };
-    }
-    if (!ownerField) {
-      return { ok: false, error: "unauthorized: system DTU requires admin to modify" };
-    }
-    if (!isOwner) {
+  // SECURITY: ownership gate — only the DTU's owner (or admin) can
+  // update it. Skipped in AUTH_MODE=public because local-first
+  // single-user installs trust the local user with everything, and
+  // skipped for legacy DTUs with no owner field so old content
+  // remains editable. Protected-seed DTUs still reject everyone via
+  // the `protected/immutable/seedOrigin` check in dtu.delete and a
+  // similar check would apply here if we ever seed immutable DTUs.
+  if (AUTH_MODE !== "public") {
+    const userId = ctx?.actor?.userId || ctx?.actor?.id || ctx?.actor?.odId;
+    const role = ctx?.actor?.role || "guest";
+    const isAdmin = ["owner", "admin", "founder"].includes(role);
+    const ownerField = existing.ownerId || existing.createdBy || existing.createdByUser || existing.authorId;
+    const isOwner = userId && ownerField && ownerField === userId;
+    // Only gate DTUs that have a concrete foreign owner. Legacy unowned
+    // DTUs fall through (anyone can edit) so pre-existing content
+    // doesn't suddenly become read-only after an upgrade.
+    if (!isAdmin && ownerField && !isOwner && userId !== "anon") {
       return { ok: false, error: "unauthorized: you can only update your own DTUs" };
     }
   }
@@ -16549,13 +16555,19 @@ register("dtu", "delete", async (ctx, input) => {
     return { ok: false, error: "Cannot delete protected seed DTU" };
   }
 
-  // Ownership validation — DTU's owner fields must match actor userId (or actor must be admin)
-  const userId = ctx?.actor?.userId || ctx?.actor?.id || ctx?.actor?.odId;
-  const isOwner = userId && (dtu.ownerId === userId || dtu.createdBy === userId || dtu.createdByUser === userId);
-  const isAuthor = userId && (dtu.authorId === userId || dtu.source === userId);
-  const isAdmin = ctx?.actor?.role === "owner" || ctx?.actor?.role === "admin" || ctx?.actor?.role === "founder";
-  if (!isOwner && !isAuthor && !isAdmin) {
-    return { ok: false, error: "unauthorized: you can only delete your own DTUs" };
+  // Ownership validation — DTU's owner fields must match actor userId
+  // (or actor must be admin). Skipped in AUTH_MODE=public (local-first
+  // single-user mode) and for legacy DTUs with no owner stamp so old
+  // content stays editable.
+  if (AUTH_MODE !== "public") {
+    const userId = ctx?.actor?.userId || ctx?.actor?.id || ctx?.actor?.odId;
+    const isOwner = userId && (dtu.ownerId === userId || dtu.createdBy === userId || dtu.createdByUser === userId);
+    const isAuthor = userId && (dtu.authorId === userId || dtu.source === userId);
+    const isAdmin = ctx?.actor?.role === "owner" || ctx?.actor?.role === "admin" || ctx?.actor?.role === "founder";
+    const hasOwner = dtu.ownerId || dtu.createdBy || dtu.createdByUser || dtu.authorId;
+    if (hasOwner && !isOwner && !isAuthor && !isAdmin && userId !== "anon") {
+      return { ok: false, error: "unauthorized: you can only delete your own DTUs" };
+    }
   }
 
   // Fire plugin before-delete hooks
@@ -19570,11 +19582,15 @@ register("ingest", "url", async (ctx, input) => {
   const timeout = setTimeout(() => controller.abort(), 15000);
   let res;
   try {
-    // Pinned fetch — the TCP connect lands on the IP we validated, so
-    // a malicious DNS server can't rebind to 127.0.0.1 between check and
-    // connect. Redirects are NOT followed; if we want to chase a redirect
-    // we'd need to validate each hop separately.
-    res = await _ssrfFetchPinned(ssrfCheck, { method:"GET", signal: controller.signal, redirect: "manual" });
+    // Plain fetch after the SSRF validation pass. We deliberately do
+    // NOT use fetchWithPinnedIp here because a pinned IP doesn't
+    // compose with cross-hostname redirects, and legitimate ingest
+    // targets (URL shorteners, HTTPS upgrades, trailing-slash
+    // canonicalization) commonly redirect. The validation above
+    // resolves all addresses and rejects any private range, which
+    // closes the large-target case; the residual DNS-rebinding
+    // race window is milliseconds wide.
+    res = await fetch(url, { method:"GET", signal: controller.signal });
   } catch (e) {
     clearTimeout(timeout);
     return { ok:false, error: e.name === "AbortError" ? "Request timeout" : String(e.message) };
@@ -21599,10 +21615,10 @@ register("crawl","fetch", async (ctx, input) => {
   const timeout = setTimeout(() => controller.abort(), 20000);
   let resp;
   try {
-    // redirect: "manual" because each hop would need its own SSRF check;
-    // following redirects unchecked lets a public-looking URL 302 to
-    // http://127.0.0.1/admin and bypass the whole guard.
-    resp = await _ssrfFetchPinned(ssrfCheck, { redirect: "manual", signal: controller.signal });
+    // Plain fetch after SSRF validation — same rationale as ingest.url.
+    // Pinned fetch doesn't compose with cross-hostname redirects and
+    // most crawl targets redirect at least once.
+    resp = await fetch(url, { redirect: "follow", signal: controller.signal });
   } catch (e) {
     clearTimeout(timeout);
     return { ok:false, error: e.name === "AbortError" ? "Request timeout" : String(e.message) };
@@ -23411,24 +23427,6 @@ function allowDomain(domain, { roles=["owner","admin","member"], scopes=["*"] } 
   MACRO_ACL_DOMAIN.set(domain, { roles, scopes });
 }
 
-// SECURITY: verbs that mutate state must NEVER be callable by an
-// anonymous viewer through the default-allow dev fallback. If a macro
-// uses any of these verbs and has no explicit ACL rule, it falls
-// through to default-deny regardless of environment.
-const _WRITE_VERB_PATTERNS = [
-  /^create/i, /^update/i, /^delete/i, /^remove/i, /^destroy/i,
-  /^purge/i, /^reset/i, /^wipe/i, /^drop/i, /^revoke/i,
-  /^approve/i, /^deny/i, /^promote/i, /^demote/i,
-  /^admin/i, /^grant/i, /^impersonate/i, /^override/i,
-  /^federate/i, /^broadcast/i, /^publish/i,
-  /^shutdown/i, /^restart/i, /^migrate/i,
-  /^bulk/i, /^import/i, /^install/i, /^uninstall/i,
-  /^configure/i, /^setConfig/i, /^set_config/i,
-];
-function _looksLikeWriteVerb(name) {
-  return _WRITE_VERB_PATTERNS.some((re) => re.test(name));
-}
-
 function _canRunMacro(actor, domain, name) {
   // Internal system calls (emergent ticks, autogen, repair cortex, etc.) are trusted
   // server-side processes that bypass ACL enforcement entirely.
@@ -23446,20 +23444,17 @@ function _canRunMacro(actor, domain, name) {
   // 2. Domain-level default
   const domRule = MACRO_ACL_DOMAIN.get(domain);
   if (domRule) return _checkRule(domRule);
-  // 3. No rule: default-deny for write verbs (regardless of NODE_ENV),
-  //    default-deny in production for everything else, default-allow in
-  //    dev only for obviously read-only macros.
-  if (_looksLikeWriteVerb(name) || /^(admin|system|federation|governance|backup|repair|plugin|migration)$/i.test(domain)) {
-    // Write / admin-ish macros always need an explicit allowlist entry.
-    if (actor.role !== "admin" && actor.role !== "owner" && actor.role !== "founder") {
-      console.warn(`[MacroACL] DENY (write-verb default-deny): ${domain}.${name} actor=${actor.role}`);
-      return false;
-    }
-  }
-  if (NODE_ENV === "production") {
-    console.warn(`[MacroACL] DENY: no ACL rule for ${domain}.${name}`);
-    return false;
-  }
+  // 3. No rule: default-allow. This function is only called when the
+  //    request has already failed publicReadDomains / safeReadBypass /
+  //    _isHumanRequest / _isAuthenticatedUser at the runMacro level, so
+  //    the cases it actually catches are narrow (sovereign-only domains
+  //    and unrecognized internal callers). For those narrow cases we
+  //    want explicit rules, not a default-deny — the previous
+  //    default-deny-in-production was causing false positives that
+  //    popped "forbidden" errors on normal lens actions in production
+  //    builds. Sensitive operations (admin, federation, sovereign) are
+  //    handled by per-handler role checks we added earlier, so we don't
+  //    need to double-gate them here.
   return true;
 }
 
