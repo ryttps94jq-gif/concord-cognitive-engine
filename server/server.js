@@ -6067,6 +6067,66 @@ async function tryInitWebSockets(server) {
       }
     });
 
+    // ── Combat: attack another entity (player or NPC) ──────────────
+    // Client emits combat:attack → server runs the damage math via
+    // cityPresence.applyAttack() and broadcasts combat:hit to
+    // everyone in the attacker's chunk so nearby players see the
+    // damage numbers render. Rate-limited to 4 attacks/sec.
+    let _lastAttackAt = 0;
+    socket.on("combat:attack", (data) => {
+      const userId = socket.data?.userId;
+      if (!userId) return;
+      if (!data || typeof data !== "object") return;
+      const now = Date.now();
+      if (now - _lastAttackAt < 250) return; // ~4 attacks/sec cap
+      _lastAttackAt = now;
+
+      const result = cityPresence.applyAttack({
+        attackerId: userId,
+        targetId: String(data.targetId || "").slice(0, 128),
+        baseDamage: Number(data.baseDamage) || 10,
+        range: Number(data.range) || 3,
+        armorPierce: Number(data.armorPierce) || 0,
+      });
+
+      // Ack back to attacker with full detail (damage, crit, kill)
+      socket.emit("combat:attack:ack", result);
+
+      if (result.ok) {
+        // Broadcast the hit event so everyone in the attacker's
+        // chunk sees it — damage numbers, blood, etc.
+        realtimeEmit("combat:hit", {
+          attackerId: userId,
+          targetId: data.targetId,
+          damage: result.damage,
+          isCrit: result.isCrit,
+          targetHealth: result.targetHealth,
+          targetMaxHealth: result.targetMaxHealth,
+          targetKilled: result.targetKilled,
+        });
+
+        if (result.targetKilled) {
+          realtimeEmit("combat:kill", {
+            attackerId: userId,
+            targetId: data.targetId,
+          });
+        }
+      }
+    });
+
+    // ── Combat: respawn at a district hub after death ──────────────
+    socket.on("player:respawn", (data) => {
+      const userId = socket.data?.userId;
+      if (!userId) return;
+      const result = cityPresence.respawnPlayer(userId, {
+        cityId: data?.cityId,
+        x: Number(data?.x) || 0,
+        y: Number(data?.y) || 0,
+        z: Number(data?.z) || 0,
+      });
+      socket.emit("player:respawn:ack", result);
+    });
+
     socket.on("disconnect", () => {
       // Persist final position before dropping from memory.
       const userId = socket.data?.userId;
@@ -25054,7 +25114,7 @@ app.use("/api/lens-features", createLensFeatureRouter(db, LENS_FEATURES));
 
 // ===== WORLD ENGINE (districts, jobs, businesses, events, progression) =====
 import createWorldRoutes from "./routes/world.js";
-app.use("/api/world", createWorldRoutes({ requireAuth }));
+app.use("/api/world", createWorldRoutes({ requireAuth, db }));
 
 // ===== CONNECTIVE TISSUE (economy wiring, DTU pipeline, CRETI, compression, fork, preview, search, emergent/bot auth) =====
 import createConnectiveTissueRouter from "./routes/connective-tissue.js";
@@ -49214,6 +49274,81 @@ try {
     db,
     fireTrigger: (cityId, triggerId, ctx) => {
       const result = worldMechanics.fireTrigger(cityId, triggerId, ctx);
+
+      // Execute fired mechanics. Most actions are side-effects that
+      // need to happen here in server.js where we have access to
+      // cityPresence, realtimeEmit, and the DB. The mechanics engine
+      // itself only DECIDES what to fire — we EXECUTE it.
+      for (const f of (result?.fired || [])) {
+        try {
+          switch (f.action) {
+            case "spawn_npc": {
+              // Cap total NPCs per city to keep the broadcast budget
+              // sane. Default: 20 NPCs per city.
+              const existingNpcs = cityPresence.getCityNpcs(cityId).length;
+              const maxNpcs = Number(f.actionParams?.maxNpcs) || 20;
+              if (existingNpcs >= maxNpcs) break;
+              // Position: actionParams.position or scatter near
+              // the triggering player / city origin
+              const pos = f.actionParams?.position || ctx || {};
+              cityPresence.spawnNpc({
+                cityId,
+                name: f.actionParams?.name || f.actionParams?.entityId || `NPC-${existingNpcs + 1}`,
+                occupation: f.actionParams?.occupation || "citizen",
+                x: Number(pos.x || 0) + (Math.random() - 0.5) * 10,
+                y: 0,
+                z: Number(pos.z || 0) + (Math.random() - 0.5) * 10,
+                health: Number(f.actionParams?.health) || 100,
+                isHostile: f.actionParams?.isHostile === true,
+                patrolPath: Array.isArray(f.actionParams?.patrolPath) ? f.actionParams.patrolPath : [],
+              });
+              break;
+            }
+            case "show_notification": {
+              // Broadcast a per-player notification to whoever the
+              // trigger is attached to (defaults to the triggering user)
+              realtimeEmit("world:notification", {
+                cityId,
+                userId: ctx?.userId,
+                message: String(f.actionParams?.message || ""),
+                type: f.actionParams?.type || "info",
+              });
+              break;
+            }
+            case "broadcast_message": {
+              realtimeEmit("world:broadcast", {
+                cityId,
+                channel: f.actionParams?.channel || "global",
+                message: String(f.actionParams?.message || ""),
+              });
+              break;
+            }
+            case "award_xp":
+            case "award_currency":
+            case "give_item":
+            case "apply_buff":
+            case "teleport_player":
+            case "spawn_object":
+            case "change_weather":
+              // These delegate to existing lens handlers. For now we
+              // log them — full execution is follow-up work per action.
+              realtimeEmit("world:action", {
+                cityId,
+                userId: ctx?.userId,
+                action: f.action,
+                params: f.actionParams || {},
+                reward: f.reward,
+              });
+              break;
+            default:
+              // Unknown action — still audit-log it below, don't crash
+              break;
+          }
+        } catch (err) {
+          logger.warn?.("server", `world mechanic execution failed: ${err?.message}`);
+        }
+      }
+
       // Log fired mechanics for audit/replay.
       if (db && result?.fired?.length > 0) {
         try {
@@ -49240,9 +49375,15 @@ try {
     },
   });
   const _stopPresenceBroadcast = cityPresence.startPresenceBroadcast(realtimeEmit, 100);
+  // NPC tick loop — 1Hz. Fires entity_spawns + advances patrols +
+  // broadcasts city:npcs per occupied chunk.
+  const _stopNpcLoop = cityPresence.startNpcLoop(realtimeEmit, 1000);
   // Cleanup on process exit so the last in-flight positions land on disk.
-  process.once("beforeExit", () => { try { _stopPresenceBroadcast(); } catch { /* ignore */ } });
-  structuredLog("info", "world_presence_enabled", { tickMs: 100, flushMs: 30000 });
+  process.once("beforeExit", () => {
+    try { _stopPresenceBroadcast(); } catch { /* ignore */ }
+    try { _stopNpcLoop(); } catch { /* ignore */ }
+  });
+  structuredLog("info", "world_presence_enabled", { tickMs: 100, flushMs: 30000, npcTickMs: 1000 });
 } catch (e) {
   structuredLog("error", "world_presence_init_failed", { error: String(e?.message || e) });
 }

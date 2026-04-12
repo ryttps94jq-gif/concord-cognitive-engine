@@ -187,7 +187,7 @@ import {
  * @param {Function} [opts.requireAuth] - Auth middleware
  * @returns {Router}
  */
-export default function createWorldRoutes({ requireAuth } = {}) {
+export default function createWorldRoutes({ requireAuth, db = null } = {}) {
   const router = Router();
 
   function _userId(req) {
@@ -1008,34 +1008,166 @@ export default function createWorldRoutes({ requireAuth } = {}) {
   // ══════════════════════════════════════════════════════════════════
 
   // ── Inventory API ────────────────────────────────────────────────
+  // Backed by the `player_inventory` table (migration 035). Falls back
+  // to the in-memory simInventories Map when db is unavailable (tests,
+  // cold-boot before migrations run).
+  //
+  // Schema: (user_id, item_id) PRIMARY KEY, quantity, slot, metadata
+  // - Stacking: same item_id adds quantity
+  // - Equip: writes slot column to a special 'equipped:<slot>' marker
+  // - Remove: zero quantity → row deleted
+
+  const MAX_SLOTS = 24;
+
+  function getInventoryFromDb(userId) {
+    if (!db) return null;
+    try {
+      const rows = db.prepare(
+        "SELECT item_id, quantity, slot, metadata, acquired_at FROM player_inventory WHERE user_id = ? ORDER BY acquired_at ASC"
+      ).all(userId);
+      const items = [];
+      const equipped = {};
+      for (const row of rows) {
+        // Rows with slot starting "equipped:" are slot markers, not items.
+        if (row.slot && row.slot.startsWith("equipped:")) {
+          equipped[row.slot.slice("equipped:".length)] = row.item_id;
+          continue;
+        }
+        items.push({
+          id: row.item_id,
+          quantity: row.quantity,
+          slot: row.slot,
+          metadata: (() => { try { return JSON.parse(row.metadata || "{}"); } catch { return {}; } })(),
+          acquiredAt: row.acquired_at,
+        });
+      }
+      return { items, maxSlots: MAX_SLOTS, equipped };
+    } catch (err) {
+      logger.warn?.("world-inventory", `db read failed: ${err.message}`);
+      return null;
+    }
+  }
+
+  function addItemToDb(userId, itemId, quantity, slot, metadata) {
+    if (!db) return null;
+    try {
+      // Upsert: if the row exists, add quantity; otherwise insert
+      const existing = db.prepare(
+        "SELECT quantity FROM player_inventory WHERE user_id = ? AND item_id = ?"
+      ).get(userId, itemId);
+      if (existing) {
+        db.prepare(
+          "UPDATE player_inventory SET quantity = quantity + ? WHERE user_id = ? AND item_id = ?"
+        ).run(quantity, userId, itemId);
+        return { quantity: existing.quantity + quantity };
+      }
+      db.prepare(
+        "INSERT INTO player_inventory (user_id, item_id, quantity, slot, metadata) VALUES (?, ?, ?, ?, ?)"
+      ).run(userId, itemId, quantity, slot || null, JSON.stringify(metadata || {}));
+      return { quantity };
+    } catch (err) {
+      logger.warn?.("world-inventory", `db add failed: ${err.message}`);
+      return null;
+    }
+  }
 
   router.get("/sim/inventory/:userId", wrap((req, res) => {
-    const inv = simInventories.get(req.params.userId) || { items: [], maxSlots: 24, equipped: {} };
+    const userId = req.params.userId;
+    const dbInv = getInventoryFromDb(userId);
+    if (dbInv) return res.json({ ok: true, inventory: dbInv });
+    // Legacy in-memory fallback
+    const inv = simInventories.get(userId) || { items: [], maxSlots: MAX_SLOTS, equipped: {} };
     res.json({ ok: true, inventory: inv });
   }));
 
   router.post("/sim/inventory/:userId/add", auth, wrap((req, res) => {
     const userId = req.params.userId;
+    // Security: user can only add to their own inventory unless admin
+    if (req.user?.id && req.user.id !== userId && req.user.role !== "admin") {
+      return res.status(403).json({ ok: false, error: "cannot_modify_other_inventory" });
+    }
+    const itemId = req.body.itemId || req.body.id || `item-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
+    const quantity = Number(req.body.quantity) || 1;
+    const slot = req.body.slot || null;
+    const metadata = req.body.metadata || { name: req.body.name, type: req.body.type, rarity: req.body.rarity };
+
+    // Check inventory capacity (only for NEW items, not stacking)
+    const dbInv = getInventoryFromDb(userId);
+    if (dbInv && !dbInv.items.find((i) => i.id === itemId) && dbInv.items.length >= MAX_SLOTS) {
+      return res.status(400).json({ ok: false, error: "Inventory full" });
+    }
+
+    const dbResult = addItemToDb(userId, itemId, quantity, slot, metadata);
+    if (dbResult) {
+      return res.json({
+        ok: true,
+        item: { id: itemId, quantity: dbResult.quantity, slot, metadata, acquiredAt: new Date().toISOString() },
+      });
+    }
+
+    // Legacy fallback
     let inv = simInventories.get(userId);
-    if (!inv) { inv = { items: [], maxSlots: 24, equipped: {} }; simInventories.set(userId, inv); }
-    const item = { id: `item-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`, ...req.body, acquiredAt: new Date().toISOString() };
-    if (inv.items.length >= inv.maxSlots) return res.status(400).json({ ok: false, error: 'Inventory full' });
+    if (!inv) { inv = { items: [], maxSlots: MAX_SLOTS, equipped: {} }; simInventories.set(userId, inv); }
+    const item = { id: itemId, quantity, slot, metadata, acquiredAt: new Date().toISOString() };
+    if (inv.items.length >= inv.maxSlots) return res.status(400).json({ ok: false, error: "Inventory full" });
     inv.items.push(item);
     res.json({ ok: true, item });
   }));
 
   router.post("/sim/inventory/:userId/equip", auth, wrap((req, res) => {
-    const inv = simInventories.get(req.params.userId);
-    if (!inv) return res.status(404).json({ ok: false, error: 'Inventory not found' });
+    const userId = req.params.userId;
+    if (req.user?.id && req.user.id !== userId && req.user.role !== "admin") {
+      return res.status(403).json({ ok: false, error: "cannot_modify_other_inventory" });
+    }
     const { slot, itemId } = req.body;
+    if (!slot || !itemId) return res.status(400).json({ ok: false, error: "slot and itemId required" });
+
+    if (db) {
+      try {
+        // Clear any existing equip for this slot
+        db.prepare(
+          "DELETE FROM player_inventory WHERE user_id = ? AND slot = ?"
+        ).run(userId, `equipped:${slot}`);
+        // Write the new equip marker
+        db.prepare(
+          "INSERT INTO player_inventory (user_id, item_id, quantity, slot, metadata) VALUES (?, ?, 1, ?, '{}')"
+        ).run(userId, itemId, `equipped:${slot}`);
+        const dbInv = getInventoryFromDb(userId);
+        return res.json({ ok: true, equipped: dbInv?.equipped || {} });
+      } catch (err) {
+        logger.warn?.("world-inventory", `equip failed: ${err.message}`);
+      }
+    }
+
+    // Legacy fallback
+    const inv = simInventories.get(userId);
+    if (!inv) return res.status(404).json({ ok: false, error: "Inventory not found" });
     inv.equipped[slot] = itemId;
     res.json({ ok: true, equipped: inv.equipped });
   }));
 
   router.delete("/sim/inventory/:userId/item/:itemId", auth, wrap((req, res) => {
-    const inv = simInventories.get(req.params.userId);
-    if (!inv) return res.status(404).json({ ok: false, error: 'Inventory not found' });
-    inv.items = inv.items.filter(i => i.id !== req.params.itemId);
+    const userId = req.params.userId;
+    if (req.user?.id && req.user.id !== userId && req.user.role !== "admin") {
+      return res.status(403).json({ ok: false, error: "cannot_modify_other_inventory" });
+    }
+    const itemId = req.params.itemId;
+
+    if (db) {
+      try {
+        const result = db.prepare(
+          "DELETE FROM player_inventory WHERE user_id = ? AND item_id = ?"
+        ).run(userId, itemId);
+        return res.json({ ok: true, deleted: result.changes });
+      } catch (err) {
+        logger.warn?.("world-inventory", `delete failed: ${err.message}`);
+      }
+    }
+
+    // Legacy fallback
+    const inv = simInventories.get(userId);
+    if (!inv) return res.status(404).json({ ok: false, error: "Inventory not found" });
+    inv.items = inv.items.filter((i) => i.id !== itemId);
     res.json({ ok: true });
   }));
 
