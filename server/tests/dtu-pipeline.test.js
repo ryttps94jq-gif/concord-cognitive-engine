@@ -293,6 +293,9 @@ describe("dtu-pipeline: createDTU", () => {
     const result = createDTU(db, {
       creatorId: "user1", title: "Cited",
       content: "cite content",
+      // citationMode defaults to "original" which forbids citations;
+      // derivative mode REQUIRES citations, which matches this test.
+      citationMode: "derivative",
       citations: [
         { parentId: "p1", parentCreatorId: "pc1", generation: 2 },
         { parentId: "p2" },

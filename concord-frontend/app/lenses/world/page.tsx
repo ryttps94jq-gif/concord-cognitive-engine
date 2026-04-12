@@ -604,32 +604,52 @@ export default function WorldLensPage() {
   // Local player avatar — mutable so moves update it in place. On
   // first mount we ask the server for saved state (via player:load)
   // and land back wherever the user logged off.
-  const [playerAvatar, setPlayerAvatar] = useState({
+  type PlayerAnimationClip = 'idle' | 'walk' | 'run' | 'sit' | 'build' | 'inspect' | 'wave' | 'clap' | 'point' | 'celebrate' | 'craft';
+  const [playerAvatar, setPlayerAvatar] = useState<{
+    id: string;
+    name: string;
+    appearance: {
+      skinColor: string;
+      hairColor: string;
+      hairStyle: 'short';
+      bodyType: 'average';
+      clothing: {
+        top: { color: string; type: 'shirt' };
+        bottom: { color: string; type: 'pants' };
+      };
+    };
+    position: { x: number; y: number; z: number };
+    rotation: number;
+    currentAnimation: PlayerAnimationClip;
+  }>({
     id: 'player-1',
     name: 'You',
     appearance: {
       skinColor: '#c8956c',
       hairColor: '#3d2314',
-      hairStyle: 'short' as const,
-      bodyType: 'average' as const,
+      hairStyle: 'short',
+      bodyType: 'average',
       clothing: {
-        top: { color: '#1a5276', type: 'shirt' as const },
-        bottom: { color: '#2c3e50', type: 'pants' as const },
+        top: { color: '#1a5276', type: 'shirt' },
+        bottom: { color: '#2c3e50', type: 'pants' },
       },
     },
     position: { x: 0, y: 0, z: 0 },
     rotation: 0,
-    currentAnimation: 'idle' as const,
+    currentAnimation: 'idle',
   });
   // Other players in the same chunk(s), updated via city:positions
-  // socket broadcasts.
+  // socket broadcasts. The `currentAnimation` is typed to match the
+  // AnimationClip union that AvatarSystem3D accepts; remote player
+  // actions that aren't in that set get coerced to 'idle' at the
+  // mapping site below.
   const [otherPlayers, setOtherPlayers] = useState<Array<{
     id: string;
     name: string;
     appearance: typeof playerAvatar.appearance;
     position: { x: number; y: number; z: number };
     rotation: number;
-    currentAnimation: 'idle' | 'walk' | 'run' | 'sit' | 'build' | 'emote' | 'wave' | 'dance' | 'cheer' | 'point' | 'nod' | 'shake' | 'clap' | 'bow' | 'laugh' | 'cry' | 'think' | 'celebrate' | 'craft' | 'paint' | 'play' | 'write' | 'read' | 'mentor' | 'construct' | 'sweep' | 'lecture';
+    currentAnimation: 'idle' | 'walk' | 'run' | 'sit' | 'build' | 'inspect' | 'wave' | 'clap' | 'point' | 'celebrate' | 'craft';
     timestamp: number;
   }>>([]);
 
@@ -782,7 +802,15 @@ export default function WorldLensPage() {
             appearance: playerAvatar.appearance,
             position: { x: u.x, y: u.y, z: u.z },
             rotation: u.rotation ?? u.direction ?? 0,
-            currentAnimation: (u.action as typeof playerAvatar.currentAnimation) || 'idle',
+            // Coerce remote player action string into the AnimationClip
+            // union AvatarSystem3D accepts. Unknown actions fall
+            // through to 'idle' rather than typechecking as a broader
+            // union that the renderer can't handle.
+            currentAnimation: (() => {
+              const a = String(u.action || '').toLowerCase();
+              const validClips = new Set(['idle','walk','run','sit','build','inspect','wave','clap','point','celebrate','craft']);
+              return (validClips.has(a) ? a : 'idle') as 'idle' | 'walk' | 'run' | 'sit' | 'build' | 'inspect' | 'wave' | 'clap' | 'point' | 'celebrate' | 'craft';
+            })(),
             timestamp: Date.now(),
           });
         }

@@ -78,7 +78,16 @@ export function ensurePipelineState(STATE) {
       },
     };
   }
-  // Ensure metrics sub-object exists even if pipeline state was deserialized without it
+  // Ensure sub-fields exist even if pipeline state was deserialized
+  // without them (old saved states may predate fields that were
+  // added later; the worker calls .find() / .push() on these so
+  // missing them throws "Cannot read properties of undefined".)
+  if (!Array.isArray(STATE._autogenPipeline.recentGeneratedHashes)) {
+    STATE._autogenPipeline.recentGeneratedHashes = [];
+  }
+  if (typeof STATE._autogenPipeline.maxRecentHashes !== "number") {
+    STATE._autogenPipeline.maxRecentHashes = 500;
+  }
   if (!STATE._autogenPipeline.metrics) {
     STATE._autogenPipeline.metrics = {
       totalRuns: 0,

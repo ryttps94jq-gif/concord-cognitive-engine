@@ -1,4 +1,5 @@
 import { Metadata } from 'next';
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
 /**
@@ -103,12 +104,12 @@ export default async function PublicLensArtifactPage({
           </div>
           <h1 className="text-xl font-semibold text-white">Not Found</h1>
           <p className="text-sm text-zinc-500">This content may have been removed or is no longer available.</p>
-          <a
+          <Link
             href="/lenses/feed"
             className="inline-block px-4 py-2 rounded-lg bg-cyan-500/20 text-cyan-400 text-sm hover:bg-cyan-500/30 transition-colors"
           >
             Explore Feed
-          </a>
+          </Link>
         </div>
       </main>
     );
@@ -168,18 +169,18 @@ export default async function PublicLensArtifactPage({
 
         {/* CTA */}
         <div className="flex items-center gap-3 pt-4 border-t border-zinc-800">
-          <a
+          <Link
             href={`/lenses/${domain}`}
             className="px-4 py-2 rounded-lg bg-cyan-500/20 text-cyan-400 text-sm font-medium hover:bg-cyan-500/30 transition-colors"
           >
             Open in {domainLabel} Lens
-          </a>
-          <a
+          </Link>
+          <Link
             href="/lenses/feed"
             className="px-4 py-2 rounded-lg bg-zinc-800 text-zinc-400 text-sm hover:bg-zinc-700 transition-colors"
           >
             Explore Feed
-          </a>
+          </Link>
         </div>
 
         {/* Branding */}

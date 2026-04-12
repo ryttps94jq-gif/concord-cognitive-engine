@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { api, apiHelpers } from '@/lib/api/client';
@@ -483,13 +484,13 @@ export default function ProfilePage() {
               </div>
             )}
             <div className="flex justify-end">
-              <a
+              <Link
                 href="/lenses/analytics"
                 className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-neon-cyan/10 text-neon-cyan text-sm font-medium hover:bg-neon-cyan/20 transition-colors"
               >
                 <BarChart2 className="w-4 h-4" />
                 Full Analytics Dashboard
-              </a>
+              </Link>
             </div>
             <CreatorAnalytics userId={profile.userId} />
           </div>

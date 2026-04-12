@@ -412,7 +412,7 @@ export default function createLearningRouter(opts = {}) {
       const expansion = await import("../lib/lens-expansion.js");
       const ldk = await import("../lib/lens-developer-kit.js").catch(() => null);
       const lensManifest = await import("../lib/lens-manifest.js").catch(() => null);
-      const brainServiceMod = await import("../lib/brain-service.js").catch(() => null);
+      const brainServiceMod = await import("../lib/brain-service.cjs").catch(() => null);
       const dtuStoreMod = await import("../lib/dtu-store.js").catch(() => null);
       const engine = expansion.createLensExpansionEngine({
         lensDeveloperKit: ldk || null,

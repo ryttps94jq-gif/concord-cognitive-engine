@@ -86,7 +86,7 @@ export class STSVKAssessment {
     if (this._brainTried) return null;
     this._brainTried = true;
     try {
-      const mod = await import('./brain-service.js');
+      const mod = await import('./brain-service.cjs');
       const BrainService = mod?.default || mod?.BrainService || mod;
       if (typeof BrainService === 'function') {
         this.brainService = new BrainService();

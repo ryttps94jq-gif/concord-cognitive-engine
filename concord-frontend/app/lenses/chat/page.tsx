@@ -2715,14 +2715,19 @@ export default function ChatLensPage() {
                       <InitiativeChip
                         key={init.id}
                         initiative={init}
-                        onDismiss={() => {
+                        onDismiss={(id: string) => {
                           try {
-                            api.post(`/api/initiative/${encodeURIComponent(init.id)}/dismiss`, {});
+                            api.post(`/api/initiative/${encodeURIComponent(id)}/dismiss`, {});
                           } catch { /* non-fatal */ }
                         }}
-                        onAction={() => {
+                        onAction={(id: string, action: string) => {
                           try {
-                            api.post(`/api/initiative/${encodeURIComponent(init.id)}/respond`, { response: 'acted' });
+                            api.post(`/api/initiative/${encodeURIComponent(id)}/respond`, { response: action || 'acted' });
+                          } catch { /* non-fatal */ }
+                        }}
+                        onRespond={(id: string) => {
+                          try {
+                            api.post(`/api/initiative/${encodeURIComponent(id)}/respond`, { response: 'engaged' });
                           } catch { /* non-fatal */ }
                         }}
                       />

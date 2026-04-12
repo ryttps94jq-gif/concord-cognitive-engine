@@ -653,7 +653,7 @@ export async function getTutorForDomain(domain, deps = {}) {
 
   if (!resolved.brainService) {
     try {
-      const mod = await import("./brain-service.js");
+      const mod = await import("./brain-service.cjs");
       resolved.brainService = mod.default || mod.brainService || mod;
     } catch (e) {
       logger?.debug?.("entity_tutor_brain_import_failed", { err: String(e?.message || e) });

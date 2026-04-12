@@ -21,7 +21,7 @@ import createFrontierRoutesPart4 from './frontier-part4.js';
 
 // Load CommonJS frontier config via createRequire (config is CJS)
 const require = createRequire(import.meta.url);
-const frontierConfig = require('../config/frontier.js');
+const frontierConfig = require('../config/frontier.cjs');
 
 /**
  * @param {object} [opts]

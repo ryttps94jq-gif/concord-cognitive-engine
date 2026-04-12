@@ -118,7 +118,7 @@ export function createOracleEngine(opts = {}) {
   // The Oracle tries three increasingly-best-effort strategies to talk to a
   // brain:
   //   1. Use `opts.brain.query(name, req)` if the injector gave us one.
-  //   2. Dynamic-import './brain-service.js'. The CJS module exports the
+  //   2. Dynamic-import './brain-service.cjs'. The CJS module exports the
   //      `BrainService` class, which we lazily instantiate and reuse.
   //   3. Fail gracefully — every call site is wrapped in try/catch and has
   //      a heuristic fallback.
@@ -134,9 +134,9 @@ export function createOracleEngine(opts = {}) {
     if (_brainFallbackTried) return null;
     _brainFallbackTried = true;
     try {
-      // brain-service.js is CommonJS and exports the class on module.exports.
+      // brain-service.cjs is CommonJS and exports the class on module.exports.
       // Under ESM dynamic import the class lands on the `default` property.
-      const mod = await import('./brain-service.js');
+      const mod = await import('./brain-service.cjs');
       const BrainService = mod?.default || mod?.BrainService || mod;
       if (typeof BrainService === 'function') {
         _brainFallback = new BrainService();
@@ -155,7 +155,7 @@ export function createOracleEngine(opts = {}) {
 
   /**
    * Call a brain by name. Prefer the injected `opts.brain`, fall back to
-   * a lazily-imported brain-service.js instance. Increments the
+   * a lazily-imported brain-service.cjs instance. Increments the
    * `brainCallsMade` stat on success.
    *
    * Graceful: returns `null` on any failure (caller must handle that).

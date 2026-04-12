@@ -378,15 +378,8 @@ export default function KnowledgeGenomeBrowser({ dtus: dtusProp, className }: Kn
     setZoom(newZoom);
   }, [zoom, pan]);
 
-  if (dtus.length === 0) {
-    return (
-      <div className={cn('flex items-center justify-center h-64 text-gray-500 text-sm bg-lattice-surface border border-lattice-border rounded-xl', className)}>
-        No DTU lineage data available
-      </div>
-    );
-  }
-
-  // Domain summary
+  // Domain summary — must be declared before any conditional early
+  // return so the hook order stays stable across renders.
   const domainCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     for (const d of dtus) {
@@ -394,6 +387,14 @@ export default function KnowledgeGenomeBrowser({ dtus: dtusProp, className }: Kn
     }
     return Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 8);
   }, [dtus]);
+
+  if (dtus.length === 0) {
+    return (
+      <div className={cn('flex items-center justify-center h-64 text-gray-500 text-sm bg-lattice-surface border border-lattice-border rounded-xl', className)}>
+        No DTU lineage data available
+      </div>
+    );
+  }
 
   return (
     <motion.div

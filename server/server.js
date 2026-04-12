@@ -7082,20 +7082,38 @@ function looksMachiney(s="") {
 
 function councilGate(dtu, opts={}) {
   const allowRewrite = opts.allowRewrite !== false;
+  // Minimum structured-field count. Different callers get different
+  // thresholds:
+  //   - Automated pipeline / cognitive worker writes (autogen, dream,
+  //     bridge) should meet the full bar so we don't flood the lattice
+  //     with vapid mechanical DTUs. They use the default (2).
+  //   - User-initiated direct writes (/api/dtus create) can be more
+  //     permissive — a user should be able to save a note with just a
+  //     definition and no formal claims/examples. These pass
+  //     { userInitiated: true } to lower the bar to 1.
+  //   - System bootstrap / seed imports bypass entirely via
+  //     { skipCouncilGate: true }.
+  if (opts.skipCouncilGate) return { ok: true, bypassed: true };
+  const minScore = opts.userInitiated ? 1 : 2;
+
   const c = dtu.core || {};
   const score =
     (c.definitions?.length||0) +
     (c.invariants?.length||0) +
     (c.examples?.length||0) +
     (c.claims?.length||0) +
-    (c.nextActions?.length||0);
+    (c.nextActions?.length||0) +
+    // Also count human.summary / title as a structured-ish field for
+    // user DTUs so a user who only types a title + one-line summary
+    // still makes it past the gate.
+    (opts.userInitiated && (dtu.human?.summary || dtu.title) ? 1 : 0);
 
   const humanText = dtu.cretiHuman || dtu.human?.summary || "";
   if (allowRewrite && looksMachiney(humanText)) {
     dtu.cretiHuman = "";
   }
 
-  if (score < 2) return { ok:false, reason:"low_value", score };
+  if (score < minScore) return { ok:false, reason:"low_value", score, minScore };
 
   if (!dtu.cretiHuman) dtu.cretiHuman = renderHumanDTU(dtu);
 
@@ -16519,6 +16537,25 @@ async function pipelineCommitDTU(ctx, dtu, opts={}) {
     realtimeEmit("dtu:created", {
       id: dtu.id, title: dtu.title, tier: dtu.tier, tags: dtu.tags, updatedAt: dtu.updatedAt,
     });
+    // Graph lens realtime — same payload shape as upsertDTU's
+    // broadcast so graph visualizers hot-patch their node cache
+    // whether the write came through the legacy upsert path or the
+    // pipeline commit path. (Pass 4 only wired it to upsertDTU which
+    // meant the REST /api/dtus create path was silently missing the
+    // event even though the connect-the-wires was committed.)
+    try {
+      realtimeEmit("graph:update", {
+        op: _prevDtu ? "update" : "add",
+        node: {
+          id: dtu.id,
+          title: dtu.title,
+          tier: dtu.tier || "regular",
+          tags: Array.isArray(dtu.tags) ? dtu.tags.slice(0, 20) : [],
+          domain: dtu.domain || null,
+        },
+        fetchedAt: new Date().toISOString(),
+      });
+    } catch (_e) { /* non-fatal */ }
 
     // Sync DTU to lens artifacts for domain-based lens views
     try { if (typeof syncDTUToLensArtifacts === "function") syncDTUToLensArtifacts(dtu); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
@@ -16928,10 +16965,25 @@ register("dtu", "create", async (ctx, input) => {
     if (!dtu.human.summary) dtu.human.summary = normalizeText(rawText).slice(0, 320);
   }
 
-  const gate = councilGate(dtu, { allowRewrite });
+  // User-initiated direct writes get a lower council threshold (1
+  // structured field, and title+summary count) so users can save
+  // notes freely. Automated pipeline / system writes still use the
+  // default (2) to prevent vapid DTU floods. Callers can also pass
+  // `skipCouncilGate: true` on the macro input to bypass entirely
+  // (used by seed importers, migration scripts, and admin tools).
+  const actorRole = ctx?.actor?.role;
+  const isUserInitiated = source === "user" ||
+    source === "forge" ||
+    source === "lens" ||
+    (actorRole && actorRole !== "system" && actorRole !== "internal");
+  const gate = councilGate(dtu, {
+    allowRewrite,
+    userInitiated: isUserInitiated,
+    skipCouncilGate: input.skipCouncilGate === true && (actorRole === "owner" || actorRole === "founder" || ctx?.actor?.internal),
+  });
   if (!gate.ok) {
     ctx.log("dtu.reject", `Rejected DTU: ${title}`, { reason: gate.reason, score: gate.score, source });
-    return { ok: false, error: "Council rejected DTU", reason: gate.reason, score: gate.score };
+    return { ok: false, error: "Council rejected DTU", reason: gate.reason, score: gate.score, minScore: gate.minScore };
   }
 
   dtu.cretiHuman = dtu.cretiHuman || renderHumanDTU(dtu);
@@ -41029,22 +41081,229 @@ app.get("/api/economy/fees", (req, res) => {
 });
 
 // GET /api/economy/transactions — list the current user's transactions.
-// Alias of /api/economy/history (existing) but with a user-scoped shape
-// that matches what lib/api/client.ts expects. Anonymous callers get
-// an empty list instead of a 404.
+// Queries economy_ledger (from migration 002) joining from_user_id and
+// to_user_id so both sides of a transfer show up. Anonymous callers
+// get an empty list instead of a 404.
 app.get("/api/economy/transactions", (req, res) => {
   const userId = req.user?.id || null;
   let transactions = [];
   try {
     if (db && userId) {
       const rows = db.prepare(
-        "SELECT * FROM economy_ledger WHERE from_user = ? OR to_user = ? ORDER BY created_at DESC LIMIT 100"
+        `SELECT id, type, from_user_id, to_user_id, amount, fee, net, status,
+                metadata_json, created_at
+         FROM economy_ledger
+         WHERE from_user_id = ? OR to_user_id = ?
+         ORDER BY created_at DESC
+         LIMIT 100`
       ).all(userId, userId);
-      transactions = rows || [];
+      transactions = (rows || []).map((r) => ({
+        id: r.id,
+        type: r.type,
+        fromUserId: r.from_user_id,
+        toUserId: r.to_user_id,
+        amount: r.amount,
+        fee: r.fee,
+        net: r.net,
+        status: r.status,
+        metadata: (() => { try { return JSON.parse(r.metadata_json || "{}"); } catch { return {}; } })(),
+        createdAt: r.created_at,
+        direction: r.from_user_id === userId ? "out" : "in",
+      }));
     }
   } catch (_e) { /* table may not exist on older deploys */ }
   res.json({ ok: true, transactions, total: transactions.length });
 });
+
+// ── Economy: buy / transfer / withdraw ───────────────────────────
+// Three core user-facing economy actions. All three delegate to
+// the atomic ledger primitives in server/economy/*.js and return
+// the same { ok, batchId?, amount, fee, net, error? } shape so
+// frontend wallet UI has a stable contract.
+//
+// These endpoints are guarded by requireAuth() — you can't spend
+// or receive tokens anonymously. Rate-limited to 10/min/user via
+// the default per-endpoint limiter.
+
+// POST /api/economy/buy — buy tokens via Stripe checkout
+// Accepts: { tokens: number, userId?: string (defaults to req.user.id) }
+// Returns: { ok, sessionUrl } — client redirects to Stripe checkout.
+// If Stripe is not configured, returns 503 with a clear error so the
+// frontend wallet UI can show a "payments not set up" state.
+app.post("/api/economy/buy", requireAuth(), asyncHandler(async (req, res) => {
+  const userId = req.user?.id;
+  const tokens = Math.floor(Number(req.body?.tokens) || 0);
+  if (!userId) return res.status(401).json({ ok: false, error: "unauthorized" });
+  if (tokens < 1 || tokens > 1_000_000) {
+    return res.status(400).json({ ok: false, error: "tokens must be between 1 and 1,000,000" });
+  }
+  try {
+    // Import the stripe helper directly — no macro wrapper needed.
+    // createCheckoutSession handles "stripe not configured" by
+    // returning { ok: false, error: "stripe_disabled" }, and we
+    // surface that as a 503 so the frontend wallet can render a
+    // "payments not set up" state instead of a generic 500.
+    const { createCheckoutSession, STRIPE_ENABLED } = await import("./economy/stripe.js");
+    if (!STRIPE_ENABLED) {
+      return res.status(503).json({
+        ok: false,
+        error: "payments_not_configured",
+        hint: "Set STRIPE_SECRET_KEY in .env to enable token purchases",
+      });
+    }
+    const result = await createCheckoutSession(db, {
+      userId,
+      tokens,
+      requestId: req.id || undefined,
+      ip: req.ip,
+    });
+    if (!result?.ok) {
+      return res.status(503).json({
+        ok: false,
+        error: result?.error || "checkout_failed",
+      });
+    }
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
+}));
+
+// POST /api/economy/transfer — atomic P2P transfer with fee split
+// Accepts: { to: userId, amount: number, note?: string, refId?: string }
+// Returns: { ok, batchId, amount, fee, net, from, to }
+app.post("/api/economy/transfer", requireAuth(), asyncHandler(async (req, res) => {
+  const from = req.user?.id;
+  const to = String(req.body?.to || "").trim();
+  const amount = Number(req.body?.amount);
+  const note = String(req.body?.note || "").slice(0, 500);
+  const refId = req.body?.refId ? String(req.body.refId).slice(0, 128) : undefined;
+  if (!from) return res.status(401).json({ ok: false, error: "unauthorized" });
+  if (!to) return res.status(400).json({ ok: false, error: "to is required" });
+  if (from === to) return res.status(400).json({ ok: false, error: "cannot_transfer_to_self" });
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return res.status(400).json({ ok: false, error: "amount must be positive" });
+  }
+  try {
+    const { executeTransfer } = await import("./economy/transfer.js");
+    const result = executeTransfer(db, {
+      from,
+      to,
+      amount,
+      type: "TRANSFER",
+      metadata: { note },
+      refId,
+      requestId: req.id || undefined,
+      ip: req.ip,
+    });
+    if (!result.ok) {
+      // Surface insufficient-balance errors as 400, others as 500.
+      const isClient = typeof result.error === "string" && (
+        result.error.startsWith("insufficient_balance") ||
+        result.error.includes("invalid") ||
+        result.error.includes("required")
+      );
+      return res.status(isClient ? 400 : 500).json(result);
+    }
+    // Audit the successful transfer
+    try {
+      auditLog("economy", "transfer", {
+        userId: from,
+        to,
+        amount,
+        fee: result.fee,
+        net: result.net,
+        batchId: result.batchId,
+        ip: req.ip,
+      });
+    } catch (_e) { /* non-fatal */ }
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
+}));
+
+// POST /api/economy/withdraw — request a token→cash withdrawal
+// Accepts: { amount: number, destination?: string }
+// Returns: { ok, withdrawalId, status: 'pending' }
+// Withdrawals go through a review queue (economy_withdrawals table)
+// rather than committing directly to the ledger. An admin approves
+// pending withdrawals and the ledger debit happens at approval time.
+app.post("/api/economy/withdraw", requireAuth(), asyncHandler(async (req, res) => {
+  const userId = req.user?.id;
+  const amount = Number(req.body?.amount);
+  const destination = String(req.body?.destination || "").slice(0, 200);
+  if (!userId) return res.status(401).json({ ok: false, error: "unauthorized" });
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return res.status(400).json({ ok: false, error: "amount must be positive" });
+  }
+  const MIN_WITHDRAW = Number(process.env.MIN_WITHDRAW_TOKENS) || 20;
+  if (amount < MIN_WITHDRAW) {
+    return res.status(400).json({ ok: false, error: `minimum withdrawal is ${MIN_WITHDRAW} tokens` });
+  }
+  try {
+    // Balance check before creating the request
+    const { validateBalance } = await import("./economy/validators.js");
+    const balanceCheck = validateBalance(db, userId, amount);
+    if (!balanceCheck.ok) {
+      return res.status(400).json({
+        ok: false,
+        error: "insufficient_balance",
+        balance: balanceCheck.balance,
+        required: balanceCheck.required,
+      });
+    }
+    // Compute fee + net without yet writing to ledger
+    const { calculateFee } = await import("./economy/fees.js");
+    const { fee, net } = calculateFee("WITHDRAWAL", amount);
+    // Daily withdrawal cap (defense in depth against automated drains)
+    const MAX_PER_DAY = Number(process.env.MAX_WITHDRAW_TOKENS_PER_DAY) || 5000;
+    try {
+      const today = db.prepare(
+        `SELECT COALESCE(SUM(amount), 0) AS total
+         FROM economy_withdrawals
+         WHERE user_id = ? AND created_at > datetime('now', '-24 hours')
+           AND status IN ('pending','approved','processing','complete')`
+      ).get(userId);
+      if ((today?.total || 0) + amount > MAX_PER_DAY) {
+        return res.status(429).json({
+          ok: false,
+          error: "daily_cap_exceeded",
+          used: today?.total || 0,
+          cap: MAX_PER_DAY,
+        });
+      }
+    } catch (_e) { /* table may not exist yet */ }
+    // Create pending withdrawal row
+    const withdrawalId = `wd_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+    db.prepare(
+      `INSERT INTO economy_withdrawals (id, user_id, amount, fee, net, status)
+       VALUES (?, ?, ?, ?, ?, 'pending')`
+    ).run(withdrawalId, userId, amount, fee, net);
+    try {
+      auditLog("economy", "withdraw_requested", {
+        userId,
+        withdrawalId,
+        amount,
+        fee,
+        net,
+        destination: destination || null,
+        ip: req.ip,
+      });
+    } catch (_e) { /* non-fatal */ }
+    res.json({
+      ok: true,
+      withdrawalId,
+      amount,
+      fee,
+      net,
+      status: "pending",
+      message: "Withdrawal submitted for review. You'll be notified on approval.",
+    });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
+}));
 
 // Growth/organs
 app.get("/api/growth/status", (req, res) => {
