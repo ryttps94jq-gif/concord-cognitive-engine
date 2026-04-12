@@ -67,6 +67,8 @@ import "./lib/vocabularies.js";
 import { BoundedMap } from "./lib/bounded-map.js";
 import { generateEntityName, migrateEntityNames as runEntityNameMigration, isFunctionLabel as isEntityFunctionLabel } from "./lib/entity-naming.js";
 import { validateSafeFetchUrl as _ssrfValidate, isUrlSafeAsync as _ssrfIsSafeAsync, fetchWithPinnedIp as _ssrfFetchPinned } from "./lib/ssrf-guard.js";
+import { registerCitation as economyRegisterCitation } from "./economy/royalty-cascade.js";
+import { checkAccess as economyCheckAccess } from "./economy/rights-enforcement.js";
 import {
   bridgeMindSpace, bridgeSubconscious,
   bridgeCognitiveBridge, bridgeMultiSpaceHandler
@@ -16316,12 +16318,17 @@ register("dtu", "create", async (ctx, input) => {
   const meta = input.meta && typeof input.meta === "object" ? input.meta : {};
   const allowRewrite = input.allowRewrite !== false;
 
-  // ── Usage Rights Enforcement: check parent DTU consent ─────────────
-  // If this DTU derives from another user's DTU, verify they allow citations.
-  // Can't have people stealing work — consent must be explicit.
-  // SECURITY: derive creator ONLY from authenticated actor so a caller can't
-  // forge `authorId` in the request body and match themselves as the parent's
-  // owner to bypass the consent check below.
+  // ── Usage Rights Enforcement: check parent DTU consent OR license ──
+  // If this DTU derives from another user's DTU, verify one of:
+  //   1. The parent is public/published/globally-scoped (implied license)
+  //   2. The parent creator has consented to citations (consent.allowCitations)
+  //   3. The caller holds a purchased usage/remix/commercial license via
+  //      the rights-enforcement layer (dtu_licenses) — this is the
+  //      marketplace wire: buying usage rights unlocks derivation.
+  //
+  // SECURITY: creator is derived ONLY from the authenticated actor so a
+  // caller can't forge `authorId` in the body to look like the parent's
+  // owner and bypass the gate.
   const _creatorId = ctx?.actor?.userId || ctx?.actor?.id || "anon";
   const _lineageViolations = [];
   for (const parentRef of lineage) {
@@ -16332,19 +16339,55 @@ register("dtu", "create", async (ctx, input) => {
     // Own DTUs and system DTUs: no restriction
     if (!parentDtu.ownerId || parentDtu.ownerId === _creatorId || parentDtu.ownerId === "anon" || parentDtu.ownerId === "system" || parentDtu.ownerId === "founder") continue;
     if (parentDtu.creatorType === "system") continue;
-    // Check consent
+
+    // (1) Public / published / global scope → implied citation license.
+    //     Council-approved global promotion sets scope="global" AND
+    //     visibility="public" via approvePromotion(), so once the
+    //     council approves a DTU it becomes derivable by anyone.
     const consent = parentDtu.consent || parentDtu.meta?.consent || {};
     const vis = parentDtu.meta?.visibility || parentDtu.visibility;
-    // Published/public with no explicit denial: implied license for citation
-    if (vis === "published" || vis === "public") continue;
-    // Private DTU from another user: must have allowCitations
-    if (!consent.allowCitations) {
-      _lineageViolations.push({ parentId, parentTitle: parentDtu.title, owner: parentDtu.ownerId, reason: "citations_not_allowed" });
+    const scope = parentDtu.scope;
+    if (vis === "published" || vis === "public" || scope === "global") continue;
+
+    // (2) Per-DTU creator consent (legacy path).
+    if (consent.allowCitations) continue;
+
+    // (3) Marketplace purchased license. Check rights-enforcement for a
+    //     tier whose capabilities include `remix`/`derivative`/`citation`.
+    //     If the caller bought usage/remix/commercial rights, that counts
+    //     as a license to derive.
+    let purchasedLicense = false;
+    try {
+      if (db && _creatorId && _creatorId !== "anon") {
+        const contentType = String(parentDtu.domain || parentDtu.type || parentDtu.kind || "document").toLowerCase();
+        // Try the most permissive derivation-capable actions in order.
+        // The first one that resolves "allowed" is enough.
+        for (const action of ["create_derivative", "remix", "cite"]) {
+          const check = economyCheckAccess(db, {
+            userId: _creatorId,
+            dtuId: parentId,
+            contentType,
+            action,
+            creatorId: parentDtu.ownerId,
+          });
+          if (check?.allowed) { purchasedLicense = true; break; }
+        }
+      }
+    } catch (e) {
+      logger.debug('server', 'license_check_failed', { error: e?.message });
     }
+    if (purchasedLicense) continue;
+
+    _lineageViolations.push({ parentId, parentTitle: parentDtu.title, owner: parentDtu.ownerId, reason: "no_usage_license_or_consent" });
   }
   if (_lineageViolations.length > 0) {
     structuredLog("warn", "dtu_lineage_consent_denied", { creator: _creatorId, violations: _lineageViolations });
-    return { ok: false, error: "usage_rights_denied", message: "Cannot derive from these DTUs without citation consent from their creators", violations: _lineageViolations };
+    return {
+      ok: false,
+      error: "usage_rights_denied",
+      message: "Cannot derive from these DTUs — parent is not public, creator hasn't consented to citations, and you don't hold a purchased usage license. Buy usage rights in the marketplace to derive.",
+      violations: _lineageViolations,
+    };
   }
 
   const coreIn = (input.core && typeof input.core === "object") ? input.core : {};
@@ -16365,6 +16408,48 @@ register("dtu", "create", async (ctx, input) => {
     if (!tags.includes("quarantine:injection-review")) tags.push("quarantine:injection-review");
   }
 
+  // ── Lens-based visibility defaults ──────────────────────────────────
+  // What you post on "social" should feel like Facebook — visible to
+  // others, interactable, citable by default. What you type in "chat"
+  // should feel like a DM — private, not citable. The lens/domain the
+  // DTU was created in is the signal we use.
+  //
+  // SOCIAL lenses: anything posted is public by default. Creator's
+  //   consent.shareToFeed and consent.allowCitations default to true
+  //   so the social graph can interact normally. Explicit caller
+  //   overrides still win.
+  // PRIVATE lenses: chat, journal, etc. Default private. Citations
+  //   disabled. (This is the existing behavior.)
+  const _lensKey = String(input.domain || input.lens || meta?.lens || "").toLowerCase();
+  const _SOCIAL_LENSES = new Set([
+    "social", "feed", "collab", "culture", "community", "post", "share",
+    "forum", "discussion", "thread", "public", "profile", "broadcast",
+  ]);
+  const _PRIVATE_LENSES = new Set([
+    "chat", "journal", "diary", "note", "notes", "private", "dm",
+    "message", "messages", "personal", "inbox", "draft", "drafts",
+  ]);
+  const _isSocialLens = _SOCIAL_LENSES.has(_lensKey);
+  const _isPrivateLens = _PRIVATE_LENSES.has(_lensKey);
+
+  // Resolved defaults: explicit input.visibility always wins.
+  const _defaultVisibility = input.visibility
+    ? input.visibility
+    : _isSocialLens
+      ? "public"
+      : "private";
+  const _defaultConsent = {
+    publishToMarketplace: false,
+    shareToFeed: !!_isSocialLens,
+    allowCitations: !!_isSocialLens,
+    allowAiTraining: false,
+  };
+  // Caller-supplied consent overrides the lens defaults piecewise.
+  const _resolvedConsent = {
+    ..._defaultConsent,
+    ...(input.consent && typeof input.consent === "object" ? input.consent : {}),
+  };
+
   const dtu = {
     id: uid("dtu"),
     title,
@@ -16376,13 +16461,8 @@ register("dtu", "create", async (ctx, input) => {
     // SECURITY: ownerId always comes from the authenticated actor — never
     // from input.authorId, which would let callers forge ownership.
     ownerId: ctx?.actor?.userId || ctx?.actor?.id || null,
-    visibility: input.visibility || "private",
-    consent: {
-      publishToMarketplace: false,
-      shareToFeed: false,
-      allowCitations: false,
-      allowAiTraining: false,
-    },
+    visibility: _defaultVisibility,
+    consent: _resolvedConsent,
     creatorType: input.creatorType || (ctx?.actor?.userId && ctx.actor.userId !== "anon" ? "user" : "system"),
     core: {
       definitions: Array.isArray(coreIn.definitions) ? coreIn.definitions : [],
@@ -16444,6 +16524,54 @@ register("dtu", "create", async (ctx, input) => {
 
   // Notify event bus of DTU creation
   try { eventBus.emit("dtu.created", { id: dtu.id, title: dtu.title, domain: dtu.domain, creatorId: dtu.authorId || source }); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
+
+  // ── Auto-register citation lineage ──────────────────────────────────
+  // When a DTU is created with a lineage/parents, we automatically
+  // record it in the royalty_lineage table so subsequent sales of
+  // THIS derivative trigger royalty cascade back to the original
+  // creators. Previously nobody called registerCitation() after
+  // dtu.create, leaving the cascade dark for anything except
+  // creative-marketplace-side derivatives. This wire closes that gap.
+  try {
+    if (db && dtu.ownerId && dtu.ownerId !== "anon") {
+      const parentIds = [];
+      if (Array.isArray(lineage)) {
+        for (const p of lineage) {
+          const id = typeof p === "string" ? p : p?.id;
+          if (id) parentIds.push(id);
+        }
+      } else if (lineage && typeof lineage === "object" && Array.isArray(lineage.parents)) {
+        for (const p of lineage.parents) {
+          const id = typeof p === "string" ? p : p?.id;
+          if (id) parentIds.push(id);
+        }
+      }
+      for (const parentId of parentIds) {
+        const parentDtu = STATE.dtus.get(parentId);
+        if (!parentDtu?.ownerId) continue;
+        if (parentDtu.ownerId === dtu.ownerId) continue; // self-citation
+        const result = economyRegisterCitation(db, {
+          childId: dtu.id,
+          parentId,
+          creatorId: dtu.ownerId,
+          parentCreatorId: parentDtu.ownerId,
+          parentDtu, // DTU-aware check: public/global/council-approved bypass user consent
+          generation: 1,
+        });
+        if (!result?.ok && result?.error !== "citation_cycle_detected") {
+          // Non-fatal — log and continue. Lineage on the DTU itself is
+          // still recorded even if the royalty ledger insert failed.
+          logger.debug('server', 'auto_register_citation_skipped', {
+            childId: dtu.id,
+            parentId,
+            reason: result?.error,
+          });
+        }
+      }
+    }
+  } catch (e) {
+    logger.debug('server', 'auto_register_citation_error', { error: e?.message });
+  }
 
   // Async embedding generation (NEVER blocks DTU creation — Rule #1)
   embedDTU(dtu).catch(() => {});

@@ -163,6 +163,69 @@ export function approvePromotion(proposalId, approverId = "sovereign") {
   if (item) {
     item._promotionStage = proposal.to;
     item._promotedAt = nowISO();
+
+    // ── Scope / visibility side-effects ─────────────────────────────
+    // Promotion stages aren't just bookkeeping — they directly affect
+    // citability, royalty flow, and who can derive. When a DTU gets
+    // approved to "global" we also mutate dtu.scope and dtu.visibility
+    // so the canCiteSpecificDtu check in the royalty cascade and the
+    // dtu.create lineage gate both see it as freely derivable and
+    // royalty-flowing across the whole federation.
+    if (proposal.itemType === "dtu") {
+      switch (proposal.to) {
+        case "published":
+          // Author made their work publicly visible — not globally
+          // promoted yet, but visible and citable.
+          item.visibility = "published";
+          if (item.consent) {
+            item.consent.allowCitations = true;
+            item.consent.shareToFeed = true;
+          }
+          break;
+        case "marketplace":
+          // Approved for marketplace listing. Scope stays "local" for
+          // citation purposes; the marketplace purchase flow is what
+          // unlocks derivation. Keep visibility as the author set it.
+          if (!item.visibility || item.visibility === "private") {
+            item.visibility = "published";
+          }
+          if (item.consent) {
+            item.consent.publishToMarketplace = true;
+            item.consent.allowCitations = true;
+          }
+          break;
+        case "global":
+          // Council-approved global promotion. This is the "citable by
+          // anyone, royalties flow across the federation" state. Every
+          // downstream checker (canCiteSpecificDtu, dtu.create lineage
+          // gate, registerCitation, distributeRoyalties) already
+          // recognizes scope="global" as the unlock signal.
+          item.scope = "global";
+          item.visibility = "public";
+          if (item.consent) {
+            item.consent.allowCitations = true;
+            item.consent.shareToFeed = true;
+            item.consent.publishToMarketplace = true;
+          }
+          // Record the approval on the DTU itself so audits can see
+          // who approved and when without querying the pipeline map.
+          item.councilApproval = {
+            approvedBy: approverId,
+            approvedAt: nowISO(),
+            proposalId,
+            fromStage: proposal.from,
+          };
+          break;
+        default:
+          break;
+      }
+      // Persist the mutation if a save helper is available.
+      try {
+        if (typeof globalThis.saveStateDebounced === "function") {
+          globalThis.saveStateDebounced();
+        }
+      } catch (_e) { /* non-fatal */ }
+    }
   }
 
   _history.push({ action: "approved", proposalId, approverId, timestamp: nowISO() });
