@@ -69,6 +69,8 @@ import { DTUDetailView } from '@/components/dtu/DTUDetailView';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import MessageRenderer from '@/components/chat/MessageRenderer';
+import OracleResponse from '@/components/chat/OracleResponse';
+import { useOracleSolve, type OracleResponseData } from '@/hooks/useOracleSolve';
 import AtlasOverlay from '@/components/chat/AtlasOverlay';
 import AtlasViewer from '@/components/chat/AtlasViewer';
 import { WelcomePanel, ModeSelector, ChatPanel as ChatModePanel } from '@/components/chat/ChatModePanels';
@@ -117,6 +119,7 @@ interface Message {
   quotedContent?: string;
   sources?: Array<{ type: string; title: string; url: string; source: string; snippet?: string; fetchedAt?: string }>;
   webAugmented?: boolean;
+  oracleResponse?: OracleResponseData;
 }
 
 interface Conversation {
@@ -215,6 +218,7 @@ const SLASH_COMMANDS: SlashCommand[] = [
   { command: '/forge', label: '/forge', description: 'Forge last response to DTU', icon: Zap },
   { command: '/help', label: '/help', description: 'Show available commands', icon: HelpCircle },
   { command: '/context', label: '/context [domain]', description: 'Set domain context', icon: Hash, args: 'domain' },
+  { command: '/oracle', label: '/oracle [query]', description: 'Ask the Oracle Engine (rich response)', icon: Sparkles, args: 'query' },
 ];
 
 const ACCEPTED_FILE_TYPES = '.txt,.md,.json,.csv,.pdf,.png,.jpg,.jpeg';
@@ -484,6 +488,77 @@ export default function ChatLensPage() {
   const [isStreaming, setIsStreaming] = useState(false);
 
   // ──────────────────────────────────────────────
+  // Oracle Engine — rich response mutation
+  // ──────────────────────────────────────────────
+
+  const oracleSolveMutation = useOracleSolve();
+
+  const runOracleQuery = useCallback((query: string) => {
+    const trimmed = query.trim();
+    if (!trimmed) {
+      const sysMsg: Message = {
+        id: `sys-${Date.now()}`,
+        role: 'system',
+        content: 'Usage: /oracle [your question]. The Oracle Engine returns a rich answer with sources, computations, and cross-domain connections.',
+        timestamp: new Date().toISOString(),
+      };
+      setLocalMessages(prev => [...prev, sysMsg]);
+      return;
+    }
+
+    // Push the user message immediately so the query appears in the thread
+    const userMsg: Message = {
+      id: `oracle-user-${Date.now()}`,
+      role: 'user',
+      content: `/oracle ${trimmed}`,
+      timestamp: new Date().toISOString(),
+    };
+    setLocalMessages(prev => [...prev, userMsg]);
+
+    // Status placeholder while the Oracle solves
+    const pendingId = `oracle-pending-${Date.now()}`;
+    const pendingMsg: Message = {
+      id: pendingId,
+      role: 'system',
+      content: 'Oracle Engine is solving — running 6-phase pipeline…',
+      timestamp: new Date().toISOString(),
+    };
+    setLocalMessages(prev => [...prev, pendingMsg]);
+
+    oracleSolveMutation.mutate(
+      { query: trimmed, context: domainContext ? { domain: domainContext } : null },
+      {
+        onSuccess: (data) => {
+          const assistantMsg: Message = {
+            id: `oracle-asst-${Date.now()}`,
+            role: 'assistant',
+            content: data.answer || '(no answer)',
+            timestamp: new Date().toISOString(),
+            oracleResponse: data,
+          };
+          setLocalMessages(prev => [
+            ...prev.filter(m => m.id !== pendingId),
+            assistantMsg,
+          ]);
+          queryClient.invalidateQueries({ queryKey: ['dtus'] });
+        },
+        onError: (err) => {
+          const errMsg: Message = {
+            id: `oracle-err-${Date.now()}`,
+            role: 'system',
+            content: `Oracle Engine failed: ${err instanceof Error ? err.message : 'Unknown error'}`,
+            timestamp: new Date().toISOString(),
+          };
+          setLocalMessages(prev => [
+            ...prev.filter(m => m.id !== pendingId),
+            errMsg,
+          ]);
+        },
+      }
+    );
+  }, [oracleSolveMutation, domainContext, queryClient]);
+
+  // ──────────────────────────────────────────────
   // Slash command filtering
   // ──────────────────────────────────────────────
 
@@ -569,6 +644,10 @@ export default function ChatLensPage() {
         setLocalMessages(prev => [...prev, sysMsg]);
         break;
       }
+      case '/oracle': {
+        runOracleQuery(arg);
+        break;
+      }
       case '/context': {
         if (arg) {
           setDomainContext(arg);
@@ -606,7 +685,7 @@ export default function ChatLensPage() {
     setShowSlashMenu(false);
     setSlashFilter('');
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [messages, domainContext]);
+  }, [messages, domainContext, runOracleQuery]);
 
   // ──────────────────────────────────────────────
   // Chat backend action handler
@@ -1279,6 +1358,17 @@ export default function ChatLensPage() {
             </div>
           )}
 
+          {message.role === 'assistant' && message.oracleResponse ? (
+            <div className="w-full max-w-3xl">
+              <OracleResponse
+                response={message.oracleResponse}
+                onOpenDTU={(id) => setInspectingDtuId(id)}
+              />
+              {timeStr && (
+                <p className="text-[10px] text-gray-500 mt-1 select-none">{timeStr}</p>
+              )}
+            </div>
+          ) : (
           <div className={cn(
             'inline-block p-4 rounded-2xl shadow-sm',
             message.role === 'user'
@@ -1370,6 +1460,7 @@ export default function ChatLensPage() {
               </div>
             )}
           </div>
+          )}
 
           {/* Message action bar */}
           <div className={cn(
