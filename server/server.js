@@ -9946,12 +9946,79 @@ register("metalearning", "adaptations", (ctx, _input = {}) => {
 // ===== END META-LEARNING MACROS =====
 
 // ---- ctx ----
+// ── Per-user activity tracker ───────────────────────────────────
+// Lightweight map of userId → { lastSeen, lens, displayName } used
+// by /api/presence/active to render "who's here" panels across
+// lenses. Touched from makeCtx() on every authenticated request so
+// the tracker is automatic: any endpoint with a real actor updates
+// presence without the handler having to think about it.
+const _USER_ACTIVITY = {
+  byUser: new Map(), // userId -> { lastSeen, lens, displayName }
+  MAX_ENTRIES: 50000,
+  touch(userId, lens, displayName) {
+    if (!userId || userId === "anon") return;
+    this.byUser.set(userId, {
+      lastSeen: Date.now(),
+      lens: lens || null,
+      displayName: displayName || null,
+    });
+    if (this.byUser.size > this.MAX_ENTRIES) {
+      // Evict oldest (insertion-order eviction — plenty fast)
+      const it = this.byUser.keys();
+      for (let i = 0, n = this.byUser.size - this.MAX_ENTRIES; i < n; i++) {
+        this.byUser.delete(it.next().value);
+      }
+    }
+  },
+  listActive(lens, windowMs = 5 * 60 * 1000, limit = 40) {
+    const now = Date.now();
+    const cutoff = now - windowMs;
+    const out = [];
+    for (const [userId, entry] of this.byUser) {
+      if (entry.lastSeen < cutoff) continue;
+      if (lens && entry.lens && entry.lens !== lens) continue;
+      out.push({
+        userId,
+        displayName: entry.displayName || userId,
+        lastSeen: new Date(entry.lastSeen).toISOString(),
+        lens: entry.lens,
+        status: (now - entry.lastSeen) < 60_000 ? "active" : "idle",
+      });
+      if (out.length >= limit) break;
+    }
+    return out;
+  },
+};
+
 function makeCtx(req=null) {
   // Inject ATS affect policy into context so macros can consume depthBudget, riskBudget, etc.
   let affectPolicy = null;
   if (ATS && req?._atsSessionId) {
     try { affectPolicy = ATS.getSessionPolicy(req._atsSessionId); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
   }
+
+  // Touch the per-user activity tracker so /api/presence/active
+  // reflects who's currently poking at the server. We infer the
+  // lens from the request path: /api/feed/* → "feed", /api/chat/*
+  // → "chat", etc. Fallbacks to the Referer header for static page
+  // navigation events.
+  try {
+    if (req && req.user && req.user.id) {
+      const urlPath = req.originalUrl || req.url || "";
+      let lensGuess = null;
+      const m = urlPath.match(/^\/api\/lens\/([a-z0-9_-]+)/) || urlPath.match(/^\/api\/([a-z0-9_-]+)\//);
+      if (m) lensGuess = m[1];
+      if (!lensGuess && typeof req.headers?.referer === "string") {
+        const r = req.headers.referer.match(/\/lenses\/([a-z0-9_-]+)/);
+        if (r) lensGuess = r[1];
+      }
+      _USER_ACTIVITY.touch(
+        req.user.id,
+        lensGuess,
+        req.user.displayName || req.user.username || null,
+      );
+    }
+  } catch (_e) { /* non-fatal */ }
 
   // Construct actor from (in order): req.actor (set by auth middleware
   // from a verified session), req.user (from JWT verify), or the
@@ -37094,6 +37161,22 @@ app.get("/api/admin/system-health/series", requireAuth(), requireOwner, (req, re
     series = [latest, ...series];
   }
   res.json({ ok: true, series, capacity: _HEALTH_RING.cap });
+});
+
+// GET /api/presence/active?lens=feed&windowMs=300000&limit=20
+// Returns the list of users active on a given lens (or across the
+// whole app if lens is omitted) within the last windowMs. Backed by
+// _USER_ACTIVITY which is touched from makeCtx() on every
+// authenticated request. No auth required — presence is intentionally
+// public so rails like "who's on feed" can render for logged-out
+// viewers; only the tracker is populated by authenticated users so
+// anonymous traffic doesn't leak into the roster.
+app.get("/api/presence/active", (req, res) => {
+  const lens = typeof req.query?.lens === "string" ? req.query.lens.slice(0, 32) : null;
+  const windowMs = Math.max(10_000, Math.min(60 * 60 * 1000, Number(req.query?.windowMs) || 5 * 60 * 1000));
+  const limit = Math.max(1, Math.min(100, Number(req.query?.limit) || 20));
+  const users = _USER_ACTIVITY.listActive(lens, windowMs, limit);
+  res.json({ ok: true, users, windowMs });
 });
 
 // GET /api/admin/permission-matrix/data

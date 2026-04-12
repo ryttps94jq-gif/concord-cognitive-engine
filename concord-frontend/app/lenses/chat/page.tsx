@@ -79,6 +79,17 @@ import { ContextOverlay } from '@/components/chat/ContextOverlay';
 import ForgeCard from '@/components/chat/ForgeCard';
 import FoundationCard from '@/components/chat/FoundationCard';
 import { SessionSidebar } from '@/components/chat/SessionSidebar';
+// ── Systems panels ─────────────────────────────────────────────
+// These five panels round-trip through the /api/chat cognitive
+// pipeline and surface system-level context alongside the
+// conversation — security posture, mesh state, inference model
+// status, proactive initiative chips, and Atlas privacy zones.
+// All fully built, all previously orphaned.
+import ShieldCard from '@/components/chat/ShieldCard';
+import MeshStatusCard from '@/components/chat/MeshStatusCard';
+import IntelligenceCard from '@/components/chat/IntelligenceCard';
+import AtlasPrivacyMonitor from '@/components/chat/AtlasPrivacyMonitor';
+import { InitiativeChip, type Initiative } from '@/components/chat/InitiativeChip';
 import {
   recommendLenses,
   createSessionContext,
@@ -401,6 +412,46 @@ export default function ChatLensPage() {
   const [chatMode, setChatMode] = useState<'welcome' | 'assist' | 'explore' | 'connect' | 'chat'>('chat');
   const [sessionSidebarOpen, setSessionSidebarOpen] = useState(false);
   const [contextOverlayOpen, setContextOverlayOpen] = useState(false);
+
+  // ── Systems panel (shield / mesh / intel / privacy / initiatives) ─────
+  // Opt-in drawer surfacing the orphaned systems cards. All five
+  // components are fully built; this gives them a live home inside
+  // the chat lens where they're most useful (the AI can reference
+  // shield/mesh/intel state while responding).
+  const [systemsPanelOpen, setSystemsPanelOpen] = useState(false);
+  const [systemsTab, setSystemsTab] = useState<'shield' | 'mesh' | 'intel' | 'privacy' | 'initiatives'>('shield');
+  // Fetched lazily from /api/runMacro so nothing hits the wire until
+  // the user opens the panel.
+  const { data: shieldData } = useQuery({
+    queryKey: ['chat-shield-status'],
+    queryFn: () => api.post<{ result?: Record<string, unknown>; ok?: boolean }>('/api/runMacro', { domain: 'shield', name: 'status', input: {} }).then((r) => r.data?.result || {}),
+    enabled: systemsPanelOpen && systemsTab === 'shield',
+    refetchInterval: systemsPanelOpen && systemsTab === 'shield' ? 10_000 : false,
+  });
+  const { data: meshData } = useQuery({
+    queryKey: ['chat-mesh-status'],
+    queryFn: () => api.post<{ result?: Record<string, unknown> }>('/api/runMacro', { domain: 'mesh', name: 'status', input: {} }).then((r) => r.data?.result || {}),
+    enabled: systemsPanelOpen && systemsTab === 'mesh',
+    refetchInterval: systemsPanelOpen && systemsTab === 'mesh' ? 10_000 : false,
+  });
+  const { data: intelData } = useQuery({
+    queryKey: ['chat-intel-status'],
+    queryFn: () => api.post<{ result?: Record<string, unknown> }>('/api/runMacro', { domain: 'intel', name: 'status', input: {} }).then((r) => r.data?.result || {}),
+    enabled: systemsPanelOpen && systemsTab === 'intel',
+    refetchInterval: systemsPanelOpen && systemsTab === 'intel' ? 15_000 : false,
+  });
+  const { data: privacyData } = useQuery({
+    queryKey: ['chat-atlas-privacy'],
+    queryFn: () => api.post<{ result?: Record<string, unknown> }>('/api/runMacro', { domain: 'atlas', name: 'privacy_zones', input: { view: 'stats' } }).then((r) => r.data?.result || null),
+    enabled: systemsPanelOpen && systemsTab === 'privacy',
+    refetchInterval: systemsPanelOpen && systemsTab === 'privacy' ? 20_000 : false,
+  });
+  const { data: initiativesData } = useQuery({
+    queryKey: ['chat-initiatives'],
+    queryFn: () => api.get<{ initiatives?: Initiative[] }>('/api/initiatives').then((r) => r.data?.initiatives || []),
+    enabled: systemsPanelOpen && systemsTab === 'initiatives',
+    refetchInterval: systemsPanelOpen && systemsTab === 'initiatives' ? 30_000 : false,
+  });
   const [atlasQuery, setAtlasQuery] = useState('');
   const [atlasResult, setAtlasResult] = useState<Record<string, unknown> | null>(null);
   const [atlasLoading, setAtlasLoading] = useState(false);
@@ -1915,6 +1966,24 @@ export default function ChatLensPage() {
               <Eye className="w-3 h-3" />
               <span>Context</span>
             </button>
+
+            {/* Systems button — opens the ShieldCard / MeshStatusCard /
+                IntelligenceCard / AtlasPrivacyMonitor / InitiativeChip
+                drawer with live-polling data from shield/mesh/intel
+                macros. */}
+            <button
+              onClick={() => setSystemsPanelOpen((v) => !v)}
+              className={cn(
+                "hidden sm:flex items-center gap-1.5 px-2.5 py-1 bg-lattice-bg border rounded-full text-xs transition-colors",
+                systemsPanelOpen
+                  ? "border-neon-purple/50 text-neon-purple"
+                  : "border-lattice-border text-gray-400 hover:text-neon-purple hover:border-neon-purple/30",
+              )}
+              title="System health, mesh, intelligence, privacy, initiatives"
+            >
+              <Activity className="w-3 h-3" />
+              <span>Systems</span>
+            </button>
           </div>
 
           {/* Cognitive Status Bar */}
@@ -2566,6 +2635,110 @@ export default function ChatLensPage() {
         isOpen={contextOverlayOpen}
         onClose={() => setContextOverlayOpen(false)}
       />
+
+      {/* Systems drawer — shield / mesh / intel / privacy / initiatives.
+          Slides in from the right edge; lazy-fetches per-tab. */}
+      <AnimatePresence>
+        {systemsPanelOpen && (
+          <motion.div
+            initial={{ x: 420, opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            exit={{ x: 420, opacity: 0 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+            className="fixed top-20 right-4 bottom-4 w-[28rem] z-50 flex flex-col bg-lattice-surface border border-lattice-border rounded-lg shadow-2xl overflow-hidden"
+          >
+            <div className="flex items-center justify-between px-4 py-3 border-b border-lattice-border">
+              <div className="flex items-center gap-2">
+                <Activity className="w-4 h-4 text-neon-purple" />
+                <span className="text-sm font-semibold text-white">Systems</span>
+              </div>
+              <button
+                onClick={() => setSystemsPanelOpen(false)}
+                className="text-gray-400 hover:text-white transition-colors"
+                title="Close"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            {/* Tabs */}
+            <div className="flex gap-1 px-3 py-2 border-b border-lattice-border overflow-x-auto">
+              {([
+                { key: 'shield', label: 'Shield' },
+                { key: 'mesh', label: 'Mesh' },
+                { key: 'intel', label: 'Intel' },
+                { key: 'privacy', label: 'Privacy' },
+                { key: 'initiatives', label: 'Initiatives' },
+              ] as const).map((t) => (
+                <button
+                  key={t.key}
+                  onClick={() => setSystemsTab(t.key)}
+                  className={cn(
+                    'px-3 py-1 rounded-md text-xs font-medium transition-colors whitespace-nowrap',
+                    systemsTab === t.key
+                      ? 'bg-neon-purple/20 text-neon-purple border border-neon-purple/30'
+                      : 'text-gray-400 hover:text-white hover:bg-lattice-bg',
+                  )}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+            {/* Tab content */}
+            <div className="flex-1 overflow-y-auto p-3">
+              {systemsTab === 'shield' && (
+                <ShieldCard
+                  type="score"
+                  securityScore={shieldData as never}
+                />
+              )}
+              {systemsTab === 'mesh' && (
+                <MeshStatusCard
+                  type="status"
+                  metrics={meshData as never}
+                />
+              )}
+              {systemsTab === 'intel' && (
+                <IntelligenceCard
+                  type="overview"
+                  metrics={intelData as never}
+                />
+              )}
+              {systemsTab === 'privacy' && (
+                <AtlasPrivacyMonitor
+                  data={privacyData as never}
+                  loading={!privacyData}
+                />
+              )}
+              {systemsTab === 'initiatives' && (
+                <div className="space-y-2">
+                  {Array.isArray(initiativesData) && initiativesData.length > 0 ? (
+                    initiativesData.slice(0, 8).map((init: Initiative) => (
+                      <InitiativeChip
+                        key={init.id}
+                        initiative={init}
+                        onDismiss={() => {
+                          try {
+                            api.post('/api/initiatives/report', { id: init.id, interaction: 'dismissed' });
+                          } catch { /* non-fatal */ }
+                        }}
+                        onAction={() => {
+                          try {
+                            api.post('/api/initiatives/report', { id: init.id, interaction: 'acted' });
+                          } catch { /* non-fatal */ }
+                        }}
+                      />
+                    ))
+                  ) : (
+                    <p className="text-xs text-gray-500 text-center py-8">
+                      No proactive initiatives right now. Claude will surface them here when opportunities arise.
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Atlas Overlay — material query results */}
       {atlasLoading || atlasResult ? (

@@ -60,6 +60,7 @@ import { ProvenanceBadge } from '@/components/dtu/ProvenanceBadge';
 import { ReportButton } from '@/components/common/ReportButton';
 import { StoriesBar } from '@/components/social/StoriesBar';
 import { SuggestedFollows } from '@/components/social/SuggestedFollows';
+import { PresenceIndicator } from '@/components/social/PresenceIndicator';
 import { SocialCommerceTag } from '@/components/social/SocialCommerceTag';
 import { CrossPostExternal } from '@/components/social/CrossPostExternal';
 import { Discovery } from '@/components/social/Discovery';
@@ -351,6 +352,16 @@ function CollabCard({ collab }: { collab: CollabAttachment }) {
 export default function FeedLensPage() {
   useLensNav('feed');
   const { latestData: realtimeData, alerts: realtimeAlerts, insights: realtimeInsights, isLive, lastUpdated } = useRealtimeLens('feed');
+
+  // ── Feed presence ──────────────────────────────────────────
+  // Who's on the feed right now. 30s poll against /api/presence/active
+  // which is fed by the per-user activity tracker in makeCtx().
+  const { data: presenceResp } = useQuery({
+    queryKey: ['feed-presence'],
+    queryFn: () => api.get<{ ok: boolean; users: Array<{ userId: string; displayName: string; status: 'active' | 'idle' }> }>('/api/presence/active?lens=feed&windowMs=300000&limit=20').then((r) => r.data),
+    refetchInterval: 30_000,
+  });
+  const presenceUsers = presenceResp?.users || [];
 
   const {
     hyperDTUs, megaDTUs, regularDTUs,
@@ -1316,6 +1327,26 @@ export default function FeedLensPage() {
         <div className="bg-lattice-surface rounded-xl border border-lattice-border overflow-hidden p-4">
           <TrendingTopics
             onTopicClick={(tag) => setSearchQuery(tag)}
+          />
+        </div>
+
+        {/* Presence — who's currently browsing the feed. Sourced
+            from the realtime lens hook so the avatar stack updates
+            when people join / leave. */}
+        <div className="bg-lattice-surface rounded-xl border border-lattice-border overflow-hidden px-4 py-3">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">On Feed Now</span>
+          </div>
+          <PresenceIndicator
+            users={(Array.isArray(presenceUsers) ? presenceUsers : []).map((u: { id?: string; userId?: string; name?: string; displayName?: string; avatar?: string; status?: 'active' | 'idle' | 'viewing'; location?: string }, i: number) => ({
+              id: u.id || u.userId || `p-${i}`,
+              name: u.name || u.displayName || 'Citizen',
+              avatar: u.avatar,
+              color: ['#06b6d4', '#8b5cf6', '#22c55e', '#f59e0b', '#ec4899'][i % 5],
+              status: (u.status || 'active') as 'active' | 'idle' | 'viewing',
+              location: u.location || 'feed',
+            }))}
+            maxVisible={5}
           />
         </div>
 
