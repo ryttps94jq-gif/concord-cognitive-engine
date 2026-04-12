@@ -10,6 +10,7 @@
  */
 
 import crypto from "crypto";
+import { verifyProviderJwt, GOOGLE_JWKS, APPLE_JWKS } from "./jwks-verifier.js";
 
 // ── Provider Configuration ──────────────────────────────────────────────────
 
@@ -102,16 +103,30 @@ export async function exchangeGoogleCode(code) {
 
   const tokens = await tokenResponse.json();
 
-  // Step 2: Decode the id_token to get user info (avoids extra API call)
+  // Step 2: Verify the id_token's signature against Google's JWKS and
+  // extract user info. SECURITY: previously this used decodeJwtPayload,
+  // which trusted the payload with NO signature check. Any attacker able
+  // to inject a forged id_token (e.g. via a broken TLS chain, dev proxy,
+  // or compromised intermediate) could impersonate any Google user.
   if (tokens.id_token) {
-    const payload = decodeJwtPayload(tokens.id_token);
-    if (payload && payload.email) {
-      return {
-        email: payload.email,
-        name: payload.name || "",
-        picture: payload.picture || "",
-        sub: payload.sub,
-      };
+    try {
+      const payload = await verifyProviderJwt(tokens.id_token, {
+        ...GOOGLE_JWKS,
+        audience: process.env.GOOGLE_CLIENT_ID,
+      });
+      if (payload && payload.email) {
+        return {
+          email: payload.email,
+          name: payload.name || "",
+          picture: payload.picture || "",
+          sub: payload.sub,
+        };
+      }
+    } catch (err) {
+      // Fall through to the userinfo endpoint if verification fails —
+      // that path re-authenticates against Google directly with the
+      // access token, so a bad id_token can't short-circuit it.
+      console.warn("[oauth:google] id_token verification failed:", err?.message);
     }
   }
 
@@ -226,12 +241,17 @@ export async function exchangeAppleCode(code) {
 
   const tokens = await tokenResponse.json();
 
-  // Apple returns user info in the id_token JWT
+  // Apple returns user info in the id_token JWT. Verify the signature
+  // against Apple's JWKS — previously we trusted the decoded payload
+  // blindly, which would allow a forged token if TLS ever failed.
   if (!tokens.id_token) {
     throw new Error("Apple token response missing id_token");
   }
 
-  const payload = decodeJwtPayload(tokens.id_token);
+  const payload = await verifyProviderJwt(tokens.id_token, {
+    ...APPLE_JWKS,
+    audience: process.env.APPLE_CLIENT_ID,
+  });
   if (!payload || !payload.sub) {
     throw new Error("Apple id_token payload missing sub claim");
   }

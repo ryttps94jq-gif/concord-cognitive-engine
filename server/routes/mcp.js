@@ -21,11 +21,59 @@ import crypto from "crypto";
 import { asyncHandler } from "../lib/async-handler.js";
 import { createMCPServer } from "../lib/mcp-server.js";
 import { MCPClient } from "../lib/mcp-client.js";
+import { validateSafeFetchUrl } from "../lib/ssrf-guard.js";
 import logger from "../logger.js";
 
 // ── External Server Registry (in-memory, persists for lifetime of process) ──
 
 const externalServers = new Map(); // id → { id, name, url, headers, addedAt, client }
+
+// ── Tool authorization ─────────────────────────────────────────────────────
+// SECURITY: a regular user calling `POST /api/mcp/tools/call` could
+// previously invoke ANY registered lens action — including admin or
+// internal-only tools — because the dispatcher only checked that the tool
+// existed. We now apply a coarse role gate:
+//   • Any tool in a domain namespace listed below requires admin role.
+//   • Any tool name matching a dangerous verb requires admin role.
+//   • Everything else requires an authenticated user (no anonymous).
+// This is a coarse defense; the macro handlers themselves still perform
+// their own ownership checks. The goal here is "tool-call from a JSON-RPC
+// client shouldn't be cheaper than tool-call from the web UI".
+
+const ADMIN_ONLY_TOOL_NAMESPACES = new Set([
+  "admin", "system", "federation", "governance", "backup", "repair",
+  "migration", "shadow", "plugin",
+]);
+const ADMIN_ONLY_TOOL_VERBS = new Set([
+  "shutdown", "restart", "purge", "reset", "wipe", "delete_all",
+  "promote", "demote", "impersonate", "revoke", "approve",
+]);
+
+function isAdminRole(actor) {
+  const r = actor?.role || "guest";
+  return r === "owner" || r === "admin" || r === "founder";
+}
+
+function authorizeToolCall(req, toolName) {
+  const actor = req.user || req.actor || null;
+  if (!actor || !actor.id) {
+    return { allowed: false, status: 401, reason: "Authentication required" };
+  }
+  if (!toolName || typeof toolName !== "string") {
+    return { allowed: false, status: 400, reason: "tool name required" };
+  }
+  const normalized = toolName.toLowerCase();
+  const [domain, ...rest] = normalized.split(".");
+  const verb = rest.join(".");
+  const adminRequired =
+    ADMIN_ONLY_TOOL_NAMESPACES.has(domain) ||
+    ADMIN_ONLY_TOOL_VERBS.has(verb) ||
+    [...ADMIN_ONLY_TOOL_VERBS].some((v) => verb.includes(v));
+  if (adminRequired && !isAdminRole(actor)) {
+    return { allowed: false, status: 403, reason: `Tool ${toolName} requires admin role` };
+  }
+  return { allowed: true };
+}
 
 // ── Router Factory ──────────────────────────────────────────────────────────
 
@@ -67,6 +115,20 @@ export default function createMCPRouter({
 
     app.post("/api/mcp", asyncHandler(async (req, res) => {
       try {
+        // SECURITY: if the JSON-RPC body is a tools/call, apply the same
+        // role gate used by the REST wrapper. Otherwise we'd have a
+        // second door around the role check.
+        if (req.body?.method === "tools/call") {
+          const toolName = req.body?.params?.name;
+          const auth = authorizeToolCall(req, toolName);
+          if (!auth.allowed) {
+            return res.status(auth.status).json({
+              jsonrpc: "2.0",
+              id: req.body?.id ?? null,
+              error: { code: -32001, message: auth.reason },
+            });
+          }
+        }
         const response = await mcpServer.handleMCPRequest(req.body, req);
 
         if (response === undefined) {
@@ -159,6 +221,12 @@ export default function createMCPRouter({
           return res.status(400).json({ ok: false, error: "name is required" });
         }
 
+        // SECURITY: per-tool role gate (see authorizeToolCall above).
+        const auth = authorizeToolCall(req, name);
+        if (!auth.allowed) {
+          return res.status(auth.status).json({ ok: false, error: auth.reason });
+        }
+
         const toolArgs = args || params || {};
 
         // Check if this is an external tool (prefixed with server id)
@@ -233,10 +301,26 @@ export default function createMCPRouter({
 
     app.post("/api/mcp/servers", asyncHandler(async (req, res) => {
       try {
+        // SECURITY: only admins can register external MCP servers. A
+        // non-admin user could otherwise point the Concord node at an
+        // attacker-controlled endpoint that then exfiltrates whatever
+        // data the bridge forwards.
+        if (!isAdminRole(req.user || req.actor)) {
+          return res.status(403).json({ ok: false, error: "admin role required to register MCP servers" });
+        }
+
         const { name, url, headers } = req.body || {};
 
         if (!url) {
           return res.status(400).json({ ok: false, error: "url is required" });
+        }
+
+        // SSRF: reject URLs that resolve to private ranges, localhost,
+        // cloud metadata, etc. — even an admin shouldn't be able to
+        // accidentally aim the bridge at internal infrastructure.
+        const ssrfCheck = await validateSafeFetchUrl(url);
+        if (!ssrfCheck.ok) {
+          return res.status(400).json({ ok: false, error: `url rejected by SSRF guard: ${ssrfCheck.error}` });
         }
 
         // Check for duplicate URL

@@ -7,24 +7,58 @@ import crypto from "crypto";
 import logger from '../logger.js';
 import { isEmailBanned, scanUsername as scanUsernameGuard } from "../lib/content-guard.js";
 
-// ── In-memory login rate limiter (defense-in-depth) ──────────────────────────
-const _loginAttempts = new Map(); // ip -> { count, resetAt }
+// ── Auth rate limiters (defense-in-depth) ────────────────────────────────────
+// Two independent buckets:
+//   • Per-IP (_loginAttempts)     — stops a single attacker from spraying.
+//   • Per-account (_accountAttempts) — stops a distributed attacker from
+//     brute-forcing one account across many IPs. NAT/carrier-grade NAT
+//     share IPs among legitimate users, so the per-IP bucket alone is
+//     easy to evade with a botnet. Per-account lockout closes that gap.
+const _loginAttempts = new Map();     // ip -> { count, resetAt }
+const _accountAttempts = new Map();   // username|email -> { count, resetAt }
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+const LOGIN_MAX_PER_IP = 10;
+const LOGIN_MAX_PER_ACCOUNT = 6;
+
 function checkLoginRateLimit(ip) {
   const now = Date.now();
   const entry = _loginAttempts.get(ip);
   if (!entry || now > entry.resetAt) {
-    _loginAttempts.set(ip, { count: 1, resetAt: now + 900000 }); // 15 min window
+    _loginAttempts.set(ip, { count: 1, resetAt: now + LOGIN_WINDOW_MS });
     return true;
   }
   entry.count++;
-  if (entry.count > 10) return false; // max 10 attempts per 15 min
+  if (entry.count > LOGIN_MAX_PER_IP) return false;
   return true;
 }
-// Cleanup stale login rate-limit entries every 30 minutes to prevent memory leak
+
+function checkAccountRateLimit(identifier) {
+  if (!identifier) return true;
+  const key = String(identifier).toLowerCase();
+  const now = Date.now();
+  const entry = _accountAttempts.get(key);
+  if (!entry || now > entry.resetAt) {
+    _accountAttempts.set(key, { count: 1, resetAt: now + LOGIN_WINDOW_MS });
+    return true;
+  }
+  entry.count++;
+  if (entry.count > LOGIN_MAX_PER_ACCOUNT) return false;
+  return true;
+}
+
+function clearAccountRateLimit(identifier) {
+  if (!identifier) return;
+  _accountAttempts.delete(String(identifier).toLowerCase());
+}
+
+// Cleanup stale entries every 30 minutes to prevent memory leak
 const _loginRateLimitCleanup = setInterval(() => {
   const now = Date.now();
   for (const [ip, entry] of _loginAttempts) {
     if (now > entry.resetAt) _loginAttempts.delete(ip);
+  }
+  for (const [k, entry] of _accountAttempts) {
+    if (now > entry.resetAt) _accountAttempts.delete(k);
   }
 }, 30 * 60 * 1000);
 _loginRateLimitCleanup.unref();
@@ -193,13 +227,18 @@ export default function createAuthRouter({
   });
 
   router.post("/login", authRateLimitMiddleware, validate("userLogin"), (req, res) => {
-    // In-memory per-IP login rate limiting (defense-in-depth)
+    // Defense-in-depth: per-IP AND per-account rate limiting so NAT
+    // doesn't defeat the IP bucket and a botnet can't target one account.
     const ip = req.ip || req.connection.remoteAddress;
     if (!checkLoginRateLimit(ip)) {
       return res.status(429).json({ ok: false, error: "Too many login attempts. Try again in 15 minutes." });
     }
 
     const { username, email, password } = req.validated || req.body;
+    const accountKey = username || email;
+    if (!checkAccountRateLimit(accountKey)) {
+      return res.status(429).json({ ok: false, error: "Too many failed login attempts for this account. Try again in 15 minutes." });
+    }
 
     // Find user by username or email
     let user = null;
@@ -219,6 +258,17 @@ export default function createAuthRouter({
       });
       return res.status(401).json({ ok: false, error: "Invalid credentials" });
     }
+
+    // Successful login — clear per-account failure bucket and rotate
+    // any prior refresh-token family so a stolen pre-login cookie can
+    // no longer refresh after the real user logs in (session fixation
+    // mitigation).
+    clearAccountRateLimit(accountKey);
+    try {
+      if (typeof _TOKEN_BLACKLIST?.revokeAllForUser === "function") {
+        _TOKEN_BLACKLIST.revokeAllForUser(user.id);
+      }
+    } catch (_e) { logger.debug('auth', 'revoke-on-login failed', { error: _e?.message }); }
 
     AuthDB.updateUserLogin(user.id);
 

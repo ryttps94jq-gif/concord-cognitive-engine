@@ -206,12 +206,20 @@ export default function registerOAuthRoutes(app, {
   /**
    * Validate the OAuth state parameter against our store.
    * Returns the state entry (including linkUserId if present) or null.
+   *
+   * SECURITY: delete-before-check is essential. Two concurrent callbacks
+   * with the same state token would both see the entry via .get() and
+   * both delete it afterwards, giving the attacker a replay window.
+   * Map.delete() returns true only for the caller that actually removed
+   * the entry, so we use that as an atomic "claim" — losing callers
+   * get null.
    */
   function validateState(state) {
     if (!state) return null;
     const entry = OAUTH_STATES.get(state);
     if (!entry) return null;
-    OAUTH_STATES.delete(state); // One-time use
+    // Atomic one-time use: whoever successfully deletes owns the token.
+    if (!OAUTH_STATES.delete(state)) return null;
     if (Date.now() - entry.createdAt > STATE_TTL_MS) return null;
     return entry;
   }
