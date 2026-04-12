@@ -23,6 +23,8 @@ import { ValidationError, NotFoundError } from "../lib/errors.js";
 import {
   createMediaDTU,
   getMediaDTU,
+  getMediaDTUForViewer,
+  canAccessMediaDTU,
   updateMediaDTU,
   deleteMediaDTU,
   recordView,
@@ -312,13 +314,21 @@ export default function createMediaRouter({ STATE }) {
 
   /**
    * GET /:id — Get a media DTU with streaming URLs and engagement data.
+   *
+   * Enforces privacy: private uploads are only readable by their author,
+   * followers-only uploads by the author or an active follower.
    */
   router.get("/:id", asyncHandler(async (req, res) => {
-    const result = getMediaDTU(STATE, req.params.id);
-    if (!result.ok) throw new NotFoundError("Media", req.params.id);
+    const viewerId = req.user?.id || null;
+    const gated = getMediaDTUForViewer(STATE, req.params.id, viewerId);
+    if (!gated.ok) {
+      if (gated.status === 401) return res.status(401).json({ ok: false, error: gated.error });
+      // 404 for both "not found" and "no access" to avoid leaking existence
+      throw new NotFoundError("Media", req.params.id);
+    }
 
-    const mediaDTU = result.mediaDTU;
-    const userId = req.user?.id || req.query.userId;
+    const mediaDTU = gated.mediaDTU;
+    const userId = viewerId || req.query.userId;
 
     // Build streaming URLs
     const streamingUrls = {
@@ -354,10 +364,14 @@ export default function createMediaRouter({ STATE }) {
    * Here we return metadata about the stream and simulate range support.
    */
   router.get("/:id/stream", asyncHandler(async (req, res) => {
-    const result = getMediaDTU(STATE, req.params.id);
-    if (!result.ok) throw new NotFoundError("Media", req.params.id);
+    const viewerId = req.user?.id || null;
+    const gated = getMediaDTUForViewer(STATE, req.params.id, viewerId);
+    if (!gated.ok) {
+      if (gated.status === 401) return res.status(401).json({ ok: false, error: gated.error });
+      throw new NotFoundError("Media", req.params.id);
+    }
 
-    const mediaDTU = result.mediaDTU;
+    const mediaDTU = gated.mediaDTU;
     const quality = req.query.quality || "original";
 
     // In production: serve actual file bytes with range support
@@ -401,10 +415,14 @@ export default function createMediaRouter({ STATE }) {
    * GET /:id/thumbnail — Get thumbnail for a media DTU.
    */
   router.get("/:id/thumbnail", asyncHandler(async (req, res) => {
-    const result = getMediaDTU(STATE, req.params.id);
-    if (!result.ok) throw new NotFoundError("Media", req.params.id);
+    const viewerId = req.user?.id || null;
+    const gated = getMediaDTUForViewer(STATE, req.params.id, viewerId);
+    if (!gated.ok) {
+      if (gated.status === 401) return res.status(401).json({ ok: false, error: gated.error });
+      throw new NotFoundError("Media", req.params.id);
+    }
 
-    const mediaDTU = result.mediaDTU;
+    const mediaDTU = gated.mediaDTU;
     if (!mediaDTU.thumbnail) {
       // Generate on the fly
       generateThumbnail(STATE, mediaDTU.id);
@@ -425,12 +443,15 @@ export default function createMediaRouter({ STATE }) {
    * GET /:id/manifest.m3u8 — Get HLS master playlist.
    */
   router.get("/:id/manifest.m3u8", asyncHandler(async (req, res) => {
-    const result = generateHLSManifest(STATE, req.params.id);
+    const viewerId = req.user?.id || null;
+    const gated = getMediaDTUForViewer(STATE, req.params.id, viewerId);
+    if (!gated.ok) {
+      if (gated.status === 401) return res.status(401).json({ ok: false, error: gated.error });
+      throw new NotFoundError("Media", req.params.id);
+    }
 
+    const result = generateHLSManifest(STATE, req.params.id);
     if (!result.ok) {
-      // Fall back to media not found or not a video
-      const mediaResult = getMediaDTU(STATE, req.params.id);
-      if (!mediaResult.ok) throw new NotFoundError("Media", req.params.id);
       throw new ValidationError(result.error);
     }
 

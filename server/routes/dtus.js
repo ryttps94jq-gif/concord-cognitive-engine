@@ -47,7 +47,7 @@ export default function registerDtuRoutes(app, { STATE, makeCtx, runMacro, dtuFo
   // ── DTU Stats ─────────────────────────────────────────────────────────
   app.get("/api/dtus/stats", (req, res) => {
     try {
-      const all = userVisibleDTUs();
+      const all = userVisibleDTUs(req.user?.id || null);
       const tierCounts = {};
       const kindCounts = {};
       let totalRichness = 0;
@@ -190,13 +190,13 @@ export default function registerDtuRoutes(app, { STATE, makeCtx, runMacro, dtuFo
   app.get("/api/megas", (req,res)=> {
     const { limit, offset } = parsePagination(req.query);
     const tier = "mega";
-    const all = userVisibleDTUs().filter(d => d.tier===tier).sort((a,b)=> (b.updatedAt||b.createdAt||"").localeCompare(a.updatedAt||a.createdAt||""));
+    const all = userVisibleDTUs(req.user?.id || null).filter(d => d.tier===tier).sort((a,b)=> (b.updatedAt||b.createdAt||"").localeCompare(a.updatedAt||a.createdAt||""));
     const out = all.slice(offset, offset + limit);
     res.json({ ok:true, megas: out, total: all.length, limit, offset });
   });
   app.get("/api/hypers", (req,res)=> {
     const { limit, offset } = parsePagination(req.query);
-    const all = userVisibleDTUs().filter(d => d.tier==="hyper").sort((a,b)=> (b.updatedAt||b.createdAt||"").localeCompare(a.updatedAt||a.createdAt||""));
+    const all = userVisibleDTUs(req.user?.id || null).filter(d => d.tier==="hyper").sort((a,b)=> (b.updatedAt||b.createdAt||"").localeCompare(a.updatedAt||a.createdAt||""));
     const out = all.slice(offset, offset + limit);
     res.json({ ok:true, hypers: out, total: all.length, limit, offset });
   });
@@ -268,7 +268,7 @@ export default function registerDtuRoutes(app, { STATE, makeCtx, runMacro, dtuFo
 
   app.get("/api/definitions", (req, res) => {
     const { limit, offset } = parsePagination(req.query);
-    const all = userVisibleDTUs().filter(d =>
+    const all = userVisibleDTUs(req.user?.id || null).filter(d =>
       (d.tags || []).includes("definition") ||
       /^def(inition)?:/i.test(d.title || "")
     );
@@ -278,7 +278,7 @@ export default function registerDtuRoutes(app, { STATE, makeCtx, runMacro, dtuFo
 
   app.get("/api/definitions/:term", (req, res) => {
     const term = String(req.params.term || "").toLowerCase();
-    const dtu = userVisibleDTUs().find(d =>
+    const dtu = userVisibleDTUs(req.user?.id || null).find(d =>
       ((d.tags || []).includes("definition") || /^def(inition)?:/i.test(d.title || "")) &&
       (d.meta?.term || "").toLowerCase() === term
     );

@@ -10031,14 +10031,42 @@ const _SYSTEM_DTU_SOURCES = new Set([
 /** All DTUs (including system/internal). Use for admin endpoints only. */
 function dtusArray() { return typeof STATE.dtus?.values === "function" ? Array.from(STATE.dtus.values()) : []; }
 
-/** User-visible DTUs only: filters out repair cortex, system internals, and internal-scope DTUs. */
-function userVisibleDTUs() {
-  return dtusArray().filter(d =>
-    !_SYSTEM_DTU_SOURCES.has(d.source) &&
-    !_SYSTEM_DTU_SOURCES.has(d.creatorType) &&
-    d.scope !== "system" &&
-    d.visibility !== "internal"
-  );
+/**
+ * User-visible DTUs only: filters out repair cortex, system internals,
+ * internal-scope DTUs, and (when `viewerId` is passed) any private /
+ * user-scoped content not owned by the viewer.
+ *
+ * Calling without a viewer ID is the safe default — private content is
+ * hidden from anonymous / system callers entirely, so we can't leak
+ * another user's uploads through a macro that forgot to thread the
+ * user context through.
+ *
+ * @param {string|null} [viewerId] - User requesting the list, if any
+ */
+function userVisibleDTUs(viewerId = null) {
+  return dtusArray().filter(d => {
+    // System internal filters (always applied)
+    if (_SYSTEM_DTU_SOURCES.has(d.source)) return false;
+    if (_SYSTEM_DTU_SOURCES.has(d.creatorType)) return false;
+    if (d.scope === "system") return false;
+    if (d.visibility === "internal") return false;
+
+    // Privacy / scope filters — private or user-scoped content is only
+    // visible to its owner, never to a system caller that forgot to
+    // pass a viewer ID.
+    const isPrivate =
+      d.privacy === "private" ||
+      d.privacy === "followers-only" ||
+      d.scope === "user" ||
+      d.visibility === "private";
+
+    if (isPrivate) {
+      if (!viewerId) return false;
+      const owner = d.author || d.ownerId || d.userId || d.createdBy;
+      if (owner !== viewerId) return false;
+    }
+    return true;
+  });
 }
 function dtusByIds(ids=[]) {
   const out = [];
@@ -13043,7 +13071,7 @@ async function buildBrainContext(query, lens = null, maxDTUs = 10, sessionId = n
     }
   }
 
-  const all = userVisibleDTUs();
+  const all = userVisibleDTUs(userId && userId !== "anon" ? userId : null);
   let existingContext = "";
 
   if (all.length) {
@@ -16308,9 +16336,10 @@ register("dtu", "list", (ctx, input) => {
   const scopeFilter = input.scope || null; // "local", "global", or null (default: user's view)
   const userId = ctx?.actor?.id || ctx?.actor?.odId || null;
 
-  // Filter out shadow/repair/system DTUs - internal, not real user content
+  // Filter out shadow/repair/system DTUs - internal, not real user content.
+  // Pass viewer ID so private/user-scoped uploads by other users are hidden.
   const INTERNAL_KINDS = new Set(["shadow", "pattern_shadow", "repair_record", "royalty_record", "session_context", "linguistic_map", "audit_trail", "system_metric", "repair_dtu"]);
-  let items = userVisibleDTUs().filter(d => !isShadowDTU(d) && !INTERNAL_KINDS.has(d.machine?.kind) && d.tier !== "shadow");
+  let items = userVisibleDTUs(userId).filter(d => !isShadowDTU(d) && !INTERNAL_KINDS.has(d.machine?.kind) && d.tier !== "shadow");
 
   // ── Scope Hierarchy Enforcement ──────────────────────────────────
   // Scopes: local → regional → national → global (strict containment)
@@ -36769,10 +36798,11 @@ app.get("/api/ai/search", asyncHandler(async (req, res) => {
     limit,
     minScore: Number(req.query.minScore || 0.3)
   });
-  // Fallback to text search if embeddings unavailable or returned no results
+  // Fallback to text search if embeddings unavailable or returned no results.
+  // Pass viewer ID so private content stays scoped to the requesting user.
   if (!result.ok || (result.results && result.results.length === 0)) {
     const qLower = q.toLowerCase();
-    const textResults = userVisibleDTUs()
+    const textResults = userVisibleDTUs(req.user?.id || null)
       .filter(d => {
         const text = `${d.title || ""} ${(d.tags || []).join(" ")} ${d.summary || ""} ${d.creti || ""}`.toLowerCase();
         return text.includes(qLower);
