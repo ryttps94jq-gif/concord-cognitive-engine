@@ -15,6 +15,7 @@ import { CrossDomainConnections } from '@/components/common/CrossDomainConnectio
 import { BrainMonitor } from '@/components/common/BrainMonitor';
 import { SkeletonCard } from '@/components/common/Skeleton';
 import { ContentPublisher } from '@/components/lens/ContentPublisher';
+import { LensStateProvider } from '@/components/lens/LensStateProvider';
 import { useLensIdentity } from '@/hooks/useLensIdentity';
 import {
   isCoreLens,
@@ -90,8 +91,10 @@ function UniversalLensFeatures({ children }: { children: React.ReactNode }) {
         </div>
       </div>
 
-      {/* Main lens content — per-lens Suspense boundary */}
-      <div className="flex-1 min-h-0 overflow-y-auto">
+      {/* Main lens content — per-lens Suspense boundary.
+          LensStateProvider preserves scroll/filter/draft state across
+          lens navigation, keyed by the current domain slug. */}
+      <LensStateProvider domain={slug} className="flex-1 min-h-0">
         <Suspense
           fallback={
             <div className="space-y-4 p-6">
@@ -103,7 +106,7 @@ function UniversalLensFeatures({ children }: { children: React.ReactNode }) {
         >
           {children}
         </Suspense>
-      </div>
+      </LensStateProvider>
 
       {/* Bottom: Activity Timeline */}
       <ActivityTimeline domain={slug} />

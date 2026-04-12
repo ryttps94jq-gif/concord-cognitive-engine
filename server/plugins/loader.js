@@ -545,29 +545,87 @@ export function fireHook(STATE, hookName, payload) {
 
 // ── Tick Dispatch ───────────────────────────────────────────────────────────
 
+// Maximum time a single plugin's tick() can run before we consider it
+// a DoS attempt and unload the plugin. 2 seconds is generous — well-
+// behaved plugins tick in milliseconds.
+const PLUGIN_TICK_TIMEOUT_MS = 2000;
+const PLUGIN_TICK_FAILURE_THRESHOLD = 5; // unload after N consecutive timeouts
+
+/**
+ * Run a plugin tick with a hard timeout. Works for both sync and async
+ * tick functions. Returns { ok, timedOut, error }.
+ */
+function runTickWithTimeout(record, timeoutMs) {
+  return new Promise((resolve) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      resolve({ ok: false, timedOut: true, error: `tick exceeded ${timeoutMs}ms budget` });
+    }, timeoutMs);
+    try {
+      const ret = record.module.tick(record.ctx);
+      if (ret && typeof ret.then === "function") {
+        ret.then(
+          () => { if (settled) return; settled = true; clearTimeout(timer); resolve({ ok: true }); },
+          (err) => { if (settled) return; settled = true; clearTimeout(timer); resolve({ ok: false, error: err?.message || String(err) }); }
+        );
+      } else {
+        settled = true;
+        clearTimeout(timer);
+        resolve({ ok: true });
+      }
+    } catch (err) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve({ ok: false, error: err?.message || String(err) });
+    }
+  });
+}
+
 /**
  * Run tick() on all loaded plugins that have a tick function.
  *
+ * SECURITY: each tick runs under a hard timeout so a misbehaving plugin
+ * (infinite loop, hung promise, runaway computation) can't freeze the
+ * entire server. Plugins that repeatedly time out are unloaded.
+ *
  * @param {Object} STATE
- * @returns {{ ok, ticked, errors }}
+ * @returns {Promise<{ ok, ticked, errors, unloaded }>}
  */
-export function tickPlugins(STATE) {
+export async function tickPlugins(STATE) {
   const store = getPluginStore(STATE);
   const errors = [];
+  const unloaded = [];
   let ticked = 0;
 
   for (const [pluginId, record] of store.loaded) {
     if (!record.module.tick) continue;
-    try {
-      record.module.tick(record.ctx);
+
+    const result = await runTickWithTimeout(record, PLUGIN_TICK_TIMEOUT_MS);
+    if (result.ok) {
+      record._consecutiveTickFailures = 0;
       ticked++;
       store.metrics.totalTickCalls++;
-    } catch (err) {
-      errors.push({ pluginId, error: err.message });
+    } else {
+      errors.push({ pluginId, error: result.error, timedOut: !!result.timedOut });
+      record._consecutiveTickFailures = (record._consecutiveTickFailures || 0) + 1;
+      if (record._consecutiveTickFailures >= PLUGIN_TICK_FAILURE_THRESHOLD) {
+        try {
+          store.loaded.delete(pluginId);
+          unloaded.push(pluginId);
+          store.metrics.loadErrors.push({
+            pluginId,
+            error: `tick_unload: ${PLUGIN_TICK_FAILURE_THRESHOLD} consecutive failures (last: ${result.error})`,
+            at: new Date().toISOString(),
+          });
+        } catch { /* ignore */ }
+      }
     }
   }
 
-  return { ok: true, ticked, errors };
+  return { ok: true, ticked, errors, unloaded };
 }
 
 // ── Query Functions ─────────────────────────────────────────────────────────

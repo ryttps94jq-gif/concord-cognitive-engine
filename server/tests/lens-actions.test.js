@@ -58,9 +58,15 @@ const { default: modules } = await import("../domains/index.js");
 // ── Module Loading & Registration Tests ───────────────────────────────────────
 
 describe("Lens Domain Module Loading", () => {
-  it("should load all 23 domain modules", () => {
+  it("should load domain modules", () => {
     assert.ok(Array.isArray(modules), "Domain modules should be an array");
-    assert.equal(modules.length, 23, "Should have 23 domain modules");
+    // The original assertion required exactly 23 — the original
+    // super-lens set. The codebase has grown to 170+ lenses across
+    // many sub-domains since then. Assert a lower bound instead so
+    // the test catches regressions (missing imports, broken
+    // exports) without needing to be updated every time a new
+    // lens lands.
+    assert.ok(modules.length >= 23, `Should have at least 23 domain modules, got ${modules.length}`);
   });
 
   it("each module should be a function accepting registerLensAction", () => {

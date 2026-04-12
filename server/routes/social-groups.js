@@ -383,5 +383,152 @@ export default function createSocialGroupRoutes({ db, requireAuth }) {
     }
   });
 
+  // ── Scheduled posts ────────────────────────────────────────────────────────
+  // Minimal scheduler backed by a zero-migration table. Frontends call
+  // GET /social/scheduled and POST /social/schedule; DELETE is handled
+  // at /social/scheduled/:id. No cron job yet — the rows sit in the
+  // table until the frontend retrieves them. Full scheduler can wire
+  // up to a cron tick later.
+
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS social_scheduled_posts (
+        id           TEXT PRIMARY KEY,
+        user_id      TEXT NOT NULL,
+        content      TEXT NOT NULL,
+        group_id     TEXT,
+        scheduled_at TEXT NOT NULL,
+        created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+        status       TEXT NOT NULL DEFAULT 'pending',
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_scheduled_user ON social_scheduled_posts(user_id, scheduled_at);
+    `);
+  } catch (_e) { /* table may not exist if db not ready */ }
+
+  router.get("/scheduled", requireAuth(), (req, res) => {
+    try {
+      const userId = resolveUserId(req);
+      const rows = db.prepare(
+        "SELECT id, content, group_id, scheduled_at, status, created_at FROM social_scheduled_posts WHERE user_id = ? AND status = 'pending' ORDER BY scheduled_at ASC"
+      ).all(userId);
+      res.json({ ok: true, scheduled: rows, count: rows.length });
+    } catch (err) {
+      console.error("[social-groups] GET /scheduled error:", err);
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  router.post("/schedule", requireAuth(), (req, res) => {
+    try {
+      const userId = resolveUserId(req);
+      const { content, groupId, scheduledAt } = req.body || {};
+      if (!content || typeof content !== "string" || !content.trim()) {
+        return res.status(400).json({ ok: false, error: "content is required" });
+      }
+      if (!scheduledAt) {
+        return res.status(400).json({ ok: false, error: "scheduledAt is required" });
+      }
+      // Validate the time is in the future
+      const when = new Date(scheduledAt);
+      if (isNaN(when.getTime())) {
+        return res.status(400).json({ ok: false, error: "scheduledAt must be a valid date" });
+      }
+      if (when.getTime() < Date.now() - 60_000) {
+        return res.status(400).json({ ok: false, error: "scheduledAt must be in the future" });
+      }
+      const id = uid();
+      db.prepare(
+        "INSERT INTO social_scheduled_posts (id, user_id, content, group_id, scheduled_at) VALUES (?, ?, ?, ?, ?)"
+      ).run(id, userId, content.trim().slice(0, 4000), groupId || null, when.toISOString());
+      res.json({ ok: true, id, scheduledAt: when.toISOString() });
+    } catch (err) {
+      console.error("[social-groups] POST /schedule error:", err);
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  router.delete("/scheduled/:id", requireAuth(), (req, res) => {
+    try {
+      const userId = resolveUserId(req);
+      const result = db.prepare(
+        "DELETE FROM social_scheduled_posts WHERE id = ? AND user_id = ?"
+      ).run(req.params.id, userId);
+      res.json({ ok: true, deleted: result.changes });
+    } catch (err) {
+      console.error("[social-groups] DELETE /scheduled/:id error:", err);
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  // ── User search ────────────────────────────────────────────────────────────
+  // GET /users/search?q=foo — search usernames / display names for mentions,
+  // DM recipients, follow suggestions. Caps at 20 results.
+
+  router.get("/users/search", (req, res) => {
+    try {
+      const q = typeof req.query?.q === "string" ? req.query.q.trim() : "";
+      if (!q || q.length < 2) {
+        return res.json({ ok: true, users: [], total: 0 });
+      }
+      const pattern = `%${q.slice(0, 50)}%`;
+      const rows = db.prepare(
+        "SELECT id, username, email FROM users WHERE is_active = 1 AND (username LIKE ? OR email LIKE ?) LIMIT 20"
+      ).all(pattern, pattern);
+      const users = rows.map((r) => ({
+        id: r.id,
+        username: r.username,
+        displayName: r.username,
+      }));
+      res.json({ ok: true, users, total: users.length });
+    } catch (err) {
+      console.error("[social-groups] GET /users/search error:", err);
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  // ── Newsletter subscribe ───────────────────────────────────────────────────
+  // Minimal email-opt-in. Backed by the same zero-migration pattern.
+  // This just stores the (email, optional userId, createdAt) tuple — sending
+  // the actual newsletter is out of scope.
+
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS newsletter_subscriptions (
+        id         TEXT PRIMARY KEY,
+        email      TEXT NOT NULL UNIQUE,
+        user_id    TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        confirmed  INTEGER NOT NULL DEFAULT 1
+      );
+    `);
+  } catch (_e) { /* non-fatal */ }
+
+  router.post("/newsletter-subscribe", (req, res) => {
+    try {
+      const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
+      if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+        return res.status(400).json({ ok: false, error: "valid email required" });
+      }
+      const userId = req.user?.id || null;
+      const id = uid();
+      try {
+        db.prepare(
+          "INSERT INTO newsletter_subscriptions (id, email, user_id) VALUES (?, ?, ?)"
+        ).run(id, email, userId);
+      } catch (dbErr) {
+        // Unique violation → already subscribed, treat as idempotent success
+        if (String(dbErr?.message || "").includes("UNIQUE")) {
+          return res.json({ ok: true, alreadySubscribed: true });
+        }
+        throw dbErr;
+      }
+      res.json({ ok: true, id });
+    } catch (err) {
+      console.error("[social-groups] POST /newsletter-subscribe error:", err);
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
   return router;
 }

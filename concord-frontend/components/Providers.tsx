@@ -6,6 +6,7 @@ import { AppShell } from '@/components/shell/AppShell';
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 import { PermissionProvider } from '@/components/common/PermissionGate';
 import { I18nProvider } from '@/components/providers/I18nProvider';
+import { GlobalMediaController } from '@/components/media/GlobalMediaController';
 import { observeWebVitals } from '@/lib/perf';
 import { connectSocket, disconnectSocket } from '@/lib/realtime/socket';
 import { api } from '@/lib/api/client';
@@ -83,6 +84,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
         <QueryClientProvider client={queryClient}>
           <PermissionProvider scopes={userScopes}>
             <AppShell>{children}</AppShell>
+            {/* Global media layer — mounts once, survives all navigation.
+                Owns the <audio> element so playback continues across
+                lens switches. */}
+            <GlobalMediaController />
           </PermissionProvider>
         </QueryClientProvider>
       </I18nProvider>

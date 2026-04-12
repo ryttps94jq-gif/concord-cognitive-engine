@@ -268,6 +268,7 @@ export default function StudioLensPage() {
   const [isPlayingBack, setIsPlayingBack] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const [recordError, setRecordError] = useState<string | null>(null);
   const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const playbackAudioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -494,9 +495,13 @@ export default function StudioLensPage() {
     const recorder = recorderRef.current;
     if (!recorder) return;
 
+    setRecordError(null);
     const hasAccess = await recorder.requestAccess();
     if (!hasAccess) {
-      console.warn('[Studio] Microphone access denied');
+      const reason = recorder.getLastError()?.message || 'Microphone access denied';
+      console.warn('[Studio] Mic access failed:', reason);
+      setRecordError(reason);
+      showToast('error', `Mic access failed: ${reason}`);
       return;
     }
 
@@ -508,11 +513,23 @@ export default function StudioLensPage() {
     setRecordedBlob(null);
     setSaveStatus('idle');
 
-    const started = recorder.startRecording((blob: Blob) => {
-      setRecordedBlob(blob);
-      const url = URL.createObjectURL(blob);
-      setRecordedUrl(url);
-    });
+    const started = recorder.startRecording(
+      (blob: Blob) => {
+        if (blob.size === 0) {
+          setRecordError('Recording produced no audio data. Check your input device and browser permissions.');
+          showToast('error', 'Recording was empty — check your mic');
+          return;
+        }
+        setRecordedBlob(blob);
+        const url = URL.createObjectURL(blob);
+        setRecordedUrl(url);
+      },
+      (err: Error) => {
+        console.error('[Studio] Recorder error:', err);
+        setRecordError(err.message);
+        showToast('error', `Recorder error: ${err.message}`);
+      },
+    );
 
     if (started) {
       transportRef.current?.record();
@@ -523,6 +540,10 @@ export default function StudioLensPage() {
       recordingTimerRef.current = setInterval(() => {
         setRecordingTimer(prev => prev + 1);
       }, 1000);
+    } else {
+      const reason = recorder.getLastError()?.message || 'Failed to start recorder';
+      setRecordError(reason);
+      showToast('error', `Failed to start recorder: ${reason}`);
     }
   }, [recordedUrl]);
 
@@ -534,20 +555,40 @@ export default function StudioLensPage() {
   // ---- Playback of recorded audio ----
   const handlePlayback = useCallback(() => {
     if (!recordedUrl) return;
+    if (recordedBlob && recordedBlob.size === 0) {
+      showToast('error', 'Recording is empty — nothing to play back');
+      return;
+    }
     // Stop any existing playback
     if (playbackAudioRef.current) {
       playbackAudioRef.current.pause();
       playbackAudioRef.current = null;
     }
-    const audio = new Audio(recordedUrl);
-    playbackAudioRef.current = audio;
-    setIsPlayingBack(true);
+    const audio = new Audio();
+    // Attach handlers BEFORE assigning src so 'error' and 'ended' can't race.
     audio.onended = () => {
       setIsPlayingBack(false);
       playbackAudioRef.current = null;
     };
-    audio.play().catch(() => setIsPlayingBack(false));
-  }, [recordedUrl]);
+    audio.onerror = () => {
+      const code = audio.error?.code;
+      const msg = audio.error?.message || `Audio load failed (code ${code ?? '?'})`;
+      console.error('[Studio] Playback error:', msg);
+      showToast('error', `Playback failed: ${msg}`);
+      setIsPlayingBack(false);
+      playbackAudioRef.current = null;
+    };
+    audio.src = recordedUrl;
+    audio.preload = 'auto';
+    playbackAudioRef.current = audio;
+    setIsPlayingBack(true);
+    audio.play().catch((err) => {
+      console.error('[Studio] Playback rejected:', err);
+      showToast('error', `Playback rejected: ${err?.message || err}`);
+      setIsPlayingBack(false);
+      playbackAudioRef.current = null;
+    });
+  }, [recordedUrl, recordedBlob]);
 
   const handleStopPlayback = useCallback(() => {
     if (playbackAudioRef.current) {
@@ -1093,6 +1134,20 @@ export default function StudioLensPage() {
               <span className="text-xs text-red-300 font-mono">
                 {Math.floor(recordingTimer / 60).toString().padStart(2, '0')}:{(recordingTimer % 60).toString().padStart(2, '0')}
               </span>
+            </div>
+          )}
+
+          {/* Recording error surface */}
+          {recordError && !isRecording && (
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-red-500/15 border border-red-500/30 rounded-lg max-w-md">
+              <span className="text-[10px] text-red-300 uppercase tracking-wide flex-shrink-0">Rec Error</span>
+              <span className="text-xs text-red-400 truncate" title={recordError}>{recordError}</span>
+              <button
+                onClick={() => setRecordError(null)}
+                className="text-[10px] text-red-300 hover:text-red-200 ml-auto flex-shrink-0"
+              >
+                ✕
+              </button>
             </div>
           )}
 

@@ -31,6 +31,7 @@ import { ProvenanceBadge } from '@/components/dtu/ProvenanceBadge';
 import { useLatticeStore } from '@/store/lattice';
 import { InteractiveGraph } from '@/components/graphs/InteractiveGraphCore';
 import { KnowledgeSpace3D } from '@/components/graphs/KnowledgeSpace3D';
+import { FractalEmpireExplorer } from '@/components/graphs/FractalEmpireExplorer';
 import KnowledgeGenomeBrowser from '@/components/visualizations/KnowledgeGenomeBrowser';
 
 // --- Types ---
@@ -38,7 +39,7 @@ import KnowledgeGenomeBrowser from '@/components/visualizations/KnowledgeGenomeB
 type NodeType = 'regular' | 'mega' | 'hyper' | 'shadow' | 'track' | 'artist' | 'sample' | 'release';
 type EdgeType = 'parent' | 'sibling' | 'semantic' | 'temporal' | 'sampled_from' | 'remixed_by' | 'collaborated_with' | 'released_on';
 type LayoutMode = 'force' | 'radial' | 'hierarchical';
-type ViewMode = 'default' | 'heatmap' | 'cluster' | 'sample_tree' | 'collab_network' | 'interactive' | '3d';
+type ViewMode = 'default' | 'heatmap' | 'cluster' | 'sample_tree' | 'collab_network' | 'interactive' | '3d' | 'fractal';
 
 interface GraphNode {
   id: string;
@@ -1189,6 +1190,51 @@ export default function GraphLensPage() {
             selectedNodeId={selectedNode?.id}
             className="absolute inset-0"
           />
+        ) : viewMode === 'fractal' ? (
+          // Fractal Empire Explorer — hierarchical drill-down of the
+          // DTU graph. Uses mega/hyper tier as natural parent nodes
+          // and collapses their descendants into fractal branches so
+          // the whole knowledge space fits in one zoomable frame.
+          <div className="absolute inset-0">
+            <FractalEmpireExplorer
+              data={(() => {
+                // Build a two-level fractal tree: MEGA / HYPER nodes
+                // become the root children; each root gets its
+                // directly-linked regular nodes as descendants.
+                const byId = new Map(graphData.nodes.map((n) => [n.id, n] as const));
+                const childrenOf = new Map<string, string[]>();
+                for (const e of graphData.edges) {
+                  if (!childrenOf.has(e.source)) childrenOf.set(e.source, []);
+                  childrenOf.get(e.source)!.push(e.target);
+                }
+                const roots = graphData.nodes
+                  .filter((n) => n.tier === 'mega' || n.tier === 'hyper')
+                  .slice(0, 12); // cap so the explorer stays legible
+                return roots.map((r) => ({
+                  id: r.id,
+                  type: r.tier,
+                  value: r.connections || 1,
+                  depth: 0,
+                  children: (childrenOf.get(r.id) || [])
+                    .slice(0, 8)
+                    .map((cid) => byId.get(cid))
+                    .filter(Boolean)
+                    .map((c) => ({
+                      id: c!.id,
+                      type: c!.tier,
+                      value: c!.connections || 1,
+                      depth: 1,
+                    })),
+                }));
+              })()}
+              zoom={1}
+              selectedNode={selectedNode?.id || null}
+              onNodeSelect={(id) => {
+                const full = graphData.nodes.find((n) => n.id === id);
+                if (full) setSelectedNode(full);
+              }}
+            />
+          </div>
         ) : (
           <canvas
             ref={canvasRef}
@@ -1289,6 +1335,7 @@ export default function GraphLensPage() {
               <option value="cluster">Clusters</option>
               <option value="interactive">Interactive (Cytoscape)</option>
               <option value="3d">3D Space</option>
+              <option value="fractal">Fractal Empire</option>
               {hasMusicDomain && <option value="sample_tree">Sample Tree</option>}
               {hasMusicDomain && <option value="collab_network">Collab Network</option>}
             </select>

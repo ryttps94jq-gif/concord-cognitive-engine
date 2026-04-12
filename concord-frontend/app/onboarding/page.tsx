@@ -88,7 +88,10 @@ export default function OnboardingPage() {
     onSuccess: (data) => {
       if (data?.ok) {
         addToast({ type: 'success', message: 'Your universe has been created!' });
-        router.push('/');
+        // Chain to step 2: region / country / primary lens. New users
+        // who haven't declared their location get nudged into the
+        // federation scope picker so regional/national posts work.
+        router.push('/onboarding/location');
       } else {
         addToast({ type: 'error', message: data?.error || 'Failed to initialize universe' });
         setStep('mode');

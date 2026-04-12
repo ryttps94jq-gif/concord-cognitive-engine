@@ -50,14 +50,30 @@ import {
 export default function createFilmStudioRouter({ db, requireAuth }) {
   const router = express.Router();
 
-  // Auth for writes: POST/PUT/DELETE/PATCH require authentication
-  // Reads (GET) are public — especially previews (no paywall before preview)
+  // Auth for writes: POST/PUT/DELETE/PATCH require authentication.
+  // Reads (GET) are public — especially previews (no paywall before preview).
+  // SECURITY: if requireAuth isn't provided, hard-fail writes instead of
+  // silently passing through — the previous behavior combined with the
+  // `req.user?.id` fallbacks below let unauthenticated
+  // callers forge creator identity.
   const authForWrites = (req, res, next) => {
     if (req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS") return next();
     if (typeof requireAuth === "function") return requireAuth()(req, res, next);
-    return next();
+    return res.status(401).json({ ok: false, error: "Authentication required" });
   };
   router.use(authForWrites);
+
+  // Helper: pull authenticated creator id, 401 if missing. Every write
+  // endpoint in this router funnels through this so we never trust a
+  // body-supplied creatorId.
+  function requireCreatorId(req, res) {
+    const creatorId = req.user?.id;
+    if (!creatorId) {
+      res.status(401).json({ ok: false, error: "Authentication required" });
+      return null;
+    }
+    return creatorId;
+  }
 
   // ─── Constants (public) ────────────────────────────────────────────
 
@@ -88,7 +104,7 @@ export default function createFilmStudioRouter({ db, requireAuth }) {
   router.post("/", (req, res) => {
     const result = createFilmDTU(db, {
       ...req.body,
-      creatorId: req.user?.id || req.body.creatorId,
+      creatorId: req.user?.id,
     });
     res.status(result.ok ? 201 : 400).json(result);
   });
@@ -100,7 +116,7 @@ export default function createFilmStudioRouter({ db, requireAuth }) {
   });
 
   router.patch("/:filmDtuId", (req, res) => {
-    const creatorId = req.user?.id || req.body.creatorId;
+    const creatorId = req.user?.id;
     const result = updateFilmDTU(db, req.params.filmDtuId, creatorId, req.body);
     res.status(result.ok ? 200 : 400).json(result);
   });
@@ -134,7 +150,7 @@ export default function createFilmStudioRouter({ db, requireAuth }) {
   router.post("/:filmDtuId/components", (req, res) => {
     const result = createFilmComponent(db, {
       filmDtuId: req.params.filmDtuId,
-      creatorId: req.user?.id || req.body.creatorId,
+      creatorId: req.user?.id,
       ...req.body,
     });
     res.status(result.ok ? 201 : 400).json(result);
@@ -146,7 +162,7 @@ export default function createFilmStudioRouter({ db, requireAuth }) {
   });
 
   router.patch("/components/:componentId", (req, res) => {
-    const creatorId = req.user?.id || req.body.creatorId;
+    const creatorId = req.user?.id;
     const result = updateFilmComponent(db, req.params.componentId, creatorId, req.body);
     res.status(result.ok ? 200 : 400).json(result);
   });
@@ -156,7 +172,7 @@ export default function createFilmStudioRouter({ db, requireAuth }) {
   router.post("/:filmDtuId/crew", (req, res) => {
     const result = addCrewMember(db, {
       filmDtuId: req.params.filmDtuId,
-      creatorId: req.user?.id || req.body.creatorId,
+      creatorId: req.user?.id,
       ...req.body,
     });
     res.status(result.ok ? 201 : 400).json(result);
@@ -168,7 +184,7 @@ export default function createFilmStudioRouter({ db, requireAuth }) {
   });
 
   router.delete("/crew/:crewId", (req, res) => {
-    const creatorId = req.user?.id || req.body?.creatorId;
+    const creatorId = req.user?.id;
     const result = removeCrewMember(db, req.params.crewId, creatorId);
     res.status(result.ok ? 200 : 400).json(result);
   });
@@ -191,7 +207,7 @@ export default function createFilmStudioRouter({ db, requireAuth }) {
   router.post("/:seriesDtuId/bundles", (req, res) => {
     const result = createSeriesBundle(db, {
       seriesDtuId: req.params.seriesDtuId,
-      creatorId: req.user?.id || req.body.creatorId,
+      creatorId: req.user?.id,
       ...req.body,
     });
     res.status(result.ok ? 201 : 400).json(result);
@@ -252,19 +268,19 @@ export default function createFilmStudioRouter({ db, requireAuth }) {
   router.post("/watch-party", (req, res) => {
     const result = createWatchParty(db, {
       filmDtuId: req.body.filmDtuId,
-      hostUserId: req.user?.id || req.body.hostUserId,
+      hostUserId: req.user?.id,
     });
     res.status(result.ok ? 201 : 400).json(result);
   });
 
   router.post("/watch-party/:partyId/join", (req, res) => {
-    const userId = req.user?.id || req.body.userId;
+    const userId = req.user?.id;
     const result = joinWatchParty(db, req.params.partyId, userId);
     res.status(result.ok ? 200 : 400).json(result);
   });
 
   router.patch("/watch-party/:partyId", (req, res) => {
-    const hostUserId = req.user?.id || req.body.hostUserId;
+    const hostUserId = req.user?.id;
     const result = updateWatchParty(db, req.params.partyId, hostUserId, req.body);
     res.status(result.ok ? 200 : 400).json(result);
   });

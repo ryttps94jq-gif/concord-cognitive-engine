@@ -16,6 +16,7 @@
 import { Router } from "express";
 import { asyncHandler } from "../lib/async-handler.js";
 import { ValidationError, AuthorizationError } from "../lib/errors.js";
+import { canAccessMediaDTU } from "../lib/media-dtu.js";
 
 /**
  * Create the CDN routes router.
@@ -131,20 +132,15 @@ export default function createCDNRouter({ cdnManager, urlSigner, STATE }) {
       throw new ValidationError("Artifact hash is required");
     }
 
-    // Check if the artifact exists in the media store
+    // Check if the artifact exists in the media store. Delegate to the
+    // shared canAccessMediaDTU helper so CDN, direct-stream, and feed
+    // paths can't drift out of sync on privacy rules.
     if (STATE && STATE._media) {
       const mediaDTU = STATE._media.mediaDTUs.get(hash);
       if (mediaDTU) {
-        // Check privacy access
-        if (mediaDTU.privacy === "private" && mediaDTU.author !== userId) {
-          throw new AuthorizationError("You do not have access to this private content");
-        }
-        if (mediaDTU.privacy === "followers-only" && mediaDTU.author !== userId) {
-          const social = STATE._social;
-          const followSet = social ? (social.follows.get(userId) || new Set()) : new Set();
-          if (!followSet.has(mediaDTU.author)) {
-            throw new AuthorizationError("You must follow the creator to access this content");
-          }
+        const access = canAccessMediaDTU(STATE, mediaDTU, userId);
+        if (!access.allowed) {
+          throw new AuthorizationError(access.reason || "You do not have access to this content");
         }
       }
     }
@@ -182,15 +178,9 @@ export default function createCDNRouter({ cdnManager, urlSigner, STATE }) {
     if (STATE && STATE._media) {
       const mediaDTU = STATE._media.mediaDTUs.get(hash);
       if (mediaDTU) {
-        if (mediaDTU.privacy === "private" && mediaDTU.author !== userId) {
-          throw new AuthorizationError("You do not have access to this private content");
-        }
-        if (mediaDTU.privacy === "followers-only" && mediaDTU.author !== userId) {
-          const social = STATE._social;
-          const followSet = social ? (social.follows.get(userId) || new Set()) : new Set();
-          if (!followSet.has(mediaDTU.author)) {
-            throw new AuthorizationError("You must follow the creator to access this content");
-          }
+        const access = canAccessMediaDTU(STATE, mediaDTU, userId);
+        if (!access.allowed) {
+          throw new AuthorizationError(access.reason || "You do not have access to this content");
         }
       }
     }

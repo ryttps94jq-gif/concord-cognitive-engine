@@ -13,14 +13,182 @@ import logger from "../logger.js";
 
 // ── State ───────────────────────────────────────────────────────────────────
 
-/** userId -> { cityId, x, y, z, direction, action, lastUpdate, avatar } */
+/** userId -> { cityId, x, y, z, direction, action, lastUpdate, avatar, dirty } */
 const _userPositions = new Map();
 
 /** "${cityId}:${chunkX}:${chunkZ}" -> Set<userId> */
 const _cityChunks = new Map();
 
+/** Pluggable DB handle + fireTrigger hook set by server.js at startup. */
+let _db = null;
+let _fireTrigger = null;
+let _flushTimer = null;
+let _npcSpawnTimer = null;
+
 const CHUNK_SIZE = 100; // metres per chunk edge
 const MAX_VISIBLE_AVATARS = 100;
+const FLUSH_INTERVAL_MS = 30_000; // persist dirty positions every 30s
+
+// ── Movement validation ─────────────────────────────────────────────────────
+// Anti-cheat bounds. Values chosen to match AvatarSystem3D's client-side
+// MOVE_SPEED (5m/s) and RUN_SPEED (12m/s) with generous slack for latency
+// jitter. Server rejects deltas that clearly exceed what a human player
+// could do — that's teleport / noclip / speed-hack territory.
+const MAX_SPRINT_SPEED_MPS = 16;            // Client RUN_SPEED is 12; slack for latency
+const MAX_SINGLE_FRAME_DISTANCE = 250;      // hard ceiling per update regardless of dt
+const MIN_UPDATE_INTERVAL_MS = 20;          // no faster than 50Hz from any one user
+const GRACE_PERIOD_MS = 500;                // first few updates after login skip speed check
+
+// ── NPC state ──────────────────────────────────────────────────────────────
+// NPCs live in the same spatial-chunking system as players but track their
+// own state (occupation, patrolPath, HP). The broadcast loop emits them
+// alongside players so the frontend's AvatarSystem3D can render both through
+// the same pipeline.
+//
+// npcId → { cityId, x, y, z, direction, health, maxHealth, occupation,
+//           patrolPath, patrolIndex, lastMoveAt, isHostile }
+const _npcState = new Map();
+
+// Player combat / HP state is piggy-backed onto the position entry
+// (entry.health, entry.maxHealth, entry.stamina, entry.maxStamina) —
+// already declared above in the position entry shape. See updateUserPosition.
+
+/**
+ * Inject persistence and trigger hooks. Called once at server startup.
+ * Passing `null` for either disables that side-effect (useful for tests).
+ *
+ * @param {object} opts
+ * @param {object} [opts.db]          - better-sqlite3 handle with the
+ *                                      035_player_world_state migration.
+ * @param {Function} [opts.fireTrigger] - (cityId, triggerId, ctx) => void
+ *                                      from world-mechanics.js.
+ */
+export function configurePresence({ db = null, fireTrigger = null } = {}) {
+  _db = db;
+  _fireTrigger = fireTrigger;
+}
+
+/**
+ * Load a player's last-saved position from SQLite and seed the
+ * in-memory map. Called on first authenticated socket connect /
+ * first HTTP presence ping so users land back where they logged out.
+ *
+ * @param {string} userId
+ * @returns {object|null} Restored position or null if nothing saved.
+ */
+export function loadPlayerState(userId) {
+  if (!_db || !userId) return null;
+  try {
+    const row = _db.prepare(
+      `SELECT user_id, city_id, district_id, x, y, z, rotation, direction,
+              current_animation, action, health, max_health, stamina, max_stamina,
+              client_state_json, last_seen_at
+         FROM player_world_state WHERE user_id = ?`
+    ).get(userId);
+    if (!row) return null;
+    const entry = {
+      cityId: row.city_id,
+      districtId: row.district_id || null,
+      x: row.x,
+      y: row.y,
+      z: row.z,
+      direction: row.direction || 0,
+      rotation: row.rotation || 0,
+      action: row.action || "idle",
+      currentAnimation: row.current_animation || "idle",
+      health: row.health,
+      maxHealth: row.max_health,
+      stamina: row.stamina,
+      maxStamina: row.max_stamina,
+      clientState: (() => { try { return JSON.parse(row.client_state_json || "{}"); } catch { return {}; } })(),
+      lastUpdate: Date.now(),
+      dirty: false,
+    };
+    _userPositions.set(userId, entry);
+    addToChunk(userId, entry.cityId, toChunk(entry.x), toChunk(entry.z));
+    return entry;
+  } catch (err) {
+    logger.warn?.("city-presence", `loadPlayerState failed for ${userId}: ${err.message}`);
+    return null;
+  }
+}
+
+/**
+ * Flush all dirty (modified since last save) positions to SQLite.
+ * Called periodically by the flush timer and on each disconnect.
+ * Upsert-by-user-id so it's idempotent.
+ */
+export function flushDirtyPositions() {
+  if (!_db || _userPositions.size === 0) return { flushed: 0 };
+  let flushed = 0;
+  try {
+    const stmt = _db.prepare(`
+      INSERT INTO player_world_state
+        (user_id, city_id, district_id, x, y, z, rotation, direction,
+         current_animation, action, health, max_health, stamina, max_stamina,
+         chunk_x, chunk_z, client_state_json, last_seen_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+      ON CONFLICT(user_id) DO UPDATE SET
+        city_id          = excluded.city_id,
+        district_id      = excluded.district_id,
+        x                = excluded.x,
+        y                = excluded.y,
+        z                = excluded.z,
+        rotation         = excluded.rotation,
+        direction        = excluded.direction,
+        current_animation = excluded.current_animation,
+        action           = excluded.action,
+        health           = excluded.health,
+        max_health       = excluded.max_health,
+        stamina          = excluded.stamina,
+        max_stamina      = excluded.max_stamina,
+        chunk_x          = excluded.chunk_x,
+        chunk_z          = excluded.chunk_z,
+        client_state_json = excluded.client_state_json,
+        last_seen_at     = excluded.last_seen_at
+    `);
+    const tx = _db.transaction(() => {
+      for (const [userId, pos] of _userPositions) {
+        if (!pos.dirty) continue;
+        stmt.run(
+          userId,
+          pos.cityId || "concordia-central",
+          pos.districtId || null,
+          pos.x || 0,
+          pos.y || 0,
+          pos.z || 0,
+          pos.rotation || 0,
+          pos.direction || 0,
+          pos.currentAnimation || "idle",
+          pos.action || "idle",
+          pos.health ?? 100,
+          pos.maxHealth ?? 100,
+          pos.stamina ?? 100,
+          pos.maxStamina ?? 100,
+          toChunk(pos.x || 0),
+          toChunk(pos.z || 0),
+          JSON.stringify(pos.clientState || {}),
+        );
+        pos.dirty = false;
+        flushed++;
+      }
+    });
+    tx();
+  } catch (err) {
+    logger.warn?.("city-presence", `flushDirtyPositions failed: ${err.message}`);
+  }
+  return { flushed };
+}
+
+/**
+ * Persist a player immediately (e.g. on disconnect). Wraps
+ * flushDirtyPositions for a single user.
+ */
+export function persistPlayer(userId) {
+  const pos = _userPositions.get(userId);
+  if (pos) pos.dirty = true;
+  return flushDirtyPositions();
+}
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -68,10 +236,62 @@ function distanceSq(a, b) {
  * @param {{ cityId: string, x: number, y: number, z: number, direction: number, action: string }} pos
  * @returns {{ nearby: object[] }} Nearby user positions after the update.
  */
-export function updateUserPosition(userId, { cityId, x, y, z, direction, action }) {
+export function updateUserPosition(userId, { cityId, x, y, z, direction, action, rotation, currentAnimation, districtId }) {
   const prev = _userPositions.get(userId);
+  const now = Date.now();
+
+  // ── Movement validation (anti-cheat / sanity) ────────────────────────
+  // Only applies once a player has an existing position — the first
+  // update after login establishes the baseline.
+  if (prev) {
+    const dt = now - prev.lastUpdate;
+    if (dt < MIN_UPDATE_INTERVAL_MS) {
+      // Client is flooding — silently drop the update instead of
+      // polluting presence state. 50Hz cap per-user mirrors the
+      // server broadcast rate.
+      return { ok: false, reason: "rate_limited", nearby: getNearbyUsers(userId), chunkCrossed: false };
+    }
+    // Skip speed check if the user is changing cities (teleport /
+    // portal) or during the grace period right after login.
+    const isCityTransition = prev.cityId !== cityId;
+    const graceActive = prev.createdAt && (now - prev.createdAt) < GRACE_PERIOD_MS;
+    if (!isCityTransition && !graceActive && dt > 0) {
+      const dx = x - prev.x;
+      const dy = y - prev.y;
+      const dz = z - prev.z;
+      const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      // Hard ceiling regardless of dt — real players can't teleport
+      if (distance > MAX_SINGLE_FRAME_DISTANCE) {
+        logger.debug?.("city-presence", `rejected teleport by ${userId}: ${distance.toFixed(1)}m in ${dt}ms`);
+        return {
+          ok: false,
+          reason: "teleport_detected",
+          prev: { x: prev.x, y: prev.y, z: prev.z },
+          nearby: getNearbyUsers(userId),
+          chunkCrossed: false,
+        };
+      }
+      // Speed check: distance / dt must be under MAX_SPRINT_SPEED_MPS
+      const speedMps = distance / (dt / 1000);
+      if (speedMps > MAX_SPRINT_SPEED_MPS) {
+        logger.debug?.("city-presence", `rejected speed hack by ${userId}: ${speedMps.toFixed(1)}m/s`);
+        return {
+          ok: false,
+          reason: "speed_hack_detected",
+          observedSpeed: speedMps,
+          maxSpeed: MAX_SPRINT_SPEED_MPS,
+          prev: { x: prev.x, y: prev.y, z: prev.z },
+          nearby: getNearbyUsers(userId),
+          chunkCrossed: false,
+        };
+      }
+    }
+  }
+
   const newChunkX = toChunk(x);
   const newChunkZ = toChunk(z);
+  let chunkCrossed = false;
+  let cityChanged = false;
 
   // Remove from old chunk if city or chunk changed
   if (prev) {
@@ -80,25 +300,60 @@ export function updateUserPosition(userId, { cityId, x, y, z, direction, action 
     if (prev.cityId !== cityId || oldChunkX !== newChunkX || oldChunkZ !== newChunkZ) {
       removeFromChunk(userId, prev.cityId, oldChunkX, oldChunkZ);
       addToChunk(userId, cityId, newChunkX, newChunkZ);
+      chunkCrossed = true;
+      cityChanged = prev.cityId !== cityId;
     }
   } else {
     addToChunk(userId, cityId, newChunkX, newChunkZ);
+    chunkCrossed = true;
   }
 
   const entry = {
     cityId,
+    districtId: districtId ?? prev?.districtId ?? null,
     x,
     y,
     z,
-    direction,
-    action,
-    lastUpdate: Date.now(),
+    direction: direction ?? prev?.direction ?? 0,
+    rotation: rotation ?? prev?.rotation ?? 0,
+    action: action ?? prev?.action ?? "idle",
+    currentAnimation: currentAnimation ?? prev?.currentAnimation ?? "idle",
+    health: prev?.health ?? 100,
+    maxHealth: prev?.maxHealth ?? 100,
+    stamina: prev?.stamina ?? 100,
+    maxStamina: prev?.maxStamina ?? 100,
+    clientState: prev?.clientState ?? {},
+    lastUpdate: now,
+    createdAt: prev?.createdAt ?? now,
+    dirty: true, // mark for next flush
     avatar: prev?.avatar ?? null,
   };
   _userPositions.set(userId, entry);
 
+  // Fire world-mechanics triggers when the player crosses a chunk
+  // (or city) boundary. The hook is optional — tests and stand-alone
+  // uses of this module just skip it. `_fireTrigger` is set at server
+  // startup via configurePresence({ fireTrigger }).
+  if (chunkCrossed && _fireTrigger) {
+    try {
+      if (cityChanged && prev) {
+        _fireTrigger(prev.cityId, "player_leaves_zone", {
+          userId,
+          zoneId: `${prev.cityId}:${toChunk(prev.x)}:${toChunk(prev.z)}`,
+        });
+      }
+      _fireTrigger(cityId, "player_enters_zone", {
+        userId,
+        zoneId: `${cityId}:${newChunkX}:${newChunkZ}`,
+        districtId: entry.districtId,
+      });
+    } catch (err) {
+      logger.debug?.("city-presence", `fireTrigger failed: ${err.message}`);
+    }
+  }
+
   const nearby = getNearbyUsers(userId);
-  return { nearby };
+  return { ok: true, nearby, chunkCrossed };
 }
 
 /**
@@ -170,11 +425,16 @@ export function getCityUserCount(cityId) {
 
 /**
  * Remove a user from the presence system (on disconnect / leave).
+ * Persists their final position to SQLite before dropping them from
+ * the in-memory map, so they land back in the same spot next login.
  * @param {string} userId
  */
 export function removeUser(userId) {
   const pos = _userPositions.get(userId);
   if (pos) {
+    // Final persist before dropping — mark dirty and flush just this user
+    pos.dirty = true;
+    flushDirtyPositions();
     removeFromChunk(userId, pos.cityId, toChunk(pos.x), toChunk(pos.z));
     _userPositions.delete(userId);
     logger.debug("city-presence", `User ${userId} removed from presence`);
@@ -258,6 +518,8 @@ export function broadcastPositions(cityId, realtimeEmit) {
  * @returns {() => void} Cleanup function to stop broadcasting.
  */
 export function startPresenceBroadcast(realtimeEmit, intervalMs = 100) {
+  // Stamina regen runs at 1/sec (every 10th broadcast tick)
+  let staminaRegenCounter = 0;
   // Collect distinct cityIds on each tick
   const timer = setInterval(() => {
     const cities = new Set();
@@ -267,19 +529,43 @@ export function startPresenceBroadcast(realtimeEmit, intervalMs = 100) {
     for (const cityId of cities) {
       broadcastPositions(cityId, realtimeEmit);
     }
+    // Stamina regen — 1 point per second
+    staminaRegenCounter++;
+    if (staminaRegenCounter >= 10) {
+      regenStamina();
+      staminaRegenCounter = 0;
+    }
   }, intervalMs);
 
-  logger.info("city-presence", `Presence broadcast started (${intervalMs}ms interval)`);
+  // Periodic flush of dirty positions to SQLite — survives restart.
+  if (!_flushTimer && _db) {
+    _flushTimer = setInterval(() => {
+      try {
+        flushDirtyPositions();
+      } catch (err) {
+        logger.warn?.("city-presence", `periodic flush failed: ${err.message}`);
+      }
+    }, FLUSH_INTERVAL_MS);
+    _flushTimer.unref?.();
+  }
+
+  logger.info("city-presence", `Presence broadcast started (${intervalMs}ms interval, flush every ${FLUSH_INTERVAL_MS}ms)`);
 
   return () => {
     clearInterval(timer);
+    if (_flushTimer) {
+      clearInterval(_flushTimer);
+      _flushTimer = null;
+    }
+    // Final flush so any in-flight positions land on disk
+    try { flushDirtyPositions(); } catch (_e) { /* shutdown, don't care */ }
     logger.info("city-presence", "Presence broadcast stopped");
   };
 }
 
 /**
  * Return aggregate presence statistics.
- * @returns {{ totalOnline: number, byCityCount: Map<string, number> }}
+ * @returns {{ totalOnline: number, byCityCount: Map<string, number>, npcCount: number }}
  */
 export function getPresenceStats() {
   const byCityCount = new Map();
@@ -289,5 +575,342 @@ export function getPresenceStats() {
   return {
     totalOnline: _userPositions.size,
     byCityCount,
+    npcCount: _npcState.size,
   };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// NPC MANAGEMENT
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Spawn an NPC in the world. Returns the generated NPC id.
+ *
+ * @param {object} opts
+ * @param {string} opts.cityId
+ * @param {string} [opts.id] - optional fixed id (otherwise generated)
+ * @param {string} opts.name
+ * @param {string} [opts.occupation='citizen']
+ * @param {number} opts.x
+ * @param {number} opts.y
+ * @param {number} opts.z
+ * @param {Array<{x,y,z}>} [opts.patrolPath] - optional waypoints
+ * @param {number} [opts.health=100]
+ * @param {boolean} [opts.isHostile=false]
+ * @param {object} [opts.appearance]
+ */
+export function spawnNpc({
+  cityId, id, name, occupation = "citizen",
+  x, y = 0, z, patrolPath = [],
+  health = 100, isHostile = false, appearance = null,
+}) {
+  if (!cityId || typeof x !== "number" || typeof z !== "number") {
+    return { ok: false, error: "missing_position" };
+  }
+  const npcId = id || `npc_${randomUUID().slice(0, 12)}`;
+  _npcState.set(npcId, {
+    id: npcId,
+    cityId,
+    name: name || npcId,
+    occupation,
+    x, y, z,
+    direction: 0,
+    health,
+    maxHealth: health,
+    patrolPath,
+    patrolIndex: 0,
+    lastMoveAt: Date.now(),
+    isHostile: !!isHostile,
+    appearance,
+    animation: "idle",
+  });
+  return { ok: true, npcId };
+}
+
+/**
+ * Remove an NPC from the world (death, despawn, etc.).
+ */
+export function despawnNpc(npcId) {
+  const existed = _npcState.delete(npcId);
+  return { ok: existed };
+}
+
+/**
+ * Get an NPC's current state.
+ */
+export function getNpc(npcId) {
+  return _npcState.get(npcId);
+}
+
+/**
+ * Get all NPCs currently in a given city.
+ */
+export function getCityNpcs(cityId) {
+  const out = [];
+  for (const npc of _npcState.values()) {
+    if (npc.cityId === cityId) out.push(npc);
+  }
+  return out;
+}
+
+/**
+ * Advance NPC patrol paths and broadcast their new positions alongside
+ * player positions. Called from the same 100ms tick as `broadcastPositions`
+ * so the frontend sees them through the same pipeline.
+ */
+function tickNpcs(cityId, realtimeEmit) {
+  const now = Date.now();
+  const perChunk = new Map(); // "cityId:cx:cz" -> [npc, ...]
+
+  for (const npc of _npcState.values()) {
+    if (npc.cityId !== cityId) continue;
+
+    // Advance along patrol path at 2m/s if one is defined
+    if (Array.isArray(npc.patrolPath) && npc.patrolPath.length > 0) {
+      const dt = (now - npc.lastMoveAt) / 1000;
+      if (dt > 0) {
+        const target = npc.patrolPath[npc.patrolIndex % npc.patrolPath.length];
+        const dx = target.x - npc.x;
+        const dz = target.z - npc.z;
+        const dist = Math.sqrt(dx * dx + dz * dz);
+        const speed = 2; // m/s
+        const stepDist = Math.min(dist, speed * dt);
+        if (dist > 0.1) {
+          npc.x += (dx / dist) * stepDist;
+          npc.z += (dz / dist) * stepDist;
+          npc.direction = Math.atan2(dx, dz);
+          npc.animation = "walk";
+        } else {
+          npc.patrolIndex = (npc.patrolIndex + 1) % npc.patrolPath.length;
+          npc.animation = "idle";
+        }
+        npc.lastMoveAt = now;
+      }
+    }
+
+    // Group by chunk so we can emit per-chunk broadcasts like players
+    const cx = toChunk(npc.x);
+    const cz = toChunk(npc.z);
+    const key = `${cityId}:${cx}:${cz}`;
+    if (!perChunk.has(key)) perChunk.set(key, []);
+    perChunk.get(key).push({
+      id: npc.id,
+      name: npc.name,
+      occupation: npc.occupation,
+      position: { x: npc.x, y: npc.y, z: npc.z },
+      rotation: npc.direction,
+      direction: npc.direction,
+      currentAnimation: npc.animation,
+      health: npc.health,
+      maxHealth: npc.maxHealth,
+      isHostile: npc.isHostile,
+      appearance: npc.appearance,
+      timestamp: now,
+    });
+  }
+
+  for (const [key, npcs] of perChunk) {
+    const parts = key.split(":");
+    realtimeEmit("city:npcs", {
+      cityId: parts[0],
+      chunk: { x: Number(parts[1]), z: Number(parts[2]) },
+      npcs,
+      timestamp: new Date().toISOString(),
+    });
+  }
+}
+
+/**
+ * Start the NPC spawn / tick loop. Calls `fireTrigger('entity_spawns')`
+ * periodically so user-defined mechanics decide when NPCs appear, and
+ * runs the patrol advance + broadcast on the same tick.
+ *
+ * @param {(event: string, data: object) => void} realtimeEmit
+ * @param {number} [tickMs=1000] - NPC tick interval (different from
+ *                                  the 100ms player broadcast tick to
+ *                                  keep CPU budget reasonable)
+ */
+export function startNpcLoop(realtimeEmit, tickMs = 1000) {
+  if (_npcSpawnTimer) return () => {};
+
+  _npcSpawnTimer = setInterval(() => {
+    // Collect distinct cityIds from active players — only tick NPCs
+    // in cities that have players in them.
+    const activeCities = new Set();
+    for (const [, pos] of _userPositions) {
+      activeCities.add(pos.cityId);
+    }
+    for (const cityId of activeCities) {
+      // Fire the entity_spawns trigger so user-defined mechanics can
+      // decide whether to spawn something. The fireTrigger hook will
+      // call spawnNpc() itself if a mechanic says so.
+      if (_fireTrigger) {
+        try {
+          _fireTrigger(cityId, "entity_spawns", {
+            cityId,
+            npcCount: getCityNpcs(cityId).length,
+            playerCount: getPlayerCountInCity(cityId),
+          });
+        } catch (_e) { /* non-fatal */ }
+      }
+      // Advance patrols + broadcast the current NPC positions
+      tickNpcs(cityId, realtimeEmit);
+    }
+  }, tickMs);
+  _npcSpawnTimer.unref?.();
+
+  logger.info?.("city-presence", `NPC loop started (${tickMs}ms tick)`);
+  return () => {
+    if (_npcSpawnTimer) {
+      clearInterval(_npcSpawnTimer);
+      _npcSpawnTimer = null;
+    }
+  };
+}
+
+/** Internal helper — count players in a given city. */
+function getPlayerCountInCity(cityId) {
+  let n = 0;
+  for (const [, pos] of _userPositions) if (pos.cityId === cityId) n++;
+  return n;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// COMBAT
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Apply an attack from one entity to another. Entities can be players
+ * or NPCs — they're resolved by id against `_userPositions` and
+ * `_npcState` respectively.
+ *
+ * Damage model: baseDamage - (armor / 2), clamped to at least 1.
+ * Critical hits (roll > 0.85) deal 2x damage.
+ * Range check: target must be within `range` metres.
+ * Stamina cost: each attack costs 8 stamina; fails if attacker has < 8.
+ *
+ * @param {object} opts
+ * @param {string} opts.attackerId
+ * @param {string} opts.targetId
+ * @param {number} [opts.baseDamage=10]
+ * @param {number} [opts.range=3]       - attack range in metres
+ * @param {number} [opts.armorPierce=0] - flat armor reduction
+ * @returns {{
+ *   ok: boolean, error?: string,
+ *   damage?: number, isCrit?: boolean,
+ *   targetHealth?: number, targetKilled?: boolean,
+ *   attackerStamina?: number
+ * }}
+ */
+export function applyAttack({ attackerId, targetId, baseDamage = 10, range = 3, armorPierce = 0 }) {
+  if (!attackerId || !targetId) return { ok: false, error: "missing_ids" };
+  if (attackerId === targetId) return { ok: false, error: "cannot_attack_self" };
+
+  // Attacker must be a player (NPC-vs-NPC combat comes later)
+  const attacker = _userPositions.get(attackerId);
+  if (!attacker) return { ok: false, error: "attacker_not_found" };
+
+  // Target can be either a player or an NPC
+  const isPlayerTarget = _userPositions.has(targetId);
+  const target = isPlayerTarget ? _userPositions.get(targetId) : _npcState.get(targetId);
+  if (!target) return { ok: false, error: "target_not_found" };
+
+  // Same-city check
+  const targetCity = isPlayerTarget ? target.cityId : target.cityId;
+  if (attacker.cityId !== targetCity) return { ok: false, error: "different_city" };
+
+  // Range check
+  const dx = attacker.x - target.x;
+  const dy = (attacker.y || 0) - (target.y || 0);
+  const dz = attacker.z - target.z;
+  const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+  if (dist > range) return { ok: false, error: "out_of_range", distance: dist, range };
+
+  // Stamina check
+  const STAMINA_COST = 8;
+  if ((attacker.stamina || 0) < STAMINA_COST) {
+    return { ok: false, error: "insufficient_stamina", stamina: attacker.stamina };
+  }
+
+  // Damage calculation
+  const isCrit = Math.random() > 0.85;
+  const targetArmor = Math.max(0, (target.armor || 0) - armorPierce);
+  const mitigated = Math.max(1, Math.floor(baseDamage - targetArmor / 2));
+  const damage = isCrit ? mitigated * 2 : mitigated;
+
+  // Apply to target
+  target.health = Math.max(0, (target.health || 100) - damage);
+  const targetKilled = target.health === 0;
+
+  // Attacker spends stamina + gets marked dirty for save
+  attacker.stamina = Math.max(0, (attacker.stamina || 0) - STAMINA_COST);
+  attacker.dirty = true;
+
+  // Mark target dirty if it's a player
+  if (isPlayerTarget) target.dirty = true;
+
+  // Fire world-mechanics triggers
+  if (_fireTrigger && !isPlayerTarget) {
+    try {
+      _fireTrigger(attacker.cityId, "npc_attacked", {
+        attackerId,
+        targetId,
+        damage,
+        npcType: target.occupation,
+      });
+      if (targetKilled) {
+        _fireTrigger(attacker.cityId, "npc_defeated", {
+          attackerId,
+          targetId,
+          npcType: target.occupation,
+        });
+      }
+    } catch (_e) { /* non-fatal */ }
+  }
+
+  // Despawn dead NPCs
+  if (targetKilled && !isPlayerTarget) {
+    _npcState.delete(targetId);
+  }
+
+  return {
+    ok: true,
+    damage,
+    isCrit,
+    targetHealth: target.health,
+    targetMaxHealth: target.maxHealth || 100,
+    targetKilled,
+    attackerStamina: attacker.stamina,
+  };
+}
+
+/**
+ * Respawn a player at a safe location with full HP/stamina.
+ * Called after death — typically at a district hub.
+ */
+export function respawnPlayer(userId, { cityId, x = 0, y = 0, z = 0 } = {}) {
+  const pos = _userPositions.get(userId);
+  if (!pos) return { ok: false, error: "player_not_found" };
+  pos.health = pos.maxHealth || 100;
+  pos.stamina = pos.maxStamina || 100;
+  if (cityId) pos.cityId = cityId;
+  pos.x = x;
+  pos.y = y;
+  pos.z = z;
+  pos.currentAnimation = "idle";
+  pos.action = "idle";
+  pos.dirty = true;
+  return { ok: true, position: { x, y, z }, health: pos.health };
+}
+
+/**
+ * Regenerate a player's stamina over time. Called from the broadcast
+ * loop — adds 1 stamina per tick up to the max.
+ */
+function regenStamina() {
+  for (const [, pos] of _userPositions) {
+    if (pos.stamina < pos.maxStamina) {
+      pos.stamina = Math.min(pos.maxStamina, pos.stamina + 1);
+    }
+  }
 }

@@ -34,6 +34,28 @@ import {
 
 export { ACTION_TYPES };
 
+// ── Oracle Engine (lazy import to tolerate parallel build) ───────────────
+// The Oracle Engine may not exist yet at module load time. Resolve lazily
+// so chat-router remains importable even without oracle-engine.js present.
+let _oracleModule = null;
+let _oracleInstance = null;
+let _oracleImportAttempted = false;
+
+async function _getOracleEngine(deps = {}) {
+  if (_oracleInstance) return _oracleInstance;
+  if (!_oracleImportAttempted) {
+    _oracleImportAttempted = true;
+    try {
+      _oracleModule = await import("./oracle-engine.js");
+    } catch (e) {
+      _oracleModule = null;
+    }
+  }
+  if (!_oracleModule?.createOracleEngine) return null;
+  _oracleInstance = _oracleModule.createOracleEngine(deps);
+  return _oracleInstance;
+}
+
 // ── Intent Classification Patterns ───────────────────────────────────────
 // Maps natural language to the 8 action types.
 
@@ -161,6 +183,236 @@ const DOMAIN_SIGNAL_PATTERNS = [
 // ── Explicit Routing (slash commands) ────────────────────────────────────
 
 const EXPLICIT_ROUTE_PATTERN = /^\/([\w-]+)\s+(.+)/;
+
+// ── Oracle Complexity Detection ──────────────────────────────────────────
+// Heuristics that identify queries worth routing through the Oracle Engine
+// rather than the standard conscious brain.
+
+const ORACLE_EXPLICIT_PATTERN = /^\/oracle(?:\s+(.+))?$/i;
+
+// Phrases that strongly suggest computational / research-grade work
+const ORACLE_SIGNAL_PATTERNS = [
+  /\b(derive|prove|theorem|lemma|corollary|axiom)\b/i,
+  /\b(research[\s-]grade|literature\s+review|systematic\s+review|meta[\s-]?analysis)\b/i,
+  /\b(optimi[sz]e|minimi[sz]e|maximi[sz]e)\s+(over|subject\s+to|with\s+constraints?)\b/i,
+  /\b(monte[\s-]carlo|bayesian|markov|stochastic|differential\s+equation|ode|pde)\b/i,
+  /\b(cite\s+sources?|with\s+citations?|show\s+your\s+work|step[\s-]by[\s-]step\s+reasoning)\b/i,
+  /\b(compute|calculate|solve\s+for|numerical(ly)?)\b.{0,60}\b(equation|integral|system|matrix)\b/i,
+  /\b(cross[\s-]?reference|synthesize\s+across|multi[\s-]domain|interdisciplinary)\b/i,
+  /\b(hypothesis|falsify|evidence\s+for|evidence\s+against|peer[\s-]?reviewed)\b/i,
+];
+
+/**
+ * Decide whether a query should be routed through the Oracle Engine.
+ *
+ * A query is considered "Oracle-worthy" when any of:
+ *   - It starts with the explicit /oracle slash command
+ *   - It contains research / computational / proof signals
+ *   - It touches 3+ distinct domains (multi-domain synthesis)
+ *   - A prior route plan already identified 3+ lens matches at high confidence
+ *
+ * @param {string} message
+ * @param {Object} [route] - Optional pre-computed route plan
+ * @returns {{ shouldRoute: boolean, reason: string, explicit: boolean, strippedQuery: string }}
+ */
+export function detectOracleIntent(message, route = null) {
+  const msg = String(message || "").trim();
+  if (!msg) {
+    return { shouldRoute: false, reason: "empty", explicit: false, strippedQuery: "" };
+  }
+
+  // Explicit /oracle slash command
+  const explicitMatch = msg.match(ORACLE_EXPLICIT_PATTERN);
+  if (explicitMatch) {
+    return {
+      shouldRoute: true,
+      reason: "explicit_slash",
+      explicit: true,
+      strippedQuery: (explicitMatch[1] || "").trim() || msg,
+    };
+  }
+
+  // Signal pattern match
+  for (const pat of ORACLE_SIGNAL_PATTERNS) {
+    if (pat.test(msg)) {
+      return {
+        shouldRoute: true,
+        reason: "oracle_signal_pattern",
+        explicit: false,
+        strippedQuery: msg,
+      };
+    }
+  }
+
+  // Multi-domain complexity from an existing route plan
+  if (route?.ok) {
+    const domainCount = new Set(route.domainSignals || []).size;
+    if (route.isMultiLens && route.lenses.length >= 3 && route.confidence >= 0.6) {
+      return {
+        shouldRoute: true,
+        reason: "multi_lens_synthesis",
+        explicit: false,
+        strippedQuery: msg,
+      };
+    }
+    if (domainCount >= 4) {
+      return {
+        shouldRoute: true,
+        reason: "multi_domain_signals",
+        explicit: false,
+        strippedQuery: msg,
+      };
+    }
+  }
+
+  // Heuristic: unique domain signal count from fresh extraction
+  const freshSignals = extractDomainSignals(msg);
+  const freshDomains = new Set(freshSignals).size;
+  if (freshDomains >= 5) {
+    return {
+      shouldRoute: true,
+      reason: "high_domain_diversity",
+      explicit: false,
+      strippedQuery: msg,
+    };
+  }
+
+  return { shouldRoute: false, reason: "standard_chat", explicit: false, strippedQuery: msg };
+}
+
+// ── Oracle Routing Shim ──────────────────────────────────────────────────
+
+/**
+ * Route a query through the Oracle Engine and shape the result as a
+ * chat message payload the frontend can render. Falls back gracefully
+ * when the Oracle Engine module isn't available yet.
+ *
+ * The returned object has the shape:
+ *   {
+ *     ok: boolean,
+ *     reply: string,            // rendered assistant content
+ *     source: "oracle",
+ *     llmUsed: boolean,
+ *     meta: {
+ *       panel: "chat",
+ *       source: "oracle",
+ *       oracle: {
+ *         confidence, phases, reason, strippedQuery, ...
+ *       },
+ *       citations: [...],       // source attribution
+ *       computations: [...],    // numerical / symbolic work
+ *       connections: [...],     // cross-domain links
+ *     }
+ *   }
+ *
+ * @param {string} query   - The user query (slash-command prefix already stripped)
+ * @param {Object} context - { STATE, userId, sessionId, route, reason, ... }
+ * @returns {Promise<Object>} chat-message-shaped oracle result
+ */
+export async function routeThroughOracle(query, context = {}) {
+  const {
+    STATE,
+    userId,
+    sessionId,
+    route,
+    reason,
+    explicit,
+    domainHandlers,
+  } = context;
+
+  const baseMeta = {
+    panel: "chat",
+    source: "oracle",
+    oracle: {
+      reason: reason || "oracle_intent",
+      explicit: !!explicit,
+      strippedQuery: query,
+    },
+  };
+
+  try {
+    const oracle = await _getOracleEngine({
+      dtuStore: STATE?.dtus,
+      domainHandlers: domainHandlers || {},
+      entities: STATE?.entities,
+      db: STATE?.db,
+    });
+
+    if (!oracle || typeof oracle.solve !== "function") {
+      return {
+        ok: false,
+        reply: "Oracle Engine is not available yet — falling back to the standard brain.",
+        source: "oracle",
+        llmUsed: false,
+        meta: {
+          ...baseMeta,
+          oracle: { ...baseMeta.oracle, unavailable: true },
+          fallback: true,
+        },
+      };
+    }
+
+    const oracleContext = {
+      userId,
+      sessionId,
+      route: route || null,
+      domainSignals: route?.domainSignals || [],
+      lensChain: route?.lenses?.map(l => l.lensId) || [],
+    };
+
+    const result = await oracle.solve(query, oracleContext);
+
+    // Normalise the oracle's solve() output into chat-message shape.
+    const reply =
+      result?.answer ||
+      result?.reply ||
+      result?.summary ||
+      result?.text ||
+      (typeof result === "string" ? result : "") ||
+      "(oracle returned no answer)";
+
+    const citations = result?.citations || result?.sources || [];
+    const computations = result?.computations || result?.calculations || [];
+    const connections = result?.connections || result?.crossDomain || [];
+    const phases = result?.phases || result?.trace || [];
+    const confidence = typeof result?.confidence === "number" ? result.confidence : null;
+    const dtusCreated = result?.dtusCreated || result?.createdDtus || [];
+
+    return {
+      ok: true,
+      reply,
+      source: "oracle",
+      llmUsed: true,
+      meta: {
+        ...baseMeta,
+        oracle: {
+          ...baseMeta.oracle,
+          confidence,
+          phases,
+          phaseCount: Array.isArray(phases) ? phases.length : undefined,
+          dtusCreated: Array.isArray(dtusCreated) ? dtusCreated.length : undefined,
+        },
+        citations,
+        computations,
+        connections,
+        dtusCreated,
+      },
+      raw: result,
+    };
+  } catch (e) {
+    return {
+      ok: false,
+      reply: `Oracle Engine error: ${e?.message || String(e)}`,
+      source: "oracle",
+      llmUsed: false,
+      meta: {
+        ...baseMeta,
+        oracle: { ...baseMeta.oracle, error: e?.message || String(e) },
+        fallback: true,
+      },
+    };
+  }
+}
 
 // ── Core Router ──────────────────────────────────────────────────────────
 

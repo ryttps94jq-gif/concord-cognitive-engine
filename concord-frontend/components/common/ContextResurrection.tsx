@@ -31,6 +31,7 @@ import {
 } from 'lucide-react';
 
 interface ResurrectionContext {
+  isNewUser?: boolean;
   welcome: string;
   lastDomain: string | null;
   lastDTUTitle: string | null;
@@ -75,6 +76,15 @@ export function ContextResurrection() {
   if (dismissed || !data?.context) return null;
 
   const ctx = data.context;
+
+  // Brand-new users have no history to resurrect — don't fake it.
+  // The ChooseYourUniverse / onboarding flow handles first-run UX.
+  if (ctx.isNewUser) return null;
+  // Also guard against partial data (no last session AND no stats) so
+  // we don't render an empty panel with placeholder fields.
+  if (!ctx.lastDomain && !ctx.lastDTUTitle && (!ctx.stats || ctx.stats.totalDTUs === 0)) {
+    return null;
+  }
 
   return (
     <div className={cn(ds.panel, 'relative border-neon-cyan/30 bg-gradient-to-r from-lattice-surface to-neon-cyan/5')}>

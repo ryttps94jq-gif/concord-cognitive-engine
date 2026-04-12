@@ -18,6 +18,7 @@ import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 import STSVKExplorer from '@/components/visualizations/STSVKExplorer';
+import { SubLensQuickNav } from '@/components/lens/SubLensQuickNav';
 
 /* ─── Interfaces ─── */
 interface ExpressionRecord {
@@ -438,6 +439,9 @@ export default function MathLensPage() {
 
           {/* ── STSVK Theorem Explorer ── */}
           <STSVKExplorer />
+
+          {/* ── Sub-Lenses ── */}
+          <SubLensQuickNav lensId="math" />
 
           {/* ── Tab Navigation ── */}
           <div className="flex gap-2 border-b border-lattice-border pb-2">

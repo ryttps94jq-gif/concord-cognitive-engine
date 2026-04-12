@@ -9,6 +9,7 @@ import {
   Network, Radio,
 } from 'lucide-react';
 import QualiaSensoryFeed from './QualiaSensoryFeed';
+import { resolveEntityName } from '@/lib/entity-naming';
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -20,6 +21,10 @@ interface OrganLevel {
 interface GrowthEntity {
   id: string;
   species: string;
+  displayName?: string;
+  fullTitle?: string;
+  domain?: string;
+  role?: string;
   age: number;
   bornAt: string;
   curiosity: number;
@@ -115,15 +120,21 @@ function Gauge({ label, value, icon: Icon, color }: { label: string; value: numb
 
 function EntityGrowthCard({ entity }: { entity: GrowthEntity }) {
   const [expanded, setExpanded] = useState(false);
+  const resolved = resolveEntityName(entity);
 
   return (
     <div className="rounded-lg border border-lattice-border bg-lattice-surface/60 p-3">
       {/* Header */}
       <button onClick={() => setExpanded(!expanded)} className="w-full flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <Dna className="w-4 h-4 text-neon-cyan" />
-          <span className="text-sm font-medium text-white">{entity.id.slice(0, 16)}</span>
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-lattice-deep text-gray-400">{entity.species}</span>
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="w-7 h-7 rounded-full bg-gradient-to-br from-neon-cyan/30 to-neon-purple/30 flex items-center justify-center text-xs font-bold text-white flex-shrink-0">
+            {resolved.displayName[0]}
+          </div>
+          <div className="min-w-0 text-left">
+            <div className="text-sm font-semibold text-white truncate">{resolved.displayName}</div>
+            <div className="text-[10px] text-gray-500 truncate">{resolved.fullTitle} · #{resolved.shortId}</div>
+          </div>
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-lattice-deep text-gray-400 flex-shrink-0">{entity.species}</span>
         </div>
         <div className="flex items-center gap-3 text-xs text-gray-500">
           <span>Age: {entity.age}</span>

@@ -20,9 +20,12 @@
 import { Router } from "express";
 import { asyncHandler } from "../lib/async-handler.js";
 import { ValidationError, NotFoundError } from "../lib/errors.js";
+import { validateSafeFetchUrl } from "../lib/ssrf-guard.js";
 import {
   createMediaDTU,
   getMediaDTU,
+  getMediaDTUForViewer,
+  canAccessMediaDTU,
   updateMediaDTU,
   deleteMediaDTU,
   recordView,
@@ -103,44 +106,17 @@ function validateMediaMimeType(mimeType, dataOrBuffer) {
 
 /**
  * Validate a URL to prevent SSRF attacks.
- * Rejects private IPs, localhost, and non-http(s) schemes.
+ * Thin wrapper around the shared ssrf-guard module — rejects private IPs,
+ * CGNAT, IPv4-mapped IPv6, cloud metadata, decimal-encoded IPs, and
+ * non-http(s) schemes. Also resolves DNS and rejects the URL if any
+ * resolution lands in a reserved range.
+ *
+ * NOTE: this function is async now. Legacy callers that used it
+ * synchronously must `await` the result.
  */
-function validateUrl(urlString) {
-  let parsed;
-  try {
-    parsed = new URL(urlString);
-  } catch {
-    return { ok: false, error: "Invalid URL" };
-  }
-
-  // Only allow http and https schemes
-  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-    return { ok: false, error: `Disallowed URL scheme: ${parsed.protocol}` };
-  }
-
-  // Reject localhost
-  const hostname = parsed.hostname.toLowerCase();
-  if (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1" || hostname === "[::1]" || hostname === "0.0.0.0") {
-    return { ok: false, error: "URLs pointing to localhost are not allowed" };
-  }
-
-  // Reject private/reserved IP ranges
-  // IPv4 pattern check
-  const ipv4Match = hostname.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
-  if (ipv4Match) {
-    const [, a, b, c] = ipv4Match.map(Number);
-    if (
-      a === 10 ||                              // 10.0.0.0/8
-      a === 127 ||                             // 127.0.0.0/8
-      (a === 172 && b >= 16 && b <= 31) ||     // 172.16.0.0/12
-      (a === 192 && b === 168) ||              // 192.168.0.0/16
-      (a === 169 && b === 254) ||              // 169.254.0.0/16 (link-local)
-      a === 0                                  // 0.0.0.0/8
-    ) {
-      return { ok: false, error: "URLs pointing to private/reserved IP addresses are not allowed" };
-    }
-  }
-
+async function validateUrl(urlString) {
+  const result = await validateSafeFetchUrl(urlString);
+  if (!result.ok) return { ok: false, error: result.error };
   return { ok: true };
 }
 
@@ -262,16 +238,19 @@ export default function createMediaRouter({ STATE }) {
    *   - privacy: string
    */
   router.post("/upload/url", asyncHandler(async (req, res) => {
-    const authorId = req.user?.id || req.body.authorId;
-    if (!authorId) throw new ValidationError("authorId is required");
+    // SECURITY: authorId comes ONLY from the authenticated session.
+    // Previously we accepted `req.body.authorId` as a fallback, which let
+    // unauthenticated callers forge attribution onto any user.
+    const authorId = req.user?.id;
+    if (!authorId) return res.status(401).json({ ok: false, error: "Authentication required" });
 
     const { url, title, description, mediaType, tags, privacy, tier } = req.body;
 
     if (!url) throw new ValidationError("url is required");
     if (!title) throw new ValidationError("title is required");
 
-    // SSRF protection: validate the URL before storing
-    const urlCheck = validateUrl(url);
+    // SSRF protection: resolve DNS, reject private ranges. Async.
+    const urlCheck = await validateUrl(url);
     if (!urlCheck.ok) throw new ValidationError(urlCheck.error);
 
     // In production, we would fetch the URL, determine MIME type, file size, etc.
@@ -312,13 +291,21 @@ export default function createMediaRouter({ STATE }) {
 
   /**
    * GET /:id — Get a media DTU with streaming URLs and engagement data.
+   *
+   * Enforces privacy: private uploads are only readable by their author,
+   * followers-only uploads by the author or an active follower.
    */
   router.get("/:id", asyncHandler(async (req, res) => {
-    const result = getMediaDTU(STATE, req.params.id);
-    if (!result.ok) throw new NotFoundError("Media", req.params.id);
+    const viewerId = req.user?.id || null;
+    const gated = getMediaDTUForViewer(STATE, req.params.id, viewerId);
+    if (!gated.ok) {
+      if (gated.status === 401) return res.status(401).json({ ok: false, error: gated.error });
+      // 404 for both "not found" and "no access" to avoid leaking existence
+      throw new NotFoundError("Media", req.params.id);
+    }
 
-    const mediaDTU = result.mediaDTU;
-    const userId = req.user?.id || req.query.userId;
+    const mediaDTU = gated.mediaDTU;
+    const userId = viewerId || req.query.userId;
 
     // Build streaming URLs
     const streamingUrls = {
@@ -354,10 +341,14 @@ export default function createMediaRouter({ STATE }) {
    * Here we return metadata about the stream and simulate range support.
    */
   router.get("/:id/stream", asyncHandler(async (req, res) => {
-    const result = getMediaDTU(STATE, req.params.id);
-    if (!result.ok) throw new NotFoundError("Media", req.params.id);
+    const viewerId = req.user?.id || null;
+    const gated = getMediaDTUForViewer(STATE, req.params.id, viewerId);
+    if (!gated.ok) {
+      if (gated.status === 401) return res.status(401).json({ ok: false, error: gated.error });
+      throw new NotFoundError("Media", req.params.id);
+    }
 
-    const mediaDTU = result.mediaDTU;
+    const mediaDTU = gated.mediaDTU;
     const quality = req.query.quality || "original";
 
     // In production: serve actual file bytes with range support
@@ -401,10 +392,14 @@ export default function createMediaRouter({ STATE }) {
    * GET /:id/thumbnail — Get thumbnail for a media DTU.
    */
   router.get("/:id/thumbnail", asyncHandler(async (req, res) => {
-    const result = getMediaDTU(STATE, req.params.id);
-    if (!result.ok) throw new NotFoundError("Media", req.params.id);
+    const viewerId = req.user?.id || null;
+    const gated = getMediaDTUForViewer(STATE, req.params.id, viewerId);
+    if (!gated.ok) {
+      if (gated.status === 401) return res.status(401).json({ ok: false, error: gated.error });
+      throw new NotFoundError("Media", req.params.id);
+    }
 
-    const mediaDTU = result.mediaDTU;
+    const mediaDTU = gated.mediaDTU;
     if (!mediaDTU.thumbnail) {
       // Generate on the fly
       generateThumbnail(STATE, mediaDTU.id);
@@ -425,12 +420,15 @@ export default function createMediaRouter({ STATE }) {
    * GET /:id/manifest.m3u8 — Get HLS master playlist.
    */
   router.get("/:id/manifest.m3u8", asyncHandler(async (req, res) => {
-    const result = generateHLSManifest(STATE, req.params.id);
+    const viewerId = req.user?.id || null;
+    const gated = getMediaDTUForViewer(STATE, req.params.id, viewerId);
+    if (!gated.ok) {
+      if (gated.status === 401) return res.status(401).json({ ok: false, error: gated.error });
+      throw new NotFoundError("Media", req.params.id);
+    }
 
+    const result = generateHLSManifest(STATE, req.params.id);
     if (!result.ok) {
-      // Fall back to media not found or not a video
-      const mediaResult = getMediaDTU(STATE, req.params.id);
-      if (!mediaResult.ok) throw new NotFoundError("Media", req.params.id);
       throw new ValidationError(result.error);
     }
 
@@ -493,7 +491,10 @@ export default function createMediaRouter({ STATE }) {
    * POST /:id/view — Record a view on media.
    */
   router.post("/:id/view", asyncHandler(async (req, res) => {
-    const userId = req.user?.id || req.body.userId || `anon-${req.ip}`;
+    // SECURITY: identity from authenticated session only. Anonymous views
+    // are bucketed per-IP so a caller can't forge someone else's userId
+    // by sending it in the body.
+    const userId = req.user?.id || `anon-${req.ip}`;
 
     const result = recordView(STATE, req.params.id, userId);
     if (!result.ok) {
@@ -510,8 +511,9 @@ export default function createMediaRouter({ STATE }) {
    * POST /:id/like — Toggle like on media.
    */
   router.post("/:id/like", asyncHandler(async (req, res) => {
-    const userId = req.user?.id || req.body.userId;
-    if (!userId) throw new ValidationError("userId is required");
+    // SECURITY: userId always comes from the authenticated session.
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ ok: false, error: "Authentication required" });
 
     const result = toggleLike(STATE, req.params.id, userId);
     if (!result.ok) {
@@ -531,8 +533,9 @@ export default function createMediaRouter({ STATE }) {
    *   - text: string (required)
    */
   router.post("/:id/comment", asyncHandler(async (req, res) => {
-    const userId = req.user?.id || req.body.userId;
-    if (!userId) throw new ValidationError("userId is required");
+    // SECURITY: userId always comes from the authenticated session.
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ ok: false, error: "Authentication required" });
 
     const { text } = req.body;
     if (!text) throw new ValidationError("Comment text is required");
@@ -575,8 +578,11 @@ export default function createMediaRouter({ STATE }) {
    * DELETE /:id — Delete a media DTU.
    */
   router.delete("/:id", asyncHandler(async (req, res) => {
-    const authorId = req.user?.id || req.body.authorId;
-    if (!authorId) throw new ValidationError("authorId is required");
+    // SECURITY: authorId from authenticated session — never from body.
+    // The caller's ability to delete is enforced inside deleteMediaDTU()
+    // which checks `dtu.author === authorId`.
+    const authorId = req.user?.id;
+    if (!authorId) return res.status(401).json({ ok: false, error: "Authentication required" });
 
     const result = deleteMediaDTU(STATE, req.params.id, authorId);
     if (!result.ok) {

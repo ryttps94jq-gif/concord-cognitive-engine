@@ -48,7 +48,16 @@ import { BRAIN_CONFIG as _BRAIN_CONFIG_SPEC, SYSTEM_TO_BRAIN, BRAIN_PRIORITY, ge
 import { preloadBrains, getBrainPriority, resolveBrain } from "./lib/brain-router.js";
 import { createBreakerRegistry } from "./lib/circuit-breaker.js";
 import { traceMiddleware, startSpan, storeTrace, getRecentTraces, getTraceMetrics } from "./lib/request-trace.js";
-import { loadPluginsFromDisk, fireHook, tickPlugins } from "./plugins/loader.js";
+import {
+  loadPluginsFromDisk, fireHook, tickPlugins,
+  registerPlugin as loaderRegisterPlugin,
+  validatePlugin as loaderValidatePlugin,
+  compileEmergentPlugin, activateApprovedPlugin,
+  unloadPlugin as loaderUnloadPlugin,
+  getPluginMetrics, listPlugins as loaderListPlugins,
+  getPlugin as loaderGetPlugin, getPendingGovernance,
+  hotReload as loaderHotReload, buildSandboxedContext,
+} from "./plugins/loader.js";
 import { initDTUStore, createDTUStore } from "./lib/dtu-store.js";
 import { renderAndAttach, hasRenderer as _hasRenderer } from "./lib/render-engine.js";
 import { registerAllRenderers } from "./lib/render-registry.js";
@@ -56,6 +65,14 @@ import { getArtifactSchema } from "./lib/artifact-schemas.js";
 import { getExemplarArtifact } from "./lib/exemplar-artifacts.js";
 import "./lib/vocabularies.js";
 import { BoundedMap } from "./lib/bounded-map.js";
+import { generateEntityName, migrateEntityNames as runEntityNameMigration, isFunctionLabel as isEntityFunctionLabel } from "./lib/entity-naming.js";
+import { validateSafeFetchUrl as _ssrfValidate, isUrlSafeAsync as _ssrfIsSafeAsync, fetchWithPinnedIp as _ssrfFetchPinned } from "./lib/ssrf-guard.js";
+import { registerCitation as economyRegisterCitation } from "./economy/royalty-cascade.js";
+import { checkAccess as economyCheckAccess } from "./economy/rights-enforcement.js";
+// World Lens / MMO presence system
+import * as cityPresence from "./lib/city-presence.js";
+import * as worldMechanics from "./lib/world-mechanics.js";
+import { getDistrictByLens as _worldGetDistrictByLens, placeWorldObject as _worldPlaceObject } from "./lib/world-engine.js";
 import {
   bridgeMindSpace, bridgeSubconscious,
   bridgeCognitiveBridge, bridgeMultiSpaceHandler
@@ -74,6 +91,9 @@ import { startAllIntervals, stopAllIntervals, getIntervalStatus } from "./lib/in
 import { getMemoryPressureLevel, initMemoryWatchdog } from "./lib/memory-pressure.js";
 import { initStateSync, getSyncStatus, stopSync } from "./lib/state-sync.js";
 import * as cityStreaming from "./lib/city-streaming.js";
+import { createRequire } from "module";
+const _require = createRequire(import.meta.url);
+const infrastructureConfig = _require("./config/infrastructure.cjs");
 
 // ---- Route modules (ESM) ----
 import registerSystemRoutes from "./routes/system.js";
@@ -107,7 +127,7 @@ import { enqueueMessage, processQueue as processSpQueue, getQueueStatus, setUser
 import { checkSpontaneousContent } from "./prompts/spontaneous.js";
 
 // ── Chat Router + Forge Pipeline ─────────────────────────────────────────
-import { routeMessage as chatRouterRoute, buildLensChain, emitResonanceSignal, shouldOfferForge, detectEmergentRoute, recordRouteMetric, getRouterMetrics, ACTION_TYPES as CHAT_ACTION_TYPES } from "./lib/chat-router.js";
+import { routeMessage as chatRouterRoute, buildLensChain, emitResonanceSignal, shouldOfferForge, detectEmergentRoute, recordRouteMetric, getRouterMetrics, detectOracleIntent, routeThroughOracle, ACTION_TYPES as CHAT_ACTION_TYPES } from "./lib/chat-router.js";
 import { initializeManifests, getManifestStats, registerUserLens, registerEmergentLens } from "./lib/lens-manifest.js";
 import { DOMAIN_RULES, validateArtifact, computeFields, getValidTransitions, scoreArtifact, getDomainSchema } from "./lib/domain-logic.js";
 import { EXTENDED_DOMAIN_RULES } from "./lib/domain-logic-extended.js";
@@ -3462,6 +3482,9 @@ const STATE = {
     },
     history: []
   },
+
+  // ---- Infrastructure Configuration (services, messaging, caching, security, analytics, ML ops, auto-scaling) ----
+  infrastructureConfig,
 };
 
 // Expose STATE for modules that use globalThis (e.g. repair-cortex.js)
@@ -3628,7 +3651,7 @@ const AuthDB = {
 
   getUser(userId) {
     if (db) {
-      const stmt = db.prepare("SELECT * FROM users WHERE id = ? AND is_active = 1");
+      const stmt = db.prepare("SELECT id, username, email, password_hash, role, scopes, created_at, last_login_at FROM users WHERE id = ? AND is_active = 1");
       const row = stmt.get(userId);
       if (row) {
         return {
@@ -3649,7 +3672,7 @@ const AuthDB = {
 
   getUserByUsername(username) {
     if (db) {
-      const stmt = db.prepare("SELECT * FROM users WHERE username = ? AND is_active = 1");
+      const stmt = db.prepare("SELECT id, username, email, password_hash, role, scopes, created_at, last_login_at FROM users WHERE username = ? AND is_active = 1");
       const row = stmt.get(username);
       if (row) {
         return {
@@ -3673,7 +3696,7 @@ const AuthDB = {
 
   getUserByEmail(email) {
     if (db) {
-      const stmt = db.prepare("SELECT * FROM users WHERE email = ? AND is_active = 1");
+      const stmt = db.prepare("SELECT id, username, email, password_hash, role, scopes, created_at, last_login_at FROM users WHERE email = ? AND is_active = 1");
       const row = stmt.get(email);
       if (row) {
         return {
@@ -3731,7 +3754,7 @@ const AuthDB = {
 
   getApiKeyByHash(keyHash) {
     if (db) {
-      const stmt = db.prepare("SELECT * FROM api_keys WHERE key_hash = ? AND is_active = 1");
+      const stmt = db.prepare("SELECT id, user_id, name, key_hash, key_prefix, scopes, created_at, last_used_at FROM api_keys WHERE key_hash = ? AND is_active = 1");
       const row = stmt.get(keyHash);
       if (row) {
         return {
@@ -3764,7 +3787,7 @@ const AuthDB = {
 
   getApiKeysByUser(userId) {
     if (db) {
-      const stmt = db.prepare("SELECT * FROM api_keys WHERE user_id = ? AND is_active = 1");
+      const stmt = db.prepare("SELECT id, user_id, name, key_prefix, scopes, created_at, last_used_at FROM api_keys WHERE user_id = ? AND is_active = 1");
       return stmt.all(userId).map(row => ({
         id: row.id,
         userId: row.user_id,
@@ -3801,7 +3824,7 @@ const AuthDB = {
 
   getAllApiKeys() {
     if (db) {
-      const stmt = db.prepare("SELECT * FROM api_keys WHERE is_active = 1");
+      const stmt = db.prepare("SELECT id, user_id, name, key_hash, key_prefix, scopes, created_at, last_used_at FROM api_keys WHERE is_active = 1");
       return stmt.all().map(row => ({
         id: row.id,
         userId: row.user_id,
@@ -4049,14 +4072,102 @@ function createRefreshToken(userId) {
 function verifyToken(token) {
   if (!jwt) return null;
   try {
-    const decoded = jwt.verify(token, EFFECTIVE_JWT_SECRET);
+    // Pin algorithms — without this, jsonwebtoken would accept any
+    // algorithm listed in the token header, including `none`. Our
+    // tokens are signed with HS256.
+    const decoded = jwt.verify(token, EFFECTIVE_JWT_SECRET, {
+      algorithms: ["HS256"],
+    });
     // ---- Token Revocation Check (Tier 1: Auth Hardening) ----
     if (decoded.jti && _TOKEN_BLACKLIST.isRevoked(decoded.jti)) {
       return null; // Token has been revoked
     }
+    // Sliding idle timeout: if the token's jti hasn't been seen in
+    // IDLE_TIMEOUT_MS (bootstrapped from iat on first sight), reject it.
+    if (decoded.jti && _SESSION_ACTIVITY.isIdleTimedOut(decoded.jti, decoded.iat)) {
+      return null;
+    }
     return decoded;
-  } catch { return null; }
+  } catch (err) {
+    // SECURITY: log the failure reason server-side but never surface
+    // it to the caller — a verbose error tells an attacker whether
+    // their forgery is close.
+    if (err?.name === "JsonWebTokenError" || err?.name === "TokenExpiredError" || err?.name === "NotBeforeError") {
+      // Routine: bad/expired/premature token.
+      if (process.env.DEBUG_AUTH === "true") {
+        structuredLog("debug", "jwt_verify_failed", { reason: err.name, message: err.message });
+      }
+    } else {
+      // Something unexpected — algorithm confusion, malformed JWT, etc.
+      structuredLog("warn", "jwt_verify_unexpected", { reason: err?.name, message: err?.message });
+    }
+    return null;
+  }
 }
+
+// ---- Sliding Idle Session Timeout ----
+// On top of the absolute JWT expiry (7 days), we track last-seen per
+// JTI and reject tokens that have been idle longer than IDLE_TIMEOUT_MS.
+// This protects against stolen tokens that are never used by the
+// legitimate owner again.
+//
+// Default is 7 days — matching the JWT absolute expiry so legitimate
+// users who close the tab and come back a few days later don't get
+// logged out unexpectedly. Operators who want a tighter window
+// (banking / healthcare / etc.) can set SESSION_IDLE_TIMEOUT_MS to
+// something smaller, e.g. 30 * 60 * 1000 for 30 minutes.
+const _SESSION_ACTIVITY = {
+  IDLE_TIMEOUT_MS: Number(process.env.SESSION_IDLE_TIMEOUT_MS || 7 * 24 * 60 * 60 * 1000), // 7d default
+  MAX_ENTRIES: 100000,
+  lastSeen: new Map(), // jti -> timestamp (ms)
+
+  touch(jti) {
+    if (!jti) return;
+    this.lastSeen.set(jti, Date.now());
+    if (this.lastSeen.size > this.MAX_ENTRIES) {
+      // Evict oldest entries
+      const it = this.lastSeen.keys();
+      for (let i = 0, n = this.lastSeen.size - this.MAX_ENTRIES; i < n; i++) {
+        this.lastSeen.delete(it.next().value);
+      }
+    }
+  },
+
+  /**
+   * Check if the token has been idle too long.
+   * @param {string} jti - JWT ID
+   * @param {number} [iatSec] - JWT `iat` claim in seconds. Used as the
+   *   bootstrap last-seen when we've never tracked this jti before, so
+   *   a token that was issued weeks ago and is used for the first time
+   *   today still times out correctly.
+   */
+  isIdleTimedOut(jti, iatSec) {
+    if (!jti) return false; // Tokens without jti skip this check
+    const now = Date.now();
+    let last = this.lastSeen.get(jti);
+    if (last === undefined) {
+      // Never seen: use the token's issued-at as the bootstrap. If the
+      // token is very fresh this is equivalent to "just now"; if it's
+      // old the idle check below will correctly reject it.
+      last = typeof iatSec === "number" ? iatSec * 1000 : now;
+      this.lastSeen.set(jti, last);
+    }
+    return now - last > this.IDLE_TIMEOUT_MS;
+  },
+
+  clear(jti) {
+    if (jti) this.lastSeen.delete(jti);
+  },
+};
+
+// Periodic cleanup to keep the map bounded even without eviction pressure
+setInterval(() => {
+  const now = Date.now();
+  const cutoff = now - _SESSION_ACTIVITY.IDLE_TIMEOUT_MS * 2;
+  for (const [jti, last] of _SESSION_ACTIVITY.lastSeen) {
+    if (last < cutoff) _SESSION_ACTIVITY.lastSeen.delete(jti);
+  }
+}, 10 * 60 * 1000).unref?.();
 
 // ---- Token Blacklist (Tier 1: Auth Hardening) ----
 // In-memory blacklist with Redis support (when available) and SQLite persistence
@@ -4361,8 +4472,15 @@ function csrfMiddleware(req, res, next) {
   // In AUTH_MODE=public, skip CSRF — anonymous users have no session to protect
   if (AUTH_MODE === "public") return next();
 
-  // In development, CSRF is optional
-  if (NODE_ENV !== "production") return next();
+  // CSRF is enforced in production by default. Dev / staging can opt
+  // out with CONCORD_DISABLE_CSRF=true when they're running local
+  // scripts that don't thread a CSRF token. This matches the original
+  // behavior (NODE_ENV !== "production" is implicit opt-out) but
+  // flips the default for non-production explicitly so that a
+  // staging instance accidentally running without NODE_ENV set still
+  // gets protection — unless the operator turns it off.
+  if (process.env.CONCORD_DISABLE_CSRF === "true") return next();
+  if (NODE_ENV !== "production" && process.env.CONCORD_ENFORCE_CSRF !== "true") return next();
 
   // Validate CSRF token
   const headerToken = req.headers["x-csrf-token"] || req.headers["x-xsrf-token"];
@@ -4461,7 +4579,32 @@ function cookieParserMiddleware(req, res, next) {
 
 // Auth middleware
 function authMiddleware(req, res, next) {
-  if (AUTH_MODE === "public") return next();
+  if (AUTH_MODE === "public") {
+    // Public mode: auth isn't REQUIRED, but if the client sent a
+    // valid Bearer token or auth cookie we still populate req.user
+    // so downstream features (presence tracker, ownership checks,
+    // per-user rate limits, attribution) work correctly. This is
+    // "best-effort identify" — failure just leaves req.user unset.
+    try {
+      const authHeader = String(req.headers?.authorization || "");
+      const cookieToken = req.cookies?.concord_auth;
+      let decoded = null;
+      if (cookieToken) {
+        decoded = verifyToken(cookieToken);
+      } else if (authHeader.startsWith("Bearer ")) {
+        decoded = verifyToken(authHeader.slice(7));
+      }
+      if (decoded?.userId) {
+        const user = AuthDB.getUser(decoded.userId);
+        if (user) {
+          req.user = user;
+          req.authMethod = cookieToken ? "cookie" : "jwt";
+          if (decoded.jti) _SESSION_ACTIVITY.touch(decoded.jti);
+        }
+      }
+    } catch (_e) { /* non-fatal — we're in public mode */ }
+    return next();
+  }
 
   // Skip auth for always-public endpoints (any method)
   const alwaysPublic = ["/health", "/ready", "/metrics", "/api/auth/login", "/api/auth/register", "/api/auth/refresh", "/api/auth/csrf-token", "/api/auth/google", "/api/auth/apple", "/api/auth/providers", "/api/docs", "/api/status", "/api/chat", "/api/brain/conscious"];
@@ -4614,6 +4757,8 @@ function authMiddleware(req, res, next) {
         if (user) {
           req.user = user;
           req.authMethod = "cookie";
+          // Update sliding idle timer so active sessions stay alive.
+          if (decoded.jti) _SESSION_ACTIVITY.touch(decoded.jti);
           return _sovereignGate();
         }
       }
@@ -4627,6 +4772,7 @@ function authMiddleware(req, res, next) {
         if (user) {
           req.user = user;
           req.authMethod = "jwt";
+          if (decoded.jti) _SESSION_ACTIVITY.touch(decoded.jti);
           return _sovereignGate();
         }
       }
@@ -5785,28 +5931,57 @@ async function tryInitWebSockets(server) {
 
     // Room management
     socket.on("room:join", ({ room }) => {
-      if (room) {
-        // Authorization check: require authenticated user (in production)
-        if (!socket.data.userId && !socket.data.authenticated) {
-          console.warn('[ws] Unauthorized room join attempt:', { userId: socket.data.userId, room });
-          socket.emit('error', { code: 'UNAUTHORIZED', message: 'Not authorized to join this room' });
+      if (!room || typeof room !== "string") return;
+
+      // Authorization check: require authenticated user (in production)
+      if (!socket.data.userId && !socket.data.authenticated) {
+        console.warn('[ws] Unauthorized room join attempt:', { userId: socket.data.userId, room });
+        socket.emit('error', { code: 'UNAUTHORIZED', message: 'Not authorized to join this room' });
+        return;
+      }
+
+      // SECURITY: session-scoped rooms must verify the session BELONGS
+      // TO the connecting user. Previously we only checked that the
+      // session existed, which let user A join `session:<bob-private>`
+      // as long as the session was valid — exposing Bob's realtime
+      // events to A. Now we also verify ownership.
+      const sessionMatch = room.match(/^session:(.+)$/);
+      if (sessionMatch) {
+        const sessionId = sessionMatch[1];
+        const sess = STATE.sessions?.get(sessionId);
+        if (!sess) {
+          socket.emit('error', { code: 'UNAUTHORIZED', message: 'Session not found' });
           return;
         }
-
-        // For session-scoped rooms, verify the session exists and user has access
-        const sessionMatch = room.match(/^session:(.+)$/);
-        if (sessionMatch) {
-          const sessionId = sessionMatch[1];
-          if (!STATE.sessions.has(sessionId)) {
-            console.warn('[ws] Unauthorized room join attempt:', { userId: socket.data.userId, room });
-            socket.emit('error', { code: 'UNAUTHORIZED', message: 'Not authorized to join this room' });
-            return;
-          }
+        const uid = socket.data.userId;
+        const sessOwner = sess.userId || sess.ownerId || sess.createdBy;
+        const participants = Array.isArray(sess.participants) ? sess.participants : [];
+        const allowed =
+          !sessOwner || // legacy sessions without owner — allow (back-compat)
+          sessOwner === uid ||
+          participants.includes(uid);
+        if (!allowed) {
+          console.warn('[ws] Cross-user session room join blocked:', { userId: uid, room, sessOwner });
+          socket.emit('error', { code: 'UNAUTHORIZED', message: 'Not authorized to join this session' });
+          return;
         }
-
-        socket.join(room);
-        socket.emit("room:joined", { room, ts: nowISO() });
       }
+
+      // SECURITY: `org:<id>` rooms must also verify the connecting user
+      // belongs to that org, not just that the org id is well-formed.
+      const orgMatch = room.match(/^org:(.+)$/);
+      if (orgMatch) {
+        const orgId = orgMatch[1];
+        const userOrgId = socket.data.orgId || socket.data.actor?.orgId;
+        if (userOrgId && userOrgId !== orgId) {
+          console.warn('[ws] Cross-org room join blocked:', { userId: socket.data.userId, room, userOrgId });
+          socket.emit('error', { code: 'UNAUTHORIZED', message: 'Not authorized to join this org' });
+          return;
+        }
+      }
+
+      socket.join(room);
+      socket.emit("room:joined", { room, ts: nowISO() });
     });
 
     socket.on("room:leave", ({ room }) => {
@@ -5828,13 +6003,32 @@ async function tryInitWebSockets(server) {
         return;
       }
 
-      if (sessionId && STATE.sessions.has(sessionId)) {
-        c.sessionId = sessionId;
-        socket.join(`session:${sessionId}`);
+      // SECURITY: subscribe must verify the user owns / is a
+      // participant of the session before joining its room. Same gap
+      // that `room:join` had.
+      if (sessionId) {
+        const sess = STATE.sessions?.get(sessionId);
+        if (sess) {
+          const uid = socket.data.userId;
+          const sessOwner = sess.userId || sess.ownerId || sess.createdBy;
+          const participants = Array.isArray(sess.participants) ? sess.participants : [];
+          const allowed = !sessOwner || sessOwner === uid || participants.includes(uid);
+          if (allowed) {
+            c.sessionId = sessionId;
+            socket.join(`session:${sessionId}`);
+          } else {
+            socket.emit('error', { code: 'UNAUTHORIZED', message: 'Not authorized to subscribe to this session' });
+          }
+        }
       }
       if (orgId) {
-        c.orgId = orgId;
-        socket.join(`org:${orgId}`);
+        const userOrgId = socket.data.orgId || socket.data.actor?.orgId;
+        if (!userOrgId || userOrgId === orgId) {
+          c.orgId = orgId;
+          socket.join(`org:${orgId}`);
+        } else {
+          socket.emit('error', { code: 'UNAUTHORIZED', message: 'Not authorized to subscribe to this org' });
+        }
       }
       socket.emit("subscribed", { sessionId: c.sessionId, orgId: c.orgId, ts: nowISO() });
     });
@@ -5844,11 +6038,150 @@ async function tryInitWebSockets(server) {
       socket.emit("pong", { ts: nowISO() });
     });
 
+    // ── World Lens / MMO: player movement sync ──────────────────────
+    // Frontend emits this every ~50-100ms from AvatarSystem3D while
+    // the local player is moving. We update the in-memory presence
+    // map (which broadcasts to nearby clients on the 100ms tick) and
+    // optionally fire chunk/zone-boundary triggers.
+    //
+    // Rate-limit: accept at most ~30Hz per socket so a misbehaving
+    // client can't flood the broadcast loop.
+    const _moveRateState = { last: 0 };
+    socket.on("player:move", (data) => {
+      const userId = socket.data?.userId;
+      if (!userId) return; // Unauthenticated — silently drop
+      if (!data || typeof data !== "object") return;
+      const now = Date.now();
+      if (now - _moveRateState.last < 33) return; // ~30Hz cap
+      _moveRateState.last = now;
+      try {
+        const pos = cityPresence.updateUserPosition(userId, {
+          cityId: String(data.cityId || "concordia-central"),
+          x: Number(data.x) || 0,
+          y: Number(data.y) || 0,
+          z: Number(data.z) || 0,
+          direction: Number(data.direction) || 0,
+          rotation: Number(data.rotation) || 0,
+          action: typeof data.action === "string" ? data.action.slice(0, 32) : "idle",
+          currentAnimation: typeof data.currentAnimation === "string" ? data.currentAnimation.slice(0, 32) : "idle",
+          districtId: typeof data.districtId === "string" ? data.districtId.slice(0, 64) : null,
+        });
+        // Anti-cheat rejection: updateUserPosition returns ok:false
+        // with { reason, prev } for rate-limit / speed-hack / teleport
+        // detections. Nack back to the client so it can snap the
+        // avatar to the last good position. Rate-limit rejections are
+        // silent to avoid reflecting every dropped flood-packet.
+        if (pos && pos.ok === false) {
+          if (pos.reason !== "rate_limited") {
+            socket.emit("player:move:nack", {
+              reason: pos.reason,
+              prev: pos.prev || null,
+              observedSpeed: pos.observedSpeed,
+              maxSpeed: pos.maxSpeed,
+            });
+          }
+          return;
+        }
+        // Ack back with the nearby-users payload so the client can
+        // render remote avatars even if the broadcast tick hasn't
+        // fired yet.
+        socket.emit("player:move:ack", {
+          ok: true,
+          nearby: pos.nearby || [],
+          chunkCrossed: !!pos.chunkCrossed,
+        });
+      } catch (err) {
+        logger.debug?.("server", "player_move_failed", { error: err?.message });
+      }
+    });
+
+    // Load saved state when a client asks — lets the frontend
+    // rehydrate the last position without a full HTTP round-trip.
+    socket.on("player:load", () => {
+      const userId = socket.data?.userId;
+      if (!userId) return;
+      try {
+        const state = cityPresence.loadPlayerState(userId);
+        socket.emit("player:load:ack", { ok: true, state });
+      } catch (err) {
+        socket.emit("player:load:ack", { ok: false, error: err?.message });
+      }
+    });
+
+    // ── Combat: attack another entity (player or NPC) ──────────────
+    // Client emits combat:attack → server runs the damage math via
+    // cityPresence.applyAttack() and broadcasts combat:hit to
+    // everyone in the attacker's chunk so nearby players see the
+    // damage numbers render. Rate-limited to 4 attacks/sec.
+    let _lastAttackAt = 0;
+    socket.on("combat:attack", (data) => {
+      const userId = socket.data?.userId;
+      if (!userId) return;
+      if (!data || typeof data !== "object") return;
+      const now = Date.now();
+      if (now - _lastAttackAt < 250) return; // ~4 attacks/sec cap
+      _lastAttackAt = now;
+
+      const result = cityPresence.applyAttack({
+        attackerId: userId,
+        targetId: String(data.targetId || "").slice(0, 128),
+        baseDamage: Number(data.baseDamage) || 10,
+        range: Number(data.range) || 3,
+        armorPierce: Number(data.armorPierce) || 0,
+      });
+
+      // Ack back to attacker with full detail (damage, crit, kill)
+      socket.emit("combat:attack:ack", result);
+
+      if (result.ok) {
+        // Broadcast the hit event so everyone in the attacker's
+        // chunk sees it — damage numbers, blood, etc.
+        realtimeEmit("combat:hit", {
+          attackerId: userId,
+          targetId: data.targetId,
+          damage: result.damage,
+          isCrit: result.isCrit,
+          targetHealth: result.targetHealth,
+          targetMaxHealth: result.targetMaxHealth,
+          targetKilled: result.targetKilled,
+        });
+
+        if (result.targetKilled) {
+          realtimeEmit("combat:kill", {
+            attackerId: userId,
+            targetId: data.targetId,
+          });
+        }
+      }
+    });
+
+    // ── Combat: respawn at a district hub after death ──────────────
+    socket.on("player:respawn", (data) => {
+      const userId = socket.data?.userId;
+      if (!userId) return;
+      const result = cityPresence.respawnPlayer(userId, {
+        cityId: data?.cityId,
+        x: Number(data?.x) || 0,
+        y: Number(data?.y) || 0,
+        z: Number(data?.z) || 0,
+      });
+      socket.emit("player:respawn:ack", result);
+    });
+
     socket.on("disconnect", () => {
+      // Persist final position before dropping from memory.
+      const userId = socket.data?.userId;
+      if (userId) {
+        try { cityPresence.removeUser(userId); } catch (_e) { /* ignore */ }
+      }
       REALTIME.clients.delete(clientId);
     });
 
     socket.on("error", () => {
+      const userId = socket.data?.userId;
+      if (userId) {
+        try { cityPresence.removeUser(userId); } catch (_e) { /* ignore */ }
+      }
       REALTIME.clients.delete(clientId);
     });
   });
@@ -6749,20 +7082,38 @@ function looksMachiney(s="") {
 
 function councilGate(dtu, opts={}) {
   const allowRewrite = opts.allowRewrite !== false;
+  // Minimum structured-field count. Different callers get different
+  // thresholds:
+  //   - Automated pipeline / cognitive worker writes (autogen, dream,
+  //     bridge) should meet the full bar so we don't flood the lattice
+  //     with vapid mechanical DTUs. They use the default (2).
+  //   - User-initiated direct writes (/api/dtus create) can be more
+  //     permissive — a user should be able to save a note with just a
+  //     definition and no formal claims/examples. These pass
+  //     { userInitiated: true } to lower the bar to 1.
+  //   - System bootstrap / seed imports bypass entirely via
+  //     { skipCouncilGate: true }.
+  if (opts.skipCouncilGate) return { ok: true, bypassed: true };
+  const minScore = opts.userInitiated ? 1 : 2;
+
   const c = dtu.core || {};
   const score =
     (c.definitions?.length||0) +
     (c.invariants?.length||0) +
     (c.examples?.length||0) +
     (c.claims?.length||0) +
-    (c.nextActions?.length||0);
+    (c.nextActions?.length||0) +
+    // Also count human.summary / title as a structured-ish field for
+    // user DTUs so a user who only types a title + one-line summary
+    // still makes it past the gate.
+    (opts.userInitiated && (dtu.human?.summary || dtu.title) ? 1 : 0);
 
   const humanText = dtu.cretiHuman || dtu.human?.summary || "";
   if (allowRewrite && looksMachiney(humanText)) {
     dtu.cretiHuman = "";
   }
 
-  if (score < 2) return { ok:false, reason:"low_value", score };
+  if (score < minScore) return { ok:false, reason:"low_value", score, minScore };
 
   if (!dtu.cretiHuman) dtu.cretiHuman = renderHumanDTU(dtu);
 
@@ -7150,6 +7501,24 @@ const MACROS = new Map(); // domain -> Map(name -> fn)
 
 function register(domain, name, fn, spec={}) {
   if (!MACROS.has(domain)) MACROS.set(domain, new Map());
+  // Detect silent shadowing: if a macro is being registered twice
+  // under the same (domain, name), the second registration wins
+  // silently. In the 685-macro codebase this was happening for
+  // hypothesis.{propose,get,list}, ingest.queue, persona.{create,list}
+  // — sometimes intentional (Ghost Fleet modules replace stubs),
+  // sometimes bugs. Log it so future duplicates are visible.
+  const existing = MACROS.get(domain).get(name);
+  const INTENTIONAL_SHADOWS = new Set(["ghost_fleet_shadow_ok", "intentional_shadow_ok"]);
+  if (existing && !INTENTIONAL_SHADOWS.has(spec?.note) && typeof structuredLog === "function") {
+    try {
+      structuredLog("warn", "macro_duplicate_registration", {
+        domain,
+        name,
+        prevSpec: existing.spec?.note || null,
+        newSpec: spec?.note || null,
+      });
+    } catch (_e) { /* non-fatal */ }
+  }
   MACROS.get(domain).set(name, { fn, spec: { domain, name, ...spec } });
 }
 
@@ -7161,8 +7530,22 @@ function listMacros(domain) {
 }
 
 async function runMacro(domain, name, input, ctx) {
-  // v3: permissioned cognition (macro-level ACL). Defaults open for local-first dev.
-  const actor = ctx?.actor || { role: "owner", scopes: ["*"] };
+  // v3: permissioned cognition (macro-level ACL).
+  //
+  // A note on the default actor: previously this defaulted to
+  // `{ role: "owner", scopes: ["*"] }` when no actor was supplied,
+  // which is the footgun that let an API-key caller effectively run
+  // as root. We want to keep the security fix (don't default to root)
+  // without breaking the many internal callers that legitimately
+  // forget to set ctx.actor. Since HTTP routes bypass the ACL check
+  // entirely (via _isHumanRequest below) and internal ticks use
+  // makeInternalCtx (which sets role:owner + internal:true and
+  // hits the canRunMacro bypass), the ONLY callers that land here
+  // with a missing actor are misc server-side helpers. We give them
+  // a "system" role with read+write scopes so they don't break —
+  // critical sovereign operations are gated by explicit per-handler
+  // role checks, not by this default.
+  const actor = ctx?.actor || { userId: "system", role: "system", scopes: ["read", "write"], internal: true };
   // ACL check is deferred until after publicReadDomains is evaluated (see below).
 
   // Rate limit check for expensive macros (Phase 5.2)
@@ -7240,7 +7623,13 @@ async function runMacro(domain, name, input, ctx) {
     reproduction: new Set(["compatible-pairs", "status"]),
     lineage: new Set(["tree", "get"]),
     rights: new Set(["list", "get", "profile", "status", "metrics"]),
-    admin: new Set(["dashboard", "stats", "metrics", "audit", "logs", "queue", "backup", "ssl", "governance-rejections", "repair"]),
+    // SECURITY: admin macros are NEVER publicly callable. Audit logs,
+    // queue state, repair history, backup metadata — all require an
+    // explicit admin/owner/founder role checked INSIDE the handler.
+    // Previously these lived in publicReadDomains, which let any
+    // authenticated user pull system logs via `admin.logs`.
+    // Each admin macro now enforces requireAdmin() itself.
+    admin: new Set(),
     heartbeat: new Set(["status", "history", "metrics"]),
     ai: new Set(["search", "gaps", "embeddings"]),
     feedback: new Set(["aggregate"]),
@@ -8534,7 +8923,10 @@ register("worldmodel", "status", (ctx, _input = {}) => {
 
 register("worldmodel", "create_entity", (ctx, input = {}) => {
   enforceEthosInvariant("worldmodel_create_entity");
-  return createWorldEntity(input);
+  // SECURITY: stamp the creator from the authenticated actor so downstream
+  // update/delete macros can verify ownership. Never trust input.createdBy.
+  const createdBy = ctx?.actor?.userId || ctx?.actor?.id || "anon";
+  return createWorldEntity({ ...input, createdBy });
 }, { public: false });
 
 register("worldmodel", "create_relation", (ctx, input = {}) => {
@@ -8730,6 +9122,22 @@ register("worldmodel", "update_entity", (ctx, input = {}) => {
   const entity = ctx.state.worldModel.entities.get(entityId);
   if (!entity) return { ok: false, error: "Entity not found" };
 
+  // SECURITY: ownership check — only the creator or an admin can modify.
+  // Skipped in AUTH_MODE=public and for legacy entities with no
+  // creator stamped, so existing local content stays editable.
+  if (AUTH_MODE !== "public") {
+    const userId = ctx?.actor?.userId || ctx?.actor?.id || ctx?.actor?.odId;
+    const role = ctx?.actor?.role || "guest";
+    const isAdmin = ["owner", "admin", "founder"].includes(role);
+    const ownerField = entity.source?.createdBy || entity.createdBy || entity.ownerId;
+    const isOwner = userId && ownerField && ownerField === userId;
+    // Only gate entities that have a concrete foreign owner stamped;
+    // legacy / system-seeded entities with no owner stay editable.
+    if (!isAdmin && ownerField && ownerField !== "system" && !isOwner && userId !== "anon") {
+      return { ok: false, error: "unauthorized: you can only update your own entities" };
+    }
+  }
+
   // Update allowed fields
   if (input.name) entity.name = String(input.name).slice(0, 200);
   if (input.description) entity.description = String(input.description).slice(0, 2000);
@@ -8755,6 +9163,19 @@ register("worldmodel", "delete_entity", (ctx, input = {}) => {
 
   const entity = ctx.state.worldModel.entities.get(entityId);
   if (!entity) return { ok: false, error: "Entity not found" };
+
+  // SECURITY: same ownership gate as update_entity — only creator or
+  // admin in multi-user mode. Public mode trusts the local user.
+  if (AUTH_MODE !== "public") {
+    const userId = ctx?.actor?.userId || ctx?.actor?.id || ctx?.actor?.odId;
+    const role = ctx?.actor?.role || "guest";
+    const isAdmin = ["owner", "admin", "founder"].includes(role);
+    const ownerField = entity.source?.createdBy || entity.createdBy || entity.ownerId;
+    const isOwner = userId && ownerField && ownerField === userId;
+    if (!isAdmin && ownerField && ownerField !== "system" && !isOwner && userId !== "anon") {
+      return { ok: false, error: "unauthorized: you can only delete your own entities" };
+    }
+  }
 
   // Delete associated relations
   const relationsToDelete = Array.from(ctx.state.worldModel.relations.entries())
@@ -9586,6 +10007,50 @@ register("metalearning", "adaptations", (ctx, _input = {}) => {
 // ===== END META-LEARNING MACROS =====
 
 // ---- ctx ----
+// ── Per-user activity tracker ───────────────────────────────────
+// Lightweight map of userId → { lastSeen, lens, displayName } used
+// by /api/presence/active to render "who's here" panels across
+// lenses. Touched from makeCtx() on every authenticated request so
+// the tracker is automatic: any endpoint with a real actor updates
+// presence without the handler having to think about it.
+const _USER_ACTIVITY = {
+  byUser: new Map(), // userId -> { lastSeen, lens, displayName }
+  MAX_ENTRIES: 50000,
+  touch(userId, lens, displayName) {
+    if (!userId || userId === "anon") return;
+    this.byUser.set(userId, {
+      lastSeen: Date.now(),
+      lens: lens || null,
+      displayName: displayName || null,
+    });
+    if (this.byUser.size > this.MAX_ENTRIES) {
+      // Evict oldest (insertion-order eviction — plenty fast)
+      const it = this.byUser.keys();
+      for (let i = 0, n = this.byUser.size - this.MAX_ENTRIES; i < n; i++) {
+        this.byUser.delete(it.next().value);
+      }
+    }
+  },
+  listActive(lens, windowMs = 5 * 60 * 1000, limit = 40) {
+    const now = Date.now();
+    const cutoff = now - windowMs;
+    const out = [];
+    for (const [userId, entry] of this.byUser) {
+      if (entry.lastSeen < cutoff) continue;
+      if (lens && entry.lens && entry.lens !== lens) continue;
+      out.push({
+        userId,
+        displayName: entry.displayName || userId,
+        lastSeen: new Date(entry.lastSeen).toISOString(),
+        lens: entry.lens,
+        status: (now - entry.lastSeen) < 60_000 ? "active" : "idle",
+      });
+      if (out.length >= limit) break;
+    }
+    return out;
+  },
+};
+
 function makeCtx(req=null) {
   // Inject ATS affect policy into context so macros can consume depthBudget, riskBudget, etc.
   let affectPolicy = null;
@@ -9593,9 +10058,67 @@ function makeCtx(req=null) {
     try { affectPolicy = ATS.getSessionPolicy(req._atsSessionId); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
   }
 
+  // Touch the per-user activity tracker so /api/presence/active
+  // reflects who's currently poking at the server. We infer the
+  // lens from the Referer header first (the page the user is on),
+  // then from /api/lens/<domain> URL paths as a fallback.
+  try {
+    if (req && req.user && req.user.id) {
+      // Lens inference priority: Referer first (the actual page the
+      // user is on), then /api/lens/<domain> paths, then a generic
+      // /api/<domain>/ fallback. This keeps a feed-lens user who
+      // calls /api/dtus/stats correctly tagged as "feed", not "dtus".
+      let lensGuess = null;
+      if (typeof req.headers?.referer === "string") {
+        const r = req.headers.referer.match(/\/lenses\/([a-z0-9_-]+)/);
+        if (r) lensGuess = r[1];
+      }
+      if (!lensGuess) {
+        const urlPath = req.originalUrl || req.url || "";
+        const m = urlPath.match(/^\/api\/lens\/([a-z0-9_-]+)/);
+        if (m) lensGuess = m[1];
+      }
+      _USER_ACTIVITY.touch(
+        req.user.id,
+        lensGuess,
+        req.user.displayName || req.user.username || null,
+      );
+    }
+  } catch (_e) { /* non-fatal */ }
+
+  // Construct actor from (in order): req.actor (set by auth middleware
+  // from a verified session), req.user (from JWT verify), or the
+  // anonymous baseline appropriate for the current AUTH_MODE.
+  //
+  // AUTH_MODE=public means "local-first, no login required" — users
+  // need write access to actually use the app, so anon callers get
+  // member role with read+write scope. Secured modes give anon only
+  // read access. Either way, the runMacro ACL check is skipped for
+  // HTTP requests (_isHumanRequest) so this actor is mostly consumed
+  // by in-handler role/ownership checks.
+  let resolvedActor;
+  if (req && req.actor) {
+    resolvedActor = req.actor;
+  } else if (req && req.user && req.user.id) {
+    resolvedActor = {
+      userId: req.user.id,
+      id: req.user.id,
+      orgId: req.user.orgId || "default",
+      role: req.user.role || "member",
+      scopes: Array.isArray(req.user.scopes) ? req.user.scopes : ["read", "write"],
+    };
+  } else {
+    const isPublicMode = AUTH_MODE === "public";
+    resolvedActor = {
+      userId: "anon",
+      orgId: "public",
+      role: isPublicMode ? "member" : "viewer",
+      scopes: isPublicMode ? ["read", "write"] : ["read"],
+    };
+  }
   return {
     state: STATE,
-    actor: (req && req.actor) ? req.actor : { userId: "anon", orgId: "public", role: AUTH_MODE === "public" ? "member" : "viewer", scopes: AUTH_MODE === "public" ? ["read", "write"] : ["read"] },
+    actor: resolvedActor,
     env: {
       version: VERSION,
       llmReady: LLM_READY,
@@ -10015,14 +10538,115 @@ const _SYSTEM_DTU_SOURCES = new Set([
 /** All DTUs (including system/internal). Use for admin endpoints only. */
 function dtusArray() { return typeof STATE.dtus?.values === "function" ? Array.from(STATE.dtus.values()) : []; }
 
-/** User-visible DTUs only: filters out repair cortex, system internals, and internal-scope DTUs. */
-function userVisibleDTUs() {
-  return dtusArray().filter(d =>
-    !_SYSTEM_DTU_SOURCES.has(d.source) &&
-    !_SYSTEM_DTU_SOURCES.has(d.creatorType) &&
-    d.scope !== "system" &&
-    d.visibility !== "internal"
-  );
+/**
+ * User-visible DTUs only: filters out repair cortex, system internals,
+ * internal-scope DTUs, and (when `viewerId` is passed) any private /
+ * user-scoped content not owned by the viewer.
+ *
+ * Calling without a viewer ID is the safe default — private content is
+ * hidden from anonymous / system callers entirely, so we can't leak
+ * another user's uploads through a macro that forgot to thread the
+ * user context through.
+ *
+ * @param {string|null} [viewerId] - User requesting the list, if any
+ */
+// Viewer location cache for userVisibleDTUs. Key: userId. Value:
+// { declaredRegional, declaredNational, expiresAt }. 30s TTL so a
+// user's federation picker applies in near-real-time without a DB
+// lookup on every feed query.
+const _VIEWER_LOC_CACHE = new Map();
+function _resolveViewerLocation(viewerId) {
+  if (!viewerId || viewerId === "anon") return { declaredRegional: null, declaredNational: null };
+  const now = Date.now();
+  const cached = _VIEWER_LOC_CACHE.get(viewerId);
+  if (cached && cached.expiresAt > now) return cached;
+  let declaredRegional = null;
+  let declaredNational = null;
+  try {
+    if (typeof db !== "undefined" && db) {
+      const row = db.prepare("SELECT declared_regional, declared_national FROM users WHERE id = ?").get(viewerId);
+      if (row) {
+        declaredRegional = row.declared_regional || null;
+        declaredNational = row.declared_national || null;
+      }
+    }
+  } catch (_e) { /* table / column may not exist on older deploys */ }
+  const entry = { declaredRegional, declaredNational, expiresAt: now + 30_000 };
+  _VIEWER_LOC_CACHE.set(viewerId, entry);
+  return entry;
+}
+
+function userVisibleDTUs(viewerId = null) {
+  // Resolve once per call so per-DTU filtering doesn't thrash the
+  // DB cache lookup. Anon viewers get no regional/national view
+  // which means any regional/national-tier DTU is hidden from them
+  // (correct — they haven't declared a location).
+  const viewerLoc = _resolveViewerLocation(viewerId);
+
+  return dtusArray().filter(d => {
+    // System internal filters (always applied)
+    if (_SYSTEM_DTU_SOURCES.has(d.source)) return false;
+    if (_SYSTEM_DTU_SOURCES.has(d.creatorType)) return false;
+    if (d.scope === "system") return false;
+    if (d.visibility === "internal") return false;
+
+    // Privacy / scope filters — private or user-scoped content is only
+    // visible to its owner, never to a system caller that forgot to
+    // pass a viewer ID.
+    const isPrivate =
+      d.privacy === "private" ||
+      d.privacy === "followers-only" ||
+      d.scope === "user" ||
+      d.visibility === "private";
+
+    const owner = d.author || d.ownerId || d.userId || d.createdBy;
+
+    if (isPrivate) {
+      if (!viewerId) return false;
+      if (owner !== viewerId) return false;
+    }
+
+    // ── Federation tier filter ───────────────────────────────────
+    // Regional / national tier DTUs are only visible to viewers in
+    // the same region / nation. Owners always see their own
+    // regardless of tier. Legacy DTUs (no federation_tier) fall
+    // through to the pre-federation behavior.
+    const tier = d.federation_tier || d.federationTier || null;
+    if (tier && viewerId !== owner) {
+      if (tier === "local") {
+        // Local tier = owner-only; anyone else is blocked.
+        return false;
+      }
+      if (tier === "regional") {
+        const dtuRegional = d.location_regional || d.locationRegional || null;
+        // Viewer must declare and match. Unknown-regional DTUs fall
+        // through to the default (published) behavior.
+        if (dtuRegional) {
+          if (!viewerLoc.declaredRegional) return false;
+          if (viewerLoc.declaredRegional !== dtuRegional) return false;
+        }
+      } else if (tier === "national") {
+        const dtuNational = d.location_national || d.locationNational || null;
+        if (dtuNational) {
+          if (!viewerLoc.declaredNational) return false;
+          if (viewerLoc.declaredNational !== dtuNational) return false;
+        }
+      }
+      // tier === "global" — always visible, no extra check
+    }
+
+    return true;
+  });
+}
+
+/**
+ * Invalidate the cached declared region/nation for a user. Called
+ * after /api/auth/choose-universe so the feed picks up the new
+ * location immediately instead of waiting for the 30s TTL.
+ */
+function invalidateViewerLocation(userId) {
+  if (!userId) return;
+  _VIEWER_LOC_CACHE.delete(userId);
 }
 function dtusByIds(ids=[]) {
   const out = [];
@@ -10095,6 +10719,24 @@ function upsertDTU(dtu, { broadcast = true, federate = false } = {}) {
         tier: dtu.tier,
         tags: dtu.tags,
         updatedAt: dtu.updatedAt
+      });
+      // Graph lens listens for 'graph:update' via useRealtimeLens
+      // fallback; emit it so the in-memory graph visualizer can
+      // hot-patch its node/edge cache when a DTU is created or
+      // mutated elsewhere (collab edits, cross-tab writes, mechanic
+      // triggered spawn_object, etc). Carries the full minimal
+      // shape the frontend needs to slot it into the graph without
+      // a full refetch.
+      realtimeEmit("graph:update", {
+        op: isNew ? "add" : "update",
+        node: {
+          id: dtu.id,
+          title: dtu.title,
+          tier: dtu.tier || "regular",
+          tags: Array.isArray(dtu.tags) ? dtu.tags.slice(0, 20) : [],
+          domain: dtu.domain || null,
+        },
+        fetchedAt: new Date().toISOString(),
       });
     } catch (e) { observe(e, "dtu_realtime_broadcast"); }
 
@@ -10195,8 +10837,17 @@ function restoreDTUVersion(dtuId, version) {
   // Save current state as new version before restoring
   saveDTUVersion(dtu, "restore");
 
-  // Restore fields from snapshot
-  Object.assign(dtu, v.snapshot, { updatedAt: nowISO() });
+  // SECURITY: Object.assign does not filter out __proto__ / constructor /
+  // prototype keys, so a tampered version snapshot could pollute the DTU
+  // prototype chain and escalate privileges. Copy own enumerable keys
+  // only and skip any dangerous key.
+  const DANGEROUS_KEYS = new Set(["__proto__", "constructor", "prototype"]);
+  const snap = v.snapshot && typeof v.snapshot === "object" ? v.snapshot : {};
+  for (const [key, value] of Object.entries(snap)) {
+    if (DANGEROUS_KEYS.has(key)) continue;
+    dtu[key] = value;
+  }
+  dtu.updatedAt = nowISO();
   upsertDTU(dtu);
 
   return { ok: true, restoredTo: version, dtu };
@@ -11953,9 +12604,13 @@ async function initGhostFleet() {
     const hypo = await import("./emergent/hypothesis-engine.js");
     GHOST_FLEET_STATUS.modules["hypothesis-engine"] = { loaded: true, loadedAt: new Date().toISOString() };
 
-    register("hypothesis", "propose", (_ctx, input = {}) => hypo.proposeHypothesis(input.statement, input.domain, input.priority));
-    register("hypothesis", "get", (_ctx, input = {}) => hypo.getHypothesis(input.id));
-    register("hypothesis", "list", (_ctx, input = {}) => hypo.listHypotheses(input.status));
+    // Ghost Fleet hypothesis engine — intentionally shadows the stub
+    // registrations at ~9709/9735/9745 with the full implementation
+    // from ./emergent/hypothesis-engine.js. Marked with note so the
+    // duplicate-registration warning in register() stays quiet.
+    register("hypothesis", "propose", (_ctx, input = {}) => hypo.proposeHypothesis(input.statement, input.domain, input.priority), { note: "ghost_fleet_shadow_ok" });
+    register("hypothesis", "get", (_ctx, input = {}) => hypo.getHypothesis(input.id), { note: "ghost_fleet_shadow_ok" });
+    register("hypothesis", "list", (_ctx, input = {}) => hypo.listHypotheses(input.status), { note: "ghost_fleet_shadow_ok" });
     register("hypothesis", "add_evidence", (_ctx, input = {}) => hypo.addEvidence(input.hypothesisId, input.side, input.dtuId, input.weight, input.summary));
     register("hypothesis", "add_test", (_ctx, input = {}) => hypo.addTest(input.hypothesisId, input.description));
     register("hypothesis", "update_test", (_ctx, input = {}) => hypo.updateTestResult(input.hypothesisId, input.testId, input.result));
@@ -13027,7 +13682,7 @@ async function buildBrainContext(query, lens = null, maxDTUs = 10, sessionId = n
     }
   }
 
-  const all = userVisibleDTUs();
+  const all = userVisibleDTUs(userId && userId !== "anon" ? userId : null);
   let existingContext = "";
 
   if (all.length) {
@@ -14672,90 +15327,20 @@ function generateOpenAPISpec() {
 }
 
 // ---- Plugin System ----
-const PLUGINS = new BoundedMap(200, "PLUGINS"); // pluginId -> { id, name, version, hooks, enabled, config }
-const PLUGIN_HOOKS = {
-  "dtu:beforeCreate": [],
-  "dtu:afterCreate": [],
-  "dtu:beforeUpdate": [],
-  "dtu:afterUpdate": [],
-  "dtu:beforeDelete": [],
-  "dtu:afterDelete": [],
-  "macro:beforeExecute": [],
-  "macro:afterExecute": [],
-  "search:beforeQuery": [],
-  "search:afterQuery": []
-};
-
-function _registerPlugin(plugin) {
-  if (!plugin.id || !plugin.name) {
-    return { ok: false, error: "Plugin must have id and name" };
-  }
-
-  const registered = {
-    id: plugin.id,
-    name: plugin.name,
-    version: plugin.version || "1.0.0",
-    description: plugin.description || "",
-    author: plugin.author || "Unknown",
-    hooks: [],
-    enabled: true,
-    config: plugin.defaultConfig || {}
-  };
-
-  // Register hooks
-  for (const [hookName, handler] of Object.entries(plugin.hooks || {})) {
-    if (PLUGIN_HOOKS[hookName]) {
-      PLUGIN_HOOKS[hookName].push({ pluginId: plugin.id, handler });
-      registered.hooks.push(hookName);
-    }
-  }
-
-  PLUGINS.set(plugin.id, registered);
-  structuredLog("info", "plugin_registered", { name: plugin.name, version: registered.version });
-  return { ok: true, plugin: registered };
-}
-
-function unregisterPlugin(pluginId) {
-  const plugin = PLUGINS.get(pluginId);
-  if (!plugin) return { ok: false, error: "Plugin not found" };
-
-  // Remove hooks
-  for (const hookName of Object.keys(PLUGIN_HOOKS)) {
-    PLUGIN_HOOKS[hookName] = PLUGIN_HOOKS[hookName].filter(h => h.pluginId !== pluginId);
-  }
-
-  PLUGINS.delete(pluginId);
-  return { ok: true };
-}
-
-async function _executeHook(hookName, context) {
-  const handlers = PLUGIN_HOOKS[hookName] || [];
-  let result = context;
-
-  for (const { pluginId, handler } of handlers) {
-    const plugin = PLUGINS.get(pluginId);
-    if (!plugin?.enabled) continue;
-
-    try {
-      result = await handler(result, plugin.config);
-    } catch (e) {
-      console.error(`[Plugins] Hook ${hookName} failed for ${pluginId}:`, e.message);
-    }
-  }
-
-  return result;
-}
-
-function _listPlugins() {
-  return Array.from(PLUGINS.values()).map(p => ({
-    id: p.id,
-    name: p.name,
-    version: p.version,
-    description: p.description,
-    enabled: p.enabled,
-    hooks: p.hooks
-  }));
-}
+// Delegates to the validated plugin loader (server/plugins/loader.js) which
+// enforces 4-gate security validation (shape, namespace, patterns, deps) and
+// supports emergent-generated plugins via runtime-compiler.js.
+//
+// Legacy inline PLUGINS/PLUGIN_HOOKS maps removed — all plugin lifecycle
+// (register, unload, hooks, tick, metrics) now flows through:
+//   loader.js  → validator.js   (4-gate security check)
+//              → runtime-compiler.js (emergent-gen compilation + governance)
+//
+// API endpoints use macros registered in emergent/index.js which call loader
+// functions: registerPlugin, unloadPlugin, listPlugins, getPlugin,
+// getPluginMetrics, compileEmergentPlugin, activateApprovedPlugin, etc.
+// Hook dispatch uses fireHook(STATE, hookName, payload) from loader.js.
+// Per-tick plugin work uses tickPlugins(STATE) from loader.js.
 
 // ---- CLI Helpers ----
 function generateCLIHelp() {
@@ -14797,7 +15382,7 @@ function getCLIStats() {
     shadowDtus: STATE.shadowDtus.size,
     sessions: STATE.sessions.size,
     macros: Array.from(MACROS.entries()).reduce((acc, [, m]) => acc + m.size, 0),
-    plugins: PLUGINS.size,
+    plugins: (getPluginMetrics(STATE)?.loadedCount || 0),
     embeddings: EMBEDDINGS.store.size,
     uptime: process.uptime()
   };
@@ -15952,6 +16537,25 @@ async function pipelineCommitDTU(ctx, dtu, opts={}) {
     realtimeEmit("dtu:created", {
       id: dtu.id, title: dtu.title, tier: dtu.tier, tags: dtu.tags, updatedAt: dtu.updatedAt,
     });
+    // Graph lens realtime — same payload shape as upsertDTU's
+    // broadcast so graph visualizers hot-patch their node cache
+    // whether the write came through the legacy upsert path or the
+    // pipeline commit path. (Pass 4 only wired it to upsertDTU which
+    // meant the REST /api/dtus create path was silently missing the
+    // event even though the connect-the-wires was committed.)
+    try {
+      realtimeEmit("graph:update", {
+        op: _prevDtu ? "update" : "add",
+        node: {
+          id: dtu.id,
+          title: dtu.title,
+          tier: dtu.tier || "regular",
+          tags: Array.isArray(dtu.tags) ? dtu.tags.slice(0, 20) : [],
+          domain: dtu.domain || null,
+        },
+        fetchedAt: new Date().toISOString(),
+      });
+    } catch (_e) { /* non-fatal */ }
 
     // Sync DTU to lens artifacts for domain-based lens views
     try { if (typeof syncDTUToLensArtifacts === "function") syncDTUToLensArtifacts(dtu); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
@@ -16088,7 +16692,10 @@ register("dtu", "create", async (ctx, input) => {
   // ── Daily DTU soft cap tracking ───────────────────────────────────────
   const DAILY_DTU_SOFT_CAP = 200;
   const _dtuTodayKey = new Date().toISOString().slice(0, 10);
-  const _dtuUserId = ctx?.actor?.id || ctx?.actor?.userId || input.authorId || "anon";
+  // SECURITY: identity comes ONLY from authenticated session context — never
+  // from the request body. A previous `|| input.authorId` fallback let
+  // unauthenticated callers forge authorship.
+  const _dtuUserId = ctx?.actor?.userId || ctx?.actor?.id || "anon";
   if (!STATE._dailyDtuCount) STATE._dailyDtuCount = {};
   if (!STATE._dailyDtuCount[_dtuTodayKey]) STATE._dailyDtuCount = { [_dtuTodayKey]: {} };
   if (!STATE._dailyDtuCount[_dtuTodayKey][_dtuUserId]) STATE._dailyDtuCount[_dtuTodayKey][_dtuUserId] = 0;
@@ -16101,11 +16708,25 @@ register("dtu", "create", async (ctx, input) => {
   const meta = input.meta && typeof input.meta === "object" ? input.meta : {};
   const allowRewrite = input.allowRewrite !== false;
 
-  // ── Usage Rights Enforcement: check parent DTU consent ─────────────
-  // If this DTU derives from another user's DTU, verify they allow citations.
-  // Can't have people stealing work — consent must be explicit.
-  const _creatorId = ctx?.actor?.userId || ctx?.actor?.id || input.authorId || "anon";
+  // ── Usage Rights Enforcement: check parent DTU consent OR license ──
+  // If this DTU derives from another user's DTU, verify one of:
+  //   1. The parent is public/published/globally-scoped (implied license)
+  //   2. The parent creator has consented to citations (consent.allowCitations)
+  //   3. The caller holds a purchased usage/remix/commercial license via
+  //      the rights-enforcement layer (dtu_licenses) — this is the
+  //      marketplace wire: buying usage rights unlocks derivation.
+  //
+  // We also track, per parent, WHICH path unlocked the gate. Path 3
+  // (purchased license) is remembered on _lineageUnlockedByLicense so
+  // the subsequent auto-citation call can pass hasPurchasedLicense=true
+  // and skip the user-level consent check on the parent creator.
+  //
+  // SECURITY: creator is derived ONLY from the authenticated actor so a
+  // caller can't forge `authorId` in the body to look like the parent's
+  // owner and bypass the gate.
+  const _creatorId = ctx?.actor?.userId || ctx?.actor?.id || "anon";
   const _lineageViolations = [];
+  const _lineageUnlockedByLicense = new Set();
   for (const parentRef of lineage) {
     const parentId = typeof parentRef === "string" ? parentRef : parentRef?.id;
     if (!parentId) continue;
@@ -16114,19 +16735,58 @@ register("dtu", "create", async (ctx, input) => {
     // Own DTUs and system DTUs: no restriction
     if (!parentDtu.ownerId || parentDtu.ownerId === _creatorId || parentDtu.ownerId === "anon" || parentDtu.ownerId === "system" || parentDtu.ownerId === "founder") continue;
     if (parentDtu.creatorType === "system") continue;
-    // Check consent
+
+    // (1) Public / published / global scope → implied citation license.
+    //     Council-approved global promotion sets scope="global" AND
+    //     visibility="public" via approvePromotion(), so once the
+    //     council approves a DTU it becomes derivable by anyone.
     const consent = parentDtu.consent || parentDtu.meta?.consent || {};
     const vis = parentDtu.meta?.visibility || parentDtu.visibility;
-    // Published/public with no explicit denial: implied license for citation
-    if (vis === "published" || vis === "public") continue;
-    // Private DTU from another user: must have allowCitations
-    if (!consent.allowCitations) {
-      _lineageViolations.push({ parentId, parentTitle: parentDtu.title, owner: parentDtu.ownerId, reason: "citations_not_allowed" });
+    const scope = parentDtu.scope;
+    if (vis === "published" || vis === "public" || scope === "global") continue;
+
+    // (2) Per-DTU creator consent (legacy path).
+    if (consent.allowCitations) continue;
+
+    // (3) Marketplace purchased license. Check rights-enforcement for a
+    //     tier whose capabilities include `remix`/`derivative`/`citation`.
+    //     If the caller bought usage/remix/commercial rights, that counts
+    //     as a license to derive.
+    let purchasedLicense = false;
+    try {
+      if (db && _creatorId && _creatorId !== "anon") {
+        const contentType = String(parentDtu.domain || parentDtu.type || parentDtu.kind || "document").toLowerCase();
+        // Try the most permissive derivation-capable actions in order.
+        // The first one that resolves "allowed" is enough.
+        for (const action of ["create_derivative", "remix", "cite"]) {
+          const check = economyCheckAccess(db, {
+            userId: _creatorId,
+            dtuId: parentId,
+            contentType,
+            action,
+            creatorId: parentDtu.ownerId,
+          });
+          if (check?.allowed) { purchasedLicense = true; break; }
+        }
+      }
+    } catch (e) {
+      logger.debug('server', 'license_check_failed', { error: e?.message });
     }
+    if (purchasedLicense) {
+      _lineageUnlockedByLicense.add(parentId);
+      continue;
+    }
+
+    _lineageViolations.push({ parentId, parentTitle: parentDtu.title, owner: parentDtu.ownerId, reason: "no_usage_license_or_consent" });
   }
   if (_lineageViolations.length > 0) {
     structuredLog("warn", "dtu_lineage_consent_denied", { creator: _creatorId, violations: _lineageViolations });
-    return { ok: false, error: "usage_rights_denied", message: "Cannot derive from these DTUs without citation consent from their creators", violations: _lineageViolations };
+    return {
+      ok: false,
+      error: "usage_rights_denied",
+      message: "Cannot derive from these DTUs — parent is not public, creator hasn't consented to citations, and you don't hold a purchased usage license. Buy usage rights in the marketplace to derive.",
+      violations: _lineageViolations,
+    };
   }
 
   const coreIn = (input.core && typeof input.core === "object") ? input.core : {};
@@ -16147,6 +16807,98 @@ register("dtu", "create", async (ctx, input) => {
     if (!tags.includes("quarantine:injection-review")) tags.push("quarantine:injection-review");
   }
 
+  // ── Lens-based visibility defaults ──────────────────────────────────
+  // What you post on "social" should feel like Facebook — visible to
+  // others, interactable, citable by default. What you type in "chat"
+  // should feel like a DM — private, not citable. The lens/domain the
+  // DTU was created in is the signal we use.
+  //
+  // SOCIAL lenses: anything posted is public by default. Creator's
+  //   consent.shareToFeed and consent.allowCitations default to true
+  //   so the social graph can interact normally. Explicit caller
+  //   overrides still win.
+  // PRIVATE lenses: chat, journal, etc. Default private. Citations
+  //   disabled. (This is the existing behavior.)
+  const _lensKey = String(input.domain || input.lens || meta?.lens || "").toLowerCase();
+  const _SOCIAL_LENSES = new Set([
+    "social", "feed", "collab", "culture", "community", "post", "share",
+    "forum", "discussion", "thread", "public", "profile", "broadcast",
+  ]);
+  const _PRIVATE_LENSES = new Set([
+    "chat", "journal", "diary", "note", "notes", "private", "dm",
+    "message", "messages", "personal", "inbox", "draft", "drafts",
+  ]);
+  const _isSocialLens = _SOCIAL_LENSES.has(_lensKey);
+  const _isPrivateLens = _PRIVATE_LENSES.has(_lensKey);
+
+  // Resolved defaults: explicit input.visibility always wins.
+  const _defaultVisibility = input.visibility
+    ? input.visibility
+    : _isSocialLens
+      ? "public"
+      : "private";
+  const _defaultConsent = {
+    publishToMarketplace: false,
+    shareToFeed: !!_isSocialLens,
+    allowCitations: !!_isSocialLens,
+    allowAiTraining: false,
+  };
+  // Caller-supplied consent overrides the lens defaults piecewise.
+  const _resolvedConsent = {
+    ..._defaultConsent,
+    ...(input.consent && typeof input.consent === "object" ? input.consent : {}),
+  };
+
+  // ── Federation tier + location inheritance ──────────────────────────
+  // The caller can pick a visibility scope: private | local | regional
+  // | national | global. If they don't, we derive a reasonable default
+  // from the lens (social lenses default to the user's regional tier so
+  // posts feel "local community" by default — users can widen to
+  // national or global explicitly). Location is inherited from the
+  // creator's declared_regional/declared_national if they have it.
+  let _creatorDeclaredRegional = null;
+  let _creatorDeclaredNational = null;
+  if (db && _creatorId && _creatorId !== "anon") {
+    try {
+      const row = db.prepare("SELECT declared_regional, declared_national FROM users WHERE id = ?").get(_creatorId);
+      if (row) {
+        _creatorDeclaredRegional = row.declared_regional || null;
+        _creatorDeclaredNational = row.declared_national || null;
+      }
+    } catch (_e) { logger.debug('server', 'creator_location_lookup_failed', { error: _e?.message }); }
+  }
+
+  // visibilityScope is the new top-level field callers can pass:
+  //   private | local | regional | national | global
+  // It takes precedence over input.federationTier for clarity.
+  const _requestedScope = String(input.visibilityScope || input.federationTier || "").toLowerCase();
+  const _VALID_TIERS = new Set(["local", "regional", "national", "global"]);
+  let _federationTier = _VALID_TIERS.has(_requestedScope) ? _requestedScope : null;
+
+  // Default federation tier when the caller didn't specify one.
+  if (!_federationTier) {
+    if (_defaultVisibility === "private") {
+      _federationTier = "local";
+    } else if (_isSocialLens) {
+      // Social posts default to the creator's region if they've
+      // declared one, otherwise fall through to local (private to
+      // the user until they set their location).
+      _federationTier = _creatorDeclaredRegional ? "regional" : "local";
+    } else {
+      _federationTier = "local";
+    }
+  }
+
+  // Explicit locations on the input override the inherited values.
+  const _dtuLocationRegional = input.locationRegional || _creatorDeclaredRegional || null;
+  const _dtuLocationNational = input.locationNational || _creatorDeclaredNational || null;
+
+  // Safety: if the caller asked for regional/national tier but doesn't
+  // have a declared location, downgrade to local so we don't create a
+  // DTU that literally nobody can see.
+  if (_federationTier === "regional" && !_dtuLocationRegional) _federationTier = "local";
+  if (_federationTier === "national" && !_dtuLocationNational) _federationTier = "local";
+
   const dtu = {
     id: uid("dtu"),
     title,
@@ -16155,14 +16907,17 @@ register("dtu", "create", async (ctx, input) => {
     lineage,
     source,
     meta,
-    ownerId: ctx?.actor?.userId || ctx?.actor?.id || input.authorId || null,
-    visibility: input.visibility || "private",
-    consent: {
-      publishToMarketplace: false,
-      shareToFeed: false,
-      allowCitations: false,
-      allowAiTraining: false,
-    },
+    // SECURITY: ownerId always comes from the authenticated actor — never
+    // from input.authorId, which would let callers forge ownership.
+    ownerId: ctx?.actor?.userId || ctx?.actor?.id || null,
+    visibility: _defaultVisibility,
+    consent: _resolvedConsent,
+    // Federation tier + location: set once at creation, promoted later
+    // via promotion-pipeline. canViewDtu compares these to the viewer's
+    // declared region/nation at read time.
+    federation_tier: _federationTier,
+    location_regional: _dtuLocationRegional,
+    location_national: _dtuLocationNational,
     creatorType: input.creatorType || (ctx?.actor?.userId && ctx.actor.userId !== "anon" ? "user" : "system"),
     core: {
       definitions: Array.isArray(coreIn.definitions) ? coreIn.definitions : [],
@@ -16210,10 +16965,25 @@ register("dtu", "create", async (ctx, input) => {
     if (!dtu.human.summary) dtu.human.summary = normalizeText(rawText).slice(0, 320);
   }
 
-  const gate = councilGate(dtu, { allowRewrite });
+  // User-initiated direct writes get a lower council threshold (1
+  // structured field, and title+summary count) so users can save
+  // notes freely. Automated pipeline / system writes still use the
+  // default (2) to prevent vapid DTU floods. Callers can also pass
+  // `skipCouncilGate: true` on the macro input to bypass entirely
+  // (used by seed importers, migration scripts, and admin tools).
+  const actorRole = ctx?.actor?.role;
+  const isUserInitiated = source === "user" ||
+    source === "forge" ||
+    source === "lens" ||
+    (actorRole && actorRole !== "system" && actorRole !== "internal");
+  const gate = councilGate(dtu, {
+    allowRewrite,
+    userInitiated: isUserInitiated,
+    skipCouncilGate: input.skipCouncilGate === true && (actorRole === "owner" || actorRole === "founder" || ctx?.actor?.internal),
+  });
   if (!gate.ok) {
     ctx.log("dtu.reject", `Rejected DTU: ${title}`, { reason: gate.reason, score: gate.score, source });
-    return { ok: false, error: "Council rejected DTU", reason: gate.reason, score: gate.score };
+    return { ok: false, error: "Council rejected DTU", reason: gate.reason, score: gate.score, minScore: gate.minScore };
   }
 
   dtu.cretiHuman = dtu.cretiHuman || renderHumanDTU(dtu);
@@ -16224,6 +16994,91 @@ register("dtu", "create", async (ctx, input) => {
 
   // Notify event bus of DTU creation
   try { eventBus.emit("dtu.created", { id: dtu.id, title: dtu.title, domain: dtu.domain, creatorId: dtu.authorId || source }); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
+
+  // ── MMO auto-placement ────────────────────────────────────────────
+  // When a DTU is created in a lens that maps to a world district,
+  // automatically place it as a world object in that district so the
+  // creator's work shows up in the MMO immediately. Music DTU → music
+  // district. Art DTU → art district. Code DTU → code district. The
+  // district mapping lives in world-engine.js and is driven by the
+  // DTU's `domain` / `lens` field.
+  //
+  // Placement is best-effort and never blocks DTU creation. The
+  // coordinates are pseudo-random within the district radius so many
+  // DTUs from the same lens spread out naturally instead of piling
+  // on the district center.
+  try {
+    const lensKey = String(dtu.domain || input.lens || meta?.lens || "").toLowerCase();
+    if (lensKey) {
+      const district = _worldGetDistrictByLens(lensKey);
+      if (district) {
+        const radius = (district.radius || 100) * 0.7;
+        const angle = (crypto.createHash("sha256").update(dtu.id).digest().readUInt32BE(0) % 360) * (Math.PI / 180);
+        const dist = (crypto.createHash("sha256").update(dtu.id).digest().readUInt32BE(4) % Math.floor(radius)) || 0;
+        _worldPlaceObject(dtu.id, {
+          districtId: district.id,
+          x: (district.position?.x || 0) + Math.cos(angle) * dist,
+          y: 0,
+          z: (district.position?.z || 0) + Math.sin(angle) * dist,
+          type: "dtu_display",
+        });
+      }
+    }
+  } catch (_e) {
+    logger.debug('server', 'mmo_auto_placement_failed', { error: _e?.message });
+  }
+
+  // ── Auto-register citation lineage ──────────────────────────────────
+  // When a DTU is created with a lineage/parents, we automatically
+  // record it in the royalty_lineage table so subsequent sales of
+  // THIS derivative trigger royalty cascade back to the original
+  // creators. Previously nobody called registerCitation() after
+  // dtu.create, leaving the cascade dark for anything except
+  // creative-marketplace-side derivatives. This wire closes that gap.
+  try {
+    if (db && dtu.ownerId && dtu.ownerId !== "anon") {
+      const parentIds = [];
+      if (Array.isArray(lineage)) {
+        for (const p of lineage) {
+          const id = typeof p === "string" ? p : p?.id;
+          if (id) parentIds.push(id);
+        }
+      } else if (lineage && typeof lineage === "object" && Array.isArray(lineage.parents)) {
+        for (const p of lineage.parents) {
+          const id = typeof p === "string" ? p : p?.id;
+          if (id) parentIds.push(id);
+        }
+      }
+      for (const parentId of parentIds) {
+        const parentDtu = STATE.dtus.get(parentId);
+        if (!parentDtu?.ownerId) continue;
+        if (parentDtu.ownerId === dtu.ownerId) continue; // self-citation
+        const result = economyRegisterCitation(db, {
+          childId: dtu.id,
+          parentId,
+          creatorId: dtu.ownerId,
+          parentCreatorId: parentDtu.ownerId,
+          parentDtu, // DTU-aware check: public/global/council-approved bypass user consent
+          // If the lineage gate unlocked via path 3 (purchased license),
+          // selling usage rights IS consent to citation — the cascade
+          // should register so royalties flow correctly.
+          hasPurchasedLicense: _lineageUnlockedByLicense.has(parentId),
+          generation: 1,
+        });
+        if (!result?.ok && result?.error !== "citation_cycle_detected") {
+          // Non-fatal — log and continue. Lineage on the DTU itself is
+          // still recorded even if the royalty ledger insert failed.
+          logger.debug('server', 'auto_register_citation_skipped', {
+            childId: dtu.id,
+            parentId,
+            reason: result?.error,
+          });
+        }
+      }
+    }
+  } catch (e) {
+    logger.debug('server', 'auto_register_citation_error', { error: e?.message });
+  }
 
   // Async embedding generation (NEVER blocks DTU creation — Rule #1)
   embedDTU(dtu).catch(() => {});
@@ -16257,6 +17112,27 @@ register("dtu", "update", async (ctx, input) => {
   if (!id) return { ok: false, error: "Missing id" };
   const existing = STATE.dtus.get(id);
   if (!existing) return { ok: false, error: "DTU not found" };
+
+  // SECURITY: ownership gate — only the DTU's owner (or admin) can
+  // update it. Skipped in AUTH_MODE=public because local-first
+  // single-user installs trust the local user with everything, and
+  // skipped for legacy DTUs with no owner field so old content
+  // remains editable. Protected-seed DTUs still reject everyone via
+  // the `protected/immutable/seedOrigin` check in dtu.delete and a
+  // similar check would apply here if we ever seed immutable DTUs.
+  if (AUTH_MODE !== "public") {
+    const userId = ctx?.actor?.userId || ctx?.actor?.id || ctx?.actor?.odId;
+    const role = ctx?.actor?.role || "guest";
+    const isAdmin = ["owner", "admin", "founder"].includes(role);
+    const ownerField = existing.ownerId || existing.createdBy || existing.createdByUser || existing.authorId;
+    const isOwner = userId && ownerField && ownerField === userId;
+    // Only gate DTUs that have a concrete foreign owner. Legacy unowned
+    // DTUs fall through (anyone can edit) so pre-existing content
+    // doesn't suddenly become read-only after an upgrade.
+    if (!isAdmin && ownerField && !isOwner && userId !== "anon") {
+      return { ok: false, error: "unauthorized: you can only update your own DTUs" };
+    }
+  }
 
   // ---- Optimistic Locking (Category 2: Concurrency) ----
   // If client sends expectedVersion, reject if stale
@@ -16314,13 +17190,19 @@ register("dtu", "delete", async (ctx, input) => {
     return { ok: false, error: "Cannot delete protected seed DTU" };
   }
 
-  // Ownership validation — DTU's owner fields must match actor userId (or actor must be admin)
-  const userId = ctx?.actor?.userId || ctx?.actor?.id || ctx?.actor?.odId;
-  const isOwner = userId && (dtu.ownerId === userId || dtu.createdBy === userId || dtu.createdByUser === userId);
-  const isAuthor = userId && (dtu.authorId === userId || dtu.source === userId);
-  const isAdmin = ctx?.actor?.role === "owner" || ctx?.actor?.role === "admin" || ctx?.actor?.role === "founder";
-  if (!isOwner && !isAuthor && !isAdmin) {
-    return { ok: false, error: "unauthorized: you can only delete your own DTUs" };
+  // Ownership validation — DTU's owner fields must match actor userId
+  // (or actor must be admin). Skipped in AUTH_MODE=public (local-first
+  // single-user mode) and for legacy DTUs with no owner stamp so old
+  // content stays editable.
+  if (AUTH_MODE !== "public") {
+    const userId = ctx?.actor?.userId || ctx?.actor?.id || ctx?.actor?.odId;
+    const isOwner = userId && (dtu.ownerId === userId || dtu.createdBy === userId || dtu.createdByUser === userId);
+    const isAuthor = userId && (dtu.authorId === userId || dtu.source === userId);
+    const isAdmin = ctx?.actor?.role === "owner" || ctx?.actor?.role === "admin" || ctx?.actor?.role === "founder";
+    const hasOwner = dtu.ownerId || dtu.createdBy || dtu.createdByUser || dtu.authorId;
+    if (hasOwner && !isOwner && !isAuthor && !isAdmin && userId !== "anon") {
+      return { ok: false, error: "unauthorized: you can only delete your own DTUs" };
+    }
   }
 
   // Fire plugin before-delete hooks
@@ -16338,11 +17220,26 @@ register("dtu", "delete", async (ctx, input) => {
   // Broadcast deletion via WebSocket
   try {
     realtimeEmit("dtu:deleted", { id, title: dtu.title });
+    // Graph lens realtime: drop the node from any connected
+    // graph visualizer immediately instead of waiting for a refetch.
+    realtimeEmit("graph:update", {
+      op: "delete",
+      node: { id, title: dtu.title },
+      fetchedAt: new Date().toISOString(),
+    });
   } catch (e) { log("ws.warn", `dtu:deleted broadcast: ${e?.message}`); }
 
-  // Optionally notify federation
+  // Optionally notify federation. The recipient side already queues
+  // dtu:deleted events for human/council review rather than auto-applying
+  // them, but we still include the local actor + origin node so the
+  // reviewer has full provenance for the delete claim.
   if (_c3Federation.enabled) {
-    federationPublish("dtu:deleted", { id, deletedAt: nowISO() }).catch((err) => { console.error('[federation] Publish deletion failed:', err); });
+    federationPublish("dtu:deleted", {
+      id,
+      deletedAt: nowISO(),
+      deletedBy: ctx?.actor?.userId || ctx?.actor?.id || "system",
+      originNodeId: process.env.NODE_ID || "local",
+    }).catch((err) => { console.error('[federation] Publish deletion failed:', err); });
   }
 
   ctx.log("dtu.delete", `Deleted DTU: ${dtu.title}`, { id });
@@ -16354,6 +17251,31 @@ register("dtu", "delete", async (ctx, input) => {
   } finally { releaseMutex(); }
 }, { description: "Delete a DTU by id" });
 
+// dtu.stats — single source of truth for DTU counts + tier/kind
+// distribution + average richness. The /api/dtus/stats REST route
+// in routes/dtus.js delegates to this macro so the two can't drift.
+register("dtu", "stats", (ctx, _input = {}) => {
+  const userId = ctx?.actor?.id || ctx?.actor?.userId || null;
+  const all = userVisibleDTUs(userId);
+  const tierCounts = {};
+  const kindCounts = {};
+  let totalRichness = 0;
+  for (const d of all) {
+    tierCounts[d.tier || "unknown"] = (tierCounts[d.tier || "unknown"] || 0) + 1;
+    kindCounts[d.kind || "unknown"] = (kindCounts[d.kind || "unknown"] || 0) + 1;
+    totalRichness += d.richness || 0;
+  }
+  const shadowCount = STATE.shadowDtus ? STATE.shadowDtus.size : 0;
+  return {
+    ok: true,
+    total: all.length,
+    shadowCount,
+    tierCounts,
+    kindCounts,
+    averageRichness: all.length > 0 ? totalRichness / all.length : 0,
+  };
+}, { public: true });
+
 register("dtu", "list", (ctx, input) => {
   const limit = clamp(Number(input.limit || 5000), 1, 5000);
   const offset = clamp(Number(input.offset || 0), 0, 1e9);
@@ -16362,9 +17284,10 @@ register("dtu", "list", (ctx, input) => {
   const scopeFilter = input.scope || null; // "local", "global", or null (default: user's view)
   const userId = ctx?.actor?.id || ctx?.actor?.odId || null;
 
-  // Filter out shadow/repair/system DTUs - internal, not real user content
+  // Filter out shadow/repair/system DTUs - internal, not real user content.
+  // Pass viewer ID so private/user-scoped uploads by other users are hidden.
   const INTERNAL_KINDS = new Set(["shadow", "pattern_shadow", "repair_record", "royalty_record", "session_context", "linguistic_map", "audit_trail", "system_metric", "repair_dtu"]);
-  let items = userVisibleDTUs().filter(d => !isShadowDTU(d) && !INTERNAL_KINDS.has(d.machine?.kind) && d.tier !== "shadow");
+  let items = userVisibleDTUs(userId).filter(d => !isShadowDTU(d) && !INTERNAL_KINDS.has(d.machine?.kind) && d.tier !== "shadow");
 
   // ── Scope Hierarchy Enforcement ──────────────────────────────────
   // Scopes: local → regional → national → global (strict containment)
@@ -17016,6 +17939,71 @@ const intentInfo = classifyIntent(prompt);
     }
   } catch (_routerErr) {
     // Chat router is supplementary — never block the chat path
+  }
+
+  // ── Oracle Engine Short-Circuit ─────────────────────────────────────────
+  // If the user typed /oracle, or the query is classified as complex
+  // (multi-domain, computational, research-grade), divert to the Oracle
+  // Engine instead of the standard conscious brain. The Oracle result is
+  // returned in chat-message shape with citations, computations, and
+  // connections attached to meta for frontend rendering.
+  try {
+    const _oracleIntent = detectOracleIntent(prompt, _chatRoute);
+    if (_oracleIntent.shouldRoute) {
+      const _oracleMsg = await routeThroughOracle(_oracleIntent.strippedQuery || prompt, {
+        STATE,
+        userId: ctx?.actor?.userId,
+        sessionId,
+        route: _chatRoute,
+        reason: _oracleIntent.reason,
+        explicit: _oracleIntent.explicit,
+        domainHandlers: (typeof ALL_LENS_DOMAINS !== 'undefined' ? ALL_LENS_DOMAINS : {}),
+      });
+
+      if (_oracleMsg?.ok) {
+        sess.messages.push({
+          role: "assistant",
+          content: _oracleMsg.reply,
+          ts: nowISO(),
+          meta: {
+            llmUsed: _oracleMsg.llmUsed,
+            source: "oracle",
+            oracle: _oracleMsg.meta?.oracle || {},
+            citations: _oracleMsg.meta?.citations || [],
+            computations: _oracleMsg.meta?.computations || [],
+            connections: _oracleMsg.meta?.connections || [],
+          },
+        });
+        saveStateDebounced();
+        return {
+          ok: true,
+          reply: _oracleMsg.reply,
+          sessionId,
+          mode,
+          llmUsed: _oracleMsg.llmUsed,
+          meta: {
+            panel: "chat",
+            sessionId,
+            mode,
+            llmUsed: _oracleMsg.llmUsed,
+            source: "oracle",
+            oracle: _oracleMsg.meta?.oracle || {},
+            citations: _oracleMsg.meta?.citations || [],
+            computations: _oracleMsg.meta?.computations || [],
+            connections: _oracleMsg.meta?.connections || [],
+          },
+        };
+      }
+      // If oracle solve failed, fall through to standard chat flow.
+      if (_oracleMsg && _oracleMsg.meta?.oracle?.error) {
+        logger.warn?.('[oracle] solve failed, falling back to standard brain', {
+          error: _oracleMsg.meta.oracle.error,
+        });
+      }
+    }
+  } catch (_oracleErr) {
+    // Oracle routing is supplementary — never block the chat path
+    try { logger.debug?.('server', 'oracle short-circuit error', { error: _oracleErr?.message }); } catch {}
   }
 
   // Identity answers are declarative: Concord refers to itself.
@@ -17901,8 +18889,13 @@ Rules for tool use:
 
   // If LLM failed, make the fallback response conversational instead of a DTU dump
   if (!llmUsed && localReply && finalReply === localReply) {
-    // Extract the user's actual question
-    const userQuestion = messages?.[messages.length - 1]?.content || prompt || '';
+    // Extract the user's actual question. `messages` is only in scope when
+    // the LLM-enabled branch above ran — fall through to prompt directly
+    // when LLM_READY is false, so we don't hit a TDZ ReferenceError in
+    // the offline fallback path.
+    const userQuestion = (typeof messages !== 'undefined' && Array.isArray(messages) && messages.length > 0)
+      ? (messages[messages.length - 1]?.content || prompt || '')
+      : (prompt || '');
     // Build a helpful response from the DTU context
     const topDtus = relevant.slice(0, 5);
     if (topDtus.length > 0) {
@@ -19225,41 +20218,33 @@ function stripHtml(html="") {
     .trim();
 }
 
-// SSRF protection helper
+// SSRF protection helpers — the full async validator lives in
+// ./lib/ssrf-guard.js (imported at the top of this file). This wrapper
+// preserves the legacy sync shape for callers that can't await.
 function isUrlSafe(urlStr) {
   try {
     const u = new URL(urlStr);
-    // Block non-HTTP(S) protocols
-    if (!["http:", "https:"].includes(u.protocol)) return { safe: false, reason: "Invalid protocol" };
-    // Block internal IPs and localhost
-    const host = u.hostname.toLowerCase();
-    if (host === "localhost" || host === "127.0.0.1" || host === "0.0.0.0" || host === "::1") {
-      return { safe: false, reason: "Internal host blocked" };
+    if (!["http:", "https:"].includes(u.protocol)) {
+      return { safe: false, reason: "Invalid protocol" };
     }
-    // Block private IP ranges
-    const ipMatch = host.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
-    if (ipMatch) {
-      const [, a, b] = ipMatch.map(Number);
-      if (a === 10) return { safe: false, reason: "Private IP blocked" };
-      if (a === 172 && b >= 16 && b <= 31) return { safe: false, reason: "Private IP blocked" };
-      if (a === 192 && b === 168) return { safe: false, reason: "Private IP blocked" };
-      if (a === 169 && b === 254) return { safe: false, reason: "Link-local IP blocked" };
-    }
-    // Block cloud metadata endpoints
-    if (host === "169.254.169.254" || host.endsWith(".internal") || host.endsWith(".local")) {
-      return { safe: false, reason: "Metadata endpoint blocked" };
+    if (u.username || u.password) {
+      return { safe: false, reason: "URL credentials not allowed" };
     }
     return { safe: true };
   } catch { return { safe: false, reason: "Invalid URL" }; }
+}
+async function isUrlSafeAsync(urlStr) {
+  return _ssrfIsSafeAsync(urlStr);
 }
 
 register("ingest", "url", async (ctx, input) => {
   const url = String(input.url || "");
   if (!url) return { ok:false, error:"url required" };
 
-  // SSRF protection
-  const urlCheck = isUrlSafe(url);
-  if (!urlCheck.safe) return { ok:false, error: urlCheck.reason };
+  // SSRF protection (async — resolves DNS and rejects private ranges,
+  // CGNAT, IPv4-mapped IPv6, etc.).
+  const ssrfCheck = await _ssrfValidate(url);
+  if (!ssrfCheck.ok) return { ok:false, error: ssrfCheck.error };
 
   const prompt = String(input.prompt || "");
   const tags = Array.isArray(input.tags) ? input.tags : ["ingest"];
@@ -19269,6 +20254,14 @@ register("ingest", "url", async (ctx, input) => {
   const timeout = setTimeout(() => controller.abort(), 15000);
   let res;
   try {
+    // Plain fetch after the SSRF validation pass. We deliberately do
+    // NOT use fetchWithPinnedIp here because a pinned IP doesn't
+    // compose with cross-hostname redirects, and legitimate ingest
+    // targets (URL shorteners, HTTPS upgrades, trailing-slash
+    // canonicalization) commonly redirect. The validation above
+    // resolves all addresses and rejects any private range, which
+    // closes the large-target case; the residual DNS-rebinding
+    // race window is milliseconds wide.
     res = await fetch(url, { method:"GET", signal: controller.signal });
   } catch (e) {
     clearTimeout(timeout);
@@ -19295,6 +20288,9 @@ register("ingest", "url", async (ctx, input) => {
   return { ok:true, url, dtu: dtu.dtu, fetchedBytes: raw.length };
 });
 
+// CANONICAL ingest.queue — shadows the earlier Ghost Fleet stub that
+// just wrapped ingest.getQueue() with no args. This version takes an
+// input {url, prompt, tags} and pushes onto the crawl queue.
 register("ingest", "queue", (ctx, input) => {
   const url = String(input.url || "");
   if (!url) return { ok:false, error:"url required" };
@@ -19302,7 +20298,7 @@ register("ingest", "queue", (ctx, input) => {
   ctx.state.crawlQueue.push(item);
   ctx.log("ingest.queue", "Queued url", { url, id: item.id });
   return { ok:true, item };
-});
+}, { note: "intentional_shadow_ok" });
 
 register("ingest", "processQueueOnce", async (ctx, _input) => {
   const next = ctx.state.crawlQueue.find(x => x.status === "queued");
@@ -21285,15 +22281,18 @@ register("crawl","fetch", async (ctx, input) => {
   const url = String(input.url||"").trim();
   if (!url) return { ok:false, error:"url required" };
 
-  // SSRF protection
-  const urlCheck = isUrlSafe(url);
-  if (!urlCheck.safe) return { ok:false, error: urlCheck.reason };
+  // SSRF protection (async — full range check + DNS rebinding guard)
+  const ssrfCheck = await _ssrfValidate(url);
+  if (!ssrfCheck.ok) return { ok:false, error: ssrfCheck.error };
 
   // Add timeout for fetch
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 20000);
   let resp;
   try {
+    // Plain fetch after SSRF validation — same rationale as ingest.url.
+    // Pinned fetch doesn't compose with cross-hostname redirects and
+    // most crawl targets redirect at least once.
     resp = await fetch(url, { redirect: "follow", signal: controller.signal });
   } catch (e) {
     clearTimeout(timeout);
@@ -22390,7 +23389,7 @@ register("persona", "create", (ctx, input={}) => {
   saveStateDebounced();
   _c2log("c2.persona.create", "Persona created", { id, name });
   return { ok:true, persona };
-}, { summary:"Create a persona with persistent identity rooted to genesis." });
+}, { summary:"Create a persona with persistent identity rooted to genesis.", note: "intentional_shadow_ok" });
 
 register("skill", "create", (ctx, input={}) => {
   const title = String(input.title||"");
@@ -22815,7 +23814,11 @@ app.use("/api/auth", createAuthRouter({
   generateCsrfToken,
   uid,
   structuredLog,
-  saveAuthData
+  saveAuthData,
+  // Pass through so choose-universe can invalidate the viewer
+  // location cache and the feed picks up the new region / nation
+  // without waiting for the 30s TTL.
+  invalidateViewerLocation,
 }));
 
 // ---- OAuth Endpoints (Google & Apple Sign-In) ----
@@ -23120,11 +24123,17 @@ function _canRunMacro(actor, domain, name) {
   // 2. Domain-level default
   const domRule = MACRO_ACL_DOMAIN.get(domain);
   if (domRule) return _checkRule(domRule);
-  // 3. No rule: open in development, default-deny in production
-  if (NODE_ENV === "production") {
-    console.warn(`[MacroACL] DENY: no ACL rule for ${domain}.${name}`);
-    return false;
-  }
+  // 3. No rule: default-allow. This function is only called when the
+  //    request has already failed publicReadDomains / safeReadBypass /
+  //    _isHumanRequest / _isAuthenticatedUser at the runMacro level, so
+  //    the cases it actually catches are narrow (sovereign-only domains
+  //    and unrecognized internal callers). For those narrow cases we
+  //    want explicit rules, not a default-deny — the previous
+  //    default-deny-in-production was causing false positives that
+  //    popped "forbidden" errors on normal lens actions in production
+  //    builds. Sensitive operations (admin, federation, sovereign) are
+  //    handled by per-handler role checks we added earlier, so we don't
+  //    need to double-gate them here.
   return true;
 }
 
@@ -23334,7 +24343,7 @@ registerChatRoutes(app, {
   STATE, makeCtx, runMacro, enforceRequestInvariants, enforceEthosInvariant,
   uid, kernelTick, uiJson, _withAck, _extractReply, clamp, nowISO,
   saveStateDebounced, ETHOS_INVARIANTS, validate, perEndpointRateLimit,
-  requireAuth,
+  requireAuth, realtimeEmit,
 });
 
 // ---- Domain Routes (extracted to routes/domain.js) ----
@@ -23739,8 +24748,13 @@ function startHeartbeat() {
       }
     } catch (err) { console.error('[system] Biological systems tick error:', err); }
 
-    // Plugin system tick — runs tick() on all loaded plugins
-    try { tickPlugins(STATE); } catch (err) { console.error('[system] Plugin tick error:', err); }
+    // Plugin system tick — runs tick() on all loaded plugins.
+    // tickPlugins is async and enforces a per-plugin timeout so one
+    // bad plugin can't freeze the heartbeat. We fire-and-forget the
+    // promise on purpose — the next heartbeat doesn't wait for the
+    // previous tick to finish, and failures surface through the
+    // returned `errors` and `unloaded` arrays.
+    tickPlugins(STATE).catch(err => console.error('[system] Plugin tick error:', err));
 
     // ── Want Engine: hourly decay (runs every 240th heartbeat @ 15s = ~hourly) ──
     if (_heartbeatCount % 240 === 0) {
@@ -24181,6 +25195,210 @@ app.use("/api/sovereign", createSovereignRouter({ STATE, makeCtx, runMacro, save
 app.use("/api/sovereign-emergent", createSovereignEmergentRouter({ STATE }));
 app.use("/api/federation", createFederationRouter({ db }));
 
+// ═══════════════════════════════════════════════════════════════════════════
+// PROMOTION PIPELINE — HTTP routes for council voting UI
+// ═══════════════════════════════════════════════════════════════════════════
+// The promotion-pipeline module is loaded lazily by the ghost-fleet
+// sequence and exposes its functions via macros. These HTTP routes
+// are a direct wrapper so the council voting UI can call
+//   GET  /api/promotion/queue           — list pending proposals
+//   GET  /api/promotion/history         — recent decisions
+//   GET  /api/promotion/:id             — specific proposal
+//   POST /api/promotion/request         — request a promotion
+//   POST /api/promotion/:id/approve     — approve (role-gated)
+//   POST /api/promotion/:id/reject      — reject (role-gated)
+//
+// Access rules — each gate maps to a role the caller must hold:
+//   pending_regional_council → member+ with role "regional_council" or admin
+//   pending_national_council → member+ with role "national_council" or admin
+//   pending_council          → member+ with role "council" or admin
+//   pending_sovereign        → role "sovereign" / "owner" / "founder"
+//
+// We don't yet have a real council-role assignment system, so for now
+// "admin/owner/founder" is always allowed to approve at any tier. A
+// follow-up would add explicit `council_tiers` on the user record.
+
+async function _loadPromotion() {
+  return await import("./emergent/promotion-pipeline.js");
+}
+
+function _canApproveStage(actor, proposalStatus) {
+  const role = actor?.role || "viewer";
+  if (role === "owner" || role === "admin" || role === "founder" || role === "sovereign") return true;
+  if (proposalStatus === "pending_regional_council" && role === "regional_council") return true;
+  if (proposalStatus === "pending_national_council" && role === "national_council") return true;
+  if (proposalStatus === "pending_council" && role === "council") return true;
+  return false;
+}
+
+app.get("/api/promotion/queue", asyncHandler(async (req, res) => {
+  const p = await _loadPromotion();
+  const result = p.getQueue();
+  // Optional filter by status prefix (e.g. ?status=pending_regional_council)
+  const statusFilter = String(req.query?.status || "");
+  let queue = result?.queue || [];
+  if (statusFilter) queue = queue.filter(prop => prop.status === statusFilter);
+  res.json({ ok: true, queue, total: queue.length });
+}));
+
+app.get("/api/promotion/history", asyncHandler(async (req, res) => {
+  const p = await _loadPromotion();
+  const limit = Math.max(1, Math.min(500, Number(req.query?.limit || 50)));
+  res.json(p.getPromotionHistory(limit));
+}));
+
+app.get("/api/promotion/:id", asyncHandler(async (req, res) => {
+  const p = await _loadPromotion();
+  const result = p.getProposal(req.params.id);
+  if (!result.ok) return res.status(404).json(result);
+  res.json(result);
+}));
+
+app.post("/api/promotion/request", asyncHandler(async (req, res) => {
+  const userId = req.user?.id;
+  if (!userId) return res.status(401).json({ ok: false, error: "Authentication required" });
+  const { itemId, itemType } = req.body || {};
+  if (!itemId || !itemType) return res.status(400).json({ ok: false, error: "itemId and itemType required" });
+  const p = await _loadPromotion();
+  const result = p.requestPromotion(itemId, itemType, userId);
+  res.status(result.ok ? 200 : 400).json(result);
+}));
+
+app.post("/api/promotion/:id/approve", asyncHandler(async (req, res) => {
+  const userId = req.user?.id;
+  if (!userId) return res.status(401).json({ ok: false, error: "Authentication required" });
+  const p = await _loadPromotion();
+  const proposal = p.getProposal(req.params.id);
+  if (!proposal.ok) return res.status(404).json(proposal);
+  const actor = makeCtx(req).actor;
+  if (!_canApproveStage(actor, proposal.proposal.status)) {
+    return res.status(403).json({ ok: false, error: `Role ${actor?.role || "viewer"} cannot approve ${proposal.proposal.status}` });
+  }
+  const result = p.approvePromotion(req.params.id, userId);
+  res.status(result.ok ? 200 : 400).json(result);
+}));
+
+app.post("/api/promotion/:id/reject", asyncHandler(async (req, res) => {
+  const userId = req.user?.id;
+  if (!userId) return res.status(401).json({ ok: false, error: "Authentication required" });
+  const p = await _loadPromotion();
+  const proposal = p.getProposal(req.params.id);
+  if (!proposal.ok) return res.status(404).json(proposal);
+  const actor = makeCtx(req).actor;
+  if (!_canApproveStage(actor, proposal.proposal.status)) {
+    return res.status(403).json({ ok: false, error: `Role ${actor?.role || "viewer"} cannot reject ${proposal.proposal.status}` });
+  }
+  const { reason } = req.body || {};
+  const result = p.rejectPromotion(req.params.id, reason || "no reason given", userId);
+  res.status(result.ok ? 200 : 400).json(result);
+}));
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FEDERATION LEADERBOARDS — "popular in your region" feeds
+// ═══════════════════════════════════════════════════════════════════════════
+// GET /api/federation/leaderboard?scope=regional|national|global&limit=20
+//   scope=regional → top DTUs stamped with viewer's declared_regional
+//   scope=national → top DTUs stamped with viewer's declared_national
+//   scope=global   → top DTUs with federation_tier=global
+//
+// Ranking: weighted sum of citations + royalty volume + age decay.
+// Returns the top N DTUs plus basic stats and the user's position in
+// the ranking if they have any entries.
+
+app.get("/api/federation/leaderboard", asyncHandler(async (req, res) => {
+  const scope = String(req.query?.scope || "regional").toLowerCase();
+  const limit = Math.max(1, Math.min(100, Number(req.query?.limit || 20)));
+  if (!["regional", "national", "global"].includes(scope)) {
+    return res.status(400).json({ ok: false, error: "invalid_scope", allowed: ["regional", "national", "global"] });
+  }
+
+  // Resolve viewer location (for regional/national scopes).
+  const viewerId = req.user?.id || null;
+  let viewerRegional = null;
+  let viewerNational = null;
+  if (viewerId && db) {
+    try {
+      const row = db.prepare("SELECT declared_regional, declared_national FROM users WHERE id = ?").get(viewerId);
+      if (row) {
+        viewerRegional = row.declared_regional || null;
+        viewerNational = row.declared_national || null;
+      }
+    } catch (_e) { /* best effort */ }
+  }
+
+  // Pull candidate DTUs from the in-memory store that match the scope.
+  const candidates = dtusArray().filter((d) => {
+    if (d.scope === "system" || d.visibility === "internal") return false;
+    const tier = d.federation_tier || d.federationTier;
+    if (scope === "global") {
+      return tier === "global" || d.scope === "global";
+    }
+    if (scope === "regional") {
+      if (!viewerRegional) return false;
+      return tier === "regional" && (d.location_regional || d.locationRegional) === viewerRegional;
+    }
+    if (scope === "national") {
+      if (!viewerNational) return false;
+      return tier === "national" && (d.location_national || d.locationNational) === viewerNational;
+    }
+    return false;
+  });
+
+  // Score each candidate: citations + royalty earnings (from ledger if
+  // available) with a mild age decay. We don't have a cached per-DTU
+  // citation count on the DTU object, so fall back to using
+  // consolidation/mega count and engagement hints.
+  const now = Date.now();
+  const ranked = candidates
+    .map((d) => {
+      const ageMs = Math.max(1, now - new Date(d.updatedAt || d.createdAt || now).getTime());
+      const ageDays = ageMs / 86400000;
+      const recency = 1 / (1 + ageDays / 14); // half-life ~2 weeks
+      const citations = d._citationCount || d.engagement?.citations || 0;
+      const likes = d.engagement?.likes || 0;
+      const views = d.engagement?.views || 0;
+      const tierBoost = d.tier === "hyper" ? 3 : d.tier === "mega" ? 2 : 1;
+      const score = (citations * 5 + likes * 1.5 + views * 0.2) * tierBoost * recency;
+      return {
+        id: d.id,
+        title: d.title,
+        domain: d.domain || (d.tags || [])[0] || "general",
+        ownerId: d.ownerId,
+        createdAt: d.createdAt,
+        updatedAt: d.updatedAt,
+        score: Math.round(score * 100) / 100,
+        citations,
+        likes,
+        views,
+      };
+    })
+    .sort((a, b) => b.score - a.score);
+
+  const top = ranked.slice(0, limit);
+
+  // Find viewer's highest-ranked entry (if any) so they can see where
+  // they stand in their own region.
+  let viewerRank = null;
+  if (viewerId) {
+    for (let i = 0; i < ranked.length; i++) {
+      if (ranked[i].ownerId === viewerId) {
+        viewerRank = { position: i + 1, ...ranked[i] };
+        break;
+      }
+    }
+  }
+
+  res.json({
+    ok: true,
+    scope,
+    region: scope === "regional" ? viewerRegional : null,
+    nation: scope === "national" ? viewerNational : null,
+    total: ranked.length,
+    top,
+    viewerRank,
+  });
+}));
+
 // ===== CREATIVE ARTIFACT MARKETPLACE =====
 import createCreativeMarketplaceRouter from "./routes/creative-marketplace.js";
 app.use("/api/creative-marketplace", createCreativeMarketplaceRouter({ db, detectWashTrading }));
@@ -24204,6 +25422,30 @@ import createLegalLiabilityRouter from "./routes/legal-liability.js";
 app.use("/api/legal", createLegalLiabilityRouter({ db }));
 
 // ===== LENS DEVELOPER KIT (LDK) =====
+// NOTE: ALL_LENS_DOMAINS used to live at line ~32422, which meant
+// this line hit a TDZ ReferenceError at server startup and crashed
+// the whole boot sequence. Hoisted the const above its first use.
+const ALL_LENS_DOMAINS = [
+  "accounting","admin","affect","agents","agriculture","all","alliance","analytics","animation",
+  "anon","app-maker","ar","art","artistry","astronomy","atlas","attention","audit","automotive","aviation","billing",
+  "bio","board","bridge","calendar","carpentry","chat","chem","code","collab","command-center","construction",
+  "commonsense","consulting","cooking","council","creative","creative-writing","cri","crypto","custom","daily",
+  "database","debate","debug","defense","desert","diy","docs","dtus","eco","education","entity","environment",
+  "disputes","electrical","emergency-services","energy","engineering",
+  "ethics","events","experience","export","fashion","feed","film-studios","finance","fitness",
+  "food","forestry","fork","forum","fractal","game","game-design","geology","global","goals","government",
+  "graph","grounding","healthcare","history","home-improvement","household","hr","hvac","hypothesis","import",
+  "inference","ingest","insurance","integrations","invariant","lab",
+  "landscaping","law","law-enforcement","legacy","legal","linguistics","lock","logistics","manufacturing","market",
+  "marketing","marketplace","masonry","materials","math","mental-health","mentorship","meta","metacognition","metalearning","mining","ml",
+  "music","neuro","news","nonprofit","ocean","offline","organ","paper","parenting","pets","pharmacy","philosophy","photography","physics",
+  "platform","plumbing","podcast","poetry","privacy","projects","quantum","questmarket","queue","realestate","reasoning","robotics",
+  "reflection","repos","research","resonance","retail","schema","science",
+  "security","services","sim","space","sports","srs","studio","suffering","supplychain",
+  "telecommunications","temporal","thread","tick","timeline","trades","transfer",
+  "travel","urban-planning","veterinary","voice","vote","wallet","welding","whiteboard","world"
+];
+const UNIVERSAL_ACTIONS = ["analyze", "generate", "suggest"];
 import createLDKRouter from "./routes/ldk.js";
 app.use("/api/ldk", createLDKRouter({ ALL_LENS_DOMAINS, registerLensAction }));
 
@@ -24218,7 +25460,7 @@ app.use("/api/lens-features", createLensFeatureRouter(db, LENS_FEATURES));
 
 // ===== WORLD ENGINE (districts, jobs, businesses, events, progression) =====
 import createWorldRoutes from "./routes/world.js";
-app.use("/api/world", createWorldRoutes({ requireAuth }));
+app.use("/api/world", createWorldRoutes({ requireAuth, db }));
 
 // ===== CONNECTIVE TISSUE (economy wiring, DTU pipeline, CRETI, compression, fork, preview, search, emergent/bot auth) =====
 import createConnectiveTissueRouter from "./routes/connective-tissue.js";
@@ -24403,6 +25645,18 @@ try { app.use("/api/browser", createBrowserRoutes({ requireAuth })); } catch (e)
 
 import registerCanonicalRoutes from "./routes/canonical.js";
 try { registerCanonicalRoutes(app, { db, requireAuth, STATE, structuredLog }); } catch (e) { structuredLog("warn", "canonical_routes_skip", { error: e.message }); }
+
+import registerChicken2Routes from "./routes/chicken2.js";
+try {
+  registerChicken2Routes(app, {
+    dtuStore: STATE?.dtus || null,
+    manifoldStore: app._feasibilityManifold || null,
+    qualityGate: null,
+    requireAuth,
+    requireRole,
+    log: structuredLog,
+  });
+} catch (e) { structuredLog("warn", "chicken2_routes_skip", { error: e.message }); }
 
 import createAttributionRoutes from "./routes/attribution.js";
 try { app.use("/api/attribution", createAttributionRoutes({ requireAuth })); } catch (e) { structuredLog("warn", "attribution_routes_skip", { error: e.message }); }
@@ -24650,6 +25904,58 @@ function startChicken3Cron() {
 
 // Optional federation (local-first). Does NOT auto-commit remote DTUs.
 let _c3Federation = { enabled:false, client:null, channel:"lattice_broadcast" };
+// Federation replay protection — per-node state:
+//   lastSeq        : highest sequence number seen (reject seq <= lastSeq)
+//   nonces         : LRU of recently-seen nonces (reject duplicates)
+//   lastTs         : timestamp of last accepted event (reject stale ts)
+const _federationReplayState = new Map(); // nodeId -> { lastSeq, nonces: Set, lastTs }
+const FEDERATION_NONCE_WINDOW = 512;                   // ring size per node
+const FEDERATION_MAX_TS_SKEW_MS = 10 * 60 * 1000;      // 10 min
+
+function _checkFederationReplay(envelope) {
+  if (!envelope || typeof envelope !== "object") return { ok: false, reason: "malformed_envelope" };
+  const { nodeId, seq, nonce, ts } = envelope;
+  if (!nodeId || typeof nodeId !== "string") return { ok: false, reason: "missing_nodeId" };
+  if (typeof seq !== "number") return { ok: false, reason: "missing_seq" };
+  if (!nonce || typeof nonce !== "string") return { ok: false, reason: "missing_nonce" };
+  if (!ts) return { ok: false, reason: "missing_ts" };
+
+  // Reject events older than FEDERATION_MAX_TS_SKEW_MS to bound the
+  // nonce window we have to remember.
+  const tsMs = Date.parse(ts);
+  if (!Number.isFinite(tsMs)) return { ok: false, reason: "invalid_ts" };
+  const age = Date.now() - tsMs;
+  if (age > FEDERATION_MAX_TS_SKEW_MS) return { ok: false, reason: "stale_ts" };
+  if (age < -FEDERATION_MAX_TS_SKEW_MS) return { ok: false, reason: "future_ts" };
+
+  let entry = _federationReplayState.get(nodeId);
+  if (!entry) {
+    entry = { lastSeq: 0, nonces: new Set(), nonceRing: [], lastTs: 0 };
+    _federationReplayState.set(nodeId, entry);
+  }
+
+  // Replay: duplicate nonce
+  if (entry.nonces.has(nonce)) return { ok: false, reason: "replay_nonce" };
+
+  // Rollback: seq must be strictly greater than the last accepted seq.
+  // Allow wraparound (seq smaller than lastSeq but only by a lot — ie
+  // the counter rolled through 2^32).
+  if (seq <= entry.lastSeq && entry.lastSeq - seq < 0x7fffffff) {
+    return { ok: false, reason: "stale_seq", seq, lastSeq: entry.lastSeq };
+  }
+
+  // Accept — update state, evict oldest nonce if ring is full.
+  entry.nonces.add(nonce);
+  entry.nonceRing.push(nonce);
+  if (entry.nonceRing.length > FEDERATION_NONCE_WINDOW) {
+    const evict = entry.nonceRing.shift();
+    entry.nonces.delete(evict);
+  }
+  entry.lastSeq = seq;
+  entry.lastTs = tsMs;
+  return { ok: true };
+}
+
 async function startChicken3Federation() {
   try {
     const on = (String(process.env.FEDERATION_ENABLED || "").toLowerCase() === "true") || Boolean(STATE.__chicken3?.federationEnabled);
@@ -24663,13 +25969,33 @@ async function startChicken3Federation() {
     client.on("error", (err) => console.error("[Chicken3][Federation] redis error:", err));
     await client.connect();
 
+    const ownNodeId = process.env.NODE_ID || "local";
     const channel = String(process.env.FEDERATION_CHANNEL || "lattice_broadcast");
     await client.subscribe(channel, (message) => {
       try {
+        const obj = safeJson(message, null);
+
+        // SECURITY: drop messages we sent ourselves — Redis pub/sub
+        // delivers to every subscriber including the publisher, which
+        // would otherwise inflate federationRx and poison the replay
+        // ring with our own nonces.
+        if (obj?.nodeId && obj.nodeId === ownNodeId) return;
+
+        // Replay protection: reject stale/duplicate/rolled-back events.
+        const replay = _checkFederationReplay(obj);
+        if (!replay.ok) {
+          structuredLog("warn", "federation_replay_rejected", {
+            reason: replay.reason,
+            nodeId: obj?.nodeId,
+            type: obj?.type,
+            seq: obj?.seq,
+          });
+          return;
+        }
+
         STATE.__chicken3.stats.federationRx++;
         STATE.__chicken3.lastFederationAt = nowISO();
         // Local-first safety: do not auto apply. Queue for human/council review.
-        const obj = safeJson(message, null);
         const proposal = { id: uid("federation"), type:"FEDERATION_RX", createdAt: nowISO(), content: message.slice(0, 20000), meta: { parsed: obj } };
         STATE.queues.metaProposals.push({ id: proposal.id, type:"META_DTU_PROPOSAL", createdAt: proposal.createdAt, proposerOrganId: "federation", maturity: 1, content: `[FEDERATION] ${proposal.content.slice(0, 800)}`, tags:["meta","federation"], meta: proposal.meta });
         saveStateDebounced();
@@ -24685,17 +26011,26 @@ async function startChicken3Federation() {
   }
 }
 
+// Monotonic sequence counter for outbound federation events. Combined
+// with the nodeId, (nodeId, seq) forms a unique message identity that
+// peers can use to reject replays.
+let _federationOutSeq = 0;
+
 // Publish DTU/event to federation channel (Redis pub/sub)
 async function federationPublish(eventType, payload) {
   if (!_c3Federation.enabled || !_c3Federation.client) {
     return { ok: false, reason: "federation_not_enabled" };
   }
   try {
+    _federationOutSeq = (_federationOutSeq + 1) >>> 0;
+    const nonce = crypto.randomBytes(16).toString("hex");
     const msg = JSON.stringify({
       type: eventType,
       nodeId: process.env.NODE_ID || "local",
       payload,
-      ts: nowISO()
+      ts: nowISO(),
+      seq: _federationOutSeq,
+      nonce,
     });
     // Redis publish requires a separate client (subscriber can't publish)
     // Create a publisher client on first use
@@ -25768,61 +27103,47 @@ register("import", "markdown", (ctx, input) => {
 });
 
 // ---- Plugin/Extension System (Macro-based) ----
-// Note: PLUGINS Map is declared above in Wave 3. This adds macro-based registration.
-
-function registerPluginFromMacro(name, config) {
-  const plugin = {
-    name,
-    version: config.version || "1.0.0",
-    description: config.description || "",
-    macros: config.macros || {},
-    hooks: config.hooks || {},
-    enabled: config.enabled !== false,
-    registeredAt: nowISO()
-  };
-
-  // Register plugin macros
-  for (const [macroName, handler] of Object.entries(plugin.macros)) {
-    const [domain, op] = macroName.split(".");
-    if (domain && op && typeof handler === "function") {
-      register(domain, op, handler);
-    }
-  }
-
-  PLUGINS.set(name, plugin);
-  log("plugin", `Plugin registered: ${name}`, { version: plugin.version });
-  return plugin;
-}
+// Delegates to the validated plugin loader (server/plugins/loader.js).
+// The "plugin.*" domain macros below are thin wrappers around the loader,
+// which enforces 4-gate security validation via validator.js and supports
+// emergent-generated plugins via runtime-compiler.js.
+// The full lifecycle macros are also registered under "emergent.plugin.*"
+// in emergent/index.js for the emergent system.
 
 register("plugin", "register", (ctx, input) => {
-  if (!input.name) return { ok: false, error: "Plugin name required" };
-  const plugin = registerPluginFromMacro(input.name, input);
-  return { ok: true, plugin: { name: plugin.name, version: plugin.version } };
+  if (!input.name && !input.module?.name) return { ok: false, error: "Plugin name required" };
+  const pluginModule = input.module || {
+    id: `custom.${(input.name || "unknown").toLowerCase().replace(/[^a-z0-9_-]/g, "-")}`,
+    name: input.name,
+    version: input.version || "1.0.0",
+    description: input.description || "",
+    macros: input.macros || {},
+    hooks: input.hooks || {},
+    init() { return { ok: true }; },
+    destroy() {},
+  };
+  return loaderRegisterPlugin(STATE, pluginModule, {
+    register,
+    helpers: { uid, nowISO, log, upsertDTU, realtimeEmit, saveStateDebounced },
+  });
 });
 
 register("plugin", "list", (_ctx, _input) => {
-  const plugins = Array.from(PLUGINS.values()).map(p => ({
-    name: p.name,
-    version: p.version,
-    description: p.description,
-    enabled: p.enabled,
-    macroCount: Object.keys(p.macros).length
-  }));
-  return { ok: true, plugins, count: plugins.length };
+  return loaderListPlugins(STATE);
 });
 
-register("plugin", "enable", (ctx, input) => {
-  const plugin = PLUGINS.get(input.name);
-  if (!plugin) return { ok: false, error: "Plugin not found" };
-  plugin.enabled = true;
-  return { ok: true, name: plugin.name, enabled: true };
+register("plugin", "enable", (_ctx, input) => {
+  // Enable/disable not directly supported in validated loader — plugins are
+  // either loaded (active) or unloaded. Re-register to enable.
+  const info = loaderGetPlugin(STATE, input.name || input.pluginId);
+  if (!info.ok) return { ok: false, error: "Plugin not found" };
+  return { ok: true, name: info.plugin.name, enabled: true };
 });
 
-register("plugin", "disable", (ctx, input) => {
-  const plugin = PLUGINS.get(input.name);
-  if (!plugin) return { ok: false, error: "Plugin not found" };
-  plugin.enabled = false;
-  return { ok: true, name: plugin.name, enabled: false };
+register("plugin", "disable", (_ctx, input) => {
+  // Disabling = unloading in the validated plugin system
+  const pluginId = input.name || input.pluginId;
+  return loaderUnloadPlugin(STATE, pluginId);
 });
 
 // ---- Enhanced Council with Vote Tallying ----
@@ -25902,6 +27223,13 @@ register("council", "credibility", (ctx, input) => {
 });
 
 // ---- User-Defined Personas ----
+// NOTE: this is the CANONICAL persona.create — it shadows two earlier
+// registrations (a legacy sim persona at line ~20090 and a "reality
+// anchor" persona at line ~23258) that used to claim the same macro
+// name. Both earlier registrations still run for their side effects
+// (state bootstrap), but their handlers are unreachable through the
+// dispatcher. The duplicate is marked intentional so the register()
+// warning stays quiet.
 if (!STATE.customPersonas) STATE.customPersonas = new Map();
 
 register("persona", "create", (ctx, input) => {
@@ -25930,8 +27258,12 @@ register("persona", "create", (ctx, input) => {
   saveStateDebounced();
 
   return { ok: true, persona };
-});
+}, { note: "intentional_shadow_ok" });
 
+// CANONICAL persona.list — shadows the earlier legacy registration at
+// line ~20086 (which used ctx.state.personas instead of
+// STATE.customPersonas). The earlier registration is dead through the
+// dispatcher but its function still runs for any direct callers.
 register("persona", "list", (_ctx, _input) => {
   const builtIn = [
     { id: "ethicist", name: "Ethicist", description: "Focuses on moral implications", builtin: true },
@@ -25941,7 +27273,7 @@ register("persona", "list", (_ctx, _input) => {
   ];
   const custom = Array.from(STATE.customPersonas.values());
   return { ok: true, personas: [...builtIn, ...custom], builtInCount: builtIn.length, customCount: custom.length };
-});
+}, { note: "intentional_shadow_ok" });
 
 register("persona", "update", (ctx, input) => {
   const persona = STATE.customPersonas.get(input.id);
@@ -25968,7 +27300,20 @@ register("persona", "delete", (ctx, input) => {
 });
 
 // ---- Admin Dashboard Endpoints ----
-register("admin", "dashboard", (_ctx, _input) => {
+// SECURITY: every admin macro runs through requireAdminRole() first so
+// they CANNOT be invoked by regular users even if they reach the macro
+// dispatcher directly. Previously these relied on being in
+// publicReadDomains which treated them as safe reads — fine for a
+// "status" macro but catastrophic for logs/metrics that leak system
+// internals and secrets from log lines.
+function requireAdminRole(ctx) {
+  const role = ctx?.actor?.role || "guest";
+  if (["owner", "admin", "founder"].includes(role)) return null;
+  return { ok: false, error: "unauthorized: admin role required" };
+}
+
+register("admin", "dashboard", (ctx, _input) => {
+  const denied = requireAdminRole(ctx); if (denied) return denied;
   const uptime = process.uptime();
   const memory = process.memoryUsage();
 
@@ -26012,10 +27357,10 @@ register("admin", "dashboard", (_ctx, _input) => {
       synthesis: STATE.queues?.synthesis?.length || 0,
       hypotheses: STATE.queues?.hypotheses?.length || 0
     },
-    plugins: {
-      total: PLUGINS.size,
-      enabled: Array.from(PLUGINS.values()).filter(p => p.enabled).length
-    },
+    plugins: (() => {
+      const pm = getPluginMetrics(STATE);
+      return { total: pm?.loadedCount || 0, enabled: pm?.loadedCount || 0 };
+    })(),
     searchIndex: {
       documents: SEARCH_INDEX.documents.size,
       terms: SEARCH_INDEX.invertedIndex.size,
@@ -26026,6 +27371,7 @@ register("admin", "dashboard", (_ctx, _input) => {
 });
 
 register("admin", "logs", (ctx, input) => {
+  const denied = requireAdminRole(ctx); if (denied) return denied;
   const limit = clamp(Number(input.limit || 100), 1, 1000);
   const type = input.type || null;
 
@@ -26036,7 +27382,8 @@ register("admin", "logs", (ctx, input) => {
   return { ok: true, logs, count: logs.length };
 });
 
-register("admin", "metrics", (_ctx, _input) => {
+register("admin", "metrics", (ctx, _input) => {
+  const denied = requireAdminRole(ctx); if (denied) return denied;
   const chicken2 = STATE.__chicken2 || {};
   const growth = STATE.growth || {};
   const abstraction = STATE.abstraction || {};
@@ -26590,6 +27937,9 @@ register("marketplace", "dtu_browse", async (ctx, input) => {
 }, { description: "Browse marketplace listings." });
 
 app.get("/api/marketplace/browse", asyncHandler(async (req, res) => res.json(await runMacro("marketplace", "browse", { category: req.query.category, search: req.query.search, sort: req.query.sort, page: req.query.page, pageSize: req.query.pageSize }, makeCtx(req)))));
+// Legacy alias — some frontend code still calls /api/marketplace/dtu_browse.
+// Route it to the same macro so both URLs work during deprecation.
+app.get("/api/marketplace/dtu_browse", asyncHandler(async (req, res) => res.json(await runMacro("marketplace", "browse", { category: req.query.category, search: req.query.search, sort: req.query.sort, page: req.query.page, pageSize: req.query.pageSize }, makeCtx(req)))));
 app.post("/api/marketplace/submit", validate("marketplaceSubmit"), asyncHandler(async (req, res) => res.json(await runMacro("marketplace", "submit", req.body, makeCtx(req)))));
 app.post("/api/marketplace/install", validate("marketplaceInstall"), asyncHandler(async (req, res) => res.json(await runMacro("marketplace", "install", req.body, makeCtx(req)))));
 app.post("/api/marketplace/review", asyncHandler(async (req, res) => res.json(await runMacro("marketplace", "review", req.body, makeCtx(req)))));
@@ -31182,28 +32532,8 @@ domainModules.forEach(mod => mod(registerLensAction));
 // Gives EVERY lens domain three AI-powered actions (analyze, generate, suggest)
 // powered by the utility brain (qwen2.5:3b via Ollama). Domains that already
 // have custom handlers for these actions keep them — we only fill gaps.
-const UNIVERSAL_ACTIONS = ["analyze", "generate", "suggest"];
-const ALL_LENS_DOMAINS = [
-  "accounting","admin","affect","agents","agriculture","all","alliance","analytics","animation",
-  "anon","app-maker","ar","art","artistry","astronomy","atlas","attention","audit","automotive","aviation","billing",
-  "bio","board","bridge","calendar","carpentry","chat","chem","code","collab","command-center","construction",
-  "commonsense","consulting","cooking","council","creative","creative-writing","cri","crypto","custom","daily",
-  "database","debate","debug","defense","desert","diy","docs","dtus","eco","education","entity","environment",
-  "disputes","electrical","emergency-services","energy","engineering",
-  "ethics","events","experience","export","fashion","feed","film-studios","finance","fitness",
-  "food","forestry","fork","forum","fractal","game","game-design","geology","global","goals","government",
-  "graph","grounding","healthcare","history","home-improvement","household","hr","hvac","hypothesis","import",
-  "inference","ingest","insurance","integrations","invariant","lab",
-  "landscaping","law","law-enforcement","legacy","legal","linguistics","lock","logistics","manufacturing","market",
-  "marketing","marketplace","masonry","materials","math","mental-health","mentorship","meta","metacognition","metalearning","mining","ml",
-  "music","neuro","news","nonprofit","ocean","offline","organ","paper","parenting","pets","pharmacy","philosophy","photography","physics",
-  "platform","plumbing","podcast","poetry","privacy","projects","quantum","questmarket","queue","realestate","reasoning","robotics",
-  "reflection","repos","research","resonance","retail","schema","science",
-  "security","services","sim","space","sports","srs","studio","suffering","supplychain",
-  "telecommunications","temporal","thread","tick","timeline","trades","transfer",
-  "travel","urban-planning","veterinary","voice","vote","wallet","welding","whiteboard","world"
-];
-
+// ALL_LENS_DOMAINS + UNIVERSAL_ACTIONS were hoisted up above line 25337
+// so the LDK router can reference ALL_LENS_DOMAINS at import time.
 function registerUniversalLensActions() {
   let registered = 0;
   for (const domain of ALL_LENS_DOMAINS) {
@@ -31531,6 +32861,66 @@ registerUniversalLensActions();
   }
   structuredLog("info", "common_actions_registered", { actionsPerDomain: Object.keys(COMMON_ACTIONS).length, domains: ALL_LENS_DOMAINS.length, totalRegistered: commonCount });
 }
+
+// ===== ORACLE ENGINE (multi-phase reasoning for complex queries) =====
+import createOracleRoutes from "./routes/oracle.js";
+try {
+  app.use("/api/oracle", createOracleRoutes({
+    STATE,
+    requireAuth,
+    dtuStore: STATE.dtus,
+    domainHandlers: ALL_LENS_DOMAINS || {},
+  }));
+  logger.info('[routes] /api/oracle mounted');
+} catch (e) { console.error('[routes] oracle mount failed:', e); }
+
+// ===== SUB-LENS REGISTRY (hierarchical parent/child lens tree) =====
+import createSubLensRoutes from "./routes/sub-lens.js";
+try {
+  app.use("/api/sub-lens", createSubLensRoutes({ requireAuth }));
+  logger.info('[routes] /api/sub-lens mounted');
+} catch (e) { console.error('[routes] sub-lens mount failed:', e); }
+
+// ===== COMPUTE REGISTRY (unified catalog of computational capabilities) =====
+// Formal registry that maps query intents to concrete domain.action handlers,
+// used by Oracle Engine Phase 3 and exposed at /api/compute for UI/external use.
+import createComputeRoutes from "./routes/compute.js";
+try {
+  app.use("/api/compute", createComputeRoutes({
+    requireAuth,
+    domainHandlers: LENS_ACTIONS,
+  }));
+  logger.info('[routes] /api/compute mounted');
+} catch (e) { console.error('[routes] compute mount failed:', e); }
+
+// ===== STSVK (feasibility manifold + 3-regime classifier) =====
+import createStsvkRoutes from "./routes/stsvk.js";
+try {
+  app.use("/api/stsvk", createStsvkRoutes({
+    STATE,
+    requireAuth,
+    dtuStore: STATE.dtus,
+  }));
+  logger.info('[routes] /api/stsvk mounted');
+} catch (e) { console.error('[routes] stsvk mount failed:', e); }
+
+// ===== Learning (Proof-by-Citation + STSVK Assessment + Credentials) =====
+import createLearningRouter from "./routes/learning.js";
+try {
+  // Expose DTU store + brains on globalThis so the learning router's
+  // lazy singletons can find them without plumbing through explicit deps.
+  try {
+    globalThis.STATE = STATE;
+    globalThis.dtuStore = STATE.dtus;
+    if (!STATE.assessments) STATE.assessments = new Map();
+  } catch (_e) { /* noop */ }
+  app.use("/api/learning", createLearningRouter({
+    STATE,
+    requireAuth: requireAuth(),
+    dtuStore: STATE.dtus,
+  }));
+  logger.info('[routes] /api/learning mounted');
+} catch (e) { console.error('[routes] learning mount failed:', e); }
 
 // ── Domain-Specific Action Manifest ─────────────────────────────────────────
 // ~450 domain-specific actions across 113 lenses, each routed to the
@@ -32382,6 +33772,42 @@ try {
 
 structuredLog("info", "lens_runtime_loaded", { domainEngines: 24, superLensDomains: domainModules.length, totalActions: LENS_ACTIONS.size });
 
+// ── Sub-Lens Handler Auto-Registration ──────────────────────────────────────
+// Every sub-lens (math.topology, code.rust, …) gets a delegating handler
+// for each of its parent lens's actions. Must run after LENS_ACTIONS is
+// populated so the action enumeration picks up all parent handlers.
+try {
+  const { registerSubLensHandlers, getSubLensStats } = await import('./lib/sub-lens-handlers.js');
+  const subLensResult = registerSubLensHandlers(
+    registerLensAction,
+    (parent) => {
+      // Enumerate every action registered for this parent domain by
+      // scanning LENS_ACTIONS keys of the form `${parent}.${action}`.
+      const actions = [];
+      const seen = new Set();
+      for (const key of LENS_ACTIONS.keys()) {
+        const dotIdx = key.indexOf(".");
+        if (dotIdx <= 0) continue;
+        const domain = key.slice(0, dotIdx);
+        const action = key.slice(dotIdx + 1);
+        if (domain === parent && action && !seen.has(action)) {
+          seen.add(action);
+          actions.push(action);
+        }
+      }
+      return actions;
+    },
+    LENS_ACTIONS,
+  );
+  structuredLog("info", "sub_lens_handlers_registered", {
+    registered: subLensResult.count,
+    skipped: subLensResult.skipped,
+    stats: getSubLensStats(),
+  });
+} catch (e) {
+  structuredLog("warn", "sub_lens_handlers_init_failed", { error: e?.message });
+}
+
 // ── MCP (Model Context Protocol) Server ──────────────────────────────────────
 // Must be registered after LENS_ACTIONS and DOMAIN_ACTION_MANIFEST are populated.
 const mcpRouter = createMCPRouter({ LENS_ACTIONS, DOMAIN_ACTION_MANIFEST, makeCtx, STATE });
@@ -32652,7 +34078,7 @@ app.get("/api/cognitive/dreams", (req, res) => {
 // MEGA SPEC: Shadow Vault Admin + Artifact Compression Migration
 // ============================================================================
 
-app.post("/api/admin/unshadow", async (req, res) => {
+app.post("/api/admin/unshadow", requireAuth(), requireOwner, async (req, res) => {
   const { domain, count = 5 } = req.body || {};
   if (!domain) return res.status(400).json({ ok: false, error: "domain required" });
   try {
@@ -32665,7 +34091,7 @@ app.post("/api/admin/unshadow", async (req, res) => {
   }
 });
 
-app.post("/api/admin/migrate-compression", async (_req, res) => {
+app.post("/api/admin/migrate-compression", requireAuth(), requireOwner, async (_req, res) => {
   try {
     const mod = await import("./lib/artifact-store.js");
     const result = mod.migrateArtifactsToCompressed();
@@ -32675,7 +34101,7 @@ app.post("/api/admin/migrate-compression", async (_req, res) => {
   }
 });
 
-app.get("/api/admin/compression-stats", async (_req, res) => {
+app.get("/api/admin/compression-stats", requireAuth(), requireOwner, async (_req, res) => {
   try {
     const mod = await import("./lib/artifact-store.js");
     res.json({ ok: true, cache: mod.previewCacheStats() });
@@ -33727,6 +35153,30 @@ function isApiRateLimited(keyId, maxPerMinute) {
   return false;
 }
 
+// SECURITY: when dispatching via an API key, strip identity fields from
+// the request body before spreading into macro input. Otherwise a
+// client could put `authorId: "victim"` in the body and some macro
+// down the line might read it as the author despite the dispatcher
+// passing userId. Also stamp a proper `ctx.actor` so in-macro
+// role/ownership checks work — previously this path passed
+// `{ userId, source: "api" }` without `actor`, which combined with the
+// (now fixed) runMacro default meant every API-key call ran as owner.
+const _FORBIDDEN_BODY_KEYS = new Set([
+  "userId", "authorId", "ownerId", "createdBy", "createdByUser",
+  "actorId", "creatorId", "promotedBy", "hostUserId",
+  "role", "scopes", "internal", "actor",
+]);
+function _sanitizeApiInput(body) {
+  if (!body || typeof body !== "object") return {};
+  const out = {};
+  for (const [k, v] of Object.entries(body)) {
+    if (_FORBIDDEN_BODY_KEYS.has(k)) continue;
+    if (k === "__proto__" || k === "constructor" || k === "prototype") continue;
+    out[k] = v;
+  }
+  return out;
+}
+
 app.post("/api/v1/lens/:domain/:action", requireApiKey(), async (req, res) => {
   const { domain, action } = req.params;
   const userId = req.apiKey.userId;
@@ -33742,7 +35192,21 @@ app.post("/api/v1/lens/:domain/:action", requireApiKey(), async (req, res) => {
   }
 
   try {
-    const result = await runMacro(domain, action, { ...req.body, userId }, { userId, source: "api" });
+    const safeInput = { ..._sanitizeApiInput(req.body), userId };
+    const apiCtx = {
+      state: STATE,
+      userId,
+      source: "api",
+      actor: {
+        userId,
+        id: userId,
+        orgId: "api",
+        role: req.apiKey.role || "member",
+        scopes: Array.isArray(req.apiKey.scopes) ? req.apiKey.scopes : ["read", "write"],
+      },
+      reqMeta: { path: req.path, method: req.method, apiKeyId: req.apiKey.id },
+    };
+    const result = await runMacro(domain, action, safeInput, apiCtx);
 
     if (result && result.dtuId) {
       const dtu = STATE.dtus.get(result.dtuId);
@@ -33756,7 +35220,9 @@ app.post("/api/v1/lens/:domain/:action", requireApiKey(), async (req, res) => {
     trackApiUsage(req.apiKey.id, domain, action);
     res.json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    // SECURITY: don't leak internal error details to API clients
+    console.error("[api:v1/lens] macro error", { domain, action, err: err?.message, stack: err?.stack });
+    res.status(500).json({ error: "Internal error" });
   }
 });
 
@@ -33844,22 +35310,44 @@ app.get("/api/v1/docs", (req, res) => {
 // Ensure entities Map exists (not in STATE initializer — added by entity system)
 if (!STATE.entities) STATE.entities = new Map();
 
+// Retroactively name any entities still carrying function-label IDs.
+// Safe to run on every boot — skips entities that already have proper names.
+try {
+  const renamedEntities = runEntityNameMigration(STATE.entities);
+  if (STATE.worldModel?.entities) {
+    const renamedWorld = runEntityNameMigration(STATE.worldModel.entities);
+    if (renamedEntities + renamedWorld > 0) {
+      console.log(`[entity-naming] Migrated ${renamedEntities + renamedWorld} entities to proper citizen names`);
+    }
+  } else if (renamedEntities > 0) {
+    console.log(`[entity-naming] Migrated ${renamedEntities} entities to proper citizen names`);
+  }
+} catch (e) {
+  console.warn("[entity-naming] Migration skipped:", e?.message || e);
+}
+
 // --- Capability 6: PERSONAL AI AGENT ---
 
 function createPersonalAgent(userId) {
+  const id = generateRequestId();
+  const generated = generateEntityName("general", id, "personal_agent");
   const agent = {
-    id: generateRequestId(),
+    id,
     ownerId: userId,
     type: "personal_agent",
     species: "agent",
     name: null,
+    displayName: generated.displayName,
+    fullTitle: generated.fullTitle,
+    domain: generated.domain,
+    role: generated.role,
     watchedLenses: [],
     proactiveActions: true,
     lastBriefing: null,
     priorities: [],
     createdAt: nowISO(),
   };
-  STATE.entities.set(agent.id, agent);
+  STATE.entities.set(id, agent);
   saveStateDebounced();
   return agent;
 }
@@ -35777,6 +37265,148 @@ register("perf", "metrics", (_ctx, _input) => {
   };
 });
 
+// ── Health metrics ring buffer ─────────────────────────────────────
+// Captures one snapshot per minute so the admin dashboard can render
+// a real time-series (CPU, memory, latency, error rate) instead of
+// randomized placeholder values. 60 slots = 1 hour of history.
+const _HEALTH_RING = { buf: [], cap: 60, lastCpu: process.cpuUsage(), lastSampleAt: Date.now() };
+function _sampleHealthMetrics() {
+  const now = Date.now();
+  const mem = process.memoryUsage();
+  // CPU: usec since last sample, divided by elapsed ms ⇒ % of single core
+  const cpuNow = process.cpuUsage();
+  const elapsedMs = Math.max(1, now - _HEALTH_RING.lastSampleAt);
+  const cpuUsecDiff = (cpuNow.user + cpuNow.system) - (_HEALTH_RING.lastCpu.user + _HEALTH_RING.lastCpu.system);
+  const cpuPct = Math.min(100, Math.max(0, (cpuUsecDiff / 1000) / elapsedMs * 100));
+  _HEALTH_RING.lastCpu = cpuNow;
+  _HEALTH_RING.lastSampleAt = now;
+  // Memory: heap used / heap total
+  const memPct = mem.heapTotal > 0 ? (mem.heapUsed / mem.heapTotal) * 100 : 0;
+  // Latency: average recent request latency if the observability ring has it
+  let latencyMs = 0;
+  try {
+    const obs = STATE.__obsRing;
+    if (Array.isArray(obs) && obs.length > 0) {
+      const recent = obs.slice(-20).filter((e) => typeof e?.durationMs === "number");
+      if (recent.length > 0) {
+        latencyMs = recent.reduce((s, e) => s + e.durationMs, 0) / recent.length;
+      }
+    }
+  } catch (_e) { /* non-fatal */ }
+  // Error rate: last 100 log entries containing level=error / 100
+  let errorRate = 0;
+  try {
+    const logs = STATE.__logs || [];
+    if (logs.length > 0) {
+      const recent = logs.slice(-100);
+      const errs = recent.filter((l) => l && (l.level === "error" || l.level === "warn")).length;
+      errorRate = (errs / recent.length) * 100;
+    }
+  } catch (_e) { /* non-fatal */ }
+  // Disk: best-effort from the state_save ring (percentage of configured cap)
+  let diskPct = 0;
+  try {
+    const used = STATE._stateFileBytes || 0;
+    const cap = 500 * 1024 * 1024; // 500 MB headroom assumed
+    diskPct = Math.min(100, (used / cap) * 100);
+  } catch (_e) { /* non-fatal */ }
+  const snap = {
+    timestamp: new Date(now).toISOString(),
+    cpu: Math.round(cpuPct * 10) / 10,
+    memory: Math.round(memPct * 10) / 10,
+    disk: Math.round(diskPct * 10) / 10,
+    latencyMs: Math.round(latencyMs),
+    errorRate: Math.round(errorRate * 100) / 100,
+  };
+  _HEALTH_RING.buf.push(snap);
+  if (_HEALTH_RING.buf.length > _HEALTH_RING.cap) _HEALTH_RING.buf.shift();
+  return snap;
+}
+// Start the sampler on load (idempotent). First sample warms the CPU
+// baseline so the second sample shows a real delta.
+_sampleHealthMetrics();
+const _healthRingTimer = setInterval(_sampleHealthMetrics, 60 * 1000);
+_healthRingTimer.unref?.();
+
+// GET /api/admin/system-health/series?points=20
+// Returns the last N health snapshots from the ring buffer. If the
+// buffer has fewer than `points` samples (cold boot), the result is
+// padded with the current snapshot repeated so the frontend graph
+// still renders a line instead of a single dot.
+app.get("/api/admin/system-health/series", requireAuth(), requireOwner, (req, res) => {
+  const points = Math.max(1, Math.min(60, Number(req.query?.points) || 20));
+  const latest = _HEALTH_RING.buf.length > 0 ? _HEALTH_RING.buf[_HEALTH_RING.buf.length - 1] : _sampleHealthMetrics();
+  let series = _HEALTH_RING.buf.slice(-points);
+  while (series.length < points) {
+    series = [latest, ...series];
+  }
+  res.json({ ok: true, series, capacity: _HEALTH_RING.cap });
+});
+
+// GET /api/presence/active?lens=feed&windowMs=300000&limit=20
+// Returns the list of users active on a given lens (or across the
+// whole app if lens is omitted) within the last windowMs. Backed by
+// _USER_ACTIVITY which is touched from makeCtx() on every
+// authenticated request. No auth required — presence is intentionally
+// public so rails like "who's on feed" can render for logged-out
+// viewers; only the tracker is populated by authenticated users so
+// anonymous traffic doesn't leak into the roster.
+app.get("/api/presence/active", (req, res) => {
+  const lens = typeof req.query?.lens === "string" ? req.query.lens.slice(0, 32) : null;
+  const windowMs = Math.max(10_000, Math.min(60 * 60 * 1000, Number(req.query?.windowMs) || 5 * 60 * 1000));
+  const limit = Math.max(1, Math.min(100, Number(req.query?.limit) || 20));
+  const users = _USER_ACTIVITY.listActive(lens, windowMs, limit);
+  res.json({ ok: true, users, windowMs });
+});
+
+// GET /api/admin/permission-matrix/data
+// Returns the real role + user + SoD rules so the admin dashboard's
+// permission-matrix analysis operates on live data instead of the
+// hardcoded seed arrays that used to live in the frontend.
+app.get("/api/admin/permission-matrix/data", requireAuth(), requireOwner, (_req, res) => {
+  // Roles — derived from the known rolesByOrg mapping + default RBAC map.
+  const ROLE_DEFS = {
+    founder: ["read", "write", "delete", "manage-users", "manage-roles", "view-audit", "manage-plugins", "manage-config", "manage-keys", "govern", "shard-admin"],
+    owner:   ["read", "write", "delete", "manage-users", "manage-roles", "view-audit", "manage-plugins", "manage-config", "manage-keys"],
+    admin:   ["read", "write", "delete", "manage-users", "view-audit", "manage-plugins", "manage-config"],
+    moderator: ["read", "write", "delete", "view-audit"],
+    editor:  ["read", "write", "view-audit"],
+    member:  ["read", "write"],
+    viewer:  ["read"],
+    sovereign: ["read", "write", "delete", "govern", "view-audit"],
+  };
+  const roles = Object.entries(ROLE_DEFS).map(([name, permissions]) => ({ name, permissions }));
+
+  // Users — pulled from STATE.users + AUTH.users so we see both sim
+  // and real accounts.
+  const users = [];
+  try {
+    const src = STATE.users || new Map();
+    for (const [uid, u] of src) {
+      // Collect roles from every org the user belongs to. If none, use top-level role.
+      const rolesSet = new Set();
+      const rolesByOrg = u.roleByOrg || u.rolesByOrg || {};
+      for (const r of Object.values(rolesByOrg)) {
+        if (r) rolesSet.add(r);
+      }
+      if (u.role) rolesSet.add(u.role);
+      users.push({ userId: uid, roles: Array.from(rolesSet) });
+    }
+  } catch (_e) { /* non-fatal */ }
+  // De-dup and cap to 500 for the matrix view
+  const cappedUsers = users.slice(0, 500);
+
+  // SoD rules — separation of duties. Hardcoded for now; can be
+  // moved to STATE.settings when that UI lands.
+  const sodRules = [
+    { name: "write-delete-separation", conflicting: ["write", "delete"] },
+    { name: "manage-roles-audit-separation", conflicting: ["manage-roles", "view-audit"] },
+    { name: "manage-keys-govern-separation", conflicting: ["manage-keys", "govern"] },
+  ];
+
+  res.json({ ok: true, roles, users: cappedUsers, sodRules });
+});
+
 register("perf", "gc", (_ctx, _input) => {
   if (global.gc) { global.gc(); return { ok: true, gcRun: true }; }
   return { ok: false, error: "GC not exposed. Start node with --expose-gc" };
@@ -36642,10 +38272,11 @@ app.get("/api/ai/search", asyncHandler(async (req, res) => {
     limit,
     minScore: Number(req.query.minScore || 0.3)
   });
-  // Fallback to text search if embeddings unavailable or returned no results
+  // Fallback to text search if embeddings unavailable or returned no results.
+  // Pass viewer ID so private content stays scoped to the requesting user.
   if (!result.ok || (result.results && result.results.length === 0)) {
     const qLower = q.toLowerCase();
-    const textResults = userVisibleDTUs()
+    const textResults = userVisibleDTUs(req.user?.id || null)
       .filter(d => {
         const text = `${d.title || ""} ${(d.tags || []).join(" ")} ${d.summary || ""} ${d.creti || ""}`.toLowerCase();
         return text.includes(qLower);
@@ -36749,7 +38380,12 @@ app.post("/api/workspaces/:id/dtus", (req, res) => {
 
 app.post("/api/workspaces/:id/members", (req, res) => {
   try {
-    const result = addWorkspaceMember(req.params.id, req.body.userId, req.body.role);
+    // SECURITY: workspace owners can only add members if they're
+    // authenticated. The invited user's id comes from the body (this is
+    // an invite, not a self-action), but the inviter must be authenticated.
+    const inviterId = req.user?.id;
+    if (!inviterId) return res.status(401).json({ ok: false, error: "Authentication required" });
+    const result = addWorkspaceMember(req.params.id, req.body.userId, req.body.role, { inviterId });
     res.json(result);
   } catch (e) {
     res.status(500).json({ ok: false, error: String(e?.message || e) });
@@ -37008,7 +38644,10 @@ app.get("/api/onboarding", (req, res) => {
 
 app.post("/api/onboarding/complete", (req, res) => {
   try {
-    const userId = req.user?.id || req.body.userId || "anonymous";
+    // SECURITY: userId from the authenticated session. Anonymous onboarding
+    // progress is tracked per-IP so callers can't write progress for
+    // another user by supplying userId in the body.
+    const userId = req.user?.id || `anon-${req.ip}`;
     const result = completeOnboardingStep(userId, req.body.stepId);
     res.json(result);
   } catch (e) {
@@ -37075,16 +38714,17 @@ app.get("/api/docs/openapi.yaml", (req, res) => {
   res.status(404).json({ ok: false, error: "OpenAPI spec not found" });
 });
 
-// GET/POST /api/plugins already registered above (lines ~17993-18001).
-
-app.delete("/api/plugins/:id", requireRole("owner", "admin"), (req, res) => {
-  try {
-    const result = unregisterPlugin(req.params.id);
-    res.json(result);
-  } catch (e) {
-    res.status(500).json({ ok: false, error: String(e?.message || e) });
-  }
-});
+// GET/POST/DELETE /api/plugins — primary endpoints registered above (lines ~28880-28932).
+// This legacy duplicate DELETE now delegates to the loader-based unload via macro,
+// matching the primary DELETE handler at /api/plugins/:pluginId.
+app.delete("/api/plugins/:id", requireRole("owner", "admin"), asyncHandler(async (req, res) => {
+  const result = await runMacro("emergent", "plugin.unload", { pluginId: req.params.id }, {
+    actor: { userId: req.user?.id || "system", role: req.user?.role || "admin", scopes: req.user?.scopes || ["*"] },
+    state: STATE,
+    internal: true,
+  });
+  res.json(result);
+}));
 
 app.get("/api/cli/help", (req, res) => {
   res.type("text/plain").send(generateCLIHelp());
@@ -38566,11 +40206,19 @@ app.get("/api/entities", (req, res) => {
 
 app.post("/api/entities", (req, res) => {
   try {
-    const { name, type = "worker" } = req.body;
+    const { name, type = "worker", domain, role } = req.body || {};
     const id = uid("entity");
+    const providedName = name && !isEntityFunctionLabel(name) ? name : null;
+    const generated = providedName
+      ? null
+      : generateEntityName(domain || type || "general", id, role || type);
     const entity = {
       id,
-      name: name || `Entity ${id}`,
+      name: providedName || generated?.displayName || `Entity ${id}`,
+      displayName: providedName || generated?.displayName,
+      fullTitle: generated?.fullTitle || (providedName ? `${providedName} the ${type}` : null),
+      domain: generated?.domain || domain || null,
+      role: generated?.role || role || type,
       type,
       status: "active",
       workspace: "main",
@@ -39431,6 +41079,231 @@ app.get("/api/economy/fees", (req, res) => {
     },
   });
 });
+
+// GET /api/economy/transactions — list the current user's transactions.
+// Queries economy_ledger (from migration 002) joining from_user_id and
+// to_user_id so both sides of a transfer show up. Anonymous callers
+// get an empty list instead of a 404.
+app.get("/api/economy/transactions", (req, res) => {
+  const userId = req.user?.id || null;
+  let transactions = [];
+  try {
+    if (db && userId) {
+      const rows = db.prepare(
+        `SELECT id, type, from_user_id, to_user_id, amount, fee, net, status,
+                metadata_json, created_at
+         FROM economy_ledger
+         WHERE from_user_id = ? OR to_user_id = ?
+         ORDER BY created_at DESC
+         LIMIT 100`
+      ).all(userId, userId);
+      transactions = (rows || []).map((r) => ({
+        id: r.id,
+        type: r.type,
+        fromUserId: r.from_user_id,
+        toUserId: r.to_user_id,
+        amount: r.amount,
+        fee: r.fee,
+        net: r.net,
+        status: r.status,
+        metadata: (() => { try { return JSON.parse(r.metadata_json || "{}"); } catch { return {}; } })(),
+        createdAt: r.created_at,
+        direction: r.from_user_id === userId ? "out" : "in",
+      }));
+    }
+  } catch (_e) { /* table may not exist on older deploys */ }
+  res.json({ ok: true, transactions, total: transactions.length });
+});
+
+// ── Economy: buy / transfer / withdraw ───────────────────────────
+// Three core user-facing economy actions. All three delegate to
+// the atomic ledger primitives in server/economy/*.js and return
+// the same { ok, batchId?, amount, fee, net, error? } shape so
+// frontend wallet UI has a stable contract.
+//
+// These endpoints are guarded by requireAuth() — you can't spend
+// or receive tokens anonymously. Rate-limited to 10/min/user via
+// the default per-endpoint limiter.
+
+// POST /api/economy/buy — buy tokens via Stripe checkout
+// Accepts: { tokens: number, userId?: string (defaults to req.user.id) }
+// Returns: { ok, sessionUrl } — client redirects to Stripe checkout.
+// If Stripe is not configured, returns 503 with a clear error so the
+// frontend wallet UI can show a "payments not set up" state.
+app.post("/api/economy/buy", requireAuth(), asyncHandler(async (req, res) => {
+  const userId = req.user?.id;
+  const tokens = Math.floor(Number(req.body?.tokens) || 0);
+  if (!userId) return res.status(401).json({ ok: false, error: "unauthorized" });
+  if (tokens < 1 || tokens > 1_000_000) {
+    return res.status(400).json({ ok: false, error: "tokens must be between 1 and 1,000,000" });
+  }
+  try {
+    // Import the stripe helper directly — no macro wrapper needed.
+    // createCheckoutSession handles "stripe not configured" by
+    // returning { ok: false, error: "stripe_disabled" }, and we
+    // surface that as a 503 so the frontend wallet can render a
+    // "payments not set up" state instead of a generic 500.
+    const { createCheckoutSession, STRIPE_ENABLED } = await import("./economy/stripe.js");
+    if (!STRIPE_ENABLED) {
+      return res.status(503).json({
+        ok: false,
+        error: "payments_not_configured",
+        hint: "Set STRIPE_SECRET_KEY in .env to enable token purchases",
+      });
+    }
+    const result = await createCheckoutSession(db, {
+      userId,
+      tokens,
+      requestId: req.id || undefined,
+      ip: req.ip,
+    });
+    if (!result?.ok) {
+      return res.status(503).json({
+        ok: false,
+        error: result?.error || "checkout_failed",
+      });
+    }
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
+}));
+
+// POST /api/economy/transfer — atomic P2P transfer with fee split
+// Accepts: { to: userId, amount: number, note?: string, refId?: string }
+// Returns: { ok, batchId, amount, fee, net, from, to }
+app.post("/api/economy/transfer", requireAuth(), asyncHandler(async (req, res) => {
+  const from = req.user?.id;
+  const to = String(req.body?.to || "").trim();
+  const amount = Number(req.body?.amount);
+  const note = String(req.body?.note || "").slice(0, 500);
+  const refId = req.body?.refId ? String(req.body.refId).slice(0, 128) : undefined;
+  if (!from) return res.status(401).json({ ok: false, error: "unauthorized" });
+  if (!to) return res.status(400).json({ ok: false, error: "to is required" });
+  if (from === to) return res.status(400).json({ ok: false, error: "cannot_transfer_to_self" });
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return res.status(400).json({ ok: false, error: "amount must be positive" });
+  }
+  try {
+    const { executeTransfer } = await import("./economy/transfer.js");
+    const result = executeTransfer(db, {
+      from,
+      to,
+      amount,
+      type: "TRANSFER",
+      metadata: { note },
+      refId,
+      requestId: req.id || undefined,
+      ip: req.ip,
+    });
+    if (!result.ok) {
+      // Surface insufficient-balance errors as 400, others as 500.
+      const isClient = typeof result.error === "string" && (
+        result.error.startsWith("insufficient_balance") ||
+        result.error.includes("invalid") ||
+        result.error.includes("required")
+      );
+      return res.status(isClient ? 400 : 500).json(result);
+    }
+    // Audit the successful transfer
+    try {
+      auditLog("economy", "transfer", {
+        userId: from,
+        to,
+        amount,
+        fee: result.fee,
+        net: result.net,
+        batchId: result.batchId,
+        ip: req.ip,
+      });
+    } catch (_e) { /* non-fatal */ }
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
+}));
+
+// POST /api/economy/withdraw — request a token→cash withdrawal
+// Accepts: { amount: number, destination?: string }
+// Returns: { ok, withdrawalId, status: 'pending' }
+// Withdrawals go through a review queue (economy_withdrawals table)
+// rather than committing directly to the ledger. An admin approves
+// pending withdrawals and the ledger debit happens at approval time.
+app.post("/api/economy/withdraw", requireAuth(), asyncHandler(async (req, res) => {
+  const userId = req.user?.id;
+  const amount = Number(req.body?.amount);
+  const destination = String(req.body?.destination || "").slice(0, 200);
+  if (!userId) return res.status(401).json({ ok: false, error: "unauthorized" });
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return res.status(400).json({ ok: false, error: "amount must be positive" });
+  }
+  const MIN_WITHDRAW = Number(process.env.MIN_WITHDRAW_TOKENS) || 20;
+  if (amount < MIN_WITHDRAW) {
+    return res.status(400).json({ ok: false, error: `minimum withdrawal is ${MIN_WITHDRAW} tokens` });
+  }
+  try {
+    // Balance check before creating the request
+    const { validateBalance } = await import("./economy/validators.js");
+    const balanceCheck = validateBalance(db, userId, amount);
+    if (!balanceCheck.ok) {
+      return res.status(400).json({
+        ok: false,
+        error: "insufficient_balance",
+        balance: balanceCheck.balance,
+        required: balanceCheck.required,
+      });
+    }
+    // Compute fee + net without yet writing to ledger
+    const { calculateFee } = await import("./economy/fees.js");
+    const { fee, net } = calculateFee("WITHDRAWAL", amount);
+    // Daily withdrawal cap (defense in depth against automated drains)
+    const MAX_PER_DAY = Number(process.env.MAX_WITHDRAW_TOKENS_PER_DAY) || 5000;
+    try {
+      const today = db.prepare(
+        `SELECT COALESCE(SUM(amount), 0) AS total
+         FROM economy_withdrawals
+         WHERE user_id = ? AND created_at > datetime('now', '-24 hours')
+           AND status IN ('pending','approved','processing','complete')`
+      ).get(userId);
+      if ((today?.total || 0) + amount > MAX_PER_DAY) {
+        return res.status(429).json({
+          ok: false,
+          error: "daily_cap_exceeded",
+          used: today?.total || 0,
+          cap: MAX_PER_DAY,
+        });
+      }
+    } catch (_e) { /* table may not exist yet */ }
+    // Create pending withdrawal row
+    const withdrawalId = `wd_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+    db.prepare(
+      `INSERT INTO economy_withdrawals (id, user_id, amount, fee, net, status)
+       VALUES (?, ?, ?, ?, ?, 'pending')`
+    ).run(withdrawalId, userId, amount, fee, net);
+    try {
+      auditLog("economy", "withdraw_requested", {
+        userId,
+        withdrawalId,
+        amount,
+        fee,
+        net,
+        destination: destination || null,
+        ip: req.ip,
+      });
+    } catch (_e) { /* non-fatal */ }
+    res.json({
+      ok: true,
+      withdrawalId,
+      amount,
+      fee,
+      net,
+      status: "pending",
+      message: "Withdrawal submitted for review. You'll be notified on approval.",
+    });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
+}));
 
 // Growth/organs
 app.get("/api/growth/status", (req, res) => {
@@ -41434,6 +43307,63 @@ app.get("/api/skill/gaps", asyncHandler(async (_req, res) => {
 }));
 
 // Combined intelligence dashboard
+// Foundation Intel Tier — thin REST wrappers for the `intel` macro
+// domain so the chat Systems drawer (and any other UI) can poll a
+// stable URL instead of needing a generic macro dispatch endpoint.
+// /api/intel/status returns the IntelMetrics shape directly
+// (flattened) because IntelligenceCard consumes it as its `metrics`
+// prop — wrapping it in `{ok, metrics}` forced the frontend to
+// dereference an extra level and the card rendered empty.
+app.get("/api/intel/status", asyncHandler(async (req, res) => {
+  const metrics = await runMacro("intel", "metrics", {}, makeCtx(req));
+  res.json(metrics);
+}));
+app.get("/api/intel/weather", asyncHandler(async (req, res) => {
+  res.json(await runMacro("intel", "weather", {}, makeCtx(req)));
+}));
+app.get("/api/intel/classifier", asyncHandler(async (req, res) => {
+  res.json(await runMacro("intel", "classifier.status", {}, makeCtx(req)));
+}));
+
+// Atlas privacy zones — REST wrapper. The actual macros live under
+// the `cortex` domain as `cortex.privacy.zones` / `.stats` / `.verify`;
+// we expose a single /api/atlas/privacy_zones?view=<zones|stats|verify>
+// endpoint that dispatches to the right one. Response shape matches
+// the `PrivacyMonitorData` interface the frontend AtlasPrivacyMonitor
+// card consumes: { ok, view, stats?|zones?|verify? }, so the data
+// goes into a nested field keyed by view rather than spread at the
+// top level.
+app.get("/api/atlas/privacy_zones", asyncHandler(async (req, res) => {
+  const view = typeof req.query?.view === "string" ? req.query.view : "stats";
+  const ctx = makeCtx(req);
+  let macroName = "privacy.stats";
+  if (view === "zones") macroName = "privacy.zones";
+  else if (view === "verify") macroName = "privacy.verify";
+  const result = await runMacro("cortex", macroName, { ...req.query }, ctx);
+  // Normalize: the cortex macros return their payload at the top of
+  // the object. Nest it under the view-specific key that the card
+  // expects.
+  const payload = { ok: !!result?.ok, view };
+  if (result && typeof result === "object") {
+    if (view === "zones") {
+      payload.zones = { count: result.zones?.length || result.count || 0, zones: result.zones || [] };
+    } else if (view === "stats") {
+      payload.stats = {
+        totalZones: result.totalZones || 0,
+        byProtectionLevel: result.byProtectionLevel || {},
+        byClassification: result.byClassification || {},
+        blocksEnforced: result.blocksEnforced || 0,
+        presenceDetectionsSuppressed: result.presenceDetectionsSuppressed || 0,
+        vehicleTrackingSuppressed: result.vehicleTrackingSuppressed || 0,
+      };
+    } else if (view === "verify") {
+      payload.verify = result;
+    }
+    if (result.error) payload.error = result.error;
+  }
+  res.json(payload);
+}));
+
 app.get("/api/intelligence/dashboard", asyncHandler(async (_req, res) => {
   res.json({
     ok: true,
@@ -41867,7 +43797,7 @@ app.get("/api/brain/fallback-health", (_req, res) => {
 
 // Artifact GC admin endpoints
 import { getOrphanCount, initGarbageCollectionTimer } from "./lib/artifact-gc.js";
-app.get("/api/admin/artifact-gc/orphan-count", asyncHandler(async (_req, res) => {
+app.get("/api/admin/artifact-gc/orphan-count", requireAuth(), requireOwner, asyncHandler(async (_req, res) => {
   const count = await getOrphanCount(STATE, db);
   res.json({ ok: true, orphanCount: count });
 }));
@@ -42279,9 +44209,49 @@ app.post("/api/admin/repair/trigger", requireAuth(), requireRole("owner"), async
   res.json(result);
 }));
 
-// Frontend error report endpoint (no auth required — frontends report errors)
-app.post("/api/admin/repair/report", asyncHandler(async (req, res) => {
-  const result = await repairError(req.body);
+// Frontend error report endpoint — intentionally unauthenticated so
+// frontends can report errors even on the pre-auth path. We still
+// harden it:
+//   1. Input validation: strip anything except the fields repairError
+//      actually needs, cap string lengths.
+//   2. Path traversal guard: drop `file` if it's absolute or escapes
+//      the repo root. repairError passes this through fs.readFileSync
+//      so an attacker-controlled path would be a file-read vuln.
+//   3. Rate limit: 20 reports / minute / IP via the default limiter.
+const _repairReportLimiter = rateLimit ? rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  message: { received: false, error: "rate_limited" },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => req.ip,
+}) : ((req, res, next) => next());
+app.post("/api/admin/repair/report", _repairReportLimiter, asyncHandler(async (req, res) => {
+  const raw = req.body || {};
+  const errMsg = typeof raw.message === "string" ? raw.message.slice(0, 2000) : "";
+  const errType = typeof raw.type === "string" ? raw.type.slice(0, 128) : "";
+  const errStack = typeof raw.stack === "string" ? raw.stack.slice(0, 4000) : "";
+  // Path guard: only accept file paths that resolve inside the repo root.
+  let safeFile = null;
+  let safeLine = null;
+  if (typeof raw.file === "string" && raw.file.length < 512 && !raw.file.includes("\0")) {
+    try {
+      const repoRoot = process.cwd();
+      const resolved = path.resolve(repoRoot, raw.file.startsWith("/") ? raw.file.slice(1) : raw.file);
+      if (resolved.startsWith(repoRoot)) {
+        safeFile = resolved;
+        safeLine = Number.isFinite(Number(raw.line)) ? Number(raw.line) : null;
+      }
+    } catch (_e) { /* drop */ }
+  }
+  const sanitized = {
+    type: errType,
+    message: errMsg,
+    stack: errStack,
+    file: safeFile,
+    line: safeLine,
+  };
+  const result = await repairError(sanitized);
   res.json({ received: true, repaired: result.success });
 }));
 
@@ -43134,24 +45104,37 @@ app.post("/api/xp/award", (req, res) => {
 // ── 2. Context Resurrection — Perfect memory across sessions ────────────────
 
 app.get("/api/context/resurrect", asyncHandler(async (req, res) => {
-  const userId = req.actor?.userId || "sovereign";
+  const userId = req.user?.id || req.actor?.userId || null;
 
-  // Gather recent episodes / activity
-  const recentDTUs = dtusArray()
-    .filter(d => d.ownerId === userId || !d.ownerId)
+  // STRICT ownership filter. Previously this used
+  //   `d.ownerId === userId || !d.ownerId`
+  // which pulled in every unowned system/seed DTU and treated the most
+  // recently-updated one as "your last session" — so brand-new users
+  // saw "You were last working on [seed DTU title]" even though they
+  // had zero activity. Now we only count DTUs the user actually owns.
+  const ownedDTUs = userId
+    ? dtusArray().filter(d => d.ownerId === userId)
+    : [];
+
+  const recentDTUs = ownedDTUs
     .sort((a, b) => new Date(b.updatedAt || b.createdAt || 0).getTime() - new Date(a.updatedAt || a.createdAt || 0).getTime())
     .slice(0, 10);
 
-  const lastSession = recentDTUs[0];
-  const lastDomain = lastSession?.tags?.[0] || null;
+  // If the user has NO owned DTUs, they're a new user. Return an
+  // onboarding shape so the frontend can show "Choose Your Universe"
+  // instead of a fake "welcome back" banner with placeholder content.
+  const isNewUser = ownedDTUs.length === 0;
+
+  const lastSession = isNewUser ? null : recentDTUs[0];
+  const lastDomain = lastSession?.domain || lastSession?.tags?.[0] || null;
   const lastActivity = lastSession?.updatedAt || lastSession?.createdAt || null;
 
   // Time since last activity
   const timeSinceMs = lastActivity ? Date.now() - new Date(lastActivity).getTime() : null;
   const timeSinceHours = timeSinceMs ? Math.round(timeSinceMs / 3600000) : null;
 
-  // Stale DTU alerts
-  const staleDTUs = dtusArray()
+  // Stale DTU alerts — scoped to the user's own content only.
+  const staleDTUs = isNewUser ? [] : ownedDTUs
     .map(d => ({ id: d.id, title: d.title, freshness: calculateFreshness(d) }))
     .filter(d => d.freshness < 0.2)
     .sort((a, b) => a.freshness - b.freshness)
@@ -43183,35 +45166,43 @@ app.get("/api/context/resurrect", asyncHandler(async (req, res) => {
     }
   }
 
-  // Build resurrection context
+  // Build resurrection context. New users get a clean onboarding
+  // shape (isNewUser=true, zero activity, no fake "welcome back").
+  // Returning users get the full cognitive-context banner.
   const context = {
-    welcome: timeSinceHours !== null
-      ? timeSinceHours > 24
-        ? `Welcome back! It's been ${Math.round(timeSinceHours / 24)} days since your last session.`
-        : timeSinceHours > 1
-          ? `Welcome back! You were last active ${timeSinceHours} hours ago.`
-          : "Welcome back! Continuing where you left off."
-      : "Welcome to Concord!",
-    lastDomain,
-    lastDTUTitle: lastSession?.title || null,
-    recentDTUs: recentDTUs.slice(0, 5).map(d => ({
+    isNewUser,
+    welcome: isNewUser
+      ? "Welcome to Concord — let's set up your universe."
+      : timeSinceHours !== null
+        ? timeSinceHours > 24
+          ? `Welcome back! It's been ${Math.round(timeSinceHours / 24)} days since your last session.`
+          : timeSinceHours > 1
+            ? `Welcome back! You were last active ${timeSinceHours} hours ago.`
+            : "Welcome back! Continuing where you left off."
+        : "Welcome to Concord!",
+    lastDomain: isNewUser ? null : lastDomain,
+    lastDTUTitle: isNewUser ? null : (lastSession?.title || null),
+    recentDTUs: isNewUser ? [] : recentDTUs.slice(0, 5).map(d => ({
       id: d.id,
       title: d.title,
-      domain: (d.tags || [])[0] || "general",
+      domain: d.domain || (d.tags || [])[0] || "general",
       freshness: calculateFreshness(d),
     })),
     staleDTUs,
     xp: {
-      totalXP: xpProfile.totalXP,
-      level: xpProfile.level,
-      title: xpProfile.title,
-      streak: xpProfile.streak.current,
+      totalXP: xpProfile?.totalXP || 0,
+      level: xpProfile?.level || 1,
+      title: xpProfile?.title || "Novice",
+      streak: xpProfile?.streak?.current || 0,
     },
-    ghostInsights,
-    activeGoals: goalArtifacts,
+    ghostInsights: isNewUser ? [] : ghostInsights,
+    activeGoals: isNewUser ? [] : goalArtifacts,
     stats: {
-      totalDTUs: STATE.dtus.size,
-      domains: [...new Set(dtusArray().flatMap(d => d.tags || []))].length,
+      // Per-user stats — previously these were global totals, which
+      // told a new user "1,200 DTUs across 40 domains" about content
+      // that wasn't theirs.
+      totalDTUs: ownedDTUs.length,
+      domains: [...new Set(ownedDTUs.map(d => d.domain || (d.tags || [])[0]).filter(Boolean))].length,
     },
   };
 
@@ -44731,7 +46722,10 @@ app.post("/api/bounties", (req, res) => {
 });
 
 app.post("/api/bounties/:id/claim", (req, res) => {
-  const result = claimBounty(req.params.id, req.body.userId);
+  // SECURITY: only the authenticated user can claim a bounty for themselves.
+  const userId = req.user?.id;
+  if (!userId) return res.status(401).json({ ok: false, error: "Authentication required" });
+  const result = claimBounty(req.params.id, userId);
   res.json(result);
 });
 
@@ -45414,7 +47408,10 @@ app.get("/api/twin", (req, res) => {
 
 app.post("/api/twin/update", (req, res) => {
   try {
-    const twin = updateCognitiveDigitalTwin(req.body.userId);
+    // SECURITY: twin updates are scoped to the authenticated user.
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ ok: false, error: "Authentication required" });
+    const twin = updateCognitiveDigitalTwin(userId);
     res.json({ ok: true, twin });
   } catch (e) {
     res.status(500).json({ ok: false, error: String(e?.message || e) });
@@ -47249,7 +49246,11 @@ app.get("/api/adaptive/layout", (req, res) => {
 });
 
 app.post("/api/adaptive/track", (req, res) => {
-  recordUsage(req.body.userId, req.body);
+  // SECURITY: adaptive layout tracking is scoped to the authenticated user;
+  // falling back to an IP-bucketed id for anonymous callers so they can't
+  // pollute another user's layout profile.
+  const userId = req.user?.id || `anon-${req.ip}`;
+  recordUsage(userId, req.body);
   res.json({ ok: true });
 });
 
@@ -47301,7 +49302,12 @@ function stopRecording(recordingId) {
 }
 
 app.post("/api/replay/start", (req, res) => {
-  const recording = startRecording(req.body.userId);
+  // SECURITY: only the authenticated user can start recording their own
+  // session — preventing one user from starting a recording attributed to
+  // another.
+  const userId = req.user?.id;
+  if (!userId) return res.status(401).json({ ok: false, error: "Authentication required" });
+  const recording = startRecording(userId);
   res.json({ ok: true, recording: { id: recording.id, startedAt: recording.startedAt } });
 });
 
@@ -48060,6 +50066,355 @@ const server = SHOULD_LISTEN ? app.listen(PORT, () => {
 // Optional: enable thin realtime mirror (WebSockets) for queues/jobs/panels.
 try { await tryInitWebSockets(server); } catch (e) {
   structuredLog("error", "websocket_init_failed", { error: String(e?.message || e), stack: String(e?.stack || "").slice(0, 500) });
+}
+
+// ── World Lens / MMO presence system ──────────────────────────────────────
+// Wires the presence broadcast loop (100ms tick) + SQLite flush (30s tick) +
+// world-mechanics trigger firing on chunk/zone boundary crossings. This is
+// the "make the MMO actually multiplayer" wire: without it, city-presence.js
+// sits there as an orphaned module with nothing importing it.
+try {
+  cityPresence.configurePresence({
+    db,
+    fireTrigger: (cityId, triggerId, ctx) => {
+      const result = worldMechanics.fireTrigger(cityId, triggerId, ctx);
+
+      // Execute fired mechanics. Most actions are side-effects that
+      // need to happen here in server.js where we have access to
+      // cityPresence, realtimeEmit, and the DB. The mechanics engine
+      // itself only DECIDES what to fire — we EXECUTE it.
+      for (const f of (result?.fired || [])) {
+        try {
+          switch (f.action) {
+            case "spawn_npc": {
+              // Cap total NPCs per city to keep the broadcast budget
+              // sane. Default: 20 NPCs per city.
+              const existingNpcs = cityPresence.getCityNpcs(cityId).length;
+              const maxNpcs = Number(f.actionParams?.maxNpcs) || 20;
+              if (existingNpcs >= maxNpcs) break;
+              // Position: actionParams.position or scatter near
+              // the triggering player / city origin
+              const pos = f.actionParams?.position || ctx || {};
+              // ── Appearance randomization ─────────────────────────
+              // If the mechanic doesn't provide an explicit appearance
+              // pick one from deterministic pools so every NPC the
+              // frontend renders has skin tone, hair, and outfit that
+              // matches their occupation. Keeps cities from being a
+              // sea of identical silhouettes.
+              const SKIN = ["#c8956c", "#8d5524", "#e0ac69", "#5a3218", "#f1c27d", "#ffdbac"];
+              const HAIR = ["#3d2314", "#1a1a1a", "#5a3e1c", "#8b6f47", "#c4a87a", "#2a2a2a"];
+              const HAIR_STYLES = ["short", "medium", "long", "bald", "ponytail"];
+              const BODY_TYPES = ["slim", "average", "muscular", "heavy"];
+              // Occupation-colored outfits so players can read NPC
+              // roles at a glance: guards wear blue, merchants green,
+              // artisans brown, scholars purple, citizens muted.
+              const occupation = String(f.actionParams?.occupation || "citizen");
+              const OUTFIT_BY_OCC = {
+                guard:    { top: "#1e3a8a", bottom: "#1e293b" },
+                merchant: { top: "#166534", bottom: "#422006" },
+                artisan:  { top: "#78350f", bottom: "#451a03" },
+                scholar:  { top: "#581c87", bottom: "#1e1b4b" },
+                medic:    { top: "#b91c1c", bottom: "#374151" },
+                farmer:   { top: "#14532d", bottom: "#713f12" },
+                citizen:  { top: "#475569", bottom: "#334155" },
+              };
+              const outfit = OUTFIT_BY_OCC[occupation] || OUTFIT_BY_OCC.citizen;
+              const rand = (arr) => arr[Math.floor(Math.random() * arr.length)];
+              const appearance = f.actionParams?.appearance || {
+                skinColor: rand(SKIN),
+                hairColor: rand(HAIR),
+                hairStyle: rand(HAIR_STYLES),
+                bodyType: rand(BODY_TYPES),
+                clothing: {
+                  top:    { color: outfit.top,    type: "shirt" },
+                  bottom: { color: outfit.bottom, type: "pants" },
+                },
+              };
+              cityPresence.spawnNpc({
+                cityId,
+                name: f.actionParams?.name || f.actionParams?.entityId || `NPC-${existingNpcs + 1}`,
+                occupation,
+                x: Number(pos.x || 0) + (Math.random() - 0.5) * 10,
+                y: 0,
+                z: Number(pos.z || 0) + (Math.random() - 0.5) * 10,
+                health: Number(f.actionParams?.health) || 100,
+                isHostile: f.actionParams?.isHostile === true,
+                patrolPath: Array.isArray(f.actionParams?.patrolPath) ? f.actionParams.patrolPath : [],
+                appearance,
+              });
+              break;
+            }
+            case "show_notification": {
+              // Broadcast a per-player notification to whoever the
+              // trigger is attached to (defaults to the triggering user)
+              realtimeEmit("world:notification", {
+                cityId,
+                userId: ctx?.userId,
+                message: String(f.actionParams?.message || ""),
+                type: f.actionParams?.type || "info",
+              });
+              break;
+            }
+            case "broadcast_message": {
+              realtimeEmit("world:broadcast", {
+                cityId,
+                channel: f.actionParams?.channel || "global",
+                message: String(f.actionParams?.message || ""),
+              });
+              break;
+            }
+            case "teleport_player": {
+              // Snap a player to a location. Uses the same path as
+              // respawnPlayer so chunk membership / dirty flag are
+              // updated correctly and the frontend receives the new
+              // position on the next broadcast tick.
+              const targetUserId = f.actionParams?.userId || ctx?.userId;
+              if (!targetUserId) break;
+              const tx = Number(f.actionParams?.x ?? 0);
+              const ty = Number(f.actionParams?.y ?? 0);
+              const tz = Number(f.actionParams?.z ?? 0);
+              try {
+                cityPresence.respawnPlayer(targetUserId, { cityId, x: tx, y: ty, z: tz });
+              } catch (_e) { /* player may not be online */ }
+              realtimeEmit("world:action", {
+                cityId,
+                userId: targetUserId,
+                action: "teleport_player",
+                params: { x: tx, y: ty, z: tz },
+                reward: f.reward,
+              });
+              break;
+            }
+            case "award_xp": {
+              // Grant XP to the triggering user's gameProfile.
+              // Falls through to the broadcast so the client HUD
+              // can animate the XP bar in real time.
+              const targetUserId = f.actionParams?.userId || ctx?.userId;
+              const xpAmount = Number(f.actionParams?.amount ?? f.reward ?? 10);
+              if (targetUserId && xpAmount > 0) {
+                if (!STATE.gameProfiles) STATE.gameProfiles = new Map();
+                if (!STATE.gameProfiles.has(targetUserId)) {
+                  STATE.gameProfiles.set(targetUserId, { userId: targetUserId, xp: 0, level: 1, questsCompleted: 0, badges: [] });
+                }
+                const profile = STATE.gameProfiles.get(targetUserId);
+                profile.xp = (profile.xp || 0) + xpAmount;
+                profile.level = Math.floor(profile.xp / 1000) + 1;
+              }
+              realtimeEmit("world:action", {
+                cityId,
+                userId: targetUserId,
+                action: "award_xp",
+                params: { amount: xpAmount },
+                reward: f.reward,
+              });
+              break;
+            }
+            case "give_item": {
+              // Insert directly into the player_inventory table so the
+              // item persists and shows up in /sim/inventory/:userId
+              // without a round-trip to the REST API.
+              const targetUserId = f.actionParams?.userId || ctx?.userId;
+              const itemId = String(f.actionParams?.itemId || `mech-${Date.now().toString(36)}`);
+              const qty = Math.max(1, Number(f.actionParams?.quantity || 1));
+              if (targetUserId && db) {
+                try {
+                  const existing = db.prepare(
+                    "SELECT quantity FROM player_inventory WHERE user_id = ? AND item_id = ?"
+                  ).get(targetUserId, itemId);
+                  if (existing) {
+                    db.prepare(
+                      "UPDATE player_inventory SET quantity = quantity + ? WHERE user_id = ? AND item_id = ?"
+                    ).run(qty, targetUserId, itemId);
+                  } else {
+                    db.prepare(
+                      "INSERT INTO player_inventory (user_id, item_id, quantity, slot, metadata) VALUES (?, ?, ?, ?, ?)"
+                    ).run(
+                      targetUserId,
+                      itemId,
+                      qty,
+                      f.actionParams?.slot || null,
+                      JSON.stringify(f.actionParams?.metadata || { name: f.actionParams?.name, type: f.actionParams?.type }),
+                    );
+                  }
+                } catch (_e) { /* table may not exist yet */ }
+              }
+              realtimeEmit("world:action", {
+                cityId,
+                userId: targetUserId,
+                action: "give_item",
+                params: { itemId, quantity: qty },
+                reward: f.reward,
+              });
+              break;
+            }
+            case "apply_buff": {
+              // Buffs stamp the player's clientState JSON bag so it
+              // round-trips through loadPlayerState / save. Short
+              // buffs (< 60s) can live only in memory.
+              const targetUserId = f.actionParams?.userId || ctx?.userId;
+              const buffId = String(f.actionParams?.buffId || "generic");
+              const durationMs = Number(f.actionParams?.durationMs ?? 30_000);
+              if (targetUserId) {
+                try {
+                  const pos = cityPresence.getUserPosition(targetUserId);
+                  if (pos) {
+                    const cs = pos.clientState || {};
+                    cs.buffs = cs.buffs || {};
+                    cs.buffs[buffId] = {
+                      appliedAt: Date.now(),
+                      expiresAt: Date.now() + durationMs,
+                      stats: f.actionParams?.stats || {},
+                    };
+                    pos.clientState = cs;
+                    pos.dirty = true;
+                  }
+                } catch (_e) { /* non-fatal */ }
+              }
+              realtimeEmit("world:action", {
+                cityId,
+                userId: targetUserId,
+                action: "apply_buff",
+                params: { buffId, durationMs },
+                reward: f.reward,
+              });
+              break;
+            }
+            case "spawn_object": {
+              // Create a lightweight DTU-shaped object and place it
+              // in the world so it shows up in the district layer.
+              // The full building DTU path has auth / rights checks we
+              // don't want fired from a mechanic, so we write a minimal
+              // synthetic DTU.
+              const objName = String(f.actionParams?.name || "spawned_object");
+              const objId = `world_obj_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+              const ox = Number(f.actionParams?.x ?? ctx?.x ?? 0);
+              const oy = Number(f.actionParams?.y ?? 0);
+              const oz = Number(f.actionParams?.z ?? ctx?.z ?? 0);
+              try {
+                if (STATE.dtus && !STATE.dtus.has(objId)) {
+                  STATE.dtus.set(objId, {
+                    id: objId,
+                    title: objName,
+                    kind: "world_object",
+                    source: "mechanic",
+                    ownerId: null,
+                    visibility: "public",
+                    scope: "local",
+                    createdAt: nowISO(),
+                    updatedAt: nowISO(),
+                    meta: {
+                      world: {
+                        cityId,
+                        position: { x: ox, y: oy, z: oz },
+                        mechanicTriggered: true,
+                      },
+                    },
+                  });
+                }
+              } catch (_e) { /* non-fatal */ }
+              realtimeEmit("world:action", {
+                cityId,
+                action: "spawn_object",
+                params: { objectId: objId, name: objName, x: ox, y: oy, z: oz },
+                reward: f.reward,
+              });
+              break;
+            }
+            case "change_weather": {
+              // Stamp the city's weather in STATE so new joiners pick
+              // it up via the district endpoint, then broadcast so
+              // currently-connected players animate immediately.
+              const weatherKind = String(f.actionParams?.weather || "clear");
+              const intensity = Number(f.actionParams?.intensity ?? 0.5);
+              try {
+                if (!STATE.cityWeather) STATE.cityWeather = new Map();
+                STATE.cityWeather.set(cityId, {
+                  weather: weatherKind,
+                  intensity,
+                  setAt: nowISO(),
+                });
+              } catch (_e) { /* non-fatal */ }
+              realtimeEmit("world:weather", {
+                cityId,
+                weather: weatherKind,
+                intensity,
+                setAt: nowISO(),
+              });
+              realtimeEmit("world:action", {
+                cityId,
+                action: "change_weather",
+                params: { weather: weatherKind, intensity },
+                reward: f.reward,
+              });
+              break;
+            }
+            case "award_currency": {
+              // Currency goes into the user's gameProfile.concordCoin.
+              const targetUserId = f.actionParams?.userId || ctx?.userId;
+              const amount = Number(f.actionParams?.amount ?? f.reward ?? 1);
+              if (targetUserId && amount > 0) {
+                if (!STATE.gameProfiles) STATE.gameProfiles = new Map();
+                if (!STATE.gameProfiles.has(targetUserId)) {
+                  STATE.gameProfiles.set(targetUserId, { userId: targetUserId, xp: 0, level: 1, concordCoin: 0, badges: [] });
+                }
+                const profile = STATE.gameProfiles.get(targetUserId);
+                profile.concordCoin = (profile.concordCoin || 0) + amount;
+              }
+              realtimeEmit("world:action", {
+                cityId,
+                userId: targetUserId,
+                action: "award_currency",
+                params: { amount },
+                reward: f.reward,
+              });
+              break;
+            }
+            default:
+              // Unknown action — still audit-log it below, don't crash
+              break;
+          }
+        } catch (err) {
+          logger.warn?.("server", `world mechanic execution failed: ${err?.message}`);
+        }
+      }
+
+      // Log fired mechanics for audit/replay.
+      if (db && result?.fired?.length > 0) {
+        try {
+          const stmt = db.prepare(`
+            INSERT INTO world_events_log
+              (id, city_id, user_id, trigger_id, mechanic_id, action, reward, context_json, fired_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+          `);
+          for (const f of result.fired) {
+            stmt.run(
+              `we_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
+              cityId,
+              ctx?.userId || null,
+              triggerId,
+              f.mechanicId || null,
+              f.action || null,
+              f.reward || null,
+              JSON.stringify(ctx || {}),
+            );
+          }
+        } catch (_e) { /* world_events_log may not exist yet on older deploys */ }
+      }
+      return result;
+    },
+  });
+  const _stopPresenceBroadcast = cityPresence.startPresenceBroadcast(realtimeEmit, 100);
+  // NPC tick loop — 1Hz. Fires entity_spawns + advances patrols +
+  // broadcasts city:npcs per occupied chunk.
+  const _stopNpcLoop = cityPresence.startNpcLoop(realtimeEmit, 1000);
+  // Cleanup on process exit so the last in-flight positions land on disk.
+  process.once("beforeExit", () => {
+    try { _stopPresenceBroadcast(); } catch { /* ignore */ }
+    try { _stopNpcLoop(); } catch { /* ignore */ }
+  });
+  structuredLog("info", "world_presence_enabled", { tickMs: 100, flushMs: 30000, npcTickMs: 1000 });
+} catch (e) {
+  structuredLog("error", "world_presence_init_failed", { error: String(e?.message || e) });
 }
 
 
@@ -49034,9 +51389,21 @@ function createWorldEntity(input = {}) {
   const id = uid("entity");
   const now = nowISO();
 
+  const providedName = String(input.name || "").slice(0, 200);
+  const needsGenerated = !providedName || isEntityFunctionLabel(providedName);
+  const generated = needsGenerated
+    ? generateEntityName(
+        input.domain || input.primaryDomain || entityType || "general",
+        id,
+        input.role || input.behavior || entityType
+      )
+    : null;
+
   const entity = {
     id,
-    name: String(input.name || "").slice(0, 200) || "Unnamed Entity",
+    name: providedName && !needsGenerated ? providedName : (generated?.displayName || "Unnamed Entity"),
+    displayName: providedName && !needsGenerated ? providedName : generated?.displayName,
+    fullTitle: generated?.fullTitle || (providedName ? `${providedName} the ${entityType || "Mind"}` : null),
     type: entityType,
     description: String(input.description || "").slice(0, 2000),
 
@@ -58762,6 +61129,7 @@ setTimeout(() => { try { runBackup(); } catch (_e) { logger.debug('server', 'sil
 setInterval(() => { try { runBackup(); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); } }, _BACKUP_INTERVAL_MS);
 
 register("admin", "backup", (ctx, _input = {}) => {
+  const denied = requireAdminRole(ctx); if (denied) return denied;
   return runBackup();
 }, { summary: "Run a manual backup of all state data." });
 

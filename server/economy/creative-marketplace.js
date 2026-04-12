@@ -20,6 +20,8 @@ import { PLATFORM_ACCOUNT_ID } from "./fees.js";
 import { distributeFee } from "./fee-split.js";
 import { economyAudit } from "./audit.js";
 import { validateBalance } from "./validators.js";
+import { grantLicense as grantDtuLicense } from "./rights-enforcement.js";
+import { validatePricing as validateTierPricing, getTier as getLicenseTier } from "./license-tiers.js";
 import {
   ARTIFACT_TYPES, CREATIVE_MARKETPLACE, CREATIVE_FEDERATION,
   CREATIVE_QUESTS, CREATIVE_LEADERBOARD, CREATOR_RIGHTS, LICENSE_TYPES,
@@ -33,6 +35,43 @@ function uid(prefix = "ca") {
 
 function nowISO() {
   return new Date().toISOString().replace("T", " ").replace("Z", "");
+}
+
+/**
+ * Idempotently ensure the per-tier pricing column exists on
+ * creative_artifacts. Called on every write path so older deployments
+ * upgrade in place.
+ */
+function ensureTierPricingColumn(db) {
+  try {
+    const cols = db.prepare("PRAGMA table_info(creative_artifacts)").all();
+    const hasColumn = cols.some((c) => c.name === "tier_prices_json");
+    if (!hasColumn) {
+      db.exec("ALTER TABLE creative_artifacts ADD COLUMN tier_prices_json TEXT");
+    }
+  } catch {
+    /* table might not exist yet — first-boot safe */
+  }
+}
+
+/**
+ * Map our loose content type strings (music/art/code/...) to the
+ * UPPERCASE content type keys the license-tiers module uses.
+ */
+const CONTENT_TYPE_TO_TIER_KEY = {
+  music: "MUSIC",
+  art: "ART",
+  code: "CODE",
+  document: "DOCUMENT",
+  "3d_asset": "3D_ASSET",
+  "3d": "3D_ASSET",
+  film: "FILM",
+  video: "FILM",
+};
+function _tierKeyForType(type) {
+  if (!type) return null;
+  const normalized = String(type).toLowerCase();
+  return CONTENT_TYPE_TO_TIER_KEY[normalized] || null;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -59,8 +98,10 @@ function nowISO() {
  */
 export function publishArtifact(db, {
   creatorId, type, title, description, filePath, fileSize, fileHash,
-  price, creative = {}, license = {}, previewPath,
+  price, tierPrices, creative = {}, license = {}, previewPath,
 }) {
+  ensureTierPricingColumn(db);
+
   if (!creatorId) return { ok: false, error: "missing_creator_id" };
   if (!type || !ARTIFACT_TYPES[type]) {
     return { ok: false, error: "invalid_artifact_type", validTypes: Object.keys(ARTIFACT_TYPES) };
@@ -69,8 +110,34 @@ export function publishArtifact(db, {
   if (!filePath) return { ok: false, error: "missing_file_path" };
   if (!fileSize || fileSize <= 0) return { ok: false, error: "invalid_file_size" };
   if (!fileHash) return { ok: false, error: "missing_file_hash" };
-  if (!price || price <= 0) return { ok: false, error: "invalid_price" };
-  if (price > 50000) return { ok: false, error: "price_exceeds_maximum", maxPrice: 50000 };
+
+  // Per-tier pricing support. Creators can now set separate prices for
+  // each tier (e.g. Music: listen=0, download=3, remix=15, commercial=60).
+  // A single `price` is still accepted for backwards compat — it becomes
+  // the "headline" price and defaults the highest interactive tier.
+  let normalizedTierPrices = null;
+  const tierKey = _tierKeyForType(type);
+  if (tierPrices && typeof tierPrices === "object" && tierKey) {
+    const validation = validateTierPricing(tierKey, tierPrices);
+    if (!validation.valid) {
+      return { ok: false, error: "invalid_tier_pricing", errors: validation.errors };
+    }
+    normalizedTierPrices = { ...tierPrices };
+  }
+
+  // If only a single `price` was passed, we still require it to be valid
+  // so listings have at least one purchase entry point.
+  if (!normalizedTierPrices) {
+    if (!price || price <= 0) return { ok: false, error: "invalid_price" };
+    if (price > 50000) return { ok: false, error: "price_exceeds_maximum", maxPrice: 50000 };
+  } else {
+    // Headline price = max non-zero tier, or fallback to caller-supplied
+    if (!price || price <= 0) {
+      const vals = Object.values(normalizedTierPrices).filter((v) => typeof v === "number" && v > 0);
+      price = vals.length ? Math.max(...vals) : 0;
+    }
+    if (price > 50000) return { ok: false, error: "price_exceeds_maximum", maxPrice: 50000 };
+  }
 
   // Validate file size against type limit
   const typeConfig = ARTIFACT_TYPES[type];
@@ -119,9 +186,9 @@ export function publishArtifact(db, {
         location_regional, location_national, federation_tier,
         license_type, license_json,
         is_derivative, lineage_depth,
-        marketplace_status, price, dedup_verified,
+        marketplace_status, price, tier_prices_json, dedup_verified,
         created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'regional', ?, ?, 0, 0, 'active', ?, 1, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'regional', ?, ?, 0, 0, 'active', ?, ?, 1, ?, ?)
     `).run(
       id, creatorId, type, title, description || null,
       JSON.stringify(creative.tags || []),
@@ -131,13 +198,16 @@ export function publishArtifact(db, {
       filePath, fileSize, fileHash, previewPath || null,
       locationRegional, locationNational,
       licenseType, JSON.stringify(license),
-      price, now, now,
+      price,
+      normalizedTierPrices ? JSON.stringify(normalizedTierPrices) : null,
+      now, now,
     );
 
     return {
       ok: true,
       artifact: {
         id, creatorId, type, title, price,
+        tierPrices: normalizedTierPrices,
         federationTier: "regional",
         marketplaceStatus: "active",
         licenseType,
@@ -286,7 +356,9 @@ export function publishDerivativeArtifact(db, { creatorId, artifact, parentDecla
  * @param {string} opts.buyerId
  * @param {string} opts.artifactId
  */
-export function purchaseArtifact(db, { buyerId, artifactId, requestId, ip }) {
+export function purchaseArtifact(db, { buyerId, artifactId, tier, requestId, ip }) {
+  ensureTierPricingColumn(db);
+
   if (!buyerId) return { ok: false, error: "missing_buyer_id" };
   if (!artifactId) return { ok: false, error: "missing_artifact_id" };
 
@@ -297,14 +369,62 @@ export function purchaseArtifact(db, { buyerId, artifactId, requestId, ip }) {
   if (!artifact) return { ok: false, error: "artifact_not_found_or_inactive" };
   if (artifact.creator_id === buyerId) return { ok: false, error: "cannot_buy_own_artifact" };
 
-  // Check buyer hasn't already purchased this
-  const existingLicense = db.prepare(
-    "SELECT id FROM creative_usage_licenses WHERE artifact_id = ? AND licensee_id = ? AND status = 'active'"
-  ).get(artifactId, buyerId);
-  if (existingLicense) return { ok: false, error: "already_licensed" };
+  // ── Resolve tier + price ────────────────────────────────────────────
+  // Buyers pick which right they want at purchase time (download vs
+  // usage vs commercial vs exclusive vs stems/source). If the listing
+  // has per-tier prices, we look up that tier's price. Otherwise the
+  // legacy single `price` applies and we map the listing's license_type
+  // to a reasonable default tier.
+  let tierPrices = null;
+  try {
+    if (artifact.tier_prices_json) tierPrices = JSON.parse(artifact.tier_prices_json);
+  } catch { tierPrices = null; }
 
-  // Check exclusive license isn't already held by someone else
-  if (artifact.license_type === "exclusive") {
+  const tierKey = _tierKeyForType(artifact.type);
+  let resolvedTier = tier || null;
+  let tierPrice = null;
+
+  if (tierPrices && Object.keys(tierPrices).length > 0) {
+    // Per-tier priced listing — buyer MUST pick a tier.
+    if (!resolvedTier) {
+      return {
+        ok: false,
+        error: "tier_required",
+        message: "This listing offers per-tier pricing — specify which tier you want to buy.",
+        availableTiers: Object.keys(tierPrices),
+      };
+    }
+    if (!(resolvedTier in tierPrices)) {
+      return {
+        ok: false,
+        error: "unknown_tier",
+        availableTiers: Object.keys(tierPrices),
+      };
+    }
+    if (tierKey && !getLicenseTier(tierKey, resolvedTier)) {
+      return { ok: false, error: "invalid_tier_for_content_type", contentType: artifact.type, tier: resolvedTier };
+    }
+    tierPrice = tierPrices[resolvedTier];
+    if (typeof tierPrice !== "number" || tierPrice < 0) {
+      return { ok: false, error: "invalid_tier_price" };
+    }
+  } else {
+    // Legacy single-price listing.
+    resolvedTier = resolvedTier || artifact.license_type || "standard";
+    tierPrice = artifact.price;
+  }
+
+  // Check buyer hasn't already purchased THIS SPECIFIC TIER. Same
+  // buyer can still upgrade from e.g. `download` to `commercial` by
+  // buying the higher tier separately (the rights-enforcement layer
+  // already handles hierarchical access).
+  const existingLicense = db.prepare(
+    "SELECT id, license_type FROM creative_usage_licenses WHERE artifact_id = ? AND licensee_id = ? AND status = 'active' AND license_type = ?"
+  ).get(artifactId, buyerId, resolvedTier);
+  if (existingLicense) return { ok: false, error: "already_licensed", tier: resolvedTier };
+
+  // Exclusive is still a one-holder-ever constraint
+  if (resolvedTier === "exclusive" || artifact.license_type === "exclusive") {
     const exclusiveHolder = db.prepare(
       "SELECT id FROM creative_usage_licenses WHERE artifact_id = ? AND license_type = 'exclusive' AND status = 'active'"
     ).get(artifactId);
@@ -315,7 +435,8 @@ export function purchaseArtifact(db, { buyerId, artifactId, requestId, ip }) {
   const washCheck = checkWashTrade(db, buyerId, artifact.creator_id, artifactId);
   if (!washCheck.ok) return washCheck;
 
-  const price = artifact.price;
+  const price = tierPrice;
+  if (!price || price < 0) return { ok: false, error: "invalid_price" };
 
   // Validate buyer has sufficient balance before proceeding
   const balanceCheck = validateBalance(db, buyerId, price);
@@ -507,13 +628,36 @@ export function purchaseArtifact(db, { buyerId, artifactId, requestId, ip }) {
       );
     }
 
-    // 5. Grant usage license
+    // 5. Grant usage license — for the specific tier the buyer purchased.
+    //    We write to BOTH license tables so every downstream checker
+    //    (creative-marketplace derivative gate AND rights-enforcement
+    //    checkAccess / downloadGuard / streamingGuard) sees the
+    //    entitlement, regardless of which one it queries.
     db.prepare(`
       INSERT INTO creative_usage_licenses (
         id, artifact_id, licensee_id, license_type,
         status, purchase_price, purchase_id, granted_at
       ) VALUES (?, ?, ?, ?, 'active', ?, ?, ?)
-    `).run(uid("cul"), artifactId, buyerId, artifact.license_type, price, purchaseId, now);
+    `).run(uid("cul"), artifactId, buyerId, resolvedTier, price, purchaseId, now);
+
+    // Mirror into dtu_licenses (the rights-enforcement table). Using the
+    // creative_artifact id as dtu_id here — they are the same identity
+    // in the DTU lattice. content_type is normalized to lowercase to
+    // match the TIER_HIERARCHY map in rights-enforcement.js.
+    try {
+      grantDtuLicense(db, {
+        dtuId: artifactId,
+        userId: buyerId,
+        contentType: String(artifact.type || "").toLowerCase(),
+        licenseTier: resolvedTier,
+        txId: purchaseId,
+        expiresAt: null,
+      });
+    } catch (e) {
+      // Don't roll back the purchase if the mirror write fails —
+      // creative_usage_licenses is still authoritative for this flow.
+      console.error("[economy] grantDtuLicense mirror failed:", e?.message);
+    }
 
     // 6. Update artifact stats + auto-delist exclusive items
     if (artifact.license_type === "exclusive") {

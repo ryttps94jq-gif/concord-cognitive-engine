@@ -1,0 +1,61 @@
+/**
+ * Compute Primitives — Unified export surface
+ *
+ * Domain-independent computational modules callable by the Oracle Engine
+ * and any domain handler.
+ *
+ *   import { logic, symbolic, numerical } from './compute/index.js';
+ *   logic.isTautology('P ∨ ¬P');
+ *   symbolic.differentiate('x^2 + 3*x');
+ *   numerical.bisection(f, 0, 10);
+ *
+ * Or lazily:
+ *   const mod = await loadComputeModule('symbolic');
+ */
+
+export * as logic from './formal-logic.js';
+export * as symbolic from './symbolic-math.js';
+export * as numerical from './numerical.js';
+
+/**
+ * Lazy-load a compute module by name.
+ * Returns the module namespace or null if the name is unknown.
+ */
+export async function loadComputeModule(name) {
+  switch (name) {
+    case 'logic':
+    case 'formal-logic':
+      return await import('./formal-logic.js');
+    case 'symbolic':
+    case 'symbolic-math':
+      return await import('./symbolic-math.js');
+    case 'numerical':
+    case 'numeric':
+      return await import('./numerical.js');
+    default:
+      return null;
+  }
+}
+
+/**
+ * List the compute modules available to the engine.
+ */
+export function listComputeModules() {
+  return [
+    {
+      name: 'logic',
+      description:
+        'Propositional/first-order logic: parse, evaluate, truth tables, tautology/SAT, natural deduction, CNF/DNF',
+    },
+    {
+      name: 'symbolic',
+      description:
+        'Symbolic algebra/calculus: simplify, expand, differentiate, integrate, solve (linear/quadratic/cubic), substitute',
+    },
+    {
+      name: 'numerical',
+      description:
+        'Numerical methods: root finding, quadrature, ODE solvers, linear systems, eigenvalues, optimization',
+    },
+  ];
+}

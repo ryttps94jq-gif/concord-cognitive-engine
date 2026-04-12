@@ -5,16 +5,26 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
 import {
   Globe, Store, User, ArrowUpCircle, Layers,
-  Filter, BarChart3
+  Filter, BarChart3, MapPin, Flag,
 } from 'lucide-react';
 import { FreshnessIndicator } from '@/components/common/FreshnessIndicator';
 
-type ScopeFilter = 'all' | 'global' | 'marketplace' | 'local';
+// Federation-tier scope filter. Matches server-side federation_tier
+// values plus a "marketplace" branch and "all" for unfiltered views.
+type ScopeFilter =
+  | 'all'
+  | 'global'
+  | 'national'
+  | 'regional'
+  | 'marketplace'
+  | 'local';
 
 const SCOPE_META: Record<string, { icon: React.ElementType; color: string; label: string; desc: string }> = {
-  global: { icon: Globe, color: 'neon-blue', label: 'Global', desc: 'Curated, council-reviewed DTUs' },
-  marketplace: { icon: Store, color: 'neon-purple', label: 'Marketplace', desc: 'Shared community contributions' },
-  local: { icon: User, color: 'neon-green', label: 'Local', desc: 'Your personal knowledge base' },
+  global:      { icon: Globe, color: 'neon-blue',   label: 'Global',      desc: 'Council-approved, federation-wide' },
+  national:    { icon: Flag, color: 'neon-purple',  label: 'National',    desc: 'Your country only' },
+  regional:    { icon: MapPin, color: 'neon-cyan',  label: 'Regional',    desc: 'Your region only' },
+  marketplace: { icon: Store, color: 'neon-orange', label: 'Marketplace', desc: 'Listed for purchase' },
+  local:       { icon: User, color: 'neon-green',   label: 'Local',       desc: 'Your personal knowledge base' },
 };
 
 function ScopeBadge({ scope }: { scope: string }) {

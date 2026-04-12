@@ -69,6 +69,8 @@ import { DTUDetailView } from '@/components/dtu/DTUDetailView';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import MessageRenderer from '@/components/chat/MessageRenderer';
+import OracleResponse from '@/components/chat/OracleResponse';
+import { useOracleSolve, type OracleResponseData } from '@/hooks/useOracleSolve';
 import AtlasOverlay from '@/components/chat/AtlasOverlay';
 import AtlasViewer from '@/components/chat/AtlasViewer';
 import { WelcomePanel, ModeSelector, ChatPanel as ChatModePanel } from '@/components/chat/ChatModePanels';
@@ -77,6 +79,26 @@ import { ContextOverlay } from '@/components/chat/ContextOverlay';
 import ForgeCard from '@/components/chat/ForgeCard';
 import FoundationCard from '@/components/chat/FoundationCard';
 import { SessionSidebar } from '@/components/chat/SessionSidebar';
+// ── Systems panels ─────────────────────────────────────────────
+// These five panels round-trip through the /api/chat cognitive
+// pipeline and surface system-level context alongside the
+// conversation — security posture, mesh state, inference model
+// status, proactive initiative chips, and Atlas privacy zones.
+// All fully built, all previously orphaned.
+import ShieldCard from '@/components/chat/ShieldCard';
+import MeshStatusCard from '@/components/chat/MeshStatusCard';
+import IntelligenceCard from '@/components/chat/IntelligenceCard';
+import AtlasPrivacyMonitor from '@/components/chat/AtlasPrivacyMonitor';
+import { InitiativeChip, type Initiative } from '@/components/chat/InitiativeChip';
+import {
+  recommendLenses,
+  createSessionContext,
+  createSessionTelemetry,
+  recordLensOpened,
+  type LensRecommendation,
+  type SessionContext,
+  type SessionTelemetry,
+} from '@/lib/lenses/chat-lens-recommender';
 
 // ──────────────────────────────────────────────
 // Types
@@ -108,6 +130,7 @@ interface Message {
   quotedContent?: string;
   sources?: Array<{ type: string; title: string; url: string; source: string; snippet?: string; fetchedAt?: string }>;
   webAugmented?: boolean;
+  oracleResponse?: OracleResponseData;
 }
 
 interface Conversation {
@@ -206,6 +229,7 @@ const SLASH_COMMANDS: SlashCommand[] = [
   { command: '/forge', label: '/forge', description: 'Forge last response to DTU', icon: Zap },
   { command: '/help', label: '/help', description: 'Show available commands', icon: HelpCircle },
   { command: '/context', label: '/context [domain]', description: 'Set domain context', icon: Hash, args: 'domain' },
+  { command: '/oracle', label: '/oracle [query]', description: 'Ask the Oracle Engine (rich response)', icon: Sparkles, args: 'query' },
 ];
 
 const ACCEPTED_FILE_TYPES = '.txt,.md,.json,.csv,.pdf,.png,.jpg,.jpeg';
@@ -388,6 +412,45 @@ export default function ChatLensPage() {
   const [chatMode, setChatMode] = useState<'welcome' | 'assist' | 'explore' | 'connect' | 'chat'>('chat');
   const [sessionSidebarOpen, setSessionSidebarOpen] = useState(false);
   const [contextOverlayOpen, setContextOverlayOpen] = useState(false);
+
+  // ── Systems panel (shield / mesh / intel / privacy / initiatives) ─────
+  // Opt-in drawer surfacing the orphaned systems cards. All five
+  // components are fully built; this gives them a live home inside
+  // the chat lens where they're most useful (the AI can reference
+  // shield/mesh/intel state while responding). Endpoints are thin
+  // REST wrappers that delegate to the corresponding macros server-side.
+  const [systemsPanelOpen, setSystemsPanelOpen] = useState(false);
+  const [systemsTab, setSystemsTab] = useState<'shield' | 'mesh' | 'intel' | 'privacy' | 'initiatives'>('shield');
+  const { data: shieldData } = useQuery({
+    queryKey: ['chat-shield-status'],
+    queryFn: () => api.get<{ ok: boolean; securityScore?: Record<string, unknown> }>('/api/shield/status').then((r) => (r.data?.securityScore || r.data || {}) as Record<string, unknown>),
+    enabled: systemsPanelOpen && systemsTab === 'shield',
+    refetchInterval: systemsPanelOpen && systemsTab === 'shield' ? 10_000 : false,
+  });
+  const { data: meshData } = useQuery({
+    queryKey: ['chat-mesh-status'],
+    queryFn: () => api.get<Record<string, unknown>>('/api/mesh/status').then((r) => r.data || {}),
+    enabled: systemsPanelOpen && systemsTab === 'mesh',
+    refetchInterval: systemsPanelOpen && systemsTab === 'mesh' ? 10_000 : false,
+  });
+  const { data: intelData } = useQuery({
+    queryKey: ['chat-intel-status'],
+    queryFn: () => api.get<Record<string, unknown>>('/api/intel/status').then((r) => r.data || {}),
+    enabled: systemsPanelOpen && systemsTab === 'intel',
+    refetchInterval: systemsPanelOpen && systemsTab === 'intel' ? 15_000 : false,
+  });
+  const { data: privacyData } = useQuery({
+    queryKey: ['chat-atlas-privacy'],
+    queryFn: () => api.get<Record<string, unknown>>('/api/atlas/privacy_zones?view=stats').then((r) => r.data || null),
+    enabled: systemsPanelOpen && systemsTab === 'privacy',
+    refetchInterval: systemsPanelOpen && systemsTab === 'privacy' ? 20_000 : false,
+  });
+  const { data: initiativesData } = useQuery({
+    queryKey: ['chat-initiatives'],
+    queryFn: () => api.get<{ pending?: Initiative[]; initiatives?: Initiative[] }>('/api/initiative/pending').then((r) => r.data?.pending || r.data?.initiatives || []),
+    enabled: systemsPanelOpen && systemsTab === 'initiatives',
+    refetchInterval: systemsPanelOpen && systemsTab === 'initiatives' ? 30_000 : false,
+  });
   const [atlasQuery, setAtlasQuery] = useState('');
   const [atlasResult, setAtlasResult] = useState<Record<string, unknown> | null>(null);
   const [atlasLoading, setAtlasLoading] = useState(false);
@@ -401,6 +464,30 @@ export default function ChatLensPage() {
   const [threadSummarizeResult, setThreadSummarizeResult] = useState<Record<string, unknown> | null>(null);
   const [participantAnalysisResult, setParticipantAnalysisResult] = useState<Record<string, unknown> | null>(null);
   const [topicDetectionResult, setTopicDetectionResult] = useState<Record<string, unknown> | null>(null);
+
+  // ── Lens Recommender state ──
+  const [lensRecommendations, setLensRecommendations] = useState<LensRecommendation[]>([]);
+  const lensSessionCtx = useRef<SessionContext>(createSessionContext());
+  const lensTelemetry = useRef<SessionTelemetry>(createSessionTelemetry());
+
+  // Compute lens recommendations whenever messages change
+  const lastUserMessage = useMemo(() => {
+    const userMessages = localMessages.filter(m => m.role === 'user');
+    return userMessages.length > 0 ? userMessages[userMessages.length - 1].content : '';
+  }, [localMessages]);
+
+  useEffect(() => {
+    if (!lastUserMessage) {
+      setLensRecommendations([]);
+      return;
+    }
+    try {
+      const result = recommendLenses(lastUserMessage, lensSessionCtx.current);
+      setLensRecommendations(result.recs.slice(0, 3));
+    } catch {
+      setLensRecommendations([]);
+    }
+  }, [lastUserMessage]);
 
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -449,6 +536,77 @@ export default function ChatLensPage() {
 
   const [streamingContent, setStreamingContent] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
+
+  // ──────────────────────────────────────────────
+  // Oracle Engine — rich response mutation
+  // ──────────────────────────────────────────────
+
+  const oracleSolveMutation = useOracleSolve();
+
+  const runOracleQuery = useCallback((query: string) => {
+    const trimmed = query.trim();
+    if (!trimmed) {
+      const sysMsg: Message = {
+        id: `sys-${Date.now()}`,
+        role: 'system',
+        content: 'Usage: /oracle [your question]. The Oracle Engine returns a rich answer with sources, computations, and cross-domain connections.',
+        timestamp: new Date().toISOString(),
+      };
+      setLocalMessages(prev => [...prev, sysMsg]);
+      return;
+    }
+
+    // Push the user message immediately so the query appears in the thread
+    const userMsg: Message = {
+      id: `oracle-user-${Date.now()}`,
+      role: 'user',
+      content: `/oracle ${trimmed}`,
+      timestamp: new Date().toISOString(),
+    };
+    setLocalMessages(prev => [...prev, userMsg]);
+
+    // Status placeholder while the Oracle solves
+    const pendingId = `oracle-pending-${Date.now()}`;
+    const pendingMsg: Message = {
+      id: pendingId,
+      role: 'system',
+      content: 'Oracle Engine is solving — running 6-phase pipeline…',
+      timestamp: new Date().toISOString(),
+    };
+    setLocalMessages(prev => [...prev, pendingMsg]);
+
+    oracleSolveMutation.mutate(
+      { query: trimmed, context: domainContext ? { domain: domainContext } : null },
+      {
+        onSuccess: (data) => {
+          const assistantMsg: Message = {
+            id: `oracle-asst-${Date.now()}`,
+            role: 'assistant',
+            content: data.answer || '(no answer)',
+            timestamp: new Date().toISOString(),
+            oracleResponse: data,
+          };
+          setLocalMessages(prev => [
+            ...prev.filter(m => m.id !== pendingId),
+            assistantMsg,
+          ]);
+          queryClient.invalidateQueries({ queryKey: ['dtus'] });
+        },
+        onError: (err) => {
+          const errMsg: Message = {
+            id: `oracle-err-${Date.now()}`,
+            role: 'system',
+            content: `Oracle Engine failed: ${err instanceof Error ? err.message : 'Unknown error'}`,
+            timestamp: new Date().toISOString(),
+          };
+          setLocalMessages(prev => [
+            ...prev.filter(m => m.id !== pendingId),
+            errMsg,
+          ]);
+        },
+      }
+    );
+  }, [oracleSolveMutation, domainContext, queryClient]);
 
   // ──────────────────────────────────────────────
   // Slash command filtering
@@ -536,6 +694,10 @@ export default function ChatLensPage() {
         setLocalMessages(prev => [...prev, sysMsg]);
         break;
       }
+      case '/oracle': {
+        runOracleQuery(arg);
+        break;
+      }
       case '/context': {
         if (arg) {
           setDomainContext(arg);
@@ -573,7 +735,7 @@ export default function ChatLensPage() {
     setShowSlashMenu(false);
     setSlashFilter('');
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [messages, domainContext]);
+  }, [messages, domainContext, runOracleQuery]);
 
   // ──────────────────────────────────────────────
   // Chat backend action handler
@@ -1246,6 +1408,17 @@ export default function ChatLensPage() {
             </div>
           )}
 
+          {message.role === 'assistant' && message.oracleResponse ? (
+            <div className="w-full max-w-3xl">
+              <OracleResponse
+                response={message.oracleResponse}
+                onOpenDTU={(id) => setInspectingDtuId(id)}
+              />
+              {timeStr && (
+                <p className="text-[10px] text-gray-500 mt-1 select-none">{timeStr}</p>
+              )}
+            </div>
+          ) : (
           <div className={cn(
             'inline-block p-4 rounded-2xl shadow-sm',
             message.role === 'user'
@@ -1337,6 +1510,7 @@ export default function ChatLensPage() {
               </div>
             )}
           </div>
+          )}
 
           {/* Message action bar */}
           <div className={cn(
@@ -1790,6 +1964,24 @@ export default function ChatLensPage() {
             >
               <Eye className="w-3 h-3" />
               <span>Context</span>
+            </button>
+
+            {/* Systems button — opens the ShieldCard / MeshStatusCard /
+                IntelligenceCard / AtlasPrivacyMonitor / InitiativeChip
+                drawer with live-polling data from shield/mesh/intel
+                macros. */}
+            <button
+              onClick={() => setSystemsPanelOpen((v) => !v)}
+              className={cn(
+                "hidden sm:flex items-center gap-1.5 px-2.5 py-1 bg-lattice-bg border rounded-full text-xs transition-colors",
+                systemsPanelOpen
+                  ? "border-neon-purple/50 text-neon-purple"
+                  : "border-lattice-border text-gray-400 hover:text-neon-purple hover:border-neon-purple/30",
+              )}
+              title="System health, mesh, intelligence, privacy, initiatives"
+            >
+              <Activity className="w-3 h-3" />
+              <span>Systems</span>
             </button>
           </div>
 
@@ -2391,6 +2583,31 @@ export default function ChatLensPage() {
         {showFeatures && (
           <div className="px-4 pb-4 space-y-4">
             <LensFeaturePanel lensId="chat" />
+            {/* Lens Recommender — suggest relevant lenses based on chat context */}
+            {lensRecommendations.length > 0 && (
+              <div className="p-3 rounded-lg border border-neon-purple/20 bg-neon-purple/5 space-y-2">
+                <p className="text-xs font-semibold text-neon-purple flex items-center gap-1.5">
+                  <Layers className="w-3.5 h-3.5" />
+                  Suggested Lenses
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {lensRecommendations.map((rec) => (
+                    <button
+                      key={rec.lensId}
+                      onClick={() => {
+                        recordLensOpened(lensTelemetry.current, rec.lensId, lensSessionCtx.current.currentTurn);
+                        window.location.href = `/lenses/${rec.lensId}`;
+                      }}
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-lattice-surface border border-lattice-border hover:border-neon-purple/50 transition-colors text-left group"
+                    >
+                      <span className="text-xs font-medium text-white group-hover:text-neon-purple transition-colors">{rec.name}</span>
+                      <span className="text-[10px] text-gray-500">{Math.round(rec.score * 100)}%</span>
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[10px] text-gray-500">Based on your current conversation context</p>
+              </div>
+            )}
             {/* Atlas Viewer — spatial/material data overview */}
             <AtlasViewer type="overview" />
           </div>
@@ -2417,6 +2634,115 @@ export default function ChatLensPage() {
         isOpen={contextOverlayOpen}
         onClose={() => setContextOverlayOpen(false)}
       />
+
+      {/* Systems drawer — shield / mesh / intel / privacy / initiatives.
+          Slides in from the right edge; lazy-fetches per-tab. */}
+      <AnimatePresence>
+        {systemsPanelOpen && (
+          <motion.div
+            initial={{ x: 420, opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            exit={{ x: 420, opacity: 0 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+            className="fixed top-20 right-4 bottom-4 w-[28rem] z-50 flex flex-col bg-lattice-surface border border-lattice-border rounded-lg shadow-2xl overflow-hidden"
+          >
+            <div className="flex items-center justify-between px-4 py-3 border-b border-lattice-border">
+              <div className="flex items-center gap-2">
+                <Activity className="w-4 h-4 text-neon-purple" />
+                <span className="text-sm font-semibold text-white">Systems</span>
+              </div>
+              <button
+                onClick={() => setSystemsPanelOpen(false)}
+                className="text-gray-400 hover:text-white transition-colors"
+                title="Close"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            {/* Tabs */}
+            <div className="flex gap-1 px-3 py-2 border-b border-lattice-border overflow-x-auto">
+              {([
+                { key: 'shield', label: 'Shield' },
+                { key: 'mesh', label: 'Mesh' },
+                { key: 'intel', label: 'Intel' },
+                { key: 'privacy', label: 'Privacy' },
+                { key: 'initiatives', label: 'Initiatives' },
+              ] as const).map((t) => (
+                <button
+                  key={t.key}
+                  onClick={() => setSystemsTab(t.key)}
+                  className={cn(
+                    'px-3 py-1 rounded-md text-xs font-medium transition-colors whitespace-nowrap',
+                    systemsTab === t.key
+                      ? 'bg-neon-purple/20 text-neon-purple border border-neon-purple/30'
+                      : 'text-gray-400 hover:text-white hover:bg-lattice-bg',
+                  )}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+            {/* Tab content */}
+            <div className="flex-1 overflow-y-auto p-3">
+              {systemsTab === 'shield' && (
+                <ShieldCard
+                  type="score"
+                  securityScore={shieldData as never}
+                />
+              )}
+              {systemsTab === 'mesh' && (
+                <MeshStatusCard
+                  type="status"
+                  metrics={meshData as never}
+                />
+              )}
+              {systemsTab === 'intel' && (
+                <IntelligenceCard
+                  type="overview"
+                  metrics={intelData as never}
+                />
+              )}
+              {systemsTab === 'privacy' && (
+                <AtlasPrivacyMonitor
+                  data={privacyData as never}
+                  loading={!privacyData}
+                />
+              )}
+              {systemsTab === 'initiatives' && (
+                <div className="space-y-2">
+                  {Array.isArray(initiativesData) && initiativesData.length > 0 ? (
+                    initiativesData.slice(0, 8).map((init: Initiative) => (
+                      <InitiativeChip
+                        key={init.id}
+                        initiative={init}
+                        onDismiss={(id: string) => {
+                          try {
+                            api.post(`/api/initiative/${encodeURIComponent(id)}/dismiss`, {});
+                          } catch { /* non-fatal */ }
+                        }}
+                        onAction={(id: string, action: string) => {
+                          try {
+                            api.post(`/api/initiative/${encodeURIComponent(id)}/respond`, { response: action || 'acted' });
+                          } catch { /* non-fatal */ }
+                        }}
+                        onRespond={(id: string) => {
+                          try {
+                            api.post(`/api/initiative/${encodeURIComponent(id)}/respond`, { response: 'engaged' });
+                          } catch { /* non-fatal */ }
+                        }}
+                      />
+                    ))
+                  ) : (
+                    <p className="text-xs text-gray-500 text-center py-8">
+                      No proactive initiatives right now. Claude will surface them here when opportunities arise.
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Atlas Overlay — material query results */}
       {atlasLoading || atlasResult ? (

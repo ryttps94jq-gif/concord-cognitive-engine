@@ -766,45 +766,167 @@ export class MixerEngine {
 // Audio Recorder
 // ============================================================================
 
+/**
+ * Pick the first MediaRecorder MIME type actually supported by this browser.
+ * Chrome/Firefox prefer webm+opus, Safari lands on mp4. If none match, we
+ * return null and the caller falls back to the browser default.
+ */
+function pickRecorderMimeType(): string | null {
+  if (typeof MediaRecorder === 'undefined') return null;
+  const candidates = [
+    'audio/webm;codecs=opus',
+    'audio/webm',
+    'audio/ogg;codecs=opus',
+    'audio/mp4;codecs=mp4a.40.2',
+    'audio/mp4',
+    'audio/mpeg',
+  ];
+  for (const type of candidates) {
+    try {
+      if (MediaRecorder.isTypeSupported(type)) return type;
+    } catch {
+      /* some browsers throw for unknown types */
+    }
+  }
+  return null;
+}
+
 export class AudioRecorder {
   private mediaStream: MediaStream | null = null;
   private mediaRecorder: MediaRecorder | null = null;
   private chunks: Blob[] = [];
   private onComplete: ((blob: Blob) => void) | null = null;
+  private onError: ((err: Error) => void) | null = null;
+  private mimeType: string | null = null;
+  private lastError: Error | null = null;
+
+  /** True once the user has granted mic permission and we have a live stream. */
+  get hasAccess(): boolean {
+    return !!this.mediaStream && this.mediaStream.getAudioTracks().some(t => t.readyState === 'live');
+  }
+
+  /** Latest error, if any — surfaces stream/recorder failures to the UI. */
+  getLastError(): Error | null {
+    return this.lastError;
+  }
 
   async requestAccess(): Promise<boolean> {
+    // Reuse an existing live stream instead of re-prompting every record.
+    if (this.hasAccess) return true;
+    // Tear down any dead stream before requesting a fresh one.
+    if (this.mediaStream) {
+      this.mediaStream.getTracks().forEach(t => t.stop());
+      this.mediaStream = null;
+    }
+    this.lastError = null;
     try {
-      this.mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+        throw new Error('getUserMedia unavailable in this context');
+      }
+      this.mediaStream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
       return true;
-    } catch {
+    } catch (err) {
+      this.lastError = err instanceof Error ? err : new Error(String(err));
       return false;
     }
   }
 
-  startRecording(onComplete: (blob: Blob) => void): boolean {
-    if (!this.mediaStream) return false;
+  startRecording(
+    onComplete: (blob: Blob) => void,
+    onError?: (err: Error) => void,
+  ): boolean {
+    if (!this.hasAccess || !this.mediaStream) {
+      this.lastError = new Error('startRecording called without mic access');
+      return false;
+    }
     this.onComplete = onComplete;
+    this.onError = onError || null;
     this.chunks = [];
-    this.mediaRecorder = new MediaRecorder(this.mediaStream);
+    this.lastError = null;
+
+    // Explicitly select a supported codec. Without this, some browsers
+    // (notably Safari) silently produce zero-byte chunks.
+    this.mimeType = pickRecorderMimeType();
+    try {
+      this.mediaRecorder = this.mimeType
+        ? new MediaRecorder(this.mediaStream, { mimeType: this.mimeType })
+        : new MediaRecorder(this.mediaStream);
+    } catch (err) {
+      this.lastError = err instanceof Error ? err : new Error(String(err));
+      this.onError?.(this.lastError);
+      return false;
+    }
+
     this.mediaRecorder.ondataavailable = (e) => {
-      if (e.data.size > 0) this.chunks.push(e.data);
+      if (e.data && e.data.size > 0) this.chunks.push(e.data);
+    };
+    this.mediaRecorder.onerror = (ev: Event) => {
+      // MediaRecorder's ErrorEvent.error is non-standard but widely shipped.
+      const err =
+        (ev as unknown as { error?: Error }).error ||
+        new Error('MediaRecorder error');
+      this.lastError = err;
+      this.onError?.(err);
     };
     this.mediaRecorder.onstop = () => {
-      const blob = new Blob(this.chunks, { type: 'audio/webm' });
+      // Use the negotiated mime type so the Blob matches what the encoder
+      // actually produced. Falling back to the first chunk's type if the
+      // recorder's mimeType is blank (Safari occasionally returns '').
+      const blobType =
+        this.mediaRecorder?.mimeType ||
+        this.mimeType ||
+        (this.chunks[0] && this.chunks[0].type) ||
+        'audio/webm';
+      const blob = new Blob(this.chunks, { type: blobType });
+      if (blob.size === 0) {
+        const err = new Error('Recording produced no audio data');
+        this.lastError = err;
+        this.onError?.(err);
+      }
       this.onComplete?.(blob);
     };
-    this.mediaRecorder.start(100);
+
+    try {
+      // Request a slice every 250ms so we get incremental data even if the
+      // user never stops the recorder normally.
+      this.mediaRecorder.start(250);
+    } catch (err) {
+      this.lastError = err instanceof Error ? err : new Error(String(err));
+      this.onError?.(this.lastError);
+      return false;
+    }
     return true;
   }
 
   stopRecording(): void {
-    this.mediaRecorder?.stop();
+    try {
+      if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
+        this.mediaRecorder.stop();
+      }
+    } catch (err) {
+      this.lastError = err instanceof Error ? err : new Error(String(err));
+      this.onError?.(this.lastError);
+    }
   }
 
   dispose(): void {
+    try {
+      if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
+        this.mediaRecorder.stop();
+      }
+    } catch {
+      /* ignore */
+    }
     this.mediaStream?.getTracks().forEach(t => t.stop());
     this.mediaStream = null;
     this.mediaRecorder = null;
+    this.chunks = [];
   }
 }
 

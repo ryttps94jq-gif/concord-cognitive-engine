@@ -846,6 +846,36 @@ import {
   tickRealTimeFeeds, getRealtimeFeedStatus, getRealtimeFeedData,
 } from "./realtime-feeds.js";
 
+// ── Event Scoping (Scoped Not Global, Pull Not Push) ───────────────────────
+
+import {
+  EVENT_SCOPE_MAP, SCOPE_FLAGS, SYSTEM_SCOPE_FLAGS, SYSTEM_ONLY_DOMAINS,
+  isSystemEvent, getScopeFlags,
+  ensureSystemDTUStore, storeSystemDTU, querySystemDTUs,
+  createDefaultSubscription, validateSubscription, updateSubscription,
+  ensureSubscriptionState, getUserSubscription, setUserSubscription,
+  subscribeLenses, unsubscribeLenses, updateNewsFilters,
+  resolveEventScope, isEventTypeScoped, getKnownEventTypes, getEventReceivingLenses,
+  checkRateLimit as checkEventRateLimit, incrementRateLimit as incrementEventRateLimit,
+  getEventScopingMetrics,
+} from "./event-scoping.js";
+
+// ── Deterministic Validation Gates (Layer B) ────────────────────────────────
+
+import {
+  gateIdentityBinding, gateScopeBinding, gateDisclosureEnforcement,
+  gateAntiEcho, gateNoveltyCheck, gateRiskCheck,
+  gateEconomicCheck, gateRateLimit as gateRateLimitCheck,
+  runAllGates, runAntiEchoGate,
+} from "./gates.js";
+
+// ── Module Registry (Dependency Graph & Load Order) ─────────────────────────
+
+import {
+  MODULE_REGISTRY, LOAD_ORDER, SUBSYSTEMS, CIRCULAR_DEPS,
+  validateDeps, getDependents, auditGlobalState,
+} from "./module-registry.js";
+
 const EMERGENT_VERSION = "5.5.0";
 
 /**
@@ -3404,4 +3434,25 @@ export {
   setAttentionBudget,
   handleAttentionCommand,
   initAttention, stopAttention,
+
+  // ── Event Scoping (Scoped Not Global, Pull Not Push) ────────────────────
+  EVENT_SCOPE_MAP, SCOPE_FLAGS, SYSTEM_SCOPE_FLAGS, SYSTEM_ONLY_DOMAINS,
+  isSystemEvent, getScopeFlags,
+  ensureSystemDTUStore, storeSystemDTU, querySystemDTUs,
+  createDefaultSubscription, validateSubscription, updateSubscription,
+  ensureSubscriptionState, getUserSubscription, setUserSubscription,
+  subscribeLenses, unsubscribeLenses, updateNewsFilters,
+  resolveEventScope, isEventTypeScoped, getKnownEventTypes, getEventReceivingLenses,
+  checkEventRateLimit, incrementEventRateLimit,
+  getEventScopingMetrics,
+
+  // ── Deterministic Validation Gates (Layer B) ──────���─────────────────────
+  gateIdentityBinding, gateScopeBinding, gateDisclosureEnforcement,
+  gateAntiEcho, gateNoveltyCheck, gateRiskCheck,
+  gateEconomicCheck, gateRateLimitCheck,
+  runAllGates, runAntiEchoGate,
+
+  // ── Module Registry (Dependency Graph & Load Order) ─────────────────────
+  MODULE_REGISTRY, LOAD_ORDER, SUBSYSTEMS, CIRCULAR_DEPS,
+  validateDeps, getDependents, auditGlobalState,
 };

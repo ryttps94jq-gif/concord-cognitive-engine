@@ -8,6 +8,7 @@
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api/client';
+import { resolveEntityName } from '@/lib/entity-naming';
 
 interface EntityAttributionCardProps {
   entityId: string;
@@ -24,14 +25,16 @@ function EntityAttributionCardInner({ entityId, compact = false }: EntityAttribu
 
   if (!entity) return null;
 
+  const resolved = resolveEntityName(entity);
+
   if (compact) {
     return (
       <div className="flex items-center gap-2 text-xs text-zinc-400">
         <div className="w-5 h-5 rounded-full bg-gradient-to-br from-neon-purple to-neon-blue
           flex items-center justify-center text-white text-[10px] font-bold">
-          {entity.species?.[0]?.toUpperCase() || 'E'}
+          {resolved.displayName[0]}
         </div>
-        <span>Entity {entity.id?.slice(-6)}</span>
+        <span className="font-medium text-zinc-200">{resolved.displayName}</span>
         <span className="text-zinc-600">|</span>
         <span>{(entity.organMaturity * 100).toFixed(0)}% mature</span>
       </div>
@@ -42,13 +45,14 @@ function EntityAttributionCardInner({ entityId, compact = false }: EntityAttribu
     <div className="flex items-center gap-3 p-3 rounded-lg bg-zinc-800/50 border border-zinc-700">
       <div className="w-10 h-10 rounded-full bg-gradient-to-br from-neon-purple to-neon-blue
         flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
-        {entity.species?.[0]?.toUpperCase() || 'E'}
+        {resolved.displayName[0]}
       </div>
       <div className="min-w-0">
         <p className="text-sm font-medium text-zinc-200">
-          Entity {entity.id?.slice(-6)}
-          {entity.species && <span className="text-zinc-500 ml-1">({entity.species})</span>}
+          {resolved.displayName}
+          <span className="text-zinc-500 ml-1 text-xs">· {resolved.fullTitle}</span>
         </p>
+        <p className="text-[10px] text-zinc-500 font-mono">#{resolved.shortId}{entity.species ? ` · ${entity.species}` : ''}</p>
         <div className="flex gap-3 text-xs text-zinc-400 flex-wrap">
           <span>Maturity: {(entity.organMaturity * 100).toFixed(0)}%</span>
           <span>Produced: {entity.totalArtifacts}</span>

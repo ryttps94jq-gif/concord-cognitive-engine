@@ -22,6 +22,10 @@ export default function registerChatRoutes(app, {
   validate,
   perEndpointRateLimit,
   requireAuth,
+  // Optional — if the server passes it we'll broadcast chat:update
+  // events so subscribed clients (multi-tab sessions, collab chat)
+  // see responses without polling.
+  realtimeEmit,
 }) {
 
   // Auth middleware — tolerate missing requireAuth for backward compat
@@ -92,6 +96,23 @@ export default function registerChatRoutes(app, {
 
       const out = await runMacro("chat","respond", req.body, ctx);
       kernelTick({ type: "USER_MSG", meta: { path: req.path }, signals: { benefit: out?.ok?0.2:0, error: out?.ok?0:0.2 } });
+
+      // Realtime broadcast — so when a user has multiple tabs open
+      // (or collab chat is active), the response lands in every
+      // subscribed viewer without polling. useRealtimeLens('chat')
+      // listens for 'chat:update' events via DOMAIN_EVENTS fallback.
+      try {
+        if (typeof realtimeEmit === "function" && out?.ok) {
+          realtimeEmit("chat:update", {
+            sessionId: req.body.sessionId || null,
+            userId: ctx?.actor?.userId || null,
+            mode: req._concordMode,
+            preview: String(out.answer || out.content || out.text || "").slice(0, 240),
+            fetchedAt: new Date().toISOString(),
+          });
+        }
+      } catch (_e) { /* non-fatal */ }
+
       return uiJson(
         res,
         _withAck(out, req, ["state","logs","shadow"], ["/api/state/latest","/api/logs"], null, { panel: "chat" }),

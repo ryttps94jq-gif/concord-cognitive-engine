@@ -157,11 +157,23 @@ export function ArtifactRenderer({ dtuId, artifact, mode = "inline" }: ArtifactR
     return <MarkdownPreview dtuId={dtuId} filename={artifact.filename} sizeBytes={artifact.sizeBytes} downloadUrl={downloadUrl} />;
   }
 
-  // MEGA SPEC: HTML sandboxed preview
+  // MEGA SPEC: HTML sandboxed preview.
+  // SECURITY: sandbox is empty — NO scripts, NO same-origin, NO form
+  // submission, NO popups. HTML DTUs can come from any user, and
+  // `sandbox="allow-scripts"` would let a malicious upload execute JS
+  // in every viewer's browser. The preview renders the raw document as
+  // static HTML/CSS only; users who want the full rendered experience
+  // can click the Download button and open the file locally.
   if (artifact.type === "text/html" || artifact.filename?.endsWith(".html")) {
     return (
       <div className="space-y-2">
-        <iframe src={streamUrl} className="w-full h-96 rounded-lg border border-zinc-700 bg-white" sandbox="allow-scripts" />
+        <iframe
+          src={streamUrl}
+          className="w-full h-96 rounded-lg border border-zinc-700 bg-white"
+          sandbox=""
+          referrerPolicy="no-referrer"
+          title={`HTML preview: ${artifact.filename || 'artifact'}`}
+        />
         <div className="flex items-center justify-between text-xs text-zinc-400">
           <span>{artifact.filename} — {formatSize(artifact.sizeBytes)}</span>
           <DownloadButton url={downloadUrl} filename={artifact.filename} />

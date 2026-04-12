@@ -2,6 +2,7 @@
 
 import { useLensNav } from '@/hooks/useLensNav';
 import { UniversalActions } from '@/components/lens/UniversalActions';
+import { SubLensQuickNav } from '@/components/lens/SubLensQuickNav';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -1015,6 +1016,9 @@ export default function PhysicsLensPage() {
   }
   return (
     <div data-lens-theme="physics" className="p-6 space-y-6">
+      {/* Sub-Lenses */}
+      <SubLensQuickNav lensId="physics" />
+
       {/* Stat Cards Row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[

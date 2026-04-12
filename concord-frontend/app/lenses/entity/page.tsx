@@ -18,10 +18,15 @@ import PresenceDashboard from '@/components/emergent/PresenceDashboard';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import EntityLifecycleViz from '@/components/visualizations/EntityLifecycleViz';
+import { resolveEntityName } from '@/lib/entity-naming';
 
 interface Entity {
   id: string;
   name: string;
+  displayName?: string;
+  fullTitle?: string;
+  domain?: string;
+  role?: string;
   type: 'worker' | 'researcher' | 'guardian' | 'architect';
   status: 'active' | 'idle' | 'suspended';
   workspace: string;
@@ -332,12 +337,20 @@ export default function EntityLensPage() {
           <p className="text-gray-400">No entities spawned yet. Click "Spawn Entity" to create one.</p>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {entities.map((entity, index) => (
+            {entities.map((entity, index) => {
+              const resolved = resolveEntityName(entity);
+              return (
               <motion.div key={entity.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }} className="lens-card">
                 <div className="flex items-start justify-between mb-3">
-                  <div>
-                    <h3 className="font-semibold">{entity.name}</h3>
-                    <p className="text-xs text-gray-500 font-mono">{entity.id}</p>
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-neon-cyan/30 to-neon-purple/30 flex items-center justify-center text-lg font-bold text-white flex-shrink-0">
+                      {resolved.displayName[0]}
+                    </div>
+                    <div className="min-w-0">
+                      <h3 className="font-semibold truncate">{resolved.displayName}</h3>
+                      <p className="text-xs text-gray-400 truncate">{resolved.fullTitle} · {resolved.domain}</p>
+                      <p className="text-[10px] text-gray-600 font-mono truncate">#{resolved.shortId}</p>
+                    </div>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className={`w-2 h-2 rounded-full ${statusColors[entity.status]}`} />
@@ -390,27 +403,36 @@ export default function EntityLensPage() {
                   </button>
                 </div>
               </motion.div>
-            ))}
+              );
+            })}
           </div>
         )}
 
       {/* Qualia Detail Panel */}
-      {qualiaEntity && (
-        <QualiaEntityPanel
-          entityId={qualiaEntity}
-          entityName={entities.find(e => e.id === qualiaEntity)?.name || qualiaEntity}
-          onClose={() => setQualiaEntity(null)}
-        />
-      )}
+      {qualiaEntity && (() => {
+        const e = entities.find(e => e.id === qualiaEntity);
+        const name = e ? resolveEntityName(e).displayName : qualiaEntity;
+        return (
+          <QualiaEntityPanel
+            entityId={qualiaEntity}
+            entityName={name}
+            onClose={() => setQualiaEntity(null)}
+          />
+        );
+      })()}
 
       {/* Cognitive Systems Detail Panel (Feature 22) */}
-      {cognitiveEntity && (
-        <CognitiveEntityPanel
-          entityId={cognitiveEntity}
-          entityName={entities.find(e => e.id === cognitiveEntity)?.name || cognitiveEntity}
-          onClose={() => setCognitiveEntity(null)}
-        />
-      )}
+      {cognitiveEntity && (() => {
+        const e = entities.find(e => e.id === cognitiveEntity);
+        const name = e ? resolveEntityName(e).displayName : cognitiveEntity;
+        return (
+          <CognitiveEntityPanel
+            entityId={cognitiveEntity}
+            entityName={name}
+            onClose={() => setCognitiveEntity(null)}
+          />
+        );
+      })()}
 
       {/* Real-time Data Panel */}
       {realtimeData && (

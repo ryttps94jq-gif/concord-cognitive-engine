@@ -123,7 +123,7 @@ export function validateAPIKey(db, rawKey) {
 
   const keyHash = hashKey(rawKey);
   const row = db.prepare(
-    "SELECT * FROM api_keys WHERE key_hash = ? AND status = 'active'"
+    "SELECT id, user_id, tier, status, key_hash FROM api_keys WHERE key_hash = ? AND status = 'active'"
   ).get(keyHash);
 
   if (!row) return { ok: false, error: "invalid_api_key" };

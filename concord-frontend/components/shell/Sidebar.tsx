@@ -17,13 +17,15 @@ import {
   getAbsorbedLenses,
   getExtensionsByCategory,
   getLensById,
+  getSubLensTree,
   type CoreLensConfig,
   type LensEntry,
+  type SubLensTreeNode,
 } from '@/lib/lens-registry';
 import {
   Home, ChevronLeft, ChevronRight, ChevronDown, X, Compass,
   Puzzle, FlaskConical, Search, Users, Cpu, Building2, Download,
-  Globe, Brain,
+  Globe, Brain, Layers,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -186,6 +188,16 @@ export function Sidebar() {
               />
             ))}
           </div>
+
+          {/* Sub-Lens Tree — 234 sub-lenses under 15 roots */}
+          {showLabel && (
+            <>
+              <p className="px-3 py-1 text-xs uppercase tracking-widest text-gray-500 font-medium mb-1">
+                Sub-Lenses
+              </p>
+              <SubLensTreeSection pathname={pathname} />
+            </>
+          )}
 
           {/* Hub Link */}
           <div className="mb-4">
@@ -504,6 +516,222 @@ const CategoryGroupedExtensions = memo(function CategoryGroupedExtensions({
         <span>View all in Hub</span>
         <ChevronRight className="w-3 h-3" />
       </Link>
+    </div>
+  );
+});
+
+/**
+ * Sub-Lens Tree Section — lazy-loads the hierarchical sub-lens registry
+ * from /api/sub-lens/tree and renders expandable parent → child links.
+ *
+ * Each parent row has a chevron; children are only rendered after the first
+ * expand (lazy hydration). Expanded state persists in localStorage under
+ * `concord:sidebar:sub-lens:expanded`.
+ */
+const SUBLENS_STORAGE_KEY = 'concord:sidebar:sub-lens:expanded';
+
+const SubLensTreeSection = memo(function SubLensTreeSection({
+  pathname,
+}: {
+  pathname: string;
+}) {
+  const [tree, setTree] = useState<SubLensTreeNode[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+  const [hydrated, setHydrated] = useState(false);
+
+  // Hydrate expanded state from localStorage (client-only).
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const raw = window.localStorage.getItem(SUBLENS_STORAGE_KEY);
+      if (raw) {
+        const arr = JSON.parse(raw);
+        if (Array.isArray(arr)) setExpanded(new Set(arr));
+      }
+    } catch {
+      /* ignore */
+    }
+    setHydrated(true);
+  }, []);
+
+  // Persist expanded state to localStorage.
+  useEffect(() => {
+    if (!hydrated || typeof window === 'undefined') return;
+    try {
+      window.localStorage.setItem(
+        SUBLENS_STORAGE_KEY,
+        JSON.stringify(Array.from(expanded)),
+      );
+    } catch {
+      /* ignore quota / privacy errors */
+    }
+  }, [expanded, hydrated]);
+
+  // Fetch the tree once on first mount.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      try {
+        const t = await getSubLensTree();
+        if (!cancelled) {
+          setTree(t);
+          setError(t.length === 0);
+        }
+      } catch {
+        if (!cancelled) setError(true);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Auto-expand the parent of the currently active sub-lens route.
+  useEffect(() => {
+    if (!pathname) return;
+    const match = pathname.match(/^\/lenses\/([^/]+)\/([^/]+)/);
+    if (match) {
+      const [, parent] = match;
+      setExpanded((prev) => {
+        if (prev.has(parent)) return prev;
+        const next = new Set(prev);
+        next.add(parent);
+        return next;
+      });
+    }
+  }, [pathname]);
+
+  const toggle = useCallback((id: string) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  if (loading && !tree) {
+    return (
+      <div className="px-3 py-2 text-xs text-gray-500 italic">
+        Loading tree&hellip;
+      </div>
+    );
+  }
+
+  if (error || !tree || tree.length === 0) {
+    return (
+      <div className="px-3 py-2 text-xs text-gray-600 italic">
+        Sub-lens tree unavailable
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-0.5 mb-4">
+      {tree.map((node) => (
+        <SubLensTreeNodeItem
+          key={node.id}
+          node={node}
+          pathname={pathname}
+          isExpanded={expanded.has(node.id)}
+          onToggle={() => toggle(node.id)}
+        />
+      ))}
+    </div>
+  );
+});
+
+/** Single parent row + its children, rendered only when expanded. */
+const SubLensTreeNodeItem = memo(function SubLensTreeNodeItem({
+  node,
+  pathname,
+  isExpanded,
+  onToggle,
+}: {
+  node: SubLensTreeNode;
+  pathname: string;
+  isExpanded: boolean;
+  onToggle: () => void;
+}) {
+  const parentHref = `/lenses/${node.id}`;
+  const isParentActive = pathname === parentHref;
+  const activeSubMatch = pathname.match(/^\/lenses\/([^/]+)\/([^/]+)/);
+  const isChildActive =
+    activeSubMatch && activeSubMatch[1] === node.id;
+  const childCount = node.children?.length ?? 0;
+
+  const parentLabel = node.id.charAt(0).toUpperCase() + node.id.slice(1);
+
+  return (
+    <div>
+      <div className="flex items-center">
+        <Link
+          href={parentHref}
+          className={cn(
+            'flex-1 flex items-center gap-2 px-3 py-1.5 rounded-md text-xs transition-all',
+            isParentActive || isChildActive
+              ? 'bg-neon-purple/10 text-neon-purple'
+              : 'text-gray-400 hover:bg-lattice-elevated hover:text-white',
+          )}
+          aria-current={isParentActive ? 'page' : undefined}
+        >
+          <Layers className="w-3.5 h-3.5 flex-shrink-0" />
+          <span className="truncate">{parentLabel}</span>
+          <span className="ml-auto text-[10px] font-mono text-gray-600">
+            {childCount}
+          </span>
+        </Link>
+        {childCount > 0 && (
+          <button
+            onClick={onToggle}
+            className="p-1.5 text-gray-500 hover:text-gray-300 transition-colors rounded"
+            aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${parentLabel} sub-lenses`}
+            aria-expanded={isExpanded}
+          >
+            <ChevronDown
+              className={cn(
+                'w-3 h-3 transition-transform',
+                isExpanded && 'rotate-180',
+              )}
+            />
+          </button>
+        )}
+      </div>
+
+      {isExpanded && childCount > 0 && (
+        <div className="ml-5 mt-0.5 mb-1 space-y-0.5 border-l border-lattice-border pl-2">
+          {node.children.map((child) => {
+            const parts = child.id.split('.');
+            const leaf = parts.slice(1).join('.') || parts[0];
+            const href = `/lenses/${parts[0]}/${parts.slice(1).join('.')}`;
+            const isActive = pathname === href;
+            const label = leaf
+              .replace(/-/g, ' ')
+              .replace(/\b\w/g, (c) => c.toUpperCase());
+            return (
+              <Link
+                key={child.id}
+                href={href}
+                className={cn(
+                  'block px-2 py-1 rounded text-[11px] truncate transition-all',
+                  isActive
+                    ? 'text-neon-purple bg-neon-purple/10'
+                    : 'text-gray-500 hover:text-gray-300 hover:bg-lattice-elevated',
+                )}
+                title={child.id}
+                aria-current={isActive ? 'page' : undefined}
+              >
+                {label}
+              </Link>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 });

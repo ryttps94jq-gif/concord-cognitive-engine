@@ -10,6 +10,46 @@
  */
 
 import crypto from "crypto";
+import { verifyProviderJwt, GOOGLE_JWKS, APPLE_JWKS } from "./jwks-verifier.js";
+
+// ── Redirect URI resolution ─────────────────────────────────────────────────
+// SECURITY: the previous fallback let redirect_uri land on
+// `http://localhost:5050/...` if neither PROVIDER_REDIRECT_URI nor
+// PUBLIC_URL was set — in production that's an open redirect risk and
+// a very likely misconfiguration. We now:
+//   1. Prefer the explicit per-provider env var.
+//   2. Fall back to PUBLIC_URL + provider path.
+//   3. Refuse to emit an http://localhost:* URL in production (throws).
+function _assertSafeRedirectUri(uri, providerName) {
+  if (!uri) {
+    throw new Error(`OAuth redirect_uri for ${providerName} is not configured`);
+  }
+  if (process.env.NODE_ENV === "production") {
+    let parsed;
+    try { parsed = new URL(uri); } catch {
+      throw new Error(`OAuth ${providerName} redirect_uri is not a valid URL: ${uri}`);
+    }
+    if (parsed.protocol !== "https:") {
+      throw new Error(`OAuth ${providerName} redirect_uri must be https in production (got ${parsed.protocol})`);
+    }
+    if (parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1") {
+      throw new Error(`OAuth ${providerName} redirect_uri must not point at localhost in production`);
+    }
+  }
+  return uri;
+}
+
+function _resolveGoogleRedirectUri() {
+  const uri = process.env.GOOGLE_REDIRECT_URI ||
+    (process.env.PUBLIC_URL ? `${process.env.PUBLIC_URL}/api/auth/google/callback` : null);
+  return _assertSafeRedirectUri(uri, "google");
+}
+
+function _resolveAppleRedirectUri() {
+  const uri = process.env.APPLE_REDIRECT_URI ||
+    (process.env.PUBLIC_URL ? `${process.env.PUBLIC_URL}/api/auth/apple/callback` : null);
+  return _assertSafeRedirectUri(uri, "apple");
+}
 
 // ── Provider Configuration ──────────────────────────────────────────────────
 
@@ -59,7 +99,7 @@ export function generateOAuthState() {
 export function getGoogleAuthUrl(state) {
   const params = new URLSearchParams({
     client_id: process.env.GOOGLE_CLIENT_ID || "",
-    redirect_uri: process.env.GOOGLE_REDIRECT_URI || `${process.env.PUBLIC_URL || "http://localhost:5050"}/api/auth/google/callback`,
+    redirect_uri: _resolveGoogleRedirectUri(),
     response_type: "code",
     scope: GOOGLE_CONFIG.scopes.join(" "),
     state,
@@ -80,7 +120,7 @@ export async function exchangeGoogleCode(code) {
     throw new Error(`Google OAuth is not configured: missing environment variable(s): ${missingGoogle.join(", ")}`);
   }
 
-  const redirectUri = process.env.GOOGLE_REDIRECT_URI || `${process.env.PUBLIC_URL || "http://localhost:5050"}/api/auth/google/callback`;
+  const redirectUri = _resolveGoogleRedirectUri();
 
   // Step 1: Exchange code for tokens
   const tokenResponse = await fetch(GOOGLE_CONFIG.tokenUrl, {
@@ -102,16 +142,30 @@ export async function exchangeGoogleCode(code) {
 
   const tokens = await tokenResponse.json();
 
-  // Step 2: Decode the id_token to get user info (avoids extra API call)
+  // Step 2: Verify the id_token's signature against Google's JWKS and
+  // extract user info. SECURITY: previously this used decodeJwtPayload,
+  // which trusted the payload with NO signature check. Any attacker able
+  // to inject a forged id_token (e.g. via a broken TLS chain, dev proxy,
+  // or compromised intermediate) could impersonate any Google user.
   if (tokens.id_token) {
-    const payload = decodeJwtPayload(tokens.id_token);
-    if (payload && payload.email) {
-      return {
-        email: payload.email,
-        name: payload.name || "",
-        picture: payload.picture || "",
-        sub: payload.sub,
-      };
+    try {
+      const payload = await verifyProviderJwt(tokens.id_token, {
+        ...GOOGLE_JWKS,
+        audience: process.env.GOOGLE_CLIENT_ID,
+      });
+      if (payload && payload.email) {
+        return {
+          email: payload.email,
+          name: payload.name || "",
+          picture: payload.picture || "",
+          sub: payload.sub,
+        };
+      }
+    } catch (err) {
+      // Fall through to the userinfo endpoint if verification fails —
+      // that path re-authenticates against Google directly with the
+      // access token, so a bad id_token can't short-circuit it.
+      console.warn("[oauth:google] id_token verification failed:", err?.message);
     }
   }
 
@@ -143,7 +197,7 @@ export async function exchangeGoogleCode(code) {
 export function getAppleAuthUrl(state) {
   const params = new URLSearchParams({
     client_id: process.env.APPLE_CLIENT_ID || "",
-    redirect_uri: process.env.APPLE_REDIRECT_URI || `${process.env.PUBLIC_URL || "http://localhost:5050"}/api/auth/apple/callback`,
+    redirect_uri: _resolveAppleRedirectUri(),
     response_type: "code",
     scope: APPLE_CONFIG.scopes.join(" "),
     state,
@@ -205,7 +259,7 @@ function generateAppleClientSecret() {
  */
 export async function exchangeAppleCode(code) {
   const clientSecret = generateAppleClientSecret();
-  const redirectUri = process.env.APPLE_REDIRECT_URI || `${process.env.PUBLIC_URL || "http://localhost:5050"}/api/auth/apple/callback`;
+  const redirectUri = _resolveAppleRedirectUri();
 
   const tokenResponse = await fetch(APPLE_CONFIG.tokenUrl, {
     method: "POST",
@@ -226,12 +280,17 @@ export async function exchangeAppleCode(code) {
 
   const tokens = await tokenResponse.json();
 
-  // Apple returns user info in the id_token JWT
+  // Apple returns user info in the id_token JWT. Verify the signature
+  // against Apple's JWKS — previously we trusted the decoded payload
+  // blindly, which would allow a forged token if TLS ever failed.
   if (!tokens.id_token) {
     throw new Error("Apple token response missing id_token");
   }
 
-  const payload = decodeJwtPayload(tokens.id_token);
+  const payload = await verifyProviderJwt(tokens.id_token, {
+    ...APPLE_JWKS,
+    audience: process.env.APPLE_CLIENT_ID,
+  });
   if (!payload || !payload.sub) {
     throw new Error("Apple id_token payload missing sub claim");
   }

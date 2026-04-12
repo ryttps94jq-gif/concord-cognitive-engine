@@ -7,24 +7,58 @@ import crypto from "crypto";
 import logger from '../logger.js';
 import { isEmailBanned, scanUsername as scanUsernameGuard } from "../lib/content-guard.js";
 
-// ── In-memory login rate limiter (defense-in-depth) ──────────────────────────
-const _loginAttempts = new Map(); // ip -> { count, resetAt }
+// ── Auth rate limiters (defense-in-depth) ────────────────────────────────────
+// Two independent buckets:
+//   • Per-IP (_loginAttempts)     — stops a single attacker from spraying.
+//   • Per-account (_accountAttempts) — stops a distributed attacker from
+//     brute-forcing one account across many IPs. NAT/carrier-grade NAT
+//     share IPs among legitimate users, so the per-IP bucket alone is
+//     easy to evade with a botnet. Per-account lockout closes that gap.
+const _loginAttempts = new Map();     // ip -> { count, resetAt }
+const _accountAttempts = new Map();   // username|email -> { count, resetAt }
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+const LOGIN_MAX_PER_IP = 20;       // was 10 — NAT/CGNAT carriers share IPs
+const LOGIN_MAX_PER_ACCOUNT = 10;  // was 6 — legitimate users typo passwords
+
 function checkLoginRateLimit(ip) {
   const now = Date.now();
   const entry = _loginAttempts.get(ip);
   if (!entry || now > entry.resetAt) {
-    _loginAttempts.set(ip, { count: 1, resetAt: now + 900000 }); // 15 min window
+    _loginAttempts.set(ip, { count: 1, resetAt: now + LOGIN_WINDOW_MS });
     return true;
   }
   entry.count++;
-  if (entry.count > 10) return false; // max 10 attempts per 15 min
+  if (entry.count > LOGIN_MAX_PER_IP) return false;
   return true;
 }
-// Cleanup stale login rate-limit entries every 30 minutes to prevent memory leak
+
+function checkAccountRateLimit(identifier) {
+  if (!identifier) return true;
+  const key = String(identifier).toLowerCase();
+  const now = Date.now();
+  const entry = _accountAttempts.get(key);
+  if (!entry || now > entry.resetAt) {
+    _accountAttempts.set(key, { count: 1, resetAt: now + LOGIN_WINDOW_MS });
+    return true;
+  }
+  entry.count++;
+  if (entry.count > LOGIN_MAX_PER_ACCOUNT) return false;
+  return true;
+}
+
+function clearAccountRateLimit(identifier) {
+  if (!identifier) return;
+  _accountAttempts.delete(String(identifier).toLowerCase());
+}
+
+// Cleanup stale entries every 30 minutes to prevent memory leak
 const _loginRateLimitCleanup = setInterval(() => {
   const now = Date.now();
   for (const [ip, entry] of _loginAttempts) {
     if (now > entry.resetAt) _loginAttempts.delete(ip);
+  }
+  for (const [k, entry] of _accountAttempts) {
+    if (now > entry.resetAt) _accountAttempts.delete(k);
   }
 }, 30 * 60 * 1000);
 _loginRateLimitCleanup.unref();
@@ -55,7 +89,8 @@ export default function createAuthRouter({
   generateCsrfToken,
   uid,
   structuredLog,
-  saveAuthData
+  saveAuthData,
+  invalidateViewerLocation,
 }) {
   const router = express.Router();
 
@@ -193,13 +228,18 @@ export default function createAuthRouter({
   });
 
   router.post("/login", authRateLimitMiddleware, validate("userLogin"), (req, res) => {
-    // In-memory per-IP login rate limiting (defense-in-depth)
+    // Defense-in-depth: per-IP AND per-account rate limiting so NAT
+    // doesn't defeat the IP bucket and a botnet can't target one account.
     const ip = req.ip || req.connection.remoteAddress;
     if (!checkLoginRateLimit(ip)) {
       return res.status(429).json({ ok: false, error: "Too many login attempts. Try again in 15 minutes." });
     }
 
     const { username, email, password } = req.validated || req.body;
+    const accountKey = username || email;
+    if (!checkAccountRateLimit(accountKey)) {
+      return res.status(429).json({ ok: false, error: "Too many failed login attempts for this account. Try again in 15 minutes." });
+    }
 
     // Find user by username or email
     let user = null;
@@ -219,6 +259,17 @@ export default function createAuthRouter({
       });
       return res.status(401).json({ ok: false, error: "Invalid credentials" });
     }
+
+    // Successful login — clear the per-account failure bucket. We do NOT
+    // revoke other active sessions: users legitimately want to be logged
+    // in on multiple devices at once. A proper "log out everywhere"
+    // button belongs in settings and should call revokeAllForUser
+    // explicitly. Session fixation for THIS login path is already
+    // mitigated by the fact that the new cookie replaces whatever
+    // cookie was on the browser — and the new JTI is unrelated to any
+    // prior one, so an attacker holding a pre-login cookie can't
+    // elevate it via this response.
+    clearAccountRateLimit(accountKey);
 
     AuthDB.updateUserLogin(user.id);
 
@@ -254,6 +305,24 @@ export default function createAuthRouter({
 
   router.get("/me", (req, res) => {
     if (!req.user) return res.status(401).json({ ok: false, error: "Not authenticated" });
+    // Pull the declared region/nation directly so the frontend knows
+    // whether to show "Choose Your Universe" onboarding.
+    let declaredRegional = null;
+    let declaredNational = null;
+    let primaryLens = null;
+    try {
+      if (db) {
+        const row = db.prepare(
+          "SELECT declared_regional, declared_national, primary_lens FROM users WHERE id = ?"
+        ).get(req.user.id);
+        if (row) {
+          declaredRegional = row.declared_regional || null;
+          declaredNational = row.declared_national || null;
+          primaryLens = row.primary_lens || null;
+        }
+      }
+    } catch (_e) { /* columns may not exist on older schemas — fall through */ }
+
     res.json({
       ok: true,
       user: {
@@ -261,9 +330,106 @@ export default function createAuthRouter({
         username: req.user.username,
         email: req.user.email,
         role: req.user.role,
-        scopes: req.user.scopes
+        scopes: req.user.scopes,
+        declaredRegional,
+        declaredNational,
+        primaryLens,
+        // Convenience: frontend gate for the onboarding screen.
+        needsOnboarding: !declaredRegional && !declaredNational && !primaryLens,
       }
     });
+  });
+
+  // POST /choose-universe — set region / nation / primary lens in one
+  // call. The "Choose Your Universe" post-signup screen hits this. All
+  // three fields are optional individually, but the caller must pass
+  // at least one. Adds the primary_lens column lazily if the schema
+  // doesn't have it yet.
+  router.post("/choose-universe", (req, res) => {
+    if (!req.user) return res.status(401).json({ ok: false, error: "Not authenticated" });
+    const { regional, national, primaryLens } = req.body || {};
+
+    if (!regional && !national && !primaryLens) {
+      return res.status(400).json({
+        ok: false,
+        error: "must_provide_at_least_one",
+        fields: ["regional", "national", "primaryLens"],
+      });
+    }
+
+    try {
+      // Ensure primary_lens column exists (idempotent).
+      try {
+        const cols = db.prepare("PRAGMA table_info(users)").all();
+        if (!cols.some((c) => c.name === "primary_lens")) {
+          db.exec("ALTER TABLE users ADD COLUMN primary_lens TEXT");
+        }
+      } catch (_e) { /* best-effort */ }
+
+      const now = new Date().toISOString();
+
+      // Fetch existing so we don't null out fields the caller omitted.
+      const existing = db.prepare(
+        "SELECT declared_regional, declared_national, primary_lens FROM users WHERE id = ?"
+      ).get(req.user.id);
+      if (!existing) return res.status(404).json({ ok: false, error: "user_not_found" });
+
+      const nextRegional = regional !== undefined ? (regional || null) : existing.declared_regional;
+      const nextNational = national !== undefined ? (national || null) : existing.declared_national;
+      const nextPrimaryLens = primaryLens !== undefined ? (primaryLens || null) : existing.primary_lens;
+
+      // Record location history if we changed region/nation.
+      if (nextRegional !== existing.declared_regional || nextNational !== existing.declared_national) {
+        try {
+          db.prepare(`
+            INSERT INTO user_location_history (id, user_id, regional, national, previous_regional, previous_national, changed_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+          `).run(
+            `ulh_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
+            req.user.id,
+            nextRegional,
+            nextNational,
+            existing.declared_regional,
+            existing.declared_national,
+            now,
+          );
+        } catch (_e) { /* history table may not exist yet — non-fatal */ }
+      }
+
+      db.prepare(`
+        UPDATE users
+        SET declared_regional = ?,
+            declared_national = ?,
+            primary_lens = ?,
+            location_declared_at = COALESCE(location_declared_at, ?)
+        WHERE id = ?
+      `).run(nextRegional, nextNational, nextPrimaryLens, now, req.user.id);
+
+      auditLog("auth", "choose_universe", {
+        userId: req.user.id,
+        regional: nextRegional,
+        national: nextNational,
+        primaryLens: nextPrimaryLens,
+        ip: req.ip,
+      });
+
+      // Drop the cached viewer-location so userVisibleDTUs sees the
+      // new region / nation on the very next feed query instead of
+      // waiting out the TTL.
+      try { invalidateViewerLocation?.(req.user.id); } catch (_e) { /* best-effort */ }
+
+      return res.json({
+        ok: true,
+        universe: {
+          regional: nextRegional,
+          national: nextNational,
+          primaryLens: nextPrimaryLens,
+        },
+      });
+    } catch (e) {
+      console.error("[auth] choose-universe failed:", e?.message);
+      return res.status(500).json({ ok: false, error: "Internal error" });
+    }
   });
 
   // Logout - clears auth cookie + blacklists token (Tier 1: Auth Hardening)

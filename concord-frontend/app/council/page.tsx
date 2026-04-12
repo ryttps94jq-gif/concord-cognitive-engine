@@ -24,13 +24,19 @@ import {
   Target,
   Search,
   RefreshCw,
+  ArrowUpCircle,
+  MapPin,
+  Flag,
+  Globe,
+  Check,
+  X,
 } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-type ConsoleTab = 'decisions' | 'voices' | 'heatmap' | 'evaluate' | 'submissions';
+type ConsoleTab = 'decisions' | 'voices' | 'heatmap' | 'evaluate' | 'submissions' | 'promotions';
 
 type VoiceName = 'skeptic' | 'socratic' | 'opposer' | 'idealist' | 'pragmatist';
 
@@ -1133,10 +1139,258 @@ function SubmissionsTab() {
 const TABS: { key: ConsoleTab; label: string; icon: typeof Scale }[] = [
   { key: 'decisions', label: 'Decisions', icon: Scale },
   { key: 'submissions', label: 'Submissions', icon: Send },
+  { key: 'promotions', label: 'Promotions', icon: ArrowUpCircle },
   { key: 'voices', label: 'Voices', icon: Users },
   { key: 'heatmap', label: 'Heatmap', icon: BarChart3 },
   { key: 'evaluate', label: 'Evaluate', icon: Eye },
 ];
+
+// ───────────────────────────────────────────────────────────────────────────
+// Promotions Tab — approve/reject regional → national → global escalations.
+// Proposals come from the promotion-pipeline module. Each proposal has a
+// `status` that tells us which council owns the vote:
+//
+//   pending_regional_council → regional council members
+//   pending_national_council → national council members
+//   pending_council          → marketplace listing review
+//   pending_sovereign        → sovereign / owner / founder only
+//
+// The backend already gates approve/reject on role so any caller can hit
+// the endpoints — they'll get 403 if they're not allowed. This UI just
+// fetches the queue and renders the action buttons.
+// ───────────────────────────────────────────────────────────────────────────
+
+type PromoStatus =
+  | 'pending_regional_council'
+  | 'pending_national_council'
+  | 'pending_council'
+  | 'pending_sovereign'
+  | 'approved'
+  | 'rejected';
+
+interface PromotionProposal {
+  id: string;
+  itemId: string;
+  itemType: string;
+  from: string;
+  to: string;
+  gate: string;
+  requesterId: string;
+  status: PromoStatus;
+  createdAt: string;
+  resolvedAt: string | null;
+  resolution: string | null;
+}
+
+const STATUS_META: Record<
+  PromoStatus,
+  { label: string; icon: typeof Scale; color: string; border: string }
+> = {
+  pending_regional_council: {
+    label: 'Regional Council',
+    icon: MapPin,
+    color: 'text-neon-cyan',
+    border: 'border-neon-cyan/30 bg-neon-cyan/5',
+  },
+  pending_national_council: {
+    label: 'National Council',
+    icon: Flag,
+    color: 'text-neon-purple',
+    border: 'border-neon-purple/30 bg-neon-purple/5',
+  },
+  pending_council: {
+    label: 'Marketplace Review',
+    icon: Scale,
+    color: 'text-neon-yellow',
+    border: 'border-neon-yellow/30 bg-neon-yellow/5',
+  },
+  pending_sovereign: {
+    label: 'Sovereign Approval',
+    icon: Globe,
+    color: 'text-neon-blue',
+    border: 'border-neon-blue/30 bg-neon-blue/5',
+  },
+  approved: {
+    label: 'Approved',
+    icon: Check,
+    color: 'text-neon-green',
+    border: 'border-neon-green/30 bg-neon-green/5',
+  },
+  rejected: {
+    label: 'Rejected',
+    icon: X,
+    color: 'text-red-400',
+    border: 'border-red-400/30 bg-red-400/5',
+  },
+};
+
+const PROMO_FILTERS: { value: string; label: string }[] = [
+  { value: '', label: 'All pending' },
+  { value: 'pending_regional_council', label: 'Regional' },
+  { value: 'pending_national_council', label: 'National' },
+  { value: 'pending_council', label: 'Marketplace' },
+  { value: 'pending_sovereign', label: 'Sovereign' },
+];
+
+function PromotionsTab() {
+  const [statusFilter, setStatusFilter] = useState('');
+  const queryClient = useQueryClient();
+
+  const { data, isLoading, refetch } = useQuery({
+    queryKey: ['promotion-queue', statusFilter],
+    queryFn: async () => {
+      const params: Record<string, string> = {};
+      if (statusFilter) params.status = statusFilter;
+      const res = await api.get('/api/promotion/queue', { params });
+      return res.data as { ok: boolean; queue: PromotionProposal[]; total: number };
+    },
+    refetchInterval: 15000,
+  });
+
+  const approve = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await api.post(`/api/promotion/${id}/approve`);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['promotion-queue'] });
+    },
+  });
+
+  const reject = useMutation({
+    mutationFn: async (args: { id: string; reason: string }) => {
+      const res = await api.post(`/api/promotion/${args.id}/reject`, { reason: args.reason });
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['promotion-queue'] });
+    },
+  });
+
+  const queue = data?.queue || [];
+
+  return (
+    <div className="space-y-4">
+      {/* Header + filter */}
+      <div className={cn(ds.panel, 'flex flex-wrap items-center gap-3 justify-between')}>
+        <div>
+          <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+            <ArrowUpCircle className="w-4 h-4 text-neon-cyan" />
+            Promotion Queue
+          </h3>
+          <p className="text-xs text-gray-500 mt-1">
+            DTUs waiting for council approval to move up the federation ladder.
+            Regional → National → Global. Each tier has its own council voice.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="rounded-lg bg-lattice-deep border border-lattice-border px-3 py-1.5 text-sm text-white focus:outline-none focus:border-neon-cyan"
+          >
+            {PROMO_FILTERS.map((f) => (
+              <option key={f.value} value={f.value}>
+                {f.label}
+              </option>
+            ))}
+          </select>
+          <button
+            onClick={() => refetch()}
+            className="p-2 rounded-lg bg-lattice-deep border border-lattice-border text-gray-400 hover:text-white hover:border-neon-cyan/30"
+            aria-label="Refresh"
+          >
+            <RefreshCw className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+
+      {/* Queue list */}
+      {isLoading ? (
+        <div className={cn(ds.panel, 'text-center py-12 text-gray-500')}>
+          Loading promotion proposals…
+        </div>
+      ) : queue.length === 0 ? (
+        <div className={cn(ds.panel, 'text-center py-12')}>
+          <ArrowUpCircle className="w-10 h-10 text-gray-700 mx-auto mb-3" />
+          <p className="text-gray-400">No pending promotions.</p>
+          <p className="text-xs text-gray-600 mt-1">
+            When users submit DTUs for council review, they appear here.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {queue.map((proposal) => {
+            const meta = STATUS_META[proposal.status] || STATUS_META.pending_council;
+            const Icon = meta.icon;
+            const isPending = proposal.status.startsWith('pending');
+            return (
+              <div
+                key={proposal.id}
+                className={cn('rounded-xl border p-4', meta.border)}
+              >
+                <div className="flex items-start justify-between gap-3 mb-3">
+                  <div className="min-w-0 flex-1">
+                    <div className={cn('inline-flex items-center gap-1.5 text-xs font-medium mb-2', meta.color)}>
+                      <Icon className="w-3.5 h-3.5" />
+                      {meta.label}
+                    </div>
+                    <div className="text-sm font-medium text-white truncate">
+                      {proposal.itemType}:{' '}
+                      <span className="font-mono text-xs text-gray-400">{proposal.itemId}</span>
+                    </div>
+                    <div className="text-xs text-gray-500 mt-1">
+                      {proposal.from} → {proposal.to}
+                      {' · '}
+                      requested by <span className="text-gray-400">{proposal.requesterId}</span>
+                      {' · '}
+                      {new Date(proposal.createdAt).toLocaleString()}
+                    </div>
+                  </div>
+
+                  {isPending && (
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <button
+                        onClick={() => approve.mutate(proposal.id)}
+                        disabled={approve.isPending}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-neon-green/15 text-neon-green border border-neon-green/30 text-xs font-medium hover:bg-neon-green/25 disabled:opacity-50"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        Approve
+                      </button>
+                      <button
+                        onClick={() => {
+                          const reason = window.prompt('Rejection reason (optional):') || '';
+                          reject.mutate({ id: proposal.id, reason });
+                        }}
+                        disabled={reject.isPending}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-red-500/15 text-red-400 border border-red-500/30 text-xs font-medium hover:bg-red-500/25 disabled:opacity-50"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                        Reject
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {proposal.resolution && (
+                  <div className="text-xs text-gray-500 italic border-t border-lattice-border pt-2">
+                    {proposal.resolution}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Footer count */}
+      <div className="text-xs text-gray-600 text-center">
+        {data?.total || 0} proposal{(data?.total || 0) === 1 ? '' : 's'} in queue
+      </div>
+    </div>
+  );
+}
 
 export default function CouncilConsolePage() {
   const [activeTab, setActiveTab] = useState<ConsoleTab>('decisions');
@@ -1234,6 +1488,7 @@ export default function CouncilConsolePage() {
       <div>
         {activeTab === 'decisions' && <DecisionsTab />}
         {activeTab === 'submissions' && <SubmissionsTab />}
+        {activeTab === 'promotions' && <PromotionsTab />}
         {activeTab === 'voices' && <VoicesTab />}
         {activeTab === 'heatmap' && <HeatmapTab />}
         {activeTab === 'evaluate' && <EvaluateTab />}

@@ -252,6 +252,7 @@ export const LENS_REGISTRY: LensEntry[] = [
   { id: 'reasoning', name: 'Reasoning', icon: Lightbulb, description: 'Reasoning chain builder', category: 'ai', showInSidebar: false, showInCommandPalette: true, path: '/lenses/reasoning', order: 142, keywords: ['logic', 'inference', 'chain'] },
   { id: 'hypothesis', name: 'Hypothesis', icon: Beaker, description: 'Hypothesis testing', category: 'ai', showInSidebar: false, showInCommandPalette: true, path: '/lenses/hypothesis', order: 143, keywords: ['test', 'experiment', 'theory'] },
   { id: 'research', name: 'Research', icon: BookOpen, description: 'Full-text search across DTUs', category: 'knowledge', showInSidebar: false, showInCommandPalette: true, path: '/lenses/research', order: 115, keywords: ['search', 'find', 'query', 'explore'] },
+  { id: 'answers', name: 'The Answers', icon: Sparkles, description: 'Browse the 30 hard-problem/answer pairs of STSVK + Concord', category: 'knowledge', showInSidebar: false, showInCommandPalette: true, path: '/lenses/answers', order: 116, keywords: ['stsvk', 'framework', 'fixed point', 'manifold', 'oracle', 'hard problems'] },
   { id: 'cri', name: 'CRI', icon: Activity, description: 'CRETI score analysis', category: 'knowledge', showInSidebar: false, showInCommandPalette: true, path: '/lenses/cri', order: 116, keywords: ['score', 'quality', 'creti', 'metrics'] },
   { id: 'ingest', name: 'Ingest', icon: Upload, description: 'Document ingestion & chunking', category: 'specialized', showInSidebar: false, showInCommandPalette: true, path: '/lenses/ingest', order: 171, keywords: ['upload', 'chunk', 'import', 'document'] },
   { id: 'inference', name: 'Inference', icon: Workflow, description: 'Inference engine', category: 'ai', showInSidebar: false, showInCommandPalette: true, path: '/lenses/inference', order: 144, keywords: ['deduce', 'rules', 'facts'] },
@@ -381,6 +382,9 @@ export const LENS_REGISTRY: LensEntry[] = [
   { id: 'marketing', name: 'Marketing', icon: TrendingUp, description: 'Marketing campaigns & analytics', category: 'superlens', showInSidebar: false, showInCommandPalette: true, path: '/lenses/marketing', order: 370, keywords: ['campaign', 'seo', 'social', 'brand'] },
   { id: 'mental-health', name: 'Mental Health', icon: Heart, description: 'Mental wellness & therapy tools', category: 'superlens', showInSidebar: false, showInCommandPalette: true, path: '/lenses/mental-health', order: 371, keywords: ['therapy', 'wellness', 'anxiety', 'counseling'] },
   { id: 'projects', name: 'Projects', icon: Layout, description: 'Project management & tracking', category: 'superlens', showInSidebar: false, showInCommandPalette: true, path: '/lenses/projects', order: 372, keywords: ['project', 'task', 'milestone', 'gantt'] },
+
+  // ── The Answers (STSVK + Concord meta-framework) ───────────────
+  { id: 'answers', name: 'The Answers', icon: Sparkles, description: 'How STSVK + Concord solve the hardest problems in existence', category: 'knowledge', showInSidebar: false, showInCommandPalette: true, path: '/lenses/answers', order: 365, keywords: ['answers', 'stsvk', 'oracle', 'hard problems', 'fixed points', 'constraints', 'meta'] },
 
   // ── Command Center (sovereign dashboard) ───────────────────────
   { id: 'command-center', name: 'Command Center', icon: Shield, description: 'Sovereign command center — brains, repair, attention, forgetting, promotions', category: 'system', showInSidebar: true, showInCommandPalette: true, path: '/lenses/command-center', order: 6, keywords: ['sovereign', 'admin', 'control', 'command', 'center', 'brains', 'repair'] },
@@ -625,4 +629,48 @@ export function getExtensionsByCategory(
   }
 
   return result;
+}
+
+// ── Sub-Lens Hierarchy ─────────────────────────────────────────
+//
+// Mirror of the server-side hierarchical registry (see
+// server/lib/sub-lens-registry.js). These helpers proxy to the
+// /api/sub-lens/* endpoints and are safe to import in client code.
+
+/** A node in the sub-lens tree as returned by /api/sub-lens/tree. */
+export interface SubLensTreeNode {
+  id: string;
+  description?: string;
+  children: SubLensTreeNode[];
+}
+
+/**
+ * Fetches the full sub-lens hierarchy tree from the backend.
+ * Returns `[]` on network errors so callers can render gracefully.
+ */
+export async function getSubLensTree(): Promise<SubLensTreeNode[]> {
+  try {
+    const r = await fetch('/api/sub-lens/tree');
+    if (!r.ok) return [];
+    const data = await r.json();
+    return Array.isArray(data?.tree) ? (data.tree as SubLensTreeNode[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Fetches the children of a given lens id from /api/sub-lens/:lensId/children.
+ * Returns `[]` on failure.
+ */
+export async function getSubLensChildren(lensId: string): Promise<string[]> {
+  if (!lensId) return [];
+  try {
+    const r = await fetch(`/api/sub-lens/${encodeURIComponent(lensId)}/children`);
+    if (!r.ok) return [];
+    const data = await r.json();
+    return Array.isArray(data?.children) ? (data.children as string[]) : [];
+  } catch {
+    return [];
+  }
 }

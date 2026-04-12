@@ -169,6 +169,16 @@ export {
   CrossDomainService,
 } from './cross-domain-service';
 
+// Wiring Profiles (per-category integration profiles)
+export {
+  type WiringProfile,
+  ALL_HOOK_NAMES,
+  WIRING_PROFILES,
+  getWiringProfile,
+  getEnabledHooksForDomain,
+  getCategoryIntegrationScore,
+} from './wiring-profiles';
+
 // World Lens Feed Service (unified activity feed across all lenses)
 export {
   type FeedItem,
