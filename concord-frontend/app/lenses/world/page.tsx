@@ -86,7 +86,7 @@ import type { ConcordiaDistrict } from '@/components/world-lens/ConcordiaHub';
 import {
   Globe, ChevronDown, Layers, Map as MapIcon, Zap, X,
   Radio, Eye, Play, Square, Users, Clock, Coins,
-  Handshake, CalendarDays, Bell, Mic, MessageSquare,
+  HeartHandshake, CalendarDays, Bell, Mic, MessageSquare,
   ThumbsUp, BellRing, Shield, Fingerprint, Network, AudioLines,
   Wrench, Package, Code2, Terminal, Diff, BookOpen, BoxSelect,
   FileCode, GitBranch, Activity, Gauge, ShoppingCart,
@@ -845,15 +845,45 @@ export default function WorldLensPage() {
             height="100%"
           />
           {/* 3D scene rendering layers */}
-          <TerrainRenderer />
-          <BuildingRenderer3D />
-          <SkyWeatherRenderer />
-          <WaterRenderer />
-          <ParticleEffectsComponent />
+          <TerrainRenderer
+            districts={[]}
+            lodCenter={{ x: 0, z: 0 }}
+            quality="medium"
+          />
+          <BuildingRenderer3D
+            buildings={[]}
+            viewMode="normal"
+          />
+          <SkyWeatherRenderer
+            timeOfDay={12}
+            weather="clear"
+            windDirection={0}
+            windSpeed={2}
+            season="summer"
+            quality="medium"
+          />
+          <WaterRenderer
+            riverConfig={{ width: 20, flowDirection: 0, flowSpeed: 1, centerX: 0, length: 100 }}
+            creekPath={[]}
+            timeOfDay={12}
+            quality="medium"
+          />
+          <ParticleEffectsComponent
+            canvasWidth={800}
+            canvasHeight={600}
+            emitters={[]}
+            weather={null}
+            active={false}
+          />
           <SoundscapeEngine />
-          <AnimationManager />
-          <GameJuice />
-          <LoadingTransitions />
+          <AnimationManager><></></AnimationManager>
+          <GameJuice><></></GameJuice>
+          <LoadingTransitions
+            transition="district"
+            destination={{ name: 'Loading...' }}
+            progress={0}
+            phase="terrain"
+          />
           <div className="absolute inset-0 pointer-events-none">
             <AvatarSystem3D
               playerAvatar={playerAvatar}
@@ -899,7 +929,7 @@ export default function WorldLensPage() {
               { key: 'crafting', label: 'Craft', icon: Layers },
               { key: 'players', label: 'Players', icon: Users },
               { key: 'profile', label: 'Profile', icon: Eye },
-              { key: 'collaboration', label: 'Collab', icon: Handshake },
+              { key: 'collaboration', label: 'Collab', icon: HeartHandshake },
               { key: 'livecollab', label: 'Live Co-op', icon: Radio },
               { key: 'events', label: 'Events', icon: CalendarDays },
               { key: 'socialproof', label: 'Social', icon: ThumbsUp },
@@ -973,7 +1003,12 @@ export default function WorldLensPage() {
           )}
           {showPanel === 'livecollab' && (
             <div className="absolute top-4 left-4 z-20 w-96 max-h-[70vh] overflow-auto pointer-events-auto">
-              <LiveCollaboration />
+              <LiveCollaboration
+                session={{ id: '', dtuId: '', dtuName: '', branch: 'main', isDraft: true, validationStatus: 'checking', validationMessages: [] }}
+                participants={[]}
+                editHistory={[]}
+                conflicts={[]}
+              />
             </div>
           )}
           {showPanel === 'events' && (
@@ -988,17 +1023,44 @@ export default function WorldLensPage() {
           )}
           {showPanel === 'notifications' && (
             <div className="absolute top-4 left-4 z-20 w-80 max-h-[70vh] overflow-auto pointer-events-auto">
-              <NotificationFeed />
+              <NotificationFeed
+                notifications={[]}
+                preferences={{ citation: true, royalty: true, discovery: true, event: true, system: true, social: true, moderation: true, milestone: true }}
+                onRead={() => {}}
+                onReadAll={() => {}}
+                onAction={() => {}}
+                onPreferenceChange={() => {}}
+              />
             </div>
           )}
           {showPanel === 'smartnotify' && (
             <div className="absolute top-4 left-4 z-20 w-80 max-h-[70vh] overflow-auto pointer-events-auto">
-              <SmartNotifications />
+              <SmartNotifications
+                notifications={[]}
+                profile={{
+                  interests: [],
+                  quietHours: { enabled: false, start: '22:00', end: '08:00' },
+                  smartMode: true,
+                  analytics: { totalReceived: 0, readRate: 0, actionRate: 0, topDomains: [] },
+                  learningSuggestions: [],
+                }}
+                rules={[]}
+                onUpdateRule={() => {}}
+                onDismiss={() => {}}
+                onLearn={() => {}}
+              />
             </div>
           )}
           {showPanel === 'moderation' && (
             <div className="absolute top-4 left-4 z-20 w-96 max-h-[70vh] overflow-auto pointer-events-auto">
-              <ModerationPanel />
+              <ModerationPanel
+                role="player"
+                reports={[]}
+                permissions={[]}
+                undoHistory={[]}
+                onReport={() => {}}
+                onUndo={() => {}}
+              />
             </div>
           )}
           {showPanel === 'ownership' && (

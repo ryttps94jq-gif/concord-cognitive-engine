@@ -847,7 +847,7 @@ function LensInfrastructureTab() {
   const statusSummary = useMemo(() => getLensStatusSummary(), []);
   const productLenses = useMemo(() => getProductLenses(), []);
   const deprecatedLenses = useMemo(() => getDeprecatedLenses(), []);
-  const missingMacro = useMemo(() => getLensesMissingMacro(), []);
+  const missingMacro = useMemo(() => getLensesMissingMacro('create'), []);
   const currentPhase = useMemo(() => getCurrentPhase(), []);
   const mergeReduction = useMemo(() => getMergeReductionCount(), []);
   const totalArtifacts = useMemo(() => getTotalArtifactCount(), []);
@@ -973,7 +973,7 @@ function LensInfrastructureTab() {
         <div className="panel p-4 space-y-3">
           <h2 className="font-semibold flex items-center gap-2">
             <GitBranch className="w-4 h-4 text-neon-green" />
-            Lens Merge Map ({LENS_MERGE_GROUPS.length} groups, reduces by {mergeReduction})
+            Lens Merge Map ({LENS_MERGE_GROUPS.length} groups, reduces by {mergeReduction.merged})
           </h2>
           <div className="space-y-3 max-h-96 overflow-y-auto">
             {LENS_MERGE_GROUPS.map((group, i) => (
@@ -991,8 +991,8 @@ function LensInfrastructureTab() {
                 </div>
                 <div className="flex flex-wrap gap-1">
                   {group.sources.map((src) => (
-                    <span key={src.sourceId} className="text-xs px-2 py-0.5 rounded bg-white/5 text-gray-400 border border-white/10">
-                      {src.sourceId} ({src.role})
+                    <span key={src.id} className="text-xs px-2 py-0.5 rounded bg-white/5 text-gray-400 border border-white/10">
+                      {src.id} ({src.role})
                     </span>
                   ))}
                 </div>
@@ -1002,7 +1002,7 @@ function LensInfrastructureTab() {
           {POST_MERGE_STANDALONE_LENSES.length > 0 && (
             <div className="p-3 border border-neon-cyan/20 rounded-lg bg-neon-cyan/5">
               <p className="text-xs text-neon-cyan font-semibold mb-1">Post-Merge Standalone ({POST_MERGE_STANDALONE_LENSES.length})</p>
-              <p className="text-xs text-gray-400">{POST_MERGE_STANDALONE_LENSES.map(l => l.id).join(', ')}</p>
+              <p className="text-xs text-gray-400">{POST_MERGE_STANDALONE_LENSES.join(', ')}</p>
             </div>
           )}
         </div>
@@ -1018,13 +1018,13 @@ function LensInfrastructureTab() {
           {currentPhase && (
             <div className="p-3 border border-neon-blue/30 rounded-lg bg-neon-blue/5 mb-3">
               <p className="text-xs text-neon-blue font-semibold">Current Phase: {currentPhase.name}</p>
-              <p className="text-xs text-gray-400 mt-1">{currentPhase.description}</p>
+              <p className="text-xs text-gray-400 mt-1">{currentPhase.rationale}</p>
             </div>
           )}
           <div className="space-y-3 max-h-96 overflow-y-auto">
             {PRODUCTIZATION_PHASES.map((phase, i) => (
               <motion.div
-                key={phase.id}
+                key={phase.lensId}
                 custom={i}
                 variants={cardVariants}
                 initial="hidden"
@@ -1035,12 +1035,12 @@ function LensInfrastructureTab() {
                   <span className="text-sm font-semibold text-white">{phase.name}</span>
                   <span className={cn(
                     'text-xs px-2 py-0.5 rounded-full',
-                    phase.status === 'active' ? 'bg-green-500/20 text-green-400' :
-                    phase.status === 'pending' ? 'bg-yellow-500/20 text-yellow-400' :
+                    phase.status === 'in_progress' ? 'bg-green-500/20 text-green-400' :
+                    phase.status === 'ready' ? 'bg-yellow-500/20 text-yellow-400' :
                     'bg-gray-500/20 text-gray-400'
                   )}>{phase.status}</span>
                 </div>
-                <p className="text-xs text-gray-500 mb-2">{phase.description}</p>
+                <p className="text-xs text-gray-500 mb-2">{phase.rationale}</p>
                 <div className="flex gap-3 text-xs text-gray-400">
                   <span>{phase.pipelines.length} pipelines</span>
                   <span>{phase.engines.length} engines</span>
