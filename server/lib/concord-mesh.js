@@ -901,6 +901,14 @@ export function sendDTU(dtu, destinationNodeId, opts = {}) {
 /**
  * Receive a DTU from the mesh network.
  * Verifies integrity, reassembles fragments, stores in lattice.
+ *
+ * SECURITY: we do NOT trust the author/ownerId/scope/privacy fields in
+ * a DTU arriving from a remote peer. One compromised node could
+ * otherwise poison every peer's lattice with DTUs claiming to be
+ * authored by "admin" or any local user. We re-stamp author to a
+ * namespaced "remote:<nodeId>" id and clear any privacy/tier
+ * metadata the sender supplied. Prototype-pollution keys
+ * (__proto__/constructor/prototype) are stripped before storage.
  */
 export function receiveDTU(packet, STATE) {
   if (!packet) return { ok: false, error: "no_packet" };
@@ -919,6 +927,33 @@ export function receiveDTU(packet, STATE) {
     dtu = typeof packet.payload === "string" ? JSON.parse(packet.payload) : packet.payload;
   } catch {
     dtu = packet.payload;
+  }
+
+  // Defensive sanitization: strip dangerous keys, re-stamp ownership.
+  if (dtu && typeof dtu === "object") {
+    const DANGEROUS = new Set(["__proto__", "constructor", "prototype"]);
+    const safe = {};
+    for (const [k, v] of Object.entries(dtu)) {
+      if (DANGEROUS.has(k)) continue;
+      safe[k] = v;
+    }
+    dtu = safe;
+
+    // Namespace the origin so remote DTUs can never impersonate a
+    // local user. Consumers can still filter by owner prefix to know
+    // the DTU came in off the wire.
+    const senderNodeId = packet.header?.source || packet.nodeId || "unknown";
+    dtu.source = "remote:mesh";
+    dtu.remoteOrigin = `mesh:${senderNodeId}`;
+    dtu.ownerId = `remote:${senderNodeId}`;
+    dtu.author = dtu.author ? `remote:${senderNodeId}:${String(dtu.author).slice(0, 100)}` : `remote:${senderNodeId}`;
+    // Remote DTUs are never auto-promoted. Force safe defaults.
+    dtu.scope = "remote";
+    dtu.privacy = "private";
+    dtu.visibility = "internal";
+    if (dtu.tier && !["regular", "mega", "hyper"].includes(dtu.tier)) {
+      dtu.tier = "regular";
+    }
   }
 
   // Store in lattice if STATE available and DTU has an id
