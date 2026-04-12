@@ -16459,6 +16459,56 @@ register("dtu", "create", async (ctx, input) => {
     ...(input.consent && typeof input.consent === "object" ? input.consent : {}),
   };
 
+  // ── Federation tier + location inheritance ──────────────────────────
+  // The caller can pick a visibility scope: private | local | regional
+  // | national | global. If they don't, we derive a reasonable default
+  // from the lens (social lenses default to the user's regional tier so
+  // posts feel "local community" by default — users can widen to
+  // national or global explicitly). Location is inherited from the
+  // creator's declared_regional/declared_national if they have it.
+  let _creatorDeclaredRegional = null;
+  let _creatorDeclaredNational = null;
+  if (db && _creatorId && _creatorId !== "anon") {
+    try {
+      const row = db.prepare("SELECT declared_regional, declared_national FROM users WHERE id = ?").get(_creatorId);
+      if (row) {
+        _creatorDeclaredRegional = row.declared_regional || null;
+        _creatorDeclaredNational = row.declared_national || null;
+      }
+    } catch (_e) { logger.debug('server', 'creator_location_lookup_failed', { error: _e?.message }); }
+  }
+
+  // visibilityScope is the new top-level field callers can pass:
+  //   private | local | regional | national | global
+  // It takes precedence over input.federationTier for clarity.
+  const _requestedScope = String(input.visibilityScope || input.federationTier || "").toLowerCase();
+  const _VALID_TIERS = new Set(["local", "regional", "national", "global"]);
+  let _federationTier = _VALID_TIERS.has(_requestedScope) ? _requestedScope : null;
+
+  // Default federation tier when the caller didn't specify one.
+  if (!_federationTier) {
+    if (_defaultVisibility === "private") {
+      _federationTier = "local";
+    } else if (_isSocialLens) {
+      // Social posts default to the creator's region if they've
+      // declared one, otherwise fall through to local (private to
+      // the user until they set their location).
+      _federationTier = _creatorDeclaredRegional ? "regional" : "local";
+    } else {
+      _federationTier = "local";
+    }
+  }
+
+  // Explicit locations on the input override the inherited values.
+  const _dtuLocationRegional = input.locationRegional || _creatorDeclaredRegional || null;
+  const _dtuLocationNational = input.locationNational || _creatorDeclaredNational || null;
+
+  // Safety: if the caller asked for regional/national tier but doesn't
+  // have a declared location, downgrade to local so we don't create a
+  // DTU that literally nobody can see.
+  if (_federationTier === "regional" && !_dtuLocationRegional) _federationTier = "local";
+  if (_federationTier === "national" && !_dtuLocationNational) _federationTier = "local";
+
   const dtu = {
     id: uid("dtu"),
     title,
@@ -16472,6 +16522,12 @@ register("dtu", "create", async (ctx, input) => {
     ownerId: ctx?.actor?.userId || ctx?.actor?.id || null,
     visibility: _defaultVisibility,
     consent: _resolvedConsent,
+    // Federation tier + location: set once at creation, promoted later
+    // via promotion-pipeline. canViewDtu compares these to the viewer's
+    // declared region/nation at read time.
+    federation_tier: _federationTier,
+    location_regional: _dtuLocationRegional,
+    location_national: _dtuLocationNational,
     creatorType: input.creatorType || (ctx?.actor?.userId && ctx.actor.userId !== "anon" ? "user" : "system"),
     core: {
       definitions: Array.isArray(coreIn.definitions) ? coreIn.definitions : [],
@@ -43880,24 +43936,37 @@ app.post("/api/xp/award", (req, res) => {
 // ── 2. Context Resurrection — Perfect memory across sessions ────────────────
 
 app.get("/api/context/resurrect", asyncHandler(async (req, res) => {
-  const userId = req.actor?.userId || "sovereign";
+  const userId = req.user?.id || req.actor?.userId || null;
 
-  // Gather recent episodes / activity
-  const recentDTUs = dtusArray()
-    .filter(d => d.ownerId === userId || !d.ownerId)
+  // STRICT ownership filter. Previously this used
+  //   `d.ownerId === userId || !d.ownerId`
+  // which pulled in every unowned system/seed DTU and treated the most
+  // recently-updated one as "your last session" — so brand-new users
+  // saw "You were last working on [seed DTU title]" even though they
+  // had zero activity. Now we only count DTUs the user actually owns.
+  const ownedDTUs = userId
+    ? dtusArray().filter(d => d.ownerId === userId)
+    : [];
+
+  const recentDTUs = ownedDTUs
     .sort((a, b) => new Date(b.updatedAt || b.createdAt || 0).getTime() - new Date(a.updatedAt || a.createdAt || 0).getTime())
     .slice(0, 10);
 
-  const lastSession = recentDTUs[0];
-  const lastDomain = lastSession?.tags?.[0] || null;
+  // If the user has NO owned DTUs, they're a new user. Return an
+  // onboarding shape so the frontend can show "Choose Your Universe"
+  // instead of a fake "welcome back" banner with placeholder content.
+  const isNewUser = ownedDTUs.length === 0;
+
+  const lastSession = isNewUser ? null : recentDTUs[0];
+  const lastDomain = lastSession?.domain || lastSession?.tags?.[0] || null;
   const lastActivity = lastSession?.updatedAt || lastSession?.createdAt || null;
 
   // Time since last activity
   const timeSinceMs = lastActivity ? Date.now() - new Date(lastActivity).getTime() : null;
   const timeSinceHours = timeSinceMs ? Math.round(timeSinceMs / 3600000) : null;
 
-  // Stale DTU alerts
-  const staleDTUs = dtusArray()
+  // Stale DTU alerts — scoped to the user's own content only.
+  const staleDTUs = isNewUser ? [] : ownedDTUs
     .map(d => ({ id: d.id, title: d.title, freshness: calculateFreshness(d) }))
     .filter(d => d.freshness < 0.2)
     .sort((a, b) => a.freshness - b.freshness)
@@ -43929,35 +43998,43 @@ app.get("/api/context/resurrect", asyncHandler(async (req, res) => {
     }
   }
 
-  // Build resurrection context
+  // Build resurrection context. New users get a clean onboarding
+  // shape (isNewUser=true, zero activity, no fake "welcome back").
+  // Returning users get the full cognitive-context banner.
   const context = {
-    welcome: timeSinceHours !== null
-      ? timeSinceHours > 24
-        ? `Welcome back! It's been ${Math.round(timeSinceHours / 24)} days since your last session.`
-        : timeSinceHours > 1
-          ? `Welcome back! You were last active ${timeSinceHours} hours ago.`
-          : "Welcome back! Continuing where you left off."
-      : "Welcome to Concord!",
-    lastDomain,
-    lastDTUTitle: lastSession?.title || null,
-    recentDTUs: recentDTUs.slice(0, 5).map(d => ({
+    isNewUser,
+    welcome: isNewUser
+      ? "Welcome to Concord — let's set up your universe."
+      : timeSinceHours !== null
+        ? timeSinceHours > 24
+          ? `Welcome back! It's been ${Math.round(timeSinceHours / 24)} days since your last session.`
+          : timeSinceHours > 1
+            ? `Welcome back! You were last active ${timeSinceHours} hours ago.`
+            : "Welcome back! Continuing where you left off."
+        : "Welcome to Concord!",
+    lastDomain: isNewUser ? null : lastDomain,
+    lastDTUTitle: isNewUser ? null : (lastSession?.title || null),
+    recentDTUs: isNewUser ? [] : recentDTUs.slice(0, 5).map(d => ({
       id: d.id,
       title: d.title,
-      domain: (d.tags || [])[0] || "general",
+      domain: d.domain || (d.tags || [])[0] || "general",
       freshness: calculateFreshness(d),
     })),
     staleDTUs,
     xp: {
-      totalXP: xpProfile.totalXP,
-      level: xpProfile.level,
-      title: xpProfile.title,
-      streak: xpProfile.streak.current,
+      totalXP: xpProfile?.totalXP || 0,
+      level: xpProfile?.level || 1,
+      title: xpProfile?.title || "Novice",
+      streak: xpProfile?.streak?.current || 0,
     },
-    ghostInsights,
-    activeGoals: goalArtifacts,
+    ghostInsights: isNewUser ? [] : ghostInsights,
+    activeGoals: isNewUser ? [] : goalArtifacts,
     stats: {
-      totalDTUs: STATE.dtus.size,
-      domains: [...new Set(dtusArray().flatMap(d => d.tags || []))].length,
+      // Per-user stats — previously these were global totals, which
+      // told a new user "1,200 DTUs across 40 domains" about content
+      // that wasn't theirs.
+      totalDTUs: ownedDTUs.length,
+      domains: [...new Set(ownedDTUs.map(d => d.domain || (d.tags || [])[0]).filter(Boolean))].length,
     },
   };
 

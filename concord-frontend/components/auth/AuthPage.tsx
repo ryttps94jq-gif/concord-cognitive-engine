@@ -87,7 +87,30 @@ export function AuthPage({ redirectTo: rawRedirectTo = '/', onAuthSuccess }: Aut
         return;
       }
 
-      // Success
+      // Success. If this is a signup (register endpoint), or the user
+      // hasn't completed onboarding (no region/nation/primary lens),
+      // route them through the onboarding flow before anything else.
+      // Sign-in users who already have all three just go to the
+      // requested destination.
+      if (mode === 'signup') {
+        window.location.href = '/onboarding';
+        return;
+      }
+      try {
+        // Probe /me to find out whether they need onboarding. If the
+        // endpoint is unavailable for any reason we fall through to
+        // the normal redirect so a broken /me doesn't block sign-in.
+        const meResp = await fetch(`${BASE_URL}/api/auth/me`, { credentials: 'include' });
+        if (meResp.ok) {
+          const me = await meResp.json();
+          if (me?.user?.needsOnboarding) {
+            window.location.href = '/onboarding';
+            return;
+          }
+        }
+      } catch {
+        /* non-fatal — fall through */
+      }
       if (onAuthSuccess && data.user) {
         onAuthSuccess(data.user);
       } else {

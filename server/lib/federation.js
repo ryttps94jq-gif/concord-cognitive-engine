@@ -415,6 +415,116 @@ export function tagDTULocation(db, { dtuId, regional = null, national = null, fe
 }
 
 /**
+ * Can `viewer` see `dtu` under the federation tier rules?
+ *
+ * The read-side filter that was missing. Compares the viewer's declared
+ * region and nation against the DTU's federation_tier + location fields
+ * and returns a simple allow/deny decision.
+ *
+ * Rules:
+ *   • Owner always sees their own content.
+ *   • Admin/founder/sovereign bypass all scope checks.
+ *   • visibility=private / internal / draft → owner only.
+ *   • federation_tier=local → owner only (plus admin).
+ *   • federation_tier=regional → viewer.declared_regional must
+ *     equal dtu.location_regional. If the DTU never had a region
+ *     stamped we fail-closed (owner/admin only).
+ *   • federation_tier=national → viewer.declared_national must
+ *     equal dtu.location_national. Same fail-closed rule.
+ *   • federation_tier=global → visible to everyone.
+ *   • DTUs created before federation tiers existed (no federation_tier
+ *     and no location columns) fall through to the legacy
+ *     visibility/scope checks so pre-upgrade content stays reachable.
+ *
+ * @param {object|null} db - optional; the caller can pass null if both
+ *                           `viewer` and `dtu` already carry all the
+ *                           location fields we need.
+ * @param {object} viewer - { id, userId, declaredRegional, declaredNational, role }
+ * @param {object} dtu    - DTU record with ownerId, federation_tier,
+ *                          location_regional, location_national,
+ *                          visibility, scope.
+ * @returns {{ allowed: boolean, reason?: string }}
+ */
+export function canViewDtu(db, viewer, dtu) {
+  if (!dtu) return { allowed: false, reason: "missing_dtu" };
+
+  const viewerId = viewer?.id || viewer?.userId || null;
+  const viewerRole = viewer?.role || "viewer";
+  const isAdmin =
+    viewerRole === "admin" ||
+    viewerRole === "owner" ||
+    viewerRole === "founder" ||
+    viewerRole === "sovereign";
+
+  // Owner always sees their own
+  const ownerId = dtu.ownerId || dtu.owner_user_id || dtu.createdBy || null;
+  if (viewerId && ownerId && viewerId === ownerId) return { allowed: true, reason: "owner" };
+
+  // Admin bypass
+  if (isAdmin) return { allowed: true, reason: "admin" };
+
+  // Private / internal / draft → owner only (already rejected above)
+  const visibility = dtu.visibility || dtu.meta?.visibility || null;
+  if (visibility === "private" || visibility === "internal" || visibility === "draft") {
+    return { allowed: false, reason: "private" };
+  }
+
+  const tier = dtu.federation_tier || dtu.federationTier || null;
+  const dtuRegional = dtu.location_regional || dtu.locationRegional || null;
+  const dtuNational = dtu.location_national || dtu.locationNational || null;
+
+  // No federation metadata → legacy path. Allow unless explicitly private.
+  if (!tier) {
+    // Global scope or public visibility = visible
+    if (dtu.scope === "global" || visibility === "public" || visibility === "published") {
+      return { allowed: true, reason: "legacy_public" };
+    }
+    // Legacy local/unscoped DTUs: owner-only (already rejected above) OR
+    // fall through to allow if the caller is reading an unscoped feed
+    // that trusts the query-level filter. Be conservative: deny.
+    return { allowed: false, reason: "legacy_unscoped" };
+  }
+
+  // Global is always visible
+  if (tier === "global") return { allowed: true, reason: "global_tier" };
+
+  // Local = owner only. Owner already handled above.
+  if (tier === "local") return { allowed: false, reason: "local_tier_not_owner" };
+
+  // Regional / national tier — need viewer location to compare.
+  const viewerRegional = viewer?.declaredRegional || viewer?.declared_regional || null;
+  const viewerNational = viewer?.declaredNational || viewer?.declared_national || null;
+
+  // If viewer hasn't declared a location we fail closed — they can't
+  // pretend they're in the region.
+  if (tier === "regional") {
+    if (!dtuRegional) return { allowed: false, reason: "regional_tier_no_dtu_region" };
+    if (!viewerRegional) return { allowed: false, reason: "regional_tier_no_viewer_region" };
+    if (viewerRegional === dtuRegional) return { allowed: true, reason: "regional_match" };
+    return { allowed: false, reason: "regional_mismatch" };
+  }
+
+  if (tier === "national") {
+    if (!dtuNational) return { allowed: false, reason: "national_tier_no_dtu_nation" };
+    if (!viewerNational) return { allowed: false, reason: "national_tier_no_viewer_nation" };
+    if (viewerNational === dtuNational) return { allowed: true, reason: "national_match" };
+    return { allowed: false, reason: "national_mismatch" };
+  }
+
+  return { allowed: false, reason: "unknown_tier" };
+}
+
+/**
+ * Filter a DTU array by `canViewDtu`. Convenience for feed/browse
+ * endpoints that pull a pile of rows and want to drop anything the
+ * viewer shouldn't see. Returns a new array, does not mutate.
+ */
+export function filterDtusByViewer(db, viewer, dtus) {
+  if (!Array.isArray(dtus) || dtus.length === 0) return [];
+  return dtus.filter((d) => canViewDtu(db, viewer, d).allowed);
+}
+
+/**
  * Promote a DTU to a higher federation tier (council-approved).
  * Once promoted, never demoted.
  */

@@ -304,6 +304,24 @@ export default function createAuthRouter({
 
   router.get("/me", (req, res) => {
     if (!req.user) return res.status(401).json({ ok: false, error: "Not authenticated" });
+    // Pull the declared region/nation directly so the frontend knows
+    // whether to show "Choose Your Universe" onboarding.
+    let declaredRegional = null;
+    let declaredNational = null;
+    let primaryLens = null;
+    try {
+      if (db) {
+        const row = db.prepare(
+          "SELECT declared_regional, declared_national, primary_lens FROM users WHERE id = ?"
+        ).get(req.user.id);
+        if (row) {
+          declaredRegional = row.declared_regional || null;
+          declaredNational = row.declared_national || null;
+          primaryLens = row.primary_lens || null;
+        }
+      }
+    } catch (_e) { /* columns may not exist on older schemas — fall through */ }
+
     res.json({
       ok: true,
       user: {
@@ -311,9 +329,101 @@ export default function createAuthRouter({
         username: req.user.username,
         email: req.user.email,
         role: req.user.role,
-        scopes: req.user.scopes
+        scopes: req.user.scopes,
+        declaredRegional,
+        declaredNational,
+        primaryLens,
+        // Convenience: frontend gate for the onboarding screen.
+        needsOnboarding: !declaredRegional && !declaredNational && !primaryLens,
       }
     });
+  });
+
+  // POST /choose-universe — set region / nation / primary lens in one
+  // call. The "Choose Your Universe" post-signup screen hits this. All
+  // three fields are optional individually, but the caller must pass
+  // at least one. Adds the primary_lens column lazily if the schema
+  // doesn't have it yet.
+  router.post("/choose-universe", (req, res) => {
+    if (!req.user) return res.status(401).json({ ok: false, error: "Not authenticated" });
+    const { regional, national, primaryLens } = req.body || {};
+
+    if (!regional && !national && !primaryLens) {
+      return res.status(400).json({
+        ok: false,
+        error: "must_provide_at_least_one",
+        fields: ["regional", "national", "primaryLens"],
+      });
+    }
+
+    try {
+      // Ensure primary_lens column exists (idempotent).
+      try {
+        const cols = db.prepare("PRAGMA table_info(users)").all();
+        if (!cols.some((c) => c.name === "primary_lens")) {
+          db.exec("ALTER TABLE users ADD COLUMN primary_lens TEXT");
+        }
+      } catch (_e) { /* best-effort */ }
+
+      const now = new Date().toISOString();
+
+      // Fetch existing so we don't null out fields the caller omitted.
+      const existing = db.prepare(
+        "SELECT declared_regional, declared_national, primary_lens FROM users WHERE id = ?"
+      ).get(req.user.id);
+      if (!existing) return res.status(404).json({ ok: false, error: "user_not_found" });
+
+      const nextRegional = regional !== undefined ? (regional || null) : existing.declared_regional;
+      const nextNational = national !== undefined ? (national || null) : existing.declared_national;
+      const nextPrimaryLens = primaryLens !== undefined ? (primaryLens || null) : existing.primary_lens;
+
+      // Record location history if we changed region/nation.
+      if (nextRegional !== existing.declared_regional || nextNational !== existing.declared_national) {
+        try {
+          db.prepare(`
+            INSERT INTO user_location_history (id, user_id, regional, national, previous_regional, previous_national, changed_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+          `).run(
+            `ulh_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
+            req.user.id,
+            nextRegional,
+            nextNational,
+            existing.declared_regional,
+            existing.declared_national,
+            now,
+          );
+        } catch (_e) { /* history table may not exist yet — non-fatal */ }
+      }
+
+      db.prepare(`
+        UPDATE users
+        SET declared_regional = ?,
+            declared_national = ?,
+            primary_lens = ?,
+            location_declared_at = COALESCE(location_declared_at, ?)
+        WHERE id = ?
+      `).run(nextRegional, nextNational, nextPrimaryLens, now, req.user.id);
+
+      auditLog("auth", "choose_universe", {
+        userId: req.user.id,
+        regional: nextRegional,
+        national: nextNational,
+        primaryLens: nextPrimaryLens,
+        ip: req.ip,
+      });
+
+      return res.json({
+        ok: true,
+        universe: {
+          regional: nextRegional,
+          national: nextNational,
+          primaryLens: nextPrimaryLens,
+        },
+      });
+    } catch (e) {
+      console.error("[auth] choose-universe failed:", e?.message);
+      return res.status(500).json({ ok: false, error: "Internal error" });
+    }
   });
 
   // Logout - clears auth cookie + blacklists token (Tier 1: Auth Hardening)
