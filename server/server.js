@@ -31552,6 +31552,25 @@ try {
   logger.info('[routes] /api/oracle mounted');
 } catch (e) { console.error('[routes] oracle mount failed:', e); }
 
+// ===== SUB-LENS REGISTRY (hierarchical parent/child lens tree) =====
+import createSubLensRoutes from "./routes/sub-lens.js";
+try {
+  app.use("/api/sub-lens", createSubLensRoutes({ requireAuth }));
+  logger.info('[routes] /api/sub-lens mounted');
+} catch (e) { console.error('[routes] sub-lens mount failed:', e); }
+
+// ===== COMPUTE REGISTRY (unified catalog of computational capabilities) =====
+// Formal registry that maps query intents to concrete domain.action handlers,
+// used by Oracle Engine Phase 3 and exposed at /api/compute for UI/external use.
+import createComputeRoutes from "./routes/compute.js";
+try {
+  app.use("/api/compute", createComputeRoutes({
+    requireAuth,
+    domainHandlers: LENS_ACTIONS,
+  }));
+  logger.info('[routes] /api/compute mounted');
+} catch (e) { console.error('[routes] compute mount failed:', e); }
+
 // ===== STSVK (feasibility manifold + 3-regime classifier) =====
 import createStsvkRoutes from "./routes/stsvk.js";
 try {
