@@ -18837,8 +18837,13 @@ Rules for tool use:
 
   // If LLM failed, make the fallback response conversational instead of a DTU dump
   if (!llmUsed && localReply && finalReply === localReply) {
-    // Extract the user's actual question
-    const userQuestion = messages?.[messages.length - 1]?.content || prompt || '';
+    // Extract the user's actual question. `messages` is only in scope when
+    // the LLM-enabled branch above ran — fall through to prompt directly
+    // when LLM_READY is false, so we don't hit a TDZ ReferenceError in
+    // the offline fallback path.
+    const userQuestion = (typeof messages !== 'undefined' && Array.isArray(messages) && messages.length > 0)
+      ? (messages[messages.length - 1]?.content || prompt || '')
+      : (prompt || '');
     // Build a helpful response from the DTU context
     const topDtus = relevant.slice(0, 5);
     if (topDtus.length > 0) {
@@ -27880,6 +27885,9 @@ register("marketplace", "dtu_browse", async (ctx, input) => {
 }, { description: "Browse marketplace listings." });
 
 app.get("/api/marketplace/browse", asyncHandler(async (req, res) => res.json(await runMacro("marketplace", "browse", { category: req.query.category, search: req.query.search, sort: req.query.sort, page: req.query.page, pageSize: req.query.pageSize }, makeCtx(req)))));
+// Legacy alias — some frontend code still calls /api/marketplace/dtu_browse.
+// Route it to the same macro so both URLs work during deprecation.
+app.get("/api/marketplace/dtu_browse", asyncHandler(async (req, res) => res.json(await runMacro("marketplace", "browse", { category: req.query.category, search: req.query.search, sort: req.query.sort, page: req.query.page, pageSize: req.query.pageSize }, makeCtx(req)))));
 app.post("/api/marketplace/submit", validate("marketplaceSubmit"), asyncHandler(async (req, res) => res.json(await runMacro("marketplace", "submit", req.body, makeCtx(req)))));
 app.post("/api/marketplace/install", validate("marketplaceInstall"), asyncHandler(async (req, res) => res.json(await runMacro("marketplace", "install", req.body, makeCtx(req)))));
 app.post("/api/marketplace/review", asyncHandler(async (req, res) => res.json(await runMacro("marketplace", "review", req.body, makeCtx(req)))));
@@ -41020,6 +41028,24 @@ app.get("/api/economy/fees", (req, res) => {
   });
 });
 
+// GET /api/economy/transactions — list the current user's transactions.
+// Alias of /api/economy/history (existing) but with a user-scoped shape
+// that matches what lib/api/client.ts expects. Anonymous callers get
+// an empty list instead of a 404.
+app.get("/api/economy/transactions", (req, res) => {
+  const userId = req.user?.id || null;
+  let transactions = [];
+  try {
+    if (db && userId) {
+      const rows = db.prepare(
+        "SELECT * FROM economy_ledger WHERE from_user = ? OR to_user = ? ORDER BY created_at DESC LIMIT 100"
+      ).all(userId, userId);
+      transactions = rows || [];
+    }
+  } catch (_e) { /* table may not exist on older deploys */ }
+  res.json({ ok: true, transactions, total: transactions.length });
+});
+
 // Growth/organs
 app.get("/api/growth/status", (req, res) => {
   res.json({ ok: true, status: STATE.growth || { stage: "seed", health: 1.0 }});
@@ -43025,13 +43051,13 @@ app.get("/api/skill/gaps", asyncHandler(async (_req, res) => {
 // Foundation Intel Tier — thin REST wrappers for the `intel` macro
 // domain so the chat Systems drawer (and any other UI) can poll a
 // stable URL instead of needing a generic macro dispatch endpoint.
-// /api/intel/status is an aggregate convenience that unions the
-// metrics macro with per-category headlines for the overview card.
+// /api/intel/status returns the IntelMetrics shape directly
+// (flattened) because IntelligenceCard consumes it as its `metrics`
+// prop — wrapping it in `{ok, metrics}` forced the frontend to
+// dereference an extra level and the card rendered empty.
 app.get("/api/intel/status", asyncHandler(async (req, res) => {
-  const ctx = makeCtx(req);
-  const metrics = await runMacro("intel", "metrics", {}, ctx);
-  const classifier = await runMacro("intel", "classifier.status", {}, ctx);
-  res.json({ ok: true, metrics, classifier });
+  const metrics = await runMacro("intel", "metrics", {}, makeCtx(req));
+  res.json(metrics);
 }));
 app.get("/api/intel/weather", asyncHandler(async (req, res) => {
   res.json(await runMacro("intel", "weather", {}, makeCtx(req)));
@@ -43043,8 +43069,11 @@ app.get("/api/intel/classifier", asyncHandler(async (req, res) => {
 // Atlas privacy zones — REST wrapper. The actual macros live under
 // the `cortex` domain as `cortex.privacy.zones` / `.stats` / `.verify`;
 // we expose a single /api/atlas/privacy_zones?view=<zones|stats|verify>
-// endpoint that dispatches to the right one, so the frontend doesn't
-// have to know about the cortex/atlas split.
+// endpoint that dispatches to the right one. Response shape matches
+// the `PrivacyMonitorData` interface the frontend AtlasPrivacyMonitor
+// card consumes: { ok, view, stats?|zones?|verify? }, so the data
+// goes into a nested field keyed by view rather than spread at the
+// top level.
 app.get("/api/atlas/privacy_zones", asyncHandler(async (req, res) => {
   const view = typeof req.query?.view === "string" ? req.query.view : "stats";
   const ctx = makeCtx(req);
@@ -43052,7 +43081,28 @@ app.get("/api/atlas/privacy_zones", asyncHandler(async (req, res) => {
   if (view === "zones") macroName = "privacy.zones";
   else if (view === "verify") macroName = "privacy.verify";
   const result = await runMacro("cortex", macroName, { ...req.query }, ctx);
-  res.json({ ok: true, view, ...(typeof result === "object" ? result : { result }) });
+  // Normalize: the cortex macros return their payload at the top of
+  // the object. Nest it under the view-specific key that the card
+  // expects.
+  const payload = { ok: !!result?.ok, view };
+  if (result && typeof result === "object") {
+    if (view === "zones") {
+      payload.zones = { count: result.zones?.length || result.count || 0, zones: result.zones || [] };
+    } else if (view === "stats") {
+      payload.stats = {
+        totalZones: result.totalZones || 0,
+        byProtectionLevel: result.byProtectionLevel || {},
+        byClassification: result.byClassification || {},
+        blocksEnforced: result.blocksEnforced || 0,
+        presenceDetectionsSuppressed: result.presenceDetectionsSuppressed || 0,
+        vehicleTrackingSuppressed: result.vehicleTrackingSuppressed || 0,
+      };
+    } else if (view === "verify") {
+      payload.verify = result;
+    }
+    if (result.error) payload.error = result.error;
+  }
+  res.json(payload);
 }));
 
 app.get("/api/intelligence/dashboard", asyncHandler(async (_req, res) => {
