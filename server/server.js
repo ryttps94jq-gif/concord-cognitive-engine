@@ -24713,6 +24713,210 @@ app.use("/api/sovereign", createSovereignRouter({ STATE, makeCtx, runMacro, save
 app.use("/api/sovereign-emergent", createSovereignEmergentRouter({ STATE }));
 app.use("/api/federation", createFederationRouter({ db }));
 
+// ═══════════════════════════════════════════════════════════════════════════
+// PROMOTION PIPELINE — HTTP routes for council voting UI
+// ═══════════════════════════════════════════════════════════════════════════
+// The promotion-pipeline module is loaded lazily by the ghost-fleet
+// sequence and exposes its functions via macros. These HTTP routes
+// are a direct wrapper so the council voting UI can call
+//   GET  /api/promotion/queue           — list pending proposals
+//   GET  /api/promotion/history         — recent decisions
+//   GET  /api/promotion/:id             — specific proposal
+//   POST /api/promotion/request         — request a promotion
+//   POST /api/promotion/:id/approve     — approve (role-gated)
+//   POST /api/promotion/:id/reject      — reject (role-gated)
+//
+// Access rules — each gate maps to a role the caller must hold:
+//   pending_regional_council → member+ with role "regional_council" or admin
+//   pending_national_council → member+ with role "national_council" or admin
+//   pending_council          → member+ with role "council" or admin
+//   pending_sovereign        → role "sovereign" / "owner" / "founder"
+//
+// We don't yet have a real council-role assignment system, so for now
+// "admin/owner/founder" is always allowed to approve at any tier. A
+// follow-up would add explicit `council_tiers` on the user record.
+
+async function _loadPromotion() {
+  return await import("./emergent/promotion-pipeline.js");
+}
+
+function _canApproveStage(actor, proposalStatus) {
+  const role = actor?.role || "viewer";
+  if (role === "owner" || role === "admin" || role === "founder" || role === "sovereign") return true;
+  if (proposalStatus === "pending_regional_council" && role === "regional_council") return true;
+  if (proposalStatus === "pending_national_council" && role === "national_council") return true;
+  if (proposalStatus === "pending_council" && role === "council") return true;
+  return false;
+}
+
+app.get("/api/promotion/queue", asyncHandler(async (req, res) => {
+  const p = await _loadPromotion();
+  const result = p.getQueue();
+  // Optional filter by status prefix (e.g. ?status=pending_regional_council)
+  const statusFilter = String(req.query?.status || "");
+  let queue = result?.queue || [];
+  if (statusFilter) queue = queue.filter(prop => prop.status === statusFilter);
+  res.json({ ok: true, queue, total: queue.length });
+}));
+
+app.get("/api/promotion/history", asyncHandler(async (req, res) => {
+  const p = await _loadPromotion();
+  const limit = Math.max(1, Math.min(500, Number(req.query?.limit || 50)));
+  res.json(p.getPromotionHistory(limit));
+}));
+
+app.get("/api/promotion/:id", asyncHandler(async (req, res) => {
+  const p = await _loadPromotion();
+  const result = p.getProposal(req.params.id);
+  if (!result.ok) return res.status(404).json(result);
+  res.json(result);
+}));
+
+app.post("/api/promotion/request", asyncHandler(async (req, res) => {
+  const userId = req.user?.id;
+  if (!userId) return res.status(401).json({ ok: false, error: "Authentication required" });
+  const { itemId, itemType } = req.body || {};
+  if (!itemId || !itemType) return res.status(400).json({ ok: false, error: "itemId and itemType required" });
+  const p = await _loadPromotion();
+  const result = p.requestPromotion(itemId, itemType, userId);
+  res.status(result.ok ? 200 : 400).json(result);
+}));
+
+app.post("/api/promotion/:id/approve", asyncHandler(async (req, res) => {
+  const userId = req.user?.id;
+  if (!userId) return res.status(401).json({ ok: false, error: "Authentication required" });
+  const p = await _loadPromotion();
+  const proposal = p.getProposal(req.params.id);
+  if (!proposal.ok) return res.status(404).json(proposal);
+  const actor = makeCtx(req).actor;
+  if (!_canApproveStage(actor, proposal.proposal.status)) {
+    return res.status(403).json({ ok: false, error: `Role ${actor?.role || "viewer"} cannot approve ${proposal.proposal.status}` });
+  }
+  const result = p.approvePromotion(req.params.id, userId);
+  res.status(result.ok ? 200 : 400).json(result);
+}));
+
+app.post("/api/promotion/:id/reject", asyncHandler(async (req, res) => {
+  const userId = req.user?.id;
+  if (!userId) return res.status(401).json({ ok: false, error: "Authentication required" });
+  const p = await _loadPromotion();
+  const proposal = p.getProposal(req.params.id);
+  if (!proposal.ok) return res.status(404).json(proposal);
+  const actor = makeCtx(req).actor;
+  if (!_canApproveStage(actor, proposal.proposal.status)) {
+    return res.status(403).json({ ok: false, error: `Role ${actor?.role || "viewer"} cannot reject ${proposal.proposal.status}` });
+  }
+  const { reason } = req.body || {};
+  const result = p.rejectPromotion(req.params.id, reason || "no reason given", userId);
+  res.status(result.ok ? 200 : 400).json(result);
+}));
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FEDERATION LEADERBOARDS — "popular in your region" feeds
+// ═══════════════════════════════════════════════════════════════════════════
+// GET /api/federation/leaderboard?scope=regional|national|global&limit=20
+//   scope=regional → top DTUs stamped with viewer's declared_regional
+//   scope=national → top DTUs stamped with viewer's declared_national
+//   scope=global   → top DTUs with federation_tier=global
+//
+// Ranking: weighted sum of citations + royalty volume + age decay.
+// Returns the top N DTUs plus basic stats and the user's position in
+// the ranking if they have any entries.
+
+app.get("/api/federation/leaderboard", asyncHandler(async (req, res) => {
+  const scope = String(req.query?.scope || "regional").toLowerCase();
+  const limit = Math.max(1, Math.min(100, Number(req.query?.limit || 20)));
+  if (!["regional", "national", "global"].includes(scope)) {
+    return res.status(400).json({ ok: false, error: "invalid_scope", allowed: ["regional", "national", "global"] });
+  }
+
+  // Resolve viewer location (for regional/national scopes).
+  const viewerId = req.user?.id || null;
+  let viewerRegional = null;
+  let viewerNational = null;
+  if (viewerId && db) {
+    try {
+      const row = db.prepare("SELECT declared_regional, declared_national FROM users WHERE id = ?").get(viewerId);
+      if (row) {
+        viewerRegional = row.declared_regional || null;
+        viewerNational = row.declared_national || null;
+      }
+    } catch (_e) { /* best effort */ }
+  }
+
+  // Pull candidate DTUs from the in-memory store that match the scope.
+  const candidates = dtusArray().filter((d) => {
+    if (d.scope === "system" || d.visibility === "internal") return false;
+    const tier = d.federation_tier || d.federationTier;
+    if (scope === "global") {
+      return tier === "global" || d.scope === "global";
+    }
+    if (scope === "regional") {
+      if (!viewerRegional) return false;
+      return tier === "regional" && (d.location_regional || d.locationRegional) === viewerRegional;
+    }
+    if (scope === "national") {
+      if (!viewerNational) return false;
+      return tier === "national" && (d.location_national || d.locationNational) === viewerNational;
+    }
+    return false;
+  });
+
+  // Score each candidate: citations + royalty earnings (from ledger if
+  // available) with a mild age decay. We don't have a cached per-DTU
+  // citation count on the DTU object, so fall back to using
+  // consolidation/mega count and engagement hints.
+  const now = Date.now();
+  const ranked = candidates
+    .map((d) => {
+      const ageMs = Math.max(1, now - new Date(d.updatedAt || d.createdAt || now).getTime());
+      const ageDays = ageMs / 86400000;
+      const recency = 1 / (1 + ageDays / 14); // half-life ~2 weeks
+      const citations = d._citationCount || d.engagement?.citations || 0;
+      const likes = d.engagement?.likes || 0;
+      const views = d.engagement?.views || 0;
+      const tierBoost = d.tier === "hyper" ? 3 : d.tier === "mega" ? 2 : 1;
+      const score = (citations * 5 + likes * 1.5 + views * 0.2) * tierBoost * recency;
+      return {
+        id: d.id,
+        title: d.title,
+        domain: d.domain || (d.tags || [])[0] || "general",
+        ownerId: d.ownerId,
+        createdAt: d.createdAt,
+        updatedAt: d.updatedAt,
+        score: Math.round(score * 100) / 100,
+        citations,
+        likes,
+        views,
+      };
+    })
+    .sort((a, b) => b.score - a.score);
+
+  const top = ranked.slice(0, limit);
+
+  // Find viewer's highest-ranked entry (if any) so they can see where
+  // they stand in their own region.
+  let viewerRank = null;
+  if (viewerId) {
+    for (let i = 0; i < ranked.length; i++) {
+      if (ranked[i].ownerId === viewerId) {
+        viewerRank = { position: i + 1, ...ranked[i] };
+        break;
+      }
+    }
+  }
+
+  res.json({
+    ok: true,
+    scope,
+    region: scope === "regional" ? viewerRegional : null,
+    nation: scope === "national" ? viewerNational : null,
+    total: ranked.length,
+    top,
+    viewerRank,
+  });
+}));
+
 // ===== CREATIVE ARTIFACT MARKETPLACE =====
 import createCreativeMarketplaceRouter from "./routes/creative-marketplace.js";
 app.use("/api/creative-marketplace", createCreativeMarketplaceRouter({ db, detectWashTrading }));
