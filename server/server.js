@@ -31540,6 +31540,17 @@ try {
   logger.info('[routes] /api/oracle mounted');
 } catch (e) { console.error('[routes] oracle mount failed:', e); }
 
+// ===== STSVK (feasibility manifold + 3-regime classifier) =====
+import createStsvkRoutes from "./routes/stsvk.js";
+try {
+  app.use("/api/stsvk", createStsvkRoutes({
+    STATE,
+    requireAuth,
+    dtuStore: STATE.dtus,
+  }));
+  logger.info('[routes] /api/stsvk mounted');
+} catch (e) { console.error('[routes] stsvk mount failed:', e); }
+
 // ── Domain-Specific Action Manifest ─────────────────────────────────────────
 // ~450 domain-specific actions across 113 lenses, each routed to the
 // appropriate brain: U=utility(3b), S=subconscious(1.5b), R=repair(0.5b), C=conscious(7b)

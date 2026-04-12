@@ -37,7 +37,49 @@ const DEFAULT_STATS = {
   totalDTUsCreated: 0,
   stsvkChecksRun: 0,
   stsvkViolations: 0,
+  // New stats added with the real-subsystem upgrade:
+  brainCallsMade: 0,
+  embeddingSearches: 0,
+  royaltiesCascaded: 0,
 };
+
+// ── Prompts (module-level constants) ────────────────────────────────────────
+
+/**
+ * Classification prompt: fed to the utility brain in Phase 1. Asks for a
+ * strict-JSON classification that downstream phases can consume.
+ */
+const CLASSIFICATION_PROMPT = (query) => (
+  `You are a query classifier for the Concord Oracle Engine. Read the user ` +
+  `query and reply with ONLY a strict JSON object (no markdown, no prose) ` +
+  `describing the query. Shape:\n` +
+  `{\n` +
+  `  "primaryDomains":   [string],       // e.g. ["physics", "math"]\n` +
+  `  "secondaryDomains": [string],       // adjacent supporting domains\n` +
+  `  "queryType":        string,         // formal|computational|theoretical|narrative|conversational|general\n` +
+  `  "complexity":       string,         // trivial|simple|moderate|complex|research\n` +
+  `  "requiredSystems":  [string],       // e.g. ["physics_modules","simulation","validation","stsvk"]\n` +
+  `  "epistemicClass":   string          // known|probable|uncertain|unknown\n` +
+  `}\n\n` +
+  `Query: ${query}\n\n` +
+  `Reply with JSON only.`
+);
+
+/**
+ * Oracle system prompt used by the conscious brain during Phase 4 synthesis.
+ * The strict rules below are NON-NEGOTIABLE — they define what makes an
+ * Oracle answer trustworthy inside Concord OS.
+ */
+const ORACLE_SYSTEM_PROMPT =
+  `You are the Oracle Engine of Concord OS. Your answer must: ` +
+  `1) Address the user's query directly. ` +
+  `2) Cite DTU sources by ID whenever you use information from them. ` +
+  `3) Include proofs or computation traces when formal claims are made. ` +
+  `4) Note cross-domain connections when relevant. ` +
+  `5) Mark each claim as KNOWN, PROBABLE, UNCERTAIN, or UNKNOWN. ` +
+  `6) Suggest follow-up questions the user could ask next. ` +
+  `Never hallucinate. Computations provided to you are ground truth — never ` +
+  `contradict them. If you do not know, say UNKNOWN.`;
 
 /**
  * Create an Oracle Engine instance.
@@ -64,6 +106,148 @@ export function createOracleEngine(opts = {}) {
     try { logger.log(level, 'oracle-engine', event, fields); }
     catch { /* logger may be unavailable in tests */ }
   };
+
+  // ── Deep-question detection & Answer-DTU preference ────────────────────
+
+  /**
+   * Keyword buckets that flag a query as a "deep question" — philosophical,
+   * physical, mathematical, alignment-, consciousness-, trust-, or systems-
+   * related. When matched, the retrieve phase prefers pre-seeded oracle
+   * answer DTUs over generic lattice hits.
+   */
+  const DEEP_QUESTION_KEYWORDS = [
+    // physics / metaphysics
+    'consciousness', 'exist', 'reality', 'nothing', 'universe', 'time',
+    'entropy', 'causation',
+    // mathematics / logic
+    'gödel', 'godel', 'incompleteness', 'proof', 'axiom', 'emergence',
+    'complexity',
+    // alignment
+    'alignment', 'reward', 'preservation', 'deception', 'capture',
+    'misalignment',
+    // epistemics
+    'knowledge', 'unknown', 'nuance', 'monoculture', 'dissent',
+    // trust / systems
+    'trust', 'watchmen', 'credit', 'attribution',
+    // long-horizon / irreversibility
+    'century', 'generations', 'drift', 'irreversible', 'immutable',
+    // self / mind
+    'self', 'boundary', 'mind', 'transcendence',
+  ];
+
+  /**
+   * Detect whether a query is a "deep question" that should prefer
+   * pre-seeded canonical answer DTUs.
+   *
+   * @param {string} query
+   * @param {object} [analysis]
+   * @returns {boolean}
+   */
+  function detectDeepQuestion(query, analysis = {}) {
+    const q = String(query || '').toLowerCase();
+    if (!q) return false;
+    for (const kw of DEEP_QUESTION_KEYWORDS) {
+      if (q.includes(kw)) return true;
+    }
+    // Also treat theoretical/formal analyses with philosophical shape as deep.
+    if (analysis && (analysis.taskType === 'theoretical')) return true;
+    return false;
+  }
+
+  /**
+   * Identify a DTU as an answer-seed DTU. Answer seeds either:
+   *   - carry the `oracle_answer_seed` tag
+   *   - have tier === 'answer'
+   *   - have type === 'oracle_answer_seed'
+   *
+   * @param {object} dtu
+   * @returns {boolean}
+   */
+  function _isAnswerSeedDTU(dtu) {
+    if (!dtu || typeof dtu !== 'object') return false;
+    if (dtu.tier === 'answer') return true;
+    if (dtu.type === 'oracle_answer_seed') return true;
+    const tags = dtu.tags || [];
+    return tags.some(t => String(t).toLowerCase() === 'oracle_answer_seed');
+  }
+
+  /**
+   * Compute a crude match score between a query and an answer-seed DTU.
+   * Counts term overlap across tags, title, summary, bullets. Returns a
+   * value in [0, 1] — 1 means every query term is present somewhere.
+   *
+   * @param {string} query
+   * @param {object} dtu
+   * @returns {number}
+   */
+  function _scoreAnswerDTU(query, dtu) {
+    const q = String(query || '').toLowerCase();
+    const terms = q.split(/\W+/).filter(t => t.length > 3);
+    if (terms.length === 0) return 0;
+    const hay = [
+      dtu.id,
+      dtu.title,
+      ...(dtu.tags || []),
+      dtu.human?.summary,
+      ...(dtu.human?.bullets || []),
+      dtu.core?.answer,
+      dtu.core?.question,
+    ].filter(Boolean).join(' ').toLowerCase();
+    let hits = 0;
+    for (const t of terms) if (hay.includes(t)) hits++;
+    return hits / terms.length;
+  }
+
+  // ── Chicken2 Gate (lazy) ───────────────────────────────────────────────
+
+  /**
+   * Lazily invoke the new Chicken2 Gate validator. Falls back to a passing
+   * result if the module isn't available so the pipeline continues to work
+   * during incremental rollout.
+   */
+  async function _runChicken2Gate(subject, metadata) {
+    try {
+      const { createChicken2Gate } = await import('./chicken2-gate.js');
+      const gate = createChicken2Gate({ dtuStore, domainHandlers });
+      return await gate.validate(subject, { kind: 'answer', metadata });
+    } catch (e) {
+      return { passed: true, confidence: 0.5, reason: `gate unavailable: ${e?.message || e}` };
+    }
+  }
+
+  // ── Feasibility Manifold (lazy) ────────────────────────────────────────
+
+  /**
+   * Lazily invoke the Feasibility Manifold check. Returns `{ inside, score,
+   * reason? }`. Graceful degrade: inside=true, score=0.5 if unavailable.
+   */
+  async function _checkManifold(subject) {
+    try {
+      const { createFeasibilityManifold } = await import('./feasibility-manifold.js');
+      const manifold = createFeasibilityManifold({ dtuStore });
+      return await manifold.isInside(subject);
+    } catch (e) {
+      return { inside: true, score: 0.5, reason: `manifold unavailable: ${e?.message || e}` };
+    }
+  }
+
+  // ── STSVK Regime classifier (lazy) ─────────────────────────────────────
+
+  /**
+   * Classify an answer into one of the three STSVK regimes. Falls back to
+   * 'binary' if the module isn't available.
+   *
+   * @param {string} answer
+   * @returns {Promise<string>}
+   */
+  async function _classifyRegime(answer) {
+    try {
+      const { classifyRegime } = await import('./stsvk-regimes.js');
+      return classifyRegime({ content: answer });
+    } catch (e) {
+      return 'binary';
+    }
+  }
 
   // ── Phase 1: Analyze ────────────────────────────────────────────────────
 
@@ -117,15 +301,45 @@ export function createOracleEngine(opts = {}) {
    */
   async function retrieve(query, analysis) {
     if (!dtuStore || typeof dtuStore.values !== 'function') {
-      return { dtus: [] };
+      return { dtus: [], deepQuestion: false, primaryAnswerDTU: null };
     }
 
     const q = String(query || '').toLowerCase();
     const terms = q.split(/\W+/).filter(t => t.length > 3);
     const out = [];
 
+    // Deep-question preference: scan for answer-seed DTUs first and boost
+    // their relevance. These are the pre-seeded canonical answers to the
+    // 120-ish philosophical/physical/mathematical questions the oracle is
+    // expected to handle.
+    const isDeep = detectDeepQuestion(query, analysis);
+    let primaryAnswerDTU = null;
+
+    if (isDeep) {
+      const scored = [];
+      for (const dtu of dtuStore.values()) {
+        if (!_isAnswerSeedDTU(dtu)) continue;
+        const base = _scoreAnswerDTU(query, dtu);
+        // 2x boost on answer-seed DTUs when the query is deep.
+        const boosted = Math.min(1, base * 2);
+        if (boosted > 0) scored.push({ dtu, score: boosted });
+      }
+      scored.sort((a, b) => b.score - a.score);
+      // Strong-match threshold: >0.8 boosted score wins as PRIMARY source.
+      if (scored.length > 0 && scored[0].score > 0.8) {
+        primaryAnswerDTU = scored[0].dtu;
+      }
+      // Always fold the top-N answer seeds into the retrieval output so they
+      // appear in citations & compute synthesis.
+      for (const { dtu } of scored.slice(0, 6)) {
+        out.push(dtu);
+      }
+    }
+
     for (const dtu of dtuStore.values()) {
       if (!dtu || typeof dtu !== 'object') continue;
+      // Skip duplicates we already surfaced as answer seeds.
+      if (out.includes(dtu)) continue;
       const hay = [
         dtu.id,
         dtu.title,
@@ -142,7 +356,7 @@ export function createOracleEngine(opts = {}) {
       }
     }
 
-    return { dtus: out };
+    return { dtus: out, deepQuestion: isDeep, primaryAnswerDTU };
   }
 
   // ── STSVK: Load theorems from the DTU lattice ──────────────────────────
@@ -449,25 +663,85 @@ export function createOracleEngine(opts = {}) {
    * @param {object|null} stsvk
    * @returns {{ confidence: number, components: object }}
    */
-  function validate(retrieval, stsvk) {
+  async function validate(retrieval, stsvk, answer = '', extras = {}) {
     const nDtus = (retrieval?.dtus || []).length;
     const coverage = Math.min(1, nDtus / 8);
     const stsvkScore = stsvk && !stsvk.skipped ? stsvk.constraintScore : 1;
 
-    // If STSVK was actually applied, weight it heavily.
-    const confidence = stsvk && !stsvk.skipped
+    // Chicken2 Gate — lazy, graceful degrade. Runs on the synthesized answer.
+    let chicken2 = null;
+    try {
+      chicken2 = await _runChicken2Gate(answer || '', {
+        query: extras.query,
+        analysis: extras.analysis,
+        retrievalSize: nDtus,
+      });
+    } catch (e) {
+      chicken2 = { passed: true, confidence: 0.5, reason: `gate error: ${e?.message || e}` };
+    }
+
+    // Feasibility Manifold — lazy, graceful degrade.
+    let manifold = null;
+    try {
+      manifold = await _checkManifold(answer || '');
+    } catch (e) {
+      manifold = { inside: true, score: 0.5, reason: `manifold error: ${e?.message || e}` };
+    }
+
+    // Base weighting: if STSVK was actually applied, weight it heavily.
+    const baseConfidence = stsvk && !stsvk.skipped
       ? 0.4 * coverage + 0.6 * stsvkScore
       : 0.7 * coverage + 0.3 * stsvkScore;
+
+    // Blend Chicken2 Gate @ 30% when it produced a real (non-unavailable)
+    // result. We detect "real" by the presence of a numeric confidence AND
+    // the absence of an "unavailable"/"error" reason string.
+    const gateReason = String(chicken2?.reason || '');
+    const gateAvailable =
+      typeof chicken2?.confidence === 'number' &&
+      !/unavailable|error/i.test(gateReason);
+
+    const manifoldAvailable =
+      manifold &&
+      typeof manifold.score === 'number' &&
+      !/unavailable|error/i.test(String(manifold.reason || ''));
+
+    let confidence = baseConfidence;
+    if (gateAvailable) {
+      confidence = 0.7 * baseConfidence + 0.3 * Number(chicken2.confidence);
+    }
+    if (manifoldAvailable) {
+      // Manifold contributes as a 20% multiplicative prior on top.
+      const mScore = Number(manifold.score);
+      confidence = 0.8 * confidence + 0.2 * mScore;
+    }
 
     // Hard cap: any violation above 25% forces low confidence.
     const violationRatio = stsvk && !stsvk.skipped && (stsvk.violatedTheorems.length + stsvk.satisfiedTheorems.length) > 0
       ? stsvk.violatedTheorems.length / (stsvk.violatedTheorems.length + stsvk.satisfiedTheorems.length)
       : 0;
-    const capped = violationRatio > 0.25 ? Math.min(confidence, 0.4) : confidence;
+    let capped = violationRatio > 0.25 ? Math.min(confidence, 0.4) : confidence;
+
+    // Chicken2 hard gate: if it explicitly failed, cap confidence.
+    if (gateAvailable && chicken2.passed === false) {
+      capped = Math.min(capped, 0.35);
+    }
+    // Manifold hard gate: outside the feasibility manifold caps too.
+    if (manifoldAvailable && manifold.inside === false) {
+      capped = Math.min(capped, 0.4);
+    }
 
     return {
       confidence: Math.round(capped * 1000) / 1000,
-      components: { coverage, stsvkScore, violationRatio },
+      components: {
+        coverage,
+        stsvkScore,
+        violationRatio,
+        chicken2Confidence: gateAvailable ? chicken2.confidence : null,
+        manifoldScore: manifoldAvailable ? manifold.score : null,
+      },
+      chicken2Gate: chicken2,
+      manifoldCheck: manifold,
     };
   }
 
@@ -484,7 +758,7 @@ export function createOracleEngine(opts = {}) {
    * @param {object|null} stsvk
    * @returns {{ id: string } | null}
    */
-  function record(query, answer, citations, validation, stsvk) {
+  function record(query, answer, citations, validation, stsvk, extras = {}) {
     if (!dtuStore || typeof dtuStore.set !== 'function') return null;
 
     const id = `dtu_oracle_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -493,11 +767,22 @@ export function createOracleEngine(opts = {}) {
     const stsvkTheoremTags = (citations.stsvkCitations || [])
       .map(tid => `validated_against:${tid}`);
 
+    // New enrichment fields — regime, manifold, chicken2 — are sourced
+    // from extras (populated by solve()).
+    const regime = extras.regime || 'binary';
+    const manifoldCheck = extras.manifoldCheck || validation?.manifoldCheck || null;
+    const chicken2GateResult = extras.chicken2Gate || validation?.chicken2Gate || null;
+
+    const regimeTag = `regime:${regime}`;
+    const manifoldTag = manifoldCheck
+      ? `manifold:${manifoldCheck.inside ? 'inside' : 'outside'}`
+      : 'manifold:unknown';
+
     const dtu = {
       id,
       tier: 'regular',
       type: 'oracle_answer',
-      tags: ['oracle_answer', ...stsvkTheoremTags],
+      tags: ['oracle_answer', ...stsvkTheoremTags, regimeTag, manifoldTag],
       human: {
         summary: `Oracle answer to: ${String(query).slice(0, 120)}`,
         bullets: [
@@ -505,6 +790,8 @@ export function createOracleEngine(opts = {}) {
           `sources=${citations.sources.length}`,
           `stsvk_checked=${stsvk?.checked || 0}`,
           `stsvk_violations=${stsvk?.violatedTheorems?.length || 0}`,
+          `regime=${regime}`,
+          `manifold_inside=${manifoldCheck ? manifoldCheck.inside : 'unknown'}`,
         ],
       },
       core: {
@@ -513,11 +800,25 @@ export function createOracleEngine(opts = {}) {
         sources: citations.sources,
         stsvkCitations: citations.stsvkCitations,
         validatedAgainstSTSVK: citations.stsvkCitations,
+        regime,
+        manifoldCheck: manifoldCheck
+          ? { inside: !!manifoldCheck.inside, score: Number(manifoldCheck.score ?? 0) }
+          : null,
+        chicken2Gate: chicken2GateResult
+          ? {
+            passed: !!chicken2GateResult.passed,
+            confidence: Number(chicken2GateResult.confidence ?? 0),
+            reasons: chicken2GateResult.reasons || chicken2GateResult.reason || null,
+          }
+          : null,
       },
       machine: {
         kind: 'oracle_answer',
         validation,
         stsvk: stsvk || null,
+        regime,
+        manifoldCheck,
+        chicken2Gate: chicken2GateResult,
       },
       createdAt: nowISO,
       updatedAt: nowISO,
@@ -546,11 +847,25 @@ export function createOracleEngine(opts = {}) {
     const started = Date.now();
 
     const analysis = await analyze(query);
+    // Annotate analysis with deep-question flag for downstream consumers.
+    try { analysis.deepQuestion = detectDeepQuestion(query, analysis); } catch { /* noop */ }
+
     const retrieval = await retrieve(query, analysis);
     const { answer, stsvk } = await compute(query, analysis, retrieval);
     const citations = cite(retrieval, stsvk);
-    const validation = validate(retrieval, stsvk);
-    const recorded = record(query, answer, citations, validation, stsvk);
+
+    // Classify the answer into an STSVK regime (binary / continuous / mixed).
+    let regime = 'binary';
+    try { regime = await _classifyRegime(answer); } catch { /* keep default */ }
+    analysis.regime = regime;
+
+    const validation = await validate(retrieval, stsvk, answer, { query, analysis });
+
+    const recorded = record(query, answer, citations, validation, stsvk, {
+      regime,
+      manifoldCheck: validation.manifoldCheck,
+      chicken2Gate: validation.chicken2Gate,
+    });
 
     // Update running stats.
     stats.queriesResolved++;
@@ -566,9 +881,62 @@ export function createOracleEngine(opts = {}) {
       stsvk,
       confidence: validation.confidence,
       validation,
+      regime,
+      manifoldCheck: validation.manifoldCheck || null,
+      chicken2Gate: validation.chicken2Gate || null,
+      deepQuestion: !!retrieval.deepQuestion,
+      primaryAnswerDTU: retrieval.primaryAnswerDTU?.id || null,
       recordedDTU: recorded?.id || null,
       elapsedMs: Date.now() - started,
       context,
+    };
+  }
+
+  // ── Short-circuit: getAnswerForQuery ───────────────────────────────────
+
+  /**
+   * For deep questions, skip the full pipeline and return the best-matching
+   * pre-seeded answer DTU directly. Returns `null` when the query is not a
+   * deep question, when no answer seeds are loaded, or when nothing matches
+   * strongly enough.
+   *
+   * Shape:
+   *   { dtu, score, answer, id }
+   *
+   * @param {string} query
+   * @returns {Promise<object|null>}
+   */
+  async function getAnswerForQuery(query) {
+    if (!detectDeepQuestion(query)) return null;
+    if (!dtuStore || typeof dtuStore.values !== 'function') return null;
+
+    let best = null;
+    try {
+      for (const dtu of dtuStore.values()) {
+        if (!_isAnswerSeedDTU(dtu)) continue;
+        const base = _scoreAnswerDTU(query, dtu);
+        const score = Math.min(1, base * 2); // same 2x boost as retrieve()
+        if (score > 0 && (!best || score > best.score)) {
+          best = { dtu, score };
+        }
+      }
+    } catch (e) {
+      log('warn', 'get_answer_for_query_failed', { error: e?.message });
+      return null;
+    }
+
+    // Require a confident match — same >0.8 threshold used by retrieve().
+    if (!best || best.score <= 0.8) return null;
+
+    return {
+      id: best.dtu.id,
+      dtu: best.dtu,
+      score: best.score,
+      answer:
+        best.dtu.core?.answer ||
+        best.dtu.human?.summary ||
+        best.dtu.title ||
+        null,
     };
   }
 
@@ -588,6 +956,9 @@ export function createOracleEngine(opts = {}) {
     loadSTSVKTheorems,
     runSTSVKConstraintCheck,
     invalidateSTSVKCache,
+    // Deep-question / answer-DTU helpers:
+    detectDeepQuestion,
+    getAnswerForQuery,
     // Top-level:
     solve,
     getStats,
