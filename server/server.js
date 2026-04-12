@@ -119,7 +119,7 @@ import { enqueueMessage, processQueue as processSpQueue, getQueueStatus, setUser
 import { checkSpontaneousContent } from "./prompts/spontaneous.js";
 
 // ── Chat Router + Forge Pipeline ─────────────────────────────────────────
-import { routeMessage as chatRouterRoute, buildLensChain, emitResonanceSignal, shouldOfferForge, detectEmergentRoute, recordRouteMetric, getRouterMetrics, ACTION_TYPES as CHAT_ACTION_TYPES } from "./lib/chat-router.js";
+import { routeMessage as chatRouterRoute, buildLensChain, emitResonanceSignal, shouldOfferForge, detectEmergentRoute, recordRouteMetric, getRouterMetrics, detectOracleIntent, routeThroughOracle, ACTION_TYPES as CHAT_ACTION_TYPES } from "./lib/chat-router.js";
 import { initializeManifests, getManifestStats, registerUserLens, registerEmergentLens } from "./lib/lens-manifest.js";
 import { DOMAIN_RULES, validateArtifact, computeFields, getValidTransitions, scoreArtifact, getDomainSchema } from "./lib/domain-logic.js";
 import { EXTENDED_DOMAIN_RULES } from "./lib/domain-logic-extended.js";
@@ -16963,6 +16963,71 @@ const intentInfo = classifyIntent(prompt);
     // Chat router is supplementary — never block the chat path
   }
 
+  // ── Oracle Engine Short-Circuit ─────────────────────────────────────────
+  // If the user typed /oracle, or the query is classified as complex
+  // (multi-domain, computational, research-grade), divert to the Oracle
+  // Engine instead of the standard conscious brain. The Oracle result is
+  // returned in chat-message shape with citations, computations, and
+  // connections attached to meta for frontend rendering.
+  try {
+    const _oracleIntent = detectOracleIntent(prompt, _chatRoute);
+    if (_oracleIntent.shouldRoute) {
+      const _oracleMsg = await routeThroughOracle(_oracleIntent.strippedQuery || prompt, {
+        STATE,
+        userId: ctx?.actor?.userId,
+        sessionId,
+        route: _chatRoute,
+        reason: _oracleIntent.reason,
+        explicit: _oracleIntent.explicit,
+        domainHandlers: (typeof ALL_LENS_DOMAINS !== 'undefined' ? ALL_LENS_DOMAINS : {}),
+      });
+
+      if (_oracleMsg?.ok) {
+        sess.messages.push({
+          role: "assistant",
+          content: _oracleMsg.reply,
+          ts: nowISO(),
+          meta: {
+            llmUsed: _oracleMsg.llmUsed,
+            source: "oracle",
+            oracle: _oracleMsg.meta?.oracle || {},
+            citations: _oracleMsg.meta?.citations || [],
+            computations: _oracleMsg.meta?.computations || [],
+            connections: _oracleMsg.meta?.connections || [],
+          },
+        });
+        saveStateDebounced();
+        return {
+          ok: true,
+          reply: _oracleMsg.reply,
+          sessionId,
+          mode,
+          llmUsed: _oracleMsg.llmUsed,
+          meta: {
+            panel: "chat",
+            sessionId,
+            mode,
+            llmUsed: _oracleMsg.llmUsed,
+            source: "oracle",
+            oracle: _oracleMsg.meta?.oracle || {},
+            citations: _oracleMsg.meta?.citations || [],
+            computations: _oracleMsg.meta?.computations || [],
+            connections: _oracleMsg.meta?.connections || [],
+          },
+        };
+      }
+      // If oracle solve failed, fall through to standard chat flow.
+      if (_oracleMsg && _oracleMsg.meta?.oracle?.error) {
+        logger.warn?.('[oracle] solve failed, falling back to standard brain', {
+          error: _oracleMsg.meta.oracle.error,
+        });
+      }
+    }
+  } catch (_oracleErr) {
+    // Oracle routing is supplementary — never block the chat path
+    try { logger.debug?.('server', 'oracle short-circuit error', { error: _oracleErr?.message }); } catch {}
+  }
+
   // Identity answers are declarative: Concord refers to itself.
   if (_mentionsSelf || intentInfo.intent === INTENT.IDENTITY) {
     const base = SYSTEM_IDENTITY.short;
@@ -31462,6 +31527,18 @@ registerUniversalLensActions();
   }
   structuredLog("info", "common_actions_registered", { actionsPerDomain: Object.keys(COMMON_ACTIONS).length, domains: ALL_LENS_DOMAINS.length, totalRegistered: commonCount });
 }
+
+// ===== ORACLE ENGINE (multi-phase reasoning for complex queries) =====
+import createOracleRoutes from "./routes/oracle.js";
+try {
+  app.use("/api/oracle", createOracleRoutes({
+    STATE,
+    requireAuth,
+    dtuStore: STATE.dtus,
+    domainHandlers: ALL_LENS_DOMAINS || {},
+  }));
+  logger.info('[routes] /api/oracle mounted');
+} catch (e) { console.error('[routes] oracle mount failed:', e); }
 
 // ── Domain-Specific Action Manifest ─────────────────────────────────────────
 // ~450 domain-specific actions across 113 lenses, each routed to the
