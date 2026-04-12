@@ -41,6 +41,9 @@ const DEFAULT_STATS = {
   brainCallsMade: 0,
   embeddingSearches: 0,
   royaltiesCascaded: 0,
+  // Compute Registry + Sub-Lens Bridge integration:
+  computeRegistryCalls: 0,
+  subLensExpansions: 0,
 };
 
 // ── Prompts (module-level constants) ────────────────────────────────────────
@@ -79,7 +82,10 @@ const ORACLE_SYSTEM_PROMPT =
   `5) Mark each claim as KNOWN, PROBABLE, UNCERTAIN, or UNKNOWN. ` +
   `6) Suggest follow-up questions the user could ask next. ` +
   `Never hallucinate. Computations provided to you are ground truth — never ` +
-  `contradict them. If you do not know, say UNKNOWN.`;
+  `contradict them. If you do not know, say UNKNOWN.\n\n` +
+  `RULE: Values in computationalGroundTruth were computed by real engines ` +
+  `(formal logic, symbolic math, numerical methods, physics modules). ` +
+  `These are ground truth. Never contradict them. Cite them as "computed".`;
 
 /**
  * Create an Oracle Engine instance.
@@ -720,6 +726,27 @@ export function createOracleEngine(opts = {}) {
     const q = String(query || '');
     const isDeep = detectDeepQuestion(query, analysis);
 
+    // ── Sub-Lens Bridge: expand primary domains via the sub-lens registry ──
+    // Lazy dynamic import with graceful fallback. If the bridge is
+    // unavailable, we keep the original primaryDomains unchanged.
+    let expandedDomains = analysis?.primaryDomains || [];
+    try {
+      const { expandLensContext } = await import('./oracle-sub-lens-bridge.js');
+      const original = analysis?.primaryDomains || [];
+      expandedDomains = expandLensContext(query, original);
+      if (Array.isArray(expandedDomains) && expandedDomains.length > original.length) {
+        analysis._subLensExpanded = true;
+        analysis._originalDomains = original;
+        analysis.primaryDomains = expandedDomains;
+        stats.subLensExpansions = (stats.subLensExpansions || 0) + 1;
+      } else if (!Array.isArray(expandedDomains)) {
+        expandedDomains = original;
+      }
+    } catch (e) {
+      log('debug', 'retrieve_sub_lens_expand_failed', { error: e?.message });
+      expandedDomains = analysis?.primaryDomains || [];
+    }
+
     // ── Deep-question answer-seed preference ────────────────────────────
     const deepOut = [];
     let primaryAnswerDTU = null;
@@ -1133,7 +1160,7 @@ export function createOracleEngine(opts = {}) {
    * @param {object} retrieval
    * @returns {Promise<object>}
    */
-  async function compute(query, analysis, retrieval) {
+  async function compute(query, analysis, retrieval, context = {}) {
     const requiredSystems = Array.isArray(analysis?.requiredSystems)
       ? analysis.requiredSystems
       : [];
@@ -1277,12 +1304,45 @@ export function createOracleEngine(opts = {}) {
       }
     }
 
+    // ── Compute Registry execution ──────────────────────────────────────
+    //
+    // Lazy dynamic import of ./compute-registry.js. We ask it which
+    // capabilities match the query, then execute them all in a batch.
+    // Results are surfaced as `registryCompute` in the return shape; the
+    // synthesize() phase uses them as computational ground truth.
+    let registryCompute = null;
+    try {
+      const { matchCapabilities, executeBatch } = await import('./compute-registry.js');
+      const matches = matchCapabilities(query, { limit: 5, threshold: 0.15 });
+      if (Array.isArray(matches) && matches.length > 0) {
+        const keys = matches.map(m => m.key);
+        const batch = await executeBatch(keys, { query, ...analysis }, {
+          domainHandlers: opts.lensActions || opts.domainHandlers || domainHandlers,
+          ctx: { userId: context?.userId, STATE: opts.STATE },
+        });
+        registryCompute = {
+          matchedCapabilities: matches.map(m => ({
+            key: m.key,
+            score: m.score,
+            description: m.capability?.description,
+          })),
+          executionResults: batch?.results || [],
+          successCount: batch?.successCount || 0,
+          failureCount: batch?.failureCount || 0,
+        };
+        stats.computeRegistryCalls = (stats.computeRegistryCalls || 0) + 1;
+      }
+    } catch (e) {
+      log('debug', 'compute_registry_failed', { error: e?.message });
+    }
+
     return {
       results,
       computationCount,
       hasProofs,
       hasSimulation,
       stsvk,
+      registryCompute,
     };
   }
 
@@ -1326,6 +1386,25 @@ export function createOracleEngine(opts = {}) {
       return `- ${k}: ${val.slice(0, 400)}`;
     }).join('\n');
 
+    // Ground truth from compute registry (these are MATHEMATICAL results,
+    // not guesses). Feed into synthesis as an authoritative block the
+    // conscious brain must respect.
+    const computationalGroundTruth = (computation?.registryCompute?.executionResults || [])
+      .filter(r => r && r.ok)
+      .map(r => ({
+        capability: r.capability?.description,
+        result: r.result,
+        durationMs: r.durationMs,
+      }));
+
+    const groundTruthBlock = computationalGroundTruth.map((g, i) => {
+      const val = typeof g.result === 'string'
+        ? g.result
+        : JSON.stringify(g.result);
+      return `- [GT${i + 1}] ${g.capability || 'computed'}: ${String(val).slice(0, 400)}` +
+        (typeof g.durationMs === 'number' ? ` (${g.durationMs}ms)` : '');
+    }).join('\n');
+
     const entityBlock = entityInsights.map(e => {
       return `- ${e.name || e.id} [${(e.domains || []).join(', ')}]${e.perspective ? ': ' + String(e.perspective).slice(0, 120) : ''}`;
     }).join('\n');
@@ -1346,6 +1425,7 @@ export function createOracleEngine(opts = {}) {
       `- complexity: ${analysis.complexity || 'n/a'}\n` +
       `- epistemic class: ${analysis.epistemicClass || 'n/a'}\n\n` +
       (sourceBlock ? `# Top DTU Sources (cite by ID)\n${sourceBlock}\n\n` : '') +
+      (groundTruthBlock ? `# computationalGroundTruth (AUTHORITATIVE — cite as "computed", never contradict)\n${groundTruthBlock}\n\n` : '') +
       (computationBlock ? `# Computation Results (ground truth — never contradict)\n${computationBlock}\n\n` : '') +
       (entityBlock ? `# Entity Perspectives\n${entityBlock}\n\n` : '') +
       (priorBlock ? `# Prior Oracle Answers\n${priorBlock}\n\n` : '') +
@@ -1405,6 +1485,7 @@ export function createOracleEngine(opts = {}) {
         title: d.title || d.human?.summary || '',
       })),
       computations: Object.keys(computationResults),
+      computationalGroundTruth,
       connections: crossDomainConnections.slice(0, 5).map(c => ({
         id: c.id,
         title: c.title,
@@ -1437,6 +1518,100 @@ export function createOracleEngine(opts = {}) {
   }
 
   // ── Phase 5: Validate ──────────────────────────────────────────────────
+
+  /**
+   * Soft consistency check between the synthesized answer and the values
+   * returned by the compute registry. These registry values are ground
+   * truth (formal logic, symbolic math, numerical methods, physics) so any
+   * disagreement is treated as a warning, not a hard failure.
+   *
+   * Strategy: extract numeric literals from each successful registry result
+   * and look for direct contradictions in the answer text (same label,
+   * different number). Soft check — warn only.
+   *
+   * @param {string} answer
+   * @param {object|null} registryCompute
+   * @returns {Promise<{ consistent: boolean, violations: Array<object>, checked: number }>}
+   */
+  async function _checkComputeConsistency(answer, registryCompute) {
+    const empty = { consistent: true, violations: [], checked: 0 };
+    if (!registryCompute || !Array.isArray(registryCompute.executionResults)) return empty;
+    const results = registryCompute.executionResults.filter(r => r && r.ok);
+    if (results.length === 0) return empty;
+
+    const violations = [];
+    const answerText = String(answer || '');
+    const answerLower = answerText.toLowerCase();
+
+    // Collect all numeric literals in the answer for fast contradiction
+    // scanning. We match integers and floats, optionally with a sign and
+    // exponent. This is deliberately coarse.
+    const answerNumbers = (answerText.match(/-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?/g) || [])
+      .map(Number)
+      .filter(n => Number.isFinite(n));
+
+    const approxEqual = (a, b) => {
+      if (!Number.isFinite(a) || !Number.isFinite(b)) return false;
+      const mag = Math.max(Math.abs(a), Math.abs(b), 1e-9);
+      return Math.abs(a - b) / mag < 0.02; // within 2%
+    };
+
+    const extractNumbers = (val) => {
+      const out = [];
+      const visit = (x) => {
+        if (x == null) return;
+        if (typeof x === 'number' && Number.isFinite(x)) out.push(x);
+        else if (typeof x === 'string') {
+          const ms = x.match(/-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?/g);
+          if (ms) for (const m of ms) { const n = Number(m); if (Number.isFinite(n)) out.push(n); }
+        } else if (Array.isArray(x)) x.forEach(visit);
+        else if (typeof x === 'object') for (const k of Object.keys(x)) visit(x[k]);
+      };
+      visit(val);
+      return out;
+    };
+
+    let checked = 0;
+    for (const r of results) {
+      const capDesc = r.capability?.description || r.key || 'computed';
+      const computedNumbers = extractNumbers(r.result);
+      if (computedNumbers.length === 0) continue;
+      checked++;
+
+      // If the answer mentions the capability's description and has
+      // numbers that wildly disagree with the computed numbers, flag it.
+      const descLower = String(capDesc).toLowerCase();
+      const mentioned =
+        descLower.length > 0 &&
+        (answerLower.includes(descLower) ||
+          descLower.split(/\W+/).filter(t => t.length > 4)
+            .some(tok => answerLower.includes(tok)));
+      if (!mentioned) continue;
+
+      for (const truth of computedNumbers.slice(0, 6)) {
+        // If the answer contains ANY number close to the truth, consider
+        // it cited — no contradiction. Otherwise, if the answer contains
+        // similarly-magnitude numbers that all differ, that's a soft flag.
+        const anyClose = answerNumbers.some(n => approxEqual(n, truth));
+        if (anyClose) continue;
+        const similarMag = answerNumbers.filter(n => {
+          const mag = Math.max(Math.abs(n), Math.abs(truth), 1e-9);
+          const ratio = Math.abs(n) / mag;
+          return ratio > 0.1 && ratio < 10;
+        });
+        if (similarMag.length > 0) {
+          violations.push({
+            capability: capDesc,
+            computed: truth,
+            answerValues: similarMag.slice(0, 3),
+          });
+          break;
+        }
+      }
+    }
+
+    return { consistent: violations.length === 0, violations, checked };
+  }
 
   /**
    * Compute final confidence. Combines retrieval coverage with the STSVK
@@ -1568,6 +1743,18 @@ export function createOracleEngine(opts = {}) {
       manifold = { inside: true, score: 0.5, reason: `manifold error: ${e?.message || e}` };
     }
 
+    // Compute-registry consistency — soft check, warnings only.
+    let computeConsistency = { consistent: true, violations: [], checked: 0 };
+    try {
+      computeConsistency = await _checkComputeConsistency(
+        answer || '',
+        extras.registryCompute || null,
+      );
+    } catch (e) {
+      log('debug', 'validate_compute_consistency_failed', { error: e?.message });
+      computeConsistency = { consistent: true, violations: [], checked: 0 };
+    }
+
     // Base weighting: if STSVK was actually applied, weight it heavily.
     // The new multi-layer validators (factCheck + qualityGate) contribute
     // 20% each when they return a non-default score.
@@ -1636,6 +1823,15 @@ export function createOracleEngine(opts = {}) {
     }
     if (gateAvailable && chicken2.passed === false) warnings.push('chicken2_gate_failed');
     if (manifoldAvailable && manifold.inside === false) warnings.push('outside_feasibility_manifold');
+    if (!computeConsistency.consistent) {
+      warnings.push(`compute_consistency_violations:${computeConsistency.violations.length}`);
+      for (const v of computeConsistency.violations.slice(0, 3)) {
+        warnings.push(
+          `compute_contradicts:${String(v.capability).slice(0, 60)}:` +
+          `computed=${v.computed}`,
+        );
+      }
+    }
 
     // Hard caps based on multi-layer verdicts.
     if (factCheck.verdict === 'fail') capped = Math.min(capped, 0.35);
@@ -1658,6 +1854,7 @@ export function createOracleEngine(opts = {}) {
       },
       chicken2Gate: chicken2,
       manifoldCheck: manifold,
+      computeConsistency,
     };
   }
 
@@ -1868,6 +2065,7 @@ export function createOracleEngine(opts = {}) {
       query,
       analysis,
       sources: retrieval?.dtus,
+      registryCompute: computation?.registryCompute || null,
     });
 
     const recorded = await record(query, answer, citations, validation, stsvk, {
@@ -1918,6 +2116,14 @@ export function createOracleEngine(opts = {}) {
         hasProofs: !!computation?.hasProofs,
         hasSimulation: !!computation?.hasSimulation,
       },
+      // Compute Registry + Sub-Lens Bridge surfaces:
+      compute: computation?.registryCompute || null,
+      subLens: analysis._subLensExpanded
+        ? {
+          original: analysis._originalDomains || [],
+          expanded: analysis.primaryDomains || [],
+        }
+        : null,
       elapsedMs: Date.now() - started,
       context,
     };
