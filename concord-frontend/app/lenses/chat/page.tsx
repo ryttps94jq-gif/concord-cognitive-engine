@@ -417,38 +417,37 @@ export default function ChatLensPage() {
   // Opt-in drawer surfacing the orphaned systems cards. All five
   // components are fully built; this gives them a live home inside
   // the chat lens where they're most useful (the AI can reference
-  // shield/mesh/intel state while responding).
+  // shield/mesh/intel state while responding). Endpoints are thin
+  // REST wrappers that delegate to the corresponding macros server-side.
   const [systemsPanelOpen, setSystemsPanelOpen] = useState(false);
   const [systemsTab, setSystemsTab] = useState<'shield' | 'mesh' | 'intel' | 'privacy' | 'initiatives'>('shield');
-  // Fetched lazily from /api/runMacro so nothing hits the wire until
-  // the user opens the panel.
   const { data: shieldData } = useQuery({
     queryKey: ['chat-shield-status'],
-    queryFn: () => api.post<{ result?: Record<string, unknown>; ok?: boolean }>('/api/runMacro', { domain: 'shield', name: 'status', input: {} }).then((r) => r.data?.result || {}),
+    queryFn: () => api.get<{ ok: boolean; securityScore?: Record<string, unknown> }>('/api/shield/status').then((r) => (r.data?.securityScore || r.data || {}) as Record<string, unknown>),
     enabled: systemsPanelOpen && systemsTab === 'shield',
     refetchInterval: systemsPanelOpen && systemsTab === 'shield' ? 10_000 : false,
   });
   const { data: meshData } = useQuery({
     queryKey: ['chat-mesh-status'],
-    queryFn: () => api.post<{ result?: Record<string, unknown> }>('/api/runMacro', { domain: 'mesh', name: 'status', input: {} }).then((r) => r.data?.result || {}),
+    queryFn: () => api.get<Record<string, unknown>>('/api/mesh/status').then((r) => r.data || {}),
     enabled: systemsPanelOpen && systemsTab === 'mesh',
     refetchInterval: systemsPanelOpen && systemsTab === 'mesh' ? 10_000 : false,
   });
   const { data: intelData } = useQuery({
     queryKey: ['chat-intel-status'],
-    queryFn: () => api.post<{ result?: Record<string, unknown> }>('/api/runMacro', { domain: 'intel', name: 'status', input: {} }).then((r) => r.data?.result || {}),
+    queryFn: () => api.get<Record<string, unknown>>('/api/intel/status').then((r) => r.data || {}),
     enabled: systemsPanelOpen && systemsTab === 'intel',
     refetchInterval: systemsPanelOpen && systemsTab === 'intel' ? 15_000 : false,
   });
   const { data: privacyData } = useQuery({
     queryKey: ['chat-atlas-privacy'],
-    queryFn: () => api.post<{ result?: Record<string, unknown> }>('/api/runMacro', { domain: 'atlas', name: 'privacy_zones', input: { view: 'stats' } }).then((r) => r.data?.result || null),
+    queryFn: () => api.get<Record<string, unknown>>('/api/atlas/privacy_zones?view=stats').then((r) => r.data || null),
     enabled: systemsPanelOpen && systemsTab === 'privacy',
     refetchInterval: systemsPanelOpen && systemsTab === 'privacy' ? 20_000 : false,
   });
   const { data: initiativesData } = useQuery({
     queryKey: ['chat-initiatives'],
-    queryFn: () => api.get<{ initiatives?: Initiative[] }>('/api/initiatives').then((r) => r.data?.initiatives || []),
+    queryFn: () => api.get<{ pending?: Initiative[]; initiatives?: Initiative[] }>('/api/initiative/pending').then((r) => r.data?.pending || r.data?.initiatives || []),
     enabled: systemsPanelOpen && systemsTab === 'initiatives',
     refetchInterval: systemsPanelOpen && systemsTab === 'initiatives' ? 30_000 : false,
   });
@@ -2718,12 +2717,12 @@ export default function ChatLensPage() {
                         initiative={init}
                         onDismiss={() => {
                           try {
-                            api.post('/api/initiatives/report', { id: init.id, interaction: 'dismissed' });
+                            api.post(`/api/initiative/${encodeURIComponent(init.id)}/dismiss`, {});
                           } catch { /* non-fatal */ }
                         }}
                         onAction={() => {
                           try {
-                            api.post('/api/initiatives/report', { id: init.id, interaction: 'acted' });
+                            api.post(`/api/initiative/${encodeURIComponent(init.id)}/respond`, { response: 'acted' });
                           } catch { /* non-fatal */ }
                         }}
                       />

@@ -93,7 +93,7 @@ import { initStateSync, getSyncStatus, stopSync } from "./lib/state-sync.js";
 import * as cityStreaming from "./lib/city-streaming.js";
 import { createRequire } from "module";
 const _require = createRequire(import.meta.url);
-const infrastructureConfig = _require("./config/infrastructure.js");
+const infrastructureConfig = _require("./config/infrastructure.cjs");
 
 // ---- Route modules (ESM) ----
 import registerSystemRoutes from "./routes/system.js";
@@ -4579,7 +4579,32 @@ function cookieParserMiddleware(req, res, next) {
 
 // Auth middleware
 function authMiddleware(req, res, next) {
-  if (AUTH_MODE === "public") return next();
+  if (AUTH_MODE === "public") {
+    // Public mode: auth isn't REQUIRED, but if the client sent a
+    // valid Bearer token or auth cookie we still populate req.user
+    // so downstream features (presence tracker, ownership checks,
+    // per-user rate limits, attribution) work correctly. This is
+    // "best-effort identify" — failure just leaves req.user unset.
+    try {
+      const authHeader = String(req.headers?.authorization || "");
+      const cookieToken = req.cookies?.concord_auth;
+      let decoded = null;
+      if (cookieToken) {
+        decoded = verifyToken(cookieToken);
+      } else if (authHeader.startsWith("Bearer ")) {
+        decoded = verifyToken(authHeader.slice(7));
+      }
+      if (decoded?.userId) {
+        const user = AuthDB.getUser(decoded.userId);
+        if (user) {
+          req.user = user;
+          req.authMethod = cookieToken ? "cookie" : "jwt";
+          if (decoded.jti) _SESSION_ACTIVITY.touch(decoded.jti);
+        }
+      }
+    } catch (_e) { /* non-fatal — we're in public mode */ }
+    return next();
+  }
 
   // Skip auth for always-public endpoints (any method)
   const alwaysPublic = ["/health", "/ready", "/metrics", "/api/auth/login", "/api/auth/register", "/api/auth/refresh", "/api/auth/csrf-token", "/api/auth/google", "/api/auth/apple", "/api/auth/providers", "/api/docs", "/api/status", "/api/chat", "/api/brain/conscious"];
@@ -10017,18 +10042,23 @@ function makeCtx(req=null) {
 
   // Touch the per-user activity tracker so /api/presence/active
   // reflects who's currently poking at the server. We infer the
-  // lens from the request path: /api/feed/* → "feed", /api/chat/*
-  // → "chat", etc. Fallbacks to the Referer header for static page
-  // navigation events.
+  // lens from the Referer header first (the page the user is on),
+  // then from /api/lens/<domain> URL paths as a fallback.
   try {
     if (req && req.user && req.user.id) {
-      const urlPath = req.originalUrl || req.url || "";
+      // Lens inference priority: Referer first (the actual page the
+      // user is on), then /api/lens/<domain> paths, then a generic
+      // /api/<domain>/ fallback. This keeps a feed-lens user who
+      // calls /api/dtus/stats correctly tagged as "feed", not "dtus".
       let lensGuess = null;
-      const m = urlPath.match(/^\/api\/lens\/([a-z0-9_-]+)/) || urlPath.match(/^\/api\/([a-z0-9_-]+)\//);
-      if (m) lensGuess = m[1];
-      if (!lensGuess && typeof req.headers?.referer === "string") {
+      if (typeof req.headers?.referer === "string") {
         const r = req.headers.referer.match(/\/lenses\/([a-z0-9_-]+)/);
         if (r) lensGuess = r[1];
+      }
+      if (!lensGuess) {
+        const urlPath = req.originalUrl || req.url || "";
+        const m = urlPath.match(/^\/api\/lens\/([a-z0-9_-]+)/);
+        if (m) lensGuess = m[1];
       }
       _USER_ACTIVITY.touch(
         req.user.id,
@@ -23302,7 +23332,7 @@ register("persona", "create", (ctx, input={}) => {
   saveStateDebounced();
   _c2log("c2.persona.create", "Persona created", { id, name });
   return { ok:true, persona };
-}, { summary:"Create a persona with persistent identity rooted to genesis." });
+}, { summary:"Create a persona with persistent identity rooted to genesis.", note: "intentional_shadow_ok" });
 
 register("skill", "create", (ctx, input={}) => {
   const title = String(input.title||"");
@@ -25335,6 +25365,30 @@ import createLegalLiabilityRouter from "./routes/legal-liability.js";
 app.use("/api/legal", createLegalLiabilityRouter({ db }));
 
 // ===== LENS DEVELOPER KIT (LDK) =====
+// NOTE: ALL_LENS_DOMAINS used to live at line ~32422, which meant
+// this line hit a TDZ ReferenceError at server startup and crashed
+// the whole boot sequence. Hoisted the const above its first use.
+const ALL_LENS_DOMAINS = [
+  "accounting","admin","affect","agents","agriculture","all","alliance","analytics","animation",
+  "anon","app-maker","ar","art","artistry","astronomy","atlas","attention","audit","automotive","aviation","billing",
+  "bio","board","bridge","calendar","carpentry","chat","chem","code","collab","command-center","construction",
+  "commonsense","consulting","cooking","council","creative","creative-writing","cri","crypto","custom","daily",
+  "database","debate","debug","defense","desert","diy","docs","dtus","eco","education","entity","environment",
+  "disputes","electrical","emergency-services","energy","engineering",
+  "ethics","events","experience","export","fashion","feed","film-studios","finance","fitness",
+  "food","forestry","fork","forum","fractal","game","game-design","geology","global","goals","government",
+  "graph","grounding","healthcare","history","home-improvement","household","hr","hvac","hypothesis","import",
+  "inference","ingest","insurance","integrations","invariant","lab",
+  "landscaping","law","law-enforcement","legacy","legal","linguistics","lock","logistics","manufacturing","market",
+  "marketing","marketplace","masonry","materials","math","mental-health","mentorship","meta","metacognition","metalearning","mining","ml",
+  "music","neuro","news","nonprofit","ocean","offline","organ","paper","parenting","pets","pharmacy","philosophy","photography","physics",
+  "platform","plumbing","podcast","poetry","privacy","projects","quantum","questmarket","queue","realestate","reasoning","robotics",
+  "reflection","repos","research","resonance","retail","schema","science",
+  "security","services","sim","space","sports","srs","studio","suffering","supplychain",
+  "telecommunications","temporal","thread","tick","timeline","trades","transfer",
+  "travel","urban-planning","veterinary","voice","vote","wallet","welding","whiteboard","world"
+];
+const UNIVERSAL_ACTIONS = ["analyze", "generate", "suggest"];
 import createLDKRouter from "./routes/ldk.js";
 app.use("/api/ldk", createLDKRouter({ ALL_LENS_DOMAINS, registerLensAction }));
 
@@ -32418,28 +32472,8 @@ domainModules.forEach(mod => mod(registerLensAction));
 // Gives EVERY lens domain three AI-powered actions (analyze, generate, suggest)
 // powered by the utility brain (qwen2.5:3b via Ollama). Domains that already
 // have custom handlers for these actions keep them — we only fill gaps.
-const UNIVERSAL_ACTIONS = ["analyze", "generate", "suggest"];
-const ALL_LENS_DOMAINS = [
-  "accounting","admin","affect","agents","agriculture","all","alliance","analytics","animation",
-  "anon","app-maker","ar","art","artistry","astronomy","atlas","attention","audit","automotive","aviation","billing",
-  "bio","board","bridge","calendar","carpentry","chat","chem","code","collab","command-center","construction",
-  "commonsense","consulting","cooking","council","creative","creative-writing","cri","crypto","custom","daily",
-  "database","debate","debug","defense","desert","diy","docs","dtus","eco","education","entity","environment",
-  "disputes","electrical","emergency-services","energy","engineering",
-  "ethics","events","experience","export","fashion","feed","film-studios","finance","fitness",
-  "food","forestry","fork","forum","fractal","game","game-design","geology","global","goals","government",
-  "graph","grounding","healthcare","history","home-improvement","household","hr","hvac","hypothesis","import",
-  "inference","ingest","insurance","integrations","invariant","lab",
-  "landscaping","law","law-enforcement","legacy","legal","linguistics","lock","logistics","manufacturing","market",
-  "marketing","marketplace","masonry","materials","math","mental-health","mentorship","meta","metacognition","metalearning","mining","ml",
-  "music","neuro","news","nonprofit","ocean","offline","organ","paper","parenting","pets","pharmacy","philosophy","photography","physics",
-  "platform","plumbing","podcast","poetry","privacy","projects","quantum","questmarket","queue","realestate","reasoning","robotics",
-  "reflection","repos","research","resonance","retail","schema","science",
-  "security","services","sim","space","sports","srs","studio","suffering","supplychain",
-  "telecommunications","temporal","thread","tick","timeline","trades","transfer",
-  "travel","urban-planning","veterinary","voice","vote","wallet","welding","whiteboard","world"
-];
-
+// ALL_LENS_DOMAINS + UNIVERSAL_ACTIONS were hoisted up above line 25337
+// so the LDK router can reference ALL_LENS_DOMAINS at import time.
 function registerUniversalLensActions() {
   let registered = 0;
   for (const domain of ALL_LENS_DOMAINS) {
@@ -42988,6 +43022,39 @@ app.get("/api/skill/gaps", asyncHandler(async (_req, res) => {
 }));
 
 // Combined intelligence dashboard
+// Foundation Intel Tier — thin REST wrappers for the `intel` macro
+// domain so the chat Systems drawer (and any other UI) can poll a
+// stable URL instead of needing a generic macro dispatch endpoint.
+// /api/intel/status is an aggregate convenience that unions the
+// metrics macro with per-category headlines for the overview card.
+app.get("/api/intel/status", asyncHandler(async (req, res) => {
+  const ctx = makeCtx(req);
+  const metrics = await runMacro("intel", "metrics", {}, ctx);
+  const classifier = await runMacro("intel", "classifier.status", {}, ctx);
+  res.json({ ok: true, metrics, classifier });
+}));
+app.get("/api/intel/weather", asyncHandler(async (req, res) => {
+  res.json(await runMacro("intel", "weather", {}, makeCtx(req)));
+}));
+app.get("/api/intel/classifier", asyncHandler(async (req, res) => {
+  res.json(await runMacro("intel", "classifier.status", {}, makeCtx(req)));
+}));
+
+// Atlas privacy zones — REST wrapper. The actual macros live under
+// the `cortex` domain as `cortex.privacy.zones` / `.stats` / `.verify`;
+// we expose a single /api/atlas/privacy_zones?view=<zones|stats|verify>
+// endpoint that dispatches to the right one, so the frontend doesn't
+// have to know about the cortex/atlas split.
+app.get("/api/atlas/privacy_zones", asyncHandler(async (req, res) => {
+  const view = typeof req.query?.view === "string" ? req.query.view : "stats";
+  const ctx = makeCtx(req);
+  let macroName = "privacy.stats";
+  if (view === "zones") macroName = "privacy.zones";
+  else if (view === "verify") macroName = "privacy.verify";
+  const result = await runMacro("cortex", macroName, { ...req.query }, ctx);
+  res.json({ ok: true, view, ...(typeof result === "object" ? result : { result }) });
+}));
+
 app.get("/api/intelligence/dashboard", asyncHandler(async (_req, res) => {
   res.json({
     ok: true,
