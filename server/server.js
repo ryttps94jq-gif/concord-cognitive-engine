@@ -7458,6 +7458,24 @@ const MACROS = new Map(); // domain -> Map(name -> fn)
 
 function register(domain, name, fn, spec={}) {
   if (!MACROS.has(domain)) MACROS.set(domain, new Map());
+  // Detect silent shadowing: if a macro is being registered twice
+  // under the same (domain, name), the second registration wins
+  // silently. In the 685-macro codebase this was happening for
+  // hypothesis.{propose,get,list}, ingest.queue, persona.{create,list}
+  // — sometimes intentional (Ghost Fleet modules replace stubs),
+  // sometimes bugs. Log it so future duplicates are visible.
+  const existing = MACROS.get(domain).get(name);
+  const INTENTIONAL_SHADOWS = new Set(["ghost_fleet_shadow_ok", "intentional_shadow_ok"]);
+  if (existing && !INTENTIONAL_SHADOWS.has(spec?.note) && typeof structuredLog === "function") {
+    try {
+      structuredLog("warn", "macro_duplicate_registration", {
+        domain,
+        name,
+        prevSpec: existing.spec?.note || null,
+        newSpec: spec?.note || null,
+      });
+    } catch (_e) { /* non-fatal */ }
+  }
   MACROS.get(domain).set(name, { fn, spec: { domain, name, ...spec } });
 }
 
@@ -10654,6 +10672,24 @@ function upsertDTU(dtu, { broadcast = true, federate = false } = {}) {
         tags: dtu.tags,
         updatedAt: dtu.updatedAt
       });
+      // Graph lens listens for 'graph:update' via useRealtimeLens
+      // fallback; emit it so the in-memory graph visualizer can
+      // hot-patch its node/edge cache when a DTU is created or
+      // mutated elsewhere (collab edits, cross-tab writes, mechanic
+      // triggered spawn_object, etc). Carries the full minimal
+      // shape the frontend needs to slot it into the graph without
+      // a full refetch.
+      realtimeEmit("graph:update", {
+        op: isNew ? "add" : "update",
+        node: {
+          id: dtu.id,
+          title: dtu.title,
+          tier: dtu.tier || "regular",
+          tags: Array.isArray(dtu.tags) ? dtu.tags.slice(0, 20) : [],
+          domain: dtu.domain || null,
+        },
+        fetchedAt: new Date().toISOString(),
+      });
     } catch (e) { observe(e, "dtu_realtime_broadcast"); }
 
     // Event-to-DTU bridge: internal dtu:created events become knowledge DTUs
@@ -12520,9 +12556,13 @@ async function initGhostFleet() {
     const hypo = await import("./emergent/hypothesis-engine.js");
     GHOST_FLEET_STATUS.modules["hypothesis-engine"] = { loaded: true, loadedAt: new Date().toISOString() };
 
-    register("hypothesis", "propose", (_ctx, input = {}) => hypo.proposeHypothesis(input.statement, input.domain, input.priority));
-    register("hypothesis", "get", (_ctx, input = {}) => hypo.getHypothesis(input.id));
-    register("hypothesis", "list", (_ctx, input = {}) => hypo.listHypotheses(input.status));
+    // Ghost Fleet hypothesis engine — intentionally shadows the stub
+    // registrations at ~9709/9735/9745 with the full implementation
+    // from ./emergent/hypothesis-engine.js. Marked with note so the
+    // duplicate-registration warning in register() stays quiet.
+    register("hypothesis", "propose", (_ctx, input = {}) => hypo.proposeHypothesis(input.statement, input.domain, input.priority), { note: "ghost_fleet_shadow_ok" });
+    register("hypothesis", "get", (_ctx, input = {}) => hypo.getHypothesis(input.id), { note: "ghost_fleet_shadow_ok" });
+    register("hypothesis", "list", (_ctx, input = {}) => hypo.listHypotheses(input.status), { note: "ghost_fleet_shadow_ok" });
     register("hypothesis", "add_evidence", (_ctx, input = {}) => hypo.addEvidence(input.hypothesisId, input.side, input.dtuId, input.weight, input.summary));
     register("hypothesis", "add_test", (_ctx, input = {}) => hypo.addTest(input.hypothesisId, input.description));
     register("hypothesis", "update_test", (_ctx, input = {}) => hypo.updateTestResult(input.hypothesisId, input.testId, input.result));
@@ -17098,6 +17138,13 @@ register("dtu", "delete", async (ctx, input) => {
   // Broadcast deletion via WebSocket
   try {
     realtimeEmit("dtu:deleted", { id, title: dtu.title });
+    // Graph lens realtime: drop the node from any connected
+    // graph visualizer immediately instead of waiting for a refetch.
+    realtimeEmit("graph:update", {
+      op: "delete",
+      node: { id, title: dtu.title },
+      fetchedAt: new Date().toISOString(),
+    });
   } catch (e) { log("ws.warn", `dtu:deleted broadcast: ${e?.message}`); }
 
   // Optionally notify federation. The recipient side already queues
@@ -17121,6 +17168,31 @@ register("dtu", "delete", async (ctx, input) => {
   return { ok: true, deleted: { id, title: dtu.title } };
   } finally { releaseMutex(); }
 }, { description: "Delete a DTU by id" });
+
+// dtu.stats — single source of truth for DTU counts + tier/kind
+// distribution + average richness. The /api/dtus/stats REST route
+// in routes/dtus.js delegates to this macro so the two can't drift.
+register("dtu", "stats", (ctx, _input = {}) => {
+  const userId = ctx?.actor?.id || ctx?.actor?.userId || null;
+  const all = userVisibleDTUs(userId);
+  const tierCounts = {};
+  const kindCounts = {};
+  let totalRichness = 0;
+  for (const d of all) {
+    tierCounts[d.tier || "unknown"] = (tierCounts[d.tier || "unknown"] || 0) + 1;
+    kindCounts[d.kind || "unknown"] = (kindCounts[d.kind || "unknown"] || 0) + 1;
+    totalRichness += d.richness || 0;
+  }
+  const shadowCount = STATE.shadowDtus ? STATE.shadowDtus.size : 0;
+  return {
+    ok: true,
+    total: all.length,
+    shadowCount,
+    tierCounts,
+    kindCounts,
+    averageRichness: all.length > 0 ? totalRichness / all.length : 0,
+  };
+}, { public: true });
 
 register("dtu", "list", (ctx, input) => {
   const limit = clamp(Number(input.limit || 5000), 1, 5000);
@@ -20129,6 +20201,9 @@ register("ingest", "url", async (ctx, input) => {
   return { ok:true, url, dtu: dtu.dtu, fetchedBytes: raw.length };
 });
 
+// CANONICAL ingest.queue — shadows the earlier Ghost Fleet stub that
+// just wrapped ingest.getQueue() with no args. This version takes an
+// input {url, prompt, tags} and pushes onto the crawl queue.
 register("ingest", "queue", (ctx, input) => {
   const url = String(input.url || "");
   if (!url) return { ok:false, error:"url required" };
@@ -20136,7 +20211,7 @@ register("ingest", "queue", (ctx, input) => {
   ctx.state.crawlQueue.push(item);
   ctx.log("ingest.queue", "Queued url", { url, id: item.id });
   return { ok:true, item };
-});
+}, { note: "intentional_shadow_ok" });
 
 register("ingest", "processQueueOnce", async (ctx, _input) => {
   const next = ctx.state.crawlQueue.find(x => x.status === "queued");
@@ -24181,7 +24256,7 @@ registerChatRoutes(app, {
   STATE, makeCtx, runMacro, enforceRequestInvariants, enforceEthosInvariant,
   uid, kernelTick, uiJson, _withAck, _extractReply, clamp, nowISO,
   saveStateDebounced, ETHOS_INVARIANTS, validate, perEndpointRateLimit,
-  requireAuth,
+  requireAuth, realtimeEmit,
 });
 
 // ---- Domain Routes (extracted to routes/domain.js) ----
@@ -27037,6 +27112,13 @@ register("council", "credibility", (ctx, input) => {
 });
 
 // ---- User-Defined Personas ----
+// NOTE: this is the CANONICAL persona.create — it shadows two earlier
+// registrations (a legacy sim persona at line ~20090 and a "reality
+// anchor" persona at line ~23258) that used to claim the same macro
+// name. Both earlier registrations still run for their side effects
+// (state bootstrap), but their handlers are unreachable through the
+// dispatcher. The duplicate is marked intentional so the register()
+// warning stays quiet.
 if (!STATE.customPersonas) STATE.customPersonas = new Map();
 
 register("persona", "create", (ctx, input) => {
@@ -27065,8 +27147,12 @@ register("persona", "create", (ctx, input) => {
   saveStateDebounced();
 
   return { ok: true, persona };
-});
+}, { note: "intentional_shadow_ok" });
 
+// CANONICAL persona.list — shadows the earlier legacy registration at
+// line ~20086 (which used ctx.state.personas instead of
+// STATE.customPersonas). The earlier registration is dead through the
+// dispatcher but its function still runs for any direct callers.
 register("persona", "list", (_ctx, _input) => {
   const builtIn = [
     { id: "ethicist", name: "Ethicist", description: "Focuses on moral implications", builtin: true },
@@ -27076,7 +27162,7 @@ register("persona", "list", (_ctx, _input) => {
   ];
   const custom = Array.from(STATE.customPersonas.values());
   return { ok: true, personas: [...builtIn, ...custom], builtInCount: builtIn.length, customCount: custom.length };
-});
+}, { note: "intentional_shadow_ok" });
 
 register("persona", "update", (ctx, input) => {
   const persona = STATE.customPersonas.get(input.id);

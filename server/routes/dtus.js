@@ -45,26 +45,15 @@ export default function registerDtuRoutes(app, { STATE, makeCtx, runMacro, dtuFo
     }
   }));
   // ── DTU Stats ─────────────────────────────────────────────────────────
-  app.get("/api/dtus/stats", (req, res) => {
+  // Delegates to the dtu.stats macro so the REST endpoint and the
+  // macro dispatcher return the exact same shape. Previously this
+  // had its own inline computation that could drift from any
+  // dtu.stats macro we later added.
+  app.get("/api/dtus/stats", async (req, res) => {
     try {
-      const all = userVisibleDTUs(req.user?.id || null);
-      const tierCounts = {};
-      const kindCounts = {};
-      let totalRichness = 0;
-      for (const d of all) {
-        tierCounts[d.tier || "unknown"] = (tierCounts[d.tier || "unknown"] || 0) + 1;
-        kindCounts[d.kind || "unknown"] = (kindCounts[d.kind || "unknown"] || 0) + 1;
-        totalRichness += d.richness || 0;
-      }
-      const shadowCount = STATE.shadowDtus ? STATE.shadowDtus.size : 0;
-      res.json({
-        ok: true,
-        total: all.length,
-        shadowCount,
-        tierCounts,
-        kindCounts,
-        averageRichness: all.length > 0 ? totalRichness / all.length : 0,
-      });
+      const ctx = makeCtx(req);
+      const result = await runMacro("dtu", "stats", {}, ctx);
+      res.json(result);
     } catch (e) {
       res.status(500).json({ ok: false, error: e.message });
     }
