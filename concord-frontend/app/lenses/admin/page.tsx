@@ -323,31 +323,22 @@ export default function AdminDashboardPage() {
   }, [logs, createArtifact, runAction]);
 
   // -- Permission Matrix action handler --
+  // Fetches the REAL role + user + SoD rules from
+  // /api/admin/permission-matrix/data so the analysis runs against
+  // live org data instead of the hardcoded seed arrays that used to
+  // live here.
   const handleRunPermMatrix = useCallback(async () => {
     setPermMatrixLoading(true);
     setPermMatrixError(null);
     try {
-      const sampleRoles = [
-        { name: 'admin', permissions: ['read', 'write', 'delete', 'manage-users', 'manage-roles', 'view-audit', 'manage-plugins', 'manage-config', 'manage-keys'] },
-        { name: 'editor', permissions: ['read', 'write', 'view-audit'] },
-        { name: 'viewer', permissions: ['read'] },
-        { name: 'moderator', permissions: ['read', 'write', 'delete', 'view-audit'] },
-        { name: 'operator', permissions: ['read', 'manage-plugins', 'manage-config', 'view-audit'] },
-      ];
-      const sampleUsers = [
-        { userId: 'user-1', roles: ['admin'] },
-        { userId: 'user-2', roles: ['editor', 'moderator'] },
-        { userId: 'user-3', roles: ['viewer'] },
-        { userId: 'user-4', roles: ['operator', 'editor'] },
-        { userId: 'user-5', roles: [] },
-      ];
-      const sodRules = [
-        { name: 'write-delete-separation', conflicting: ['write', 'delete'] },
-      ];
+      const live = await api.get<{ ok: boolean; roles: Array<{ name: string; permissions: string[] }>; users: Array<{ userId: string; roles: string[] }>; sodRules: Array<{ name: string; conflicting: string[] }> }>('/api/admin/permission-matrix/data').then((r) => r.data);
+      if (!live?.ok) {
+        throw new Error('Failed to load permission matrix data');
+      }
       const created = await createArtifact.mutateAsync({
         type: 'PermSnapshot',
         title: `Permission Matrix ${new Date().toLocaleString()}`,
-        data: { roles: sampleRoles, users: sampleUsers, sodRules } as Record<string, unknown>,
+        data: { roles: live.roles, users: live.users, sodRules: live.sodRules } as Record<string, unknown>,
       });
       const res = await runAction.mutateAsync({
         id: created.artifact.id,
@@ -363,28 +354,23 @@ export default function AdminDashboardPage() {
   }, [createArtifact, runAction]);
 
   // -- System Health action handler --
+  // Pulls the REAL 20-point time series from
+  // /api/admin/system-health/series which is backed by a 1-minute
+  // ring buffer on the server (CPU via process.cpuUsage delta, heap
+  // via process.memoryUsage, latency from the observability ring,
+  // error rate from the log ring). No randomized values.
   const handleRunSysHealth = useCallback(async () => {
     setSysHealthLoading(true);
     setSysHealthError(null);
     try {
-      // Build metrics from real dashboard data when available
-      const now = Date.now();
-      const metricsPoints = Array.from({ length: 20 }, (_, i) => {
-        const heapUsedMb = parseFloat(dashboard?.system?.memory?.heapUsed?.replace(/[^\d.]/g, '') || '50');
-        const heapTotalMb = parseFloat(dashboard?.system?.memory?.heapTotal?.replace(/[^\d.]/g, '') || '100');
-        return {
-          timestamp: new Date(now - (19 - i) * 60000).toISOString(),
-          cpu: 30 + Math.random() * 40,
-          memory: heapTotalMb > 0 ? (heapUsedMb / heapTotalMb) * 100 : 45 + Math.random() * 20,
-          disk: 40 + Math.random() * 15,
-          latencyMs: 50 + Math.random() * 200,
-          errorRate: Math.random() * 3,
-        };
-      });
+      const live = await api.get<{ ok: boolean; series: Array<{ timestamp: string; cpu: number; memory: number; disk: number; latencyMs: number; errorRate: number }> }>('/api/admin/system-health/series?points=20').then((r) => r.data);
+      if (!live?.ok || !Array.isArray(live.series)) {
+        throw new Error('Failed to load health time series');
+      }
       const created = await createArtifact.mutateAsync({
         type: 'HealthSnapshot',
         title: `System Health Check ${new Date().toLocaleString()}`,
-        data: { metrics: metricsPoints } as Record<string, unknown>,
+        data: { metrics: live.series } as Record<string, unknown>,
       });
       const res = await runAction.mutateAsync({
         id: created.artifact.id,

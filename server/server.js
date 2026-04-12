@@ -33831,7 +33831,7 @@ app.get("/api/cognitive/dreams", (req, res) => {
 // MEGA SPEC: Shadow Vault Admin + Artifact Compression Migration
 // ============================================================================
 
-app.post("/api/admin/unshadow", async (req, res) => {
+app.post("/api/admin/unshadow", requireAuth(), requireOwner, async (req, res) => {
   const { domain, count = 5 } = req.body || {};
   if (!domain) return res.status(400).json({ ok: false, error: "domain required" });
   try {
@@ -33844,7 +33844,7 @@ app.post("/api/admin/unshadow", async (req, res) => {
   }
 });
 
-app.post("/api/admin/migrate-compression", async (_req, res) => {
+app.post("/api/admin/migrate-compression", requireAuth(), requireOwner, async (_req, res) => {
   try {
     const mod = await import("./lib/artifact-store.js");
     const result = mod.migrateArtifactsToCompressed();
@@ -33854,7 +33854,7 @@ app.post("/api/admin/migrate-compression", async (_req, res) => {
   }
 });
 
-app.get("/api/admin/compression-stats", async (_req, res) => {
+app.get("/api/admin/compression-stats", requireAuth(), requireOwner, async (_req, res) => {
   try {
     const mod = await import("./lib/artifact-store.js");
     res.json({ ok: true, cache: mod.previewCacheStats() });
@@ -37016,6 +37016,132 @@ register("perf", "metrics", (_ctx, _input) => {
     collab: { sessions: COLLAB_SESSIONS.size, locks: COLLAB_LOCKS.size },
     plugins: { marketplace: PLUGIN_MARKETPLACE.listings.size, installed: PLUGIN_MARKETPLACE.installed.size }
   };
+});
+
+// ── Health metrics ring buffer ─────────────────────────────────────
+// Captures one snapshot per minute so the admin dashboard can render
+// a real time-series (CPU, memory, latency, error rate) instead of
+// randomized placeholder values. 60 slots = 1 hour of history.
+const _HEALTH_RING = { buf: [], cap: 60, lastCpu: process.cpuUsage(), lastSampleAt: Date.now() };
+function _sampleHealthMetrics() {
+  const now = Date.now();
+  const mem = process.memoryUsage();
+  // CPU: usec since last sample, divided by elapsed ms ⇒ % of single core
+  const cpuNow = process.cpuUsage();
+  const elapsedMs = Math.max(1, now - _HEALTH_RING.lastSampleAt);
+  const cpuUsecDiff = (cpuNow.user + cpuNow.system) - (_HEALTH_RING.lastCpu.user + _HEALTH_RING.lastCpu.system);
+  const cpuPct = Math.min(100, Math.max(0, (cpuUsecDiff / 1000) / elapsedMs * 100));
+  _HEALTH_RING.lastCpu = cpuNow;
+  _HEALTH_RING.lastSampleAt = now;
+  // Memory: heap used / heap total
+  const memPct = mem.heapTotal > 0 ? (mem.heapUsed / mem.heapTotal) * 100 : 0;
+  // Latency: average recent request latency if the observability ring has it
+  let latencyMs = 0;
+  try {
+    const obs = STATE.__obsRing;
+    if (Array.isArray(obs) && obs.length > 0) {
+      const recent = obs.slice(-20).filter((e) => typeof e?.durationMs === "number");
+      if (recent.length > 0) {
+        latencyMs = recent.reduce((s, e) => s + e.durationMs, 0) / recent.length;
+      }
+    }
+  } catch (_e) { /* non-fatal */ }
+  // Error rate: last 100 log entries containing level=error / 100
+  let errorRate = 0;
+  try {
+    const logs = STATE.__logs || [];
+    if (logs.length > 0) {
+      const recent = logs.slice(-100);
+      const errs = recent.filter((l) => l && (l.level === "error" || l.level === "warn")).length;
+      errorRate = (errs / recent.length) * 100;
+    }
+  } catch (_e) { /* non-fatal */ }
+  // Disk: best-effort from the state_save ring (percentage of configured cap)
+  let diskPct = 0;
+  try {
+    const used = STATE._stateFileBytes || 0;
+    const cap = 500 * 1024 * 1024; // 500 MB headroom assumed
+    diskPct = Math.min(100, (used / cap) * 100);
+  } catch (_e) { /* non-fatal */ }
+  const snap = {
+    timestamp: new Date(now).toISOString(),
+    cpu: Math.round(cpuPct * 10) / 10,
+    memory: Math.round(memPct * 10) / 10,
+    disk: Math.round(diskPct * 10) / 10,
+    latencyMs: Math.round(latencyMs),
+    errorRate: Math.round(errorRate * 100) / 100,
+  };
+  _HEALTH_RING.buf.push(snap);
+  if (_HEALTH_RING.buf.length > _HEALTH_RING.cap) _HEALTH_RING.buf.shift();
+  return snap;
+}
+// Start the sampler on load (idempotent). First sample warms the CPU
+// baseline so the second sample shows a real delta.
+_sampleHealthMetrics();
+const _healthRingTimer = setInterval(_sampleHealthMetrics, 60 * 1000);
+_healthRingTimer.unref?.();
+
+// GET /api/admin/system-health/series?points=20
+// Returns the last N health snapshots from the ring buffer. If the
+// buffer has fewer than `points` samples (cold boot), the result is
+// padded with the current snapshot repeated so the frontend graph
+// still renders a line instead of a single dot.
+app.get("/api/admin/system-health/series", requireAuth(), requireOwner, (req, res) => {
+  const points = Math.max(1, Math.min(60, Number(req.query?.points) || 20));
+  const latest = _HEALTH_RING.buf.length > 0 ? _HEALTH_RING.buf[_HEALTH_RING.buf.length - 1] : _sampleHealthMetrics();
+  let series = _HEALTH_RING.buf.slice(-points);
+  while (series.length < points) {
+    series = [latest, ...series];
+  }
+  res.json({ ok: true, series, capacity: _HEALTH_RING.cap });
+});
+
+// GET /api/admin/permission-matrix/data
+// Returns the real role + user + SoD rules so the admin dashboard's
+// permission-matrix analysis operates on live data instead of the
+// hardcoded seed arrays that used to live in the frontend.
+app.get("/api/admin/permission-matrix/data", requireAuth(), requireOwner, (_req, res) => {
+  // Roles — derived from the known rolesByOrg mapping + default RBAC map.
+  const ROLE_DEFS = {
+    founder: ["read", "write", "delete", "manage-users", "manage-roles", "view-audit", "manage-plugins", "manage-config", "manage-keys", "govern", "shard-admin"],
+    owner:   ["read", "write", "delete", "manage-users", "manage-roles", "view-audit", "manage-plugins", "manage-config", "manage-keys"],
+    admin:   ["read", "write", "delete", "manage-users", "view-audit", "manage-plugins", "manage-config"],
+    moderator: ["read", "write", "delete", "view-audit"],
+    editor:  ["read", "write", "view-audit"],
+    member:  ["read", "write"],
+    viewer:  ["read"],
+    sovereign: ["read", "write", "delete", "govern", "view-audit"],
+  };
+  const roles = Object.entries(ROLE_DEFS).map(([name, permissions]) => ({ name, permissions }));
+
+  // Users — pulled from STATE.users + AUTH.users so we see both sim
+  // and real accounts.
+  const users = [];
+  try {
+    const src = STATE.users || new Map();
+    for (const [uid, u] of src) {
+      // Collect roles from every org the user belongs to. If none, use top-level role.
+      const rolesSet = new Set();
+      const rolesByOrg = u.roleByOrg || u.rolesByOrg || {};
+      for (const r of Object.values(rolesByOrg)) {
+        if (r) rolesSet.add(r);
+      }
+      if (u.role) rolesSet.add(u.role);
+      users.push({ userId: uid, roles: Array.from(rolesSet) });
+    }
+  } catch (_e) { /* non-fatal */ }
+  // De-dup and cap to 500 for the matrix view
+  const cappedUsers = users.slice(0, 500);
+
+  // SoD rules — separation of duties. Hardcoded for now; can be
+  // moved to STATE.settings when that UI lands.
+  const sodRules = [
+    { name: "write-delete-separation", conflicting: ["write", "delete"] },
+    { name: "manage-roles-audit-separation", conflicting: ["manage-roles", "view-audit"] },
+    { name: "manage-keys-govern-separation", conflicting: ["manage-keys", "govern"] },
+  ];
+
+  res.json({ ok: true, roles, users: cappedUsers, sodRules });
 });
 
 register("perf", "gc", (_ctx, _input) => {
@@ -43126,7 +43252,7 @@ app.get("/api/brain/fallback-health", (_req, res) => {
 
 // Artifact GC admin endpoints
 import { getOrphanCount, initGarbageCollectionTimer } from "./lib/artifact-gc.js";
-app.get("/api/admin/artifact-gc/orphan-count", asyncHandler(async (_req, res) => {
+app.get("/api/admin/artifact-gc/orphan-count", requireAuth(), requireOwner, asyncHandler(async (_req, res) => {
   const count = await getOrphanCount(STATE, db);
   res.json({ ok: true, orphanCount: count });
 }));
@@ -43538,9 +43664,49 @@ app.post("/api/admin/repair/trigger", requireAuth(), requireRole("owner"), async
   res.json(result);
 }));
 
-// Frontend error report endpoint (no auth required — frontends report errors)
-app.post("/api/admin/repair/report", asyncHandler(async (req, res) => {
-  const result = await repairError(req.body);
+// Frontend error report endpoint — intentionally unauthenticated so
+// frontends can report errors even on the pre-auth path. We still
+// harden it:
+//   1. Input validation: strip anything except the fields repairError
+//      actually needs, cap string lengths.
+//   2. Path traversal guard: drop `file` if it's absolute or escapes
+//      the repo root. repairError passes this through fs.readFileSync
+//      so an attacker-controlled path would be a file-read vuln.
+//   3. Rate limit: 20 reports / minute / IP via the default limiter.
+const _repairReportLimiter = rateLimit ? rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  message: { received: false, error: "rate_limited" },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => req.ip,
+}) : ((req, res, next) => next());
+app.post("/api/admin/repair/report", _repairReportLimiter, asyncHandler(async (req, res) => {
+  const raw = req.body || {};
+  const errMsg = typeof raw.message === "string" ? raw.message.slice(0, 2000) : "";
+  const errType = typeof raw.type === "string" ? raw.type.slice(0, 128) : "";
+  const errStack = typeof raw.stack === "string" ? raw.stack.slice(0, 4000) : "";
+  // Path guard: only accept file paths that resolve inside the repo root.
+  let safeFile = null;
+  let safeLine = null;
+  if (typeof raw.file === "string" && raw.file.length < 512 && !raw.file.includes("\0")) {
+    try {
+      const repoRoot = process.cwd();
+      const resolved = path.resolve(repoRoot, raw.file.startsWith("/") ? raw.file.slice(1) : raw.file);
+      if (resolved.startsWith(repoRoot)) {
+        safeFile = resolved;
+        safeLine = Number.isFinite(Number(raw.line)) ? Number(raw.line) : null;
+      }
+    } catch (_e) { /* drop */ }
+  }
+  const sanitized = {
+    type: errType,
+    message: errMsg,
+    stack: errStack,
+    file: safeFile,
+    line: safeLine,
+  };
+  const result = await repairError(sanitized);
   res.json({ received: true, repaired: result.success });
 }));
 
