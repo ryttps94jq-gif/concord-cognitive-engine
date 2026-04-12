@@ -66,6 +66,7 @@ import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
+import { SubLensQuickNav } from '@/components/lens/SubLensQuickNav';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -1085,6 +1086,8 @@ export default function HealthcareLensPage() {
           animation: pulse-critical 2s ease-in-out infinite;
         }
       `}</style>
+      {/* Sub-Lenses */}
+      <SubLensQuickNav lensId="healthcare" />
       {/* ============================================================ */}
       {/* Compliance Banner                                            */}
       {/* ============================================================ */}

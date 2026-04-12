@@ -14,6 +14,7 @@ import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
+import { SubLensQuickNav } from '@/components/lens/SubLensQuickNav';
 
 interface Compound {
   id: string;
@@ -99,6 +100,9 @@ export default function ChemLensPage() {
   }
   return (
     <div data-lens-theme="chem" className="p-6 space-y-6">
+      {/* Sub-Lenses */}
+      <SubLensQuickNav lensId="chem" />
+
       {/* Safety Disclaimer */}
       <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg px-4 py-3 flex items-start gap-3">
         <AlertTriangle className="w-5 h-5 text-amber-400 mt-0.5 shrink-0" />

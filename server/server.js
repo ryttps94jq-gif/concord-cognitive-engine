@@ -32450,6 +32450,42 @@ try {
 
 structuredLog("info", "lens_runtime_loaded", { domainEngines: 24, superLensDomains: domainModules.length, totalActions: LENS_ACTIONS.size });
 
+// ── Sub-Lens Handler Auto-Registration ──────────────────────────────────────
+// Every sub-lens (math.topology, code.rust, …) gets a delegating handler
+// for each of its parent lens's actions. Must run after LENS_ACTIONS is
+// populated so the action enumeration picks up all parent handlers.
+try {
+  const { registerSubLensHandlers, getSubLensStats } = await import('./lib/sub-lens-handlers.js');
+  const subLensResult = registerSubLensHandlers(
+    registerLensAction,
+    (parent) => {
+      // Enumerate every action registered for this parent domain by
+      // scanning LENS_ACTIONS keys of the form `${parent}.${action}`.
+      const actions = [];
+      const seen = new Set();
+      for (const key of LENS_ACTIONS.keys()) {
+        const dotIdx = key.indexOf(".");
+        if (dotIdx <= 0) continue;
+        const domain = key.slice(0, dotIdx);
+        const action = key.slice(dotIdx + 1);
+        if (domain === parent && action && !seen.has(action)) {
+          seen.add(action);
+          actions.push(action);
+        }
+      }
+      return actions;
+    },
+    LENS_ACTIONS,
+  );
+  structuredLog("info", "sub_lens_handlers_registered", {
+    registered: subLensResult.count,
+    skipped: subLensResult.skipped,
+    stats: getSubLensStats(),
+  });
+} catch (e) {
+  structuredLog("warn", "sub_lens_handlers_init_failed", { error: e?.message });
+}
+
 // ── MCP (Model Context Protocol) Server ──────────────────────────────────────
 // Must be registered after LENS_ACTIONS and DOMAIN_ACTION_MANIFEST are populated.
 const mcpRouter = createMCPRouter({ LENS_ACTIONS, DOMAIN_ACTION_MANIFEST, makeCtx, STATE });

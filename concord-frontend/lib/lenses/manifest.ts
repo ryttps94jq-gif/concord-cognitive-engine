@@ -19,6 +19,8 @@
  *   const manifest = getLensManifest('music');
  */
 
+import { buildSubLensManifests } from './sub-lens-manifests';
+
 export interface LensManifest {
   /** Unique domain identifier (e.g. 'music', 'finance', 'studio') */
   domain: string;
@@ -1767,6 +1769,22 @@ export const LENS_MANIFESTS: LensManifest[] = [
     category: 'trades',
   },
 ];
+
+// ---- Sub-lens auto-registration ----
+// Every parent lens (math, physics, code, ...) fans out into a set of
+// sub-lenses whose manifests inherit from the parent (see
+// sub-lens-manifests.ts). We append those entries to LENS_MANIFESTS
+// here so downstream lookups treat sub-lenses as first-class citizens.
+{
+  const _subLensEntries = buildSubLensManifests(LENS_MANIFESTS);
+  const _seen = new Set(LENS_MANIFESTS.map(m => m.domain));
+  for (const entry of _subLensEntries) {
+    if (!_seen.has(entry.domain)) {
+      LENS_MANIFESTS.push(entry);
+      _seen.add(entry.domain);
+    }
+  }
+}
 
 // ---- Lookup helpers ----
 

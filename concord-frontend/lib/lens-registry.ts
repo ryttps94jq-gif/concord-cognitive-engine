@@ -630,3 +630,47 @@ export function getExtensionsByCategory(
 
   return result;
 }
+
+// ── Sub-Lens Hierarchy ─────────────────────────────────────────
+//
+// Mirror of the server-side hierarchical registry (see
+// server/lib/sub-lens-registry.js). These helpers proxy to the
+// /api/sub-lens/* endpoints and are safe to import in client code.
+
+/** A node in the sub-lens tree as returned by /api/sub-lens/tree. */
+export interface SubLensTreeNode {
+  id: string;
+  description?: string;
+  children: SubLensTreeNode[];
+}
+
+/**
+ * Fetches the full sub-lens hierarchy tree from the backend.
+ * Returns `[]` on network errors so callers can render gracefully.
+ */
+export async function getSubLensTree(): Promise<SubLensTreeNode[]> {
+  try {
+    const r = await fetch('/api/sub-lens/tree');
+    if (!r.ok) return [];
+    const data = await r.json();
+    return Array.isArray(data?.tree) ? (data.tree as SubLensTreeNode[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Fetches the children of a given lens id from /api/sub-lens/:lensId/children.
+ * Returns `[]` on failure.
+ */
+export async function getSubLensChildren(lensId: string): Promise<string[]> {
+  if (!lensId) return [];
+  try {
+    const r = await fetch(`/api/sub-lens/${encodeURIComponent(lensId)}/children`);
+    if (!r.ok) return [];
+    const data = await r.json();
+    return Array.isArray(data?.children) ? (data.children as string[]) : [];
+  } catch {
+    return [];
+  }
+}
