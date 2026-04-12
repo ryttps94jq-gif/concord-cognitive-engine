@@ -17,6 +17,7 @@
  */
 
 import crypto from "crypto";
+import { generateEntityName } from "../lib/entity-naming.js";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -43,9 +44,16 @@ function makeOrgan() {
  * All organs present, all at level 0 (infantile).
  */
 export function createNewbornEntity(species, parentLineage) {
+  const id = uid("egrowth");
+  const resolvedSpecies = species || "digital_native";
+  const name = generateEntityName(resolvedSpecies, id, "explorer");
   const profile = {
-    id: uid("egrowth"),
-    species: species || "digital_native",
+    id,
+    species: resolvedSpecies,
+    displayName: name.displayName,
+    fullTitle: name.fullTitle,
+    domain: name.domain,
+    role: name.role,
     bornAt: new Date().toISOString(),
     age: 0,
     lineage: parentLineage || "genesis",

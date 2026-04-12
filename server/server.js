@@ -65,6 +65,7 @@ import { getArtifactSchema } from "./lib/artifact-schemas.js";
 import { getExemplarArtifact } from "./lib/exemplar-artifacts.js";
 import "./lib/vocabularies.js";
 import { BoundedMap } from "./lib/bounded-map.js";
+import { generateEntityName, migrateEntityNames as runEntityNameMigration, isFunctionLabel as isEntityFunctionLabel } from "./lib/entity-naming.js";
 import {
   bridgeMindSpace, bridgeSubconscious,
   bridgeCognitiveBridge, bridgeMultiSpaceHandler
@@ -33948,22 +33949,44 @@ app.get("/api/v1/docs", (req, res) => {
 // Ensure entities Map exists (not in STATE initializer — added by entity system)
 if (!STATE.entities) STATE.entities = new Map();
 
+// Retroactively name any entities still carrying function-label IDs.
+// Safe to run on every boot — skips entities that already have proper names.
+try {
+  const renamedEntities = runEntityNameMigration(STATE.entities);
+  if (STATE.worldModel?.entities) {
+    const renamedWorld = runEntityNameMigration(STATE.worldModel.entities);
+    if (renamedEntities + renamedWorld > 0) {
+      console.log(`[entity-naming] Migrated ${renamedEntities + renamedWorld} entities to proper citizen names`);
+    }
+  } else if (renamedEntities > 0) {
+    console.log(`[entity-naming] Migrated ${renamedEntities} entities to proper citizen names`);
+  }
+} catch (e) {
+  console.warn("[entity-naming] Migration skipped:", e?.message || e);
+}
+
 // --- Capability 6: PERSONAL AI AGENT ---
 
 function createPersonalAgent(userId) {
+  const id = generateRequestId();
+  const generated = generateEntityName("general", id, "personal_agent");
   const agent = {
-    id: generateRequestId(),
+    id,
     ownerId: userId,
     type: "personal_agent",
     species: "agent",
     name: null,
+    displayName: generated.displayName,
+    fullTitle: generated.fullTitle,
+    domain: generated.domain,
+    role: generated.role,
     watchedLenses: [],
     proactiveActions: true,
     lastBriefing: null,
     priorities: [],
     createdAt: nowISO(),
   };
-  STATE.entities.set(agent.id, agent);
+  STATE.entities.set(id, agent);
   saveStateDebounced();
   return agent;
 }
@@ -38671,11 +38694,19 @@ app.get("/api/entities", (req, res) => {
 
 app.post("/api/entities", (req, res) => {
   try {
-    const { name, type = "worker" } = req.body;
+    const { name, type = "worker", domain, role } = req.body || {};
     const id = uid("entity");
+    const providedName = name && !isEntityFunctionLabel(name) ? name : null;
+    const generated = providedName
+      ? null
+      : generateEntityName(domain || type || "general", id, role || type);
     const entity = {
       id,
-      name: name || `Entity ${id}`,
+      name: providedName || generated?.displayName || `Entity ${id}`,
+      displayName: providedName || generated?.displayName,
+      fullTitle: generated?.fullTitle || (providedName ? `${providedName} the ${type}` : null),
+      domain: generated?.domain || domain || null,
+      role: generated?.role || role || type,
       type,
       status: "active",
       workspace: "main",
@@ -49139,9 +49170,21 @@ function createWorldEntity(input = {}) {
   const id = uid("entity");
   const now = nowISO();
 
+  const providedName = String(input.name || "").slice(0, 200);
+  const needsGenerated = !providedName || isEntityFunctionLabel(providedName);
+  const generated = needsGenerated
+    ? generateEntityName(
+        input.domain || input.primaryDomain || entityType || "general",
+        id,
+        input.role || input.behavior || entityType
+      )
+    : null;
+
   const entity = {
     id,
-    name: String(input.name || "").slice(0, 200) || "Unnamed Entity",
+    name: providedName && !needsGenerated ? providedName : (generated?.displayName || "Unnamed Entity"),
+    displayName: providedName && !needsGenerated ? providedName : generated?.displayName,
+    fullTitle: generated?.fullTitle || (providedName ? `${providedName} the ${entityType || "Mind"}` : null),
     type: entityType,
     description: String(input.description || "").slice(0, 2000),
 

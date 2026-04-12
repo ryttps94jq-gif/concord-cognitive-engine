@@ -5,6 +5,14 @@
 export interface Entity {
   id: string;
   name: string;
+  /** Proper citizen-style name (e.g. "Coltrane"). Deterministic from id+domain. */
+  displayName?: string;
+  /** Full title (e.g. "Coltrane the Seeker"). */
+  fullTitle?: string;
+  /** Normalized domain (music, code, physics, ...). */
+  domain?: string;
+  /** Behavioral role (critic, analyzer, explorer, ...). */
+  role?: string;
   species: string;
   status: 'alive' | 'dead' | 'dormant' | 'spawning';
   health: number;
@@ -13,6 +21,8 @@ export interface Entity {
   lastActiveAt: string;
   organs: EntityOrgan[];
   traits: Record<string, number>;
+  dtusCreated?: number;
+  masteryLevel?: number;
   metadata?: Record<string, unknown>;
 }
 
