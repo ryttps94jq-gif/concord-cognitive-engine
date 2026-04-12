@@ -65,8 +65,22 @@ import {
   Flame,
   Timer,
   Zap,
+  Dna,
+  Route,
+  ClipboardCheck,
+  Coins,
+  Send,
+  Sparkles,
+  Brain,
+  MessageSquare,
+  UserPlus,
+  Trophy,
+  Loader2,
   type LucideIcon,
 } from 'lucide-react';
+import { api } from '@/lib/api/client';
+import { GenomeGraph, type GenomeNode, type GenomeEdge } from '@/components/education/GenomeGraph';
+import { PathStepCard, type PathStep } from '@/components/education/PathStepCard';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -80,7 +94,25 @@ import { VisionAnalyzeButton } from '@/components/common/VisionAnalyzeButton';
 /*  Types                                                              */
 /* ------------------------------------------------------------------ */
 
-type ModeTab = 'Students' | 'Courses' | 'Assignments' | 'Grades' | 'Plans' | 'Certifications' | 'Resources' | 'Quizzes' | 'Study';
+type ModeTab =
+  | 'Students'
+  | 'Courses'
+  | 'Assignments'
+  | 'Grades'
+  | 'Plans'
+  | 'Certifications'
+  | 'Resources'
+  | 'Quizzes'
+  | 'Study'
+  // Concord Educational Engine — constraint-navigation learning surface
+  | 'Genome'
+  | 'Path'
+  | 'Proof'
+  | 'Tutor'
+  | 'Cohort'
+  | 'Assessment'
+  | 'Credentials'
+  | 'Earnings';
 type ArtifactType = 'Student' | 'Course' | 'Assignment' | 'Grade' | 'LessonPlan' | 'Certification' | 'Resource' | 'Quiz';
 type Status = 'enrolled' | 'active' | 'completed' | 'withdrawn' | 'graduated';
 type AttendanceStatus = 'present' | 'absent' | 'tardy' | 'excused';
@@ -178,6 +210,16 @@ interface EducationArtifact {
 }
 
 const MODE_TABS: { id: ModeTab; icon: LucideIcon; defaultType: ArtifactType }[] = [
+  // Constraint-navigation learning surface (Concord Educational Engine)
+  { id: 'Genome', icon: Dna, defaultType: 'Student' },
+  { id: 'Path', icon: Route, defaultType: 'Student' },
+  { id: 'Proof', icon: FileCheck, defaultType: 'Assignment' },
+  { id: 'Tutor', icon: GraduationCap, defaultType: 'Student' },
+  { id: 'Cohort', icon: Users, defaultType: 'Student' },
+  { id: 'Assessment', icon: ClipboardCheck, defaultType: 'Quiz' },
+  { id: 'Credentials', icon: Award, defaultType: 'Certification' },
+  { id: 'Earnings', icon: Coins, defaultType: 'Student' },
+  // Classic CRUD lens
   { id: 'Students', icon: Users, defaultType: 'Student' },
   { id: 'Courses', icon: BookOpen, defaultType: 'Course' },
   { id: 'Assignments', icon: ClipboardList, defaultType: 'Assignment' },
@@ -1547,6 +1589,52 @@ export default function EducationLensPage() {
           )}
         </div>
       )}
+
+      {/* ============================================================ */}
+      {/*  Concord Educational Engine — constraint-navigation surface  */}
+      {/* ============================================================ */}
+      <AnimatePresence mode="wait">
+        {activeTab === 'Genome' && (
+          <motion.div key="genome" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}>
+            <GenomePanel />
+          </motion.div>
+        )}
+        {activeTab === 'Path' && (
+          <motion.div key="path" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}>
+            <LearningPathPanel />
+          </motion.div>
+        )}
+        {activeTab === 'Proof' && (
+          <motion.div key="proof" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}>
+            <ProofByCitationPanel />
+          </motion.div>
+        )}
+        {activeTab === 'Tutor' && (
+          <motion.div key="tutor" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}>
+            <TutorPanel />
+          </motion.div>
+        )}
+        {activeTab === 'Cohort' && (
+          <motion.div key="cohort" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}>
+            <CohortPanel />
+          </motion.div>
+        )}
+        {activeTab === 'Assessment' && (
+          <motion.div key="assessment" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}>
+            <AssessmentPanel />
+          </motion.div>
+        )}
+        {activeTab === 'Credentials' && (
+          <motion.div key="credentials" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}>
+            <CredentialsPanel />
+          </motion.div>
+        )}
+        {activeTab === 'Earnings' && (
+          <motion.div key="earnings" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}>
+            <EarningsPanel />
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ============================================================ */}
       {/*  TAB: Students + Attendance Tracker                           */}
@@ -3187,5 +3275,273 @@ function StudyModePanel() {
         </div>
       ) : null}
     </section>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Concord Educational Engine — Panel Components
+// Each panel calls the /api/learning/* endpoints for real data.
+// ═══════════════════════════════════════════════════════════════════
+
+function PanelShell({ title, subtitle, icon: Icon, accent = 'neon-cyan', children }: {
+  title: string; subtitle?: string; icon: React.ElementType; accent?: string; children: React.ReactNode;
+}) {
+  return (
+    <section className="bg-lattice-surface border border-lattice-border rounded-xl p-6">
+      <div className="flex items-center gap-3 mb-4">
+        <Icon className={`w-5 h-5 text-${accent}`} />
+        <div>
+          <h3 className="text-lg font-semibold text-white">{title}</h3>
+          {subtitle && <p className="text-xs text-gray-500">{subtitle}</p>}
+        </div>
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function GenomePanel() {
+  const { data, isLoading } = useQuery({
+    queryKey: ['learning', 'genome'],
+    queryFn: async () => {
+      try {
+        const r = await fetch('/api/learning/genome');
+        return await r.json();
+      } catch { return null; }
+    },
+  });
+  return (
+    <PanelShell title="Knowledge Genome" subtitle="Your intellectual DNA" icon={Sparkles}>
+      {isLoading && <p className="text-sm text-gray-500">Loading genome…</p>}
+      {data?.ok === false && <p className="text-sm text-amber-400">Genome not available yet. Interact with DTUs to build your genome.</p>}
+      {data?.ok && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <StatCard label="Known" value={data.summary?.totalKnown ?? 0} />
+          <StatCard label="Mastered" value={data.summary?.totalMastered ?? 0} />
+          <StatCard label="Gaps" value={data.summary?.gapCount ?? 0} />
+          <StatCard label="Strongest" value={data.summary?.strongestDomain ?? '—'} />
+        </div>
+      )}
+      <p className="text-xs text-gray-500 mt-4">Mastery updates every time you read, cite, create, test, or teach a DTU.</p>
+    </PanelShell>
+  );
+}
+
+function LearningPathPanel() {
+  const { data, isLoading } = useQuery({
+    queryKey: ['learning', 'frontier'],
+    queryFn: async () => {
+      try {
+        const r = await fetch('/api/learning/frontier');
+        return await r.json();
+      } catch { return null; }
+    },
+  });
+  return (
+    <PanelShell title="Learning Path" subtitle="Navigate the feasibility manifold" icon={TrendingUp} accent="neon-purple">
+      {isLoading && <p className="text-sm text-gray-500">Computing frontier…</p>}
+      {!data?.frontier?.length && <p className="text-sm text-gray-500">No reachable frontier yet. Start with a core DTU.</p>}
+      {data?.frontier?.slice(0, 10).map((step: Record<string, unknown>, i: number) => (
+        <div key={i} className="flex items-center gap-3 p-3 bg-lattice-deep border border-lattice-border rounded-lg mb-2">
+          <span className="w-6 h-6 flex items-center justify-center text-xs bg-neon-purple/20 text-neon-purple rounded-full">{i + 1}</span>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm text-white truncate">{String(step.title || step.id)}</p>
+            <p className="text-xs text-gray-500">readiness {Math.round(Number(step.readiness || 0) * 100)}% · ~{Number(step.estimatedMinutes || 15)}m</p>
+          </div>
+        </div>
+      ))}
+    </PanelShell>
+  );
+}
+
+function ProofByCitationPanel() {
+  const [claim, setClaim] = useState('');
+  const [citations, setCitations] = useState('');
+  const submit = useMutation({
+    mutationFn: async () => {
+      const r = await fetch('/api/learning/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ claim, citations: citations.split(',').map(s => s.trim()).filter(Boolean) }),
+      });
+      return r.json();
+    },
+  });
+  return (
+    <PanelShell title="Proof by Citation" subtitle="Prove understanding by citing DTU evidence" icon={BookOpen} accent="neon-pink">
+      <div className="space-y-3">
+        <textarea value={claim} onChange={e => setClaim(e.target.value)} placeholder="Your claim…" className="w-full p-3 bg-lattice-deep border border-lattice-border rounded-lg text-sm text-white" rows={3} />
+        <input value={citations} onChange={e => setCitations(e.target.value)} placeholder="DTU IDs (comma-separated)" className="w-full p-3 bg-lattice-deep border border-lattice-border rounded-lg text-sm text-white" />
+        <button onClick={() => submit.mutate()} disabled={!claim || submit.isPending} className="px-4 py-2 bg-neon-pink/20 text-neon-pink border border-neon-pink/30 rounded-lg hover:bg-neon-pink/30 text-sm">
+          {submit.isPending ? 'Evaluating…' : 'Submit for Evaluation'}
+        </button>
+        {submit.data?.ok && (
+          <div className="p-3 bg-lattice-deep border border-lattice-border rounded-lg text-xs text-gray-300">
+            Grade: {Math.round((submit.data.evaluation?.grade || 0) * 100)}%
+            {submit.data.published && ' · Published as DTU'}
+          </div>
+        )}
+      </div>
+    </PanelShell>
+  );
+}
+
+function TutorPanel() {
+  const [query, setQuery] = useState('');
+  const [domain, setDomain] = useState('general');
+  const ask = useMutation({
+    mutationFn: async () => {
+      const r = await fetch('/api/learning/tutor/ask', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query, domain }),
+      });
+      return r.json();
+    },
+  });
+  return (
+    <PanelShell title="Entity Tutor" subtitle="AI mentors per domain" icon={User} accent="neon-cyan">
+      <div className="space-y-3">
+        <div className="flex gap-2">
+          <select value={domain} onChange={e => setDomain(e.target.value)} className="p-2 bg-lattice-deep border border-lattice-border rounded-lg text-sm text-white">
+            <option value="general">General</option>
+            <option value="math">Math</option>
+            <option value="physics">Physics</option>
+            <option value="code">Code</option>
+            <option value="philosophy">Philosophy</option>
+          </select>
+          <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Ask your tutor…" className="flex-1 p-2 bg-lattice-deep border border-lattice-border rounded-lg text-sm text-white" />
+          <button onClick={() => ask.mutate()} disabled={!query || ask.isPending} className="px-4 py-2 bg-neon-cyan/20 text-neon-cyan border border-neon-cyan/30 rounded-lg text-sm">Ask</button>
+        </div>
+        {ask.data?.response && (
+          <div className="p-3 bg-lattice-deep border border-lattice-border rounded-lg text-sm text-gray-300 whitespace-pre-wrap">{ask.data.response}</div>
+        )}
+      </div>
+    </PanelShell>
+  );
+}
+
+function CohortPanel() {
+  const { data } = useQuery({
+    queryKey: ['learning', 'cohort', 'mine'],
+    queryFn: async () => {
+      try { const r = await fetch('/api/learning/cohort/mine'); return await r.json(); } catch { return null; }
+    },
+  });
+  return (
+    <PanelShell title="Learning Cohorts" subtitle="Peer-matched learning groups" icon={Users} accent="neon-purple">
+      {!data?.cohorts?.length && <p className="text-sm text-gray-500">No cohorts yet. Form one from the dashboard.</p>}
+      {data?.cohorts?.map((c: Record<string, unknown>, i: number) => (
+        <div key={i} className="p-3 bg-lattice-deep border border-lattice-border rounded-lg mb-2">
+          <p className="text-sm text-white">{String(c.name || `Cohort ${i + 1}`)}</p>
+          <p className="text-xs text-gray-500">{String(c.domain || 'mixed')} · {(c.members as unknown[])?.length || 0} members</p>
+        </div>
+      ))}
+    </PanelShell>
+  );
+}
+
+function AssessmentPanel() {
+  const [domain, setDomain] = useState('general');
+  const gen = useMutation({
+    mutationFn: async () => {
+      const r = await fetch('/api/learning/assessment/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ domain }),
+      });
+      return r.json();
+    },
+  });
+  return (
+    <PanelShell title="STSVK Assessment" subtitle="Ungameable tests — synthesis, not recall" icon={GraduationCap} accent="neon-pink">
+      <div className="flex gap-2 mb-3">
+        <input value={domain} onChange={e => setDomain(e.target.value)} className="flex-1 p-2 bg-lattice-deep border border-lattice-border rounded-lg text-sm text-white" placeholder="Domain" />
+        <button onClick={() => gen.mutate()} disabled={gen.isPending} className="px-4 py-2 bg-neon-pink/20 text-neon-pink border border-neon-pink/30 rounded-lg text-sm">
+          {gen.isPending ? 'Generating…' : 'Generate'}
+        </button>
+      </div>
+      {gen.data?.questions?.map((q: Record<string, unknown>, i: number) => (
+        <div key={i} className="p-3 bg-lattice-deep border border-lattice-border rounded-lg mb-2">
+          <p className="text-xs uppercase text-neon-cyan mb-1">{String(q.type || 'question')}</p>
+          <p className="text-sm text-gray-300">{String(q.prompt || '')}</p>
+        </div>
+      ))}
+    </PanelShell>
+  );
+}
+
+function CredentialsPanel() {
+  const [domain, setDomain] = useState('general');
+  const issue = useMutation({
+    mutationFn: async () => {
+      const r = await fetch(`/api/learning/credential/me/${domain}`);
+      return r.json();
+    },
+  });
+  return (
+    <PanelShell title="Credential Genome" subtitle="Living, verifiable proof of understanding" icon={Award} accent="neon-cyan">
+      <div className="flex gap-2 mb-3">
+        <input value={domain} onChange={e => setDomain(e.target.value)} className="flex-1 p-2 bg-lattice-deep border border-lattice-border rounded-lg text-sm text-white" placeholder="Domain" />
+        <button onClick={() => issue.mutate()} disabled={issue.isPending} className="px-4 py-2 bg-neon-cyan/20 text-neon-cyan border border-neon-cyan/30 rounded-lg text-sm">Generate</button>
+      </div>
+      {issue.data?.credential && (
+        <div className="p-3 bg-lattice-deep border border-lattice-border rounded-lg">
+          <p className="text-xs text-gray-500">Credential ID: <span className="text-neon-cyan font-mono">{String(issue.data.credential.credentialId)}</span></p>
+          <div className="grid grid-cols-2 gap-2 mt-2 text-xs">
+            {Object.entries(issue.data.credential.metrics || {}).slice(0, 6).map(([k, v]) => (
+              <div key={k}><span className="text-gray-500">{k}:</span> <span className="text-white">{String(v)}</span></div>
+            ))}
+          </div>
+        </div>
+      )}
+    </PanelShell>
+  );
+}
+
+function EarningsPanel() {
+  const { data } = useQuery({
+    queryKey: ['learning', 'earnings'],
+    queryFn: async () => {
+      try { const r = await fetch('/api/learning/earnings/me'); return await r.json(); } catch { return null; }
+    },
+  });
+  const { data: rates } = useQuery({
+    queryKey: ['learning', 'rates'],
+    queryFn: async () => {
+      try { const r = await fetch('/api/learning/rates'); return await r.json(); } catch { return null; }
+    },
+  });
+  return (
+    <PanelShell title="Education Earnings" subtitle="Learn free. Teaching earns." icon={Award} accent="neon-purple">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+        <StatCard label="Total CC" value={data?.earnings?.total ?? 0} />
+        <StatCard label="Events" value={data?.earnings?.count ?? 0} />
+        <StatCard label="Taught" value={data?.earnings?.teachCount ?? 0} />
+        <StatCard label="Citations" value={data?.earnings?.citationCount ?? 0} />
+      </div>
+      {rates?.rates?.earning && (
+        <div className="p-3 bg-lattice-deep border border-lattice-border rounded-lg">
+          <p className="text-xs text-gray-500 uppercase mb-2">Rate Card</p>
+          <div className="grid grid-cols-2 gap-1 text-xs">
+            {Object.entries(rates.rates.earning).map(([k, v]) => (
+              <div key={k} className="flex justify-between">
+                <span className="text-gray-400">{k}</span>
+                <span className="text-neon-cyan">+{String(v)} CC</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </PanelShell>
+  );
+}
+
+function StatCard({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="p-3 bg-lattice-deep border border-lattice-border rounded-lg">
+      <p className="text-xs text-gray-500">{label}</p>
+      <p className="text-lg font-semibold text-white mt-1">{value}</p>
+    </div>
   );
 }

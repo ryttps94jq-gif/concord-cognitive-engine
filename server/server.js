@@ -31563,6 +31563,24 @@ try {
   logger.info('[routes] /api/stsvk mounted');
 } catch (e) { console.error('[routes] stsvk mount failed:', e); }
 
+// ===== Learning (Proof-by-Citation + STSVK Assessment + Credentials) =====
+import createLearningRouter from "./routes/learning.js";
+try {
+  // Expose DTU store + brains on globalThis so the learning router's
+  // lazy singletons can find them without plumbing through explicit deps.
+  try {
+    globalThis.STATE = STATE;
+    globalThis.dtuStore = STATE.dtus;
+    if (!STATE.assessments) STATE.assessments = new Map();
+  } catch (_e) { /* noop */ }
+  app.use("/api/learning", createLearningRouter({
+    STATE,
+    requireAuth: requireAuth(),
+    dtuStore: STATE.dtus,
+  }));
+  logger.info('[routes] /api/learning mounted');
+} catch (e) { console.error('[routes] learning mount failed:', e); }
+
 // ── Domain-Specific Action Manifest ─────────────────────────────────────────
 // ~450 domain-specific actions across 113 lenses, each routed to the
 // appropriate brain: U=utility(3b), S=subconscious(1.5b), R=repair(0.5b), C=conscious(7b)

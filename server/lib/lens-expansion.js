@@ -34,11 +34,16 @@ export const EXPANSION_DOMAINS = {
   chemistry: [
     "organic-chem", "inorganic-chem", "biochem", "analytical-chem",
     "physical-chem", "polymer-chem", "medicinal-chem", "electrochem",
+    "nuclear-chem", "surface-chem", "green-chem", "computational-chem",
+    "photochem", "supramolecular-chem",
   ],
   mathematics: [
     "topology", "number-theory", "algebraic-geometry",
     "differential-equations", "probability", "statistics",
     "combinatorics", "logic", "category-theory", "set-theory",
+    "real-analysis", "complex-analysis", "functional-analysis",
+    "differential-geometry", "graph-theory", "numerical-analysis",
+    "game-theory", "measure-theory",
   ],
   trades: [
     "hvac-specialist", "electrician-advanced", "plumber-advanced",
@@ -95,6 +100,10 @@ export const EXPANSION_DOMAINS = {
     "capoeira", "yoga-hatha", "yoga-ashtanga", "breathwork",
     "sleep-science", "circadian-optimization", "cold-therapy",
     "movement-therapy", "nutrition-science", "fasting",
+    "tai-chi", "qigong", "pilates", "aikido", "kendo",
+    "wing-chun", "krav-maga", "parkour", "functional-movement",
+    "stretching-science", "mobility-training", "breath-hold-training",
+    "heat-therapy", "hydrotherapy", "somatics",
   ],
 };
 
