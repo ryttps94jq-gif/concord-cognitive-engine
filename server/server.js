@@ -6041,6 +6041,22 @@ async function tryInitWebSockets(server) {
           currentAnimation: typeof data.currentAnimation === "string" ? data.currentAnimation.slice(0, 32) : "idle",
           districtId: typeof data.districtId === "string" ? data.districtId.slice(0, 64) : null,
         });
+        // Anti-cheat rejection: updateUserPosition returns ok:false
+        // with { reason, prev } for rate-limit / speed-hack / teleport
+        // detections. Nack back to the client so it can snap the
+        // avatar to the last good position. Rate-limit rejections are
+        // silent to avoid reflecting every dropped flood-packet.
+        if (pos && pos.ok === false) {
+          if (pos.reason !== "rate_limited") {
+            socket.emit("player:move:nack", {
+              reason: pos.reason,
+              prev: pos.prev || null,
+              observedSpeed: pos.observedSpeed,
+              maxSpeed: pos.maxSpeed,
+            });
+          }
+          return;
+        }
         // Ack back with the nearby-users payload so the client can
         // render remote avatars even if the broadcast tick hasn't
         // fired yet.
@@ -10401,7 +10417,39 @@ function dtusArray() { return typeof STATE.dtus?.values === "function" ? Array.f
  *
  * @param {string|null} [viewerId] - User requesting the list, if any
  */
+// Viewer location cache for userVisibleDTUs. Key: userId. Value:
+// { declaredRegional, declaredNational, expiresAt }. 30s TTL so a
+// user's federation picker applies in near-real-time without a DB
+// lookup on every feed query.
+const _VIEWER_LOC_CACHE = new Map();
+function _resolveViewerLocation(viewerId) {
+  if (!viewerId || viewerId === "anon") return { declaredRegional: null, declaredNational: null };
+  const now = Date.now();
+  const cached = _VIEWER_LOC_CACHE.get(viewerId);
+  if (cached && cached.expiresAt > now) return cached;
+  let declaredRegional = null;
+  let declaredNational = null;
+  try {
+    if (typeof db !== "undefined" && db) {
+      const row = db.prepare("SELECT declared_regional, declared_national FROM users WHERE id = ?").get(viewerId);
+      if (row) {
+        declaredRegional = row.declared_regional || null;
+        declaredNational = row.declared_national || null;
+      }
+    }
+  } catch (_e) { /* table / column may not exist on older deploys */ }
+  const entry = { declaredRegional, declaredNational, expiresAt: now + 30_000 };
+  _VIEWER_LOC_CACHE.set(viewerId, entry);
+  return entry;
+}
+
 function userVisibleDTUs(viewerId = null) {
+  // Resolve once per call so per-DTU filtering doesn't thrash the
+  // DB cache lookup. Anon viewers get no regional/national view
+  // which means any regional/national-tier DTU is hidden from them
+  // (correct — they haven't declared a location).
+  const viewerLoc = _resolveViewerLocation(viewerId);
+
   return dtusArray().filter(d => {
     // System internal filters (always applied)
     if (_SYSTEM_DTU_SOURCES.has(d.source)) return false;
@@ -10418,13 +10466,54 @@ function userVisibleDTUs(viewerId = null) {
       d.scope === "user" ||
       d.visibility === "private";
 
+    const owner = d.author || d.ownerId || d.userId || d.createdBy;
+
     if (isPrivate) {
       if (!viewerId) return false;
-      const owner = d.author || d.ownerId || d.userId || d.createdBy;
       if (owner !== viewerId) return false;
     }
+
+    // ── Federation tier filter ───────────────────────────────────
+    // Regional / national tier DTUs are only visible to viewers in
+    // the same region / nation. Owners always see their own
+    // regardless of tier. Legacy DTUs (no federation_tier) fall
+    // through to the pre-federation behavior.
+    const tier = d.federation_tier || d.federationTier || null;
+    if (tier && viewerId !== owner) {
+      if (tier === "local") {
+        // Local tier = owner-only; anyone else is blocked.
+        return false;
+      }
+      if (tier === "regional") {
+        const dtuRegional = d.location_regional || d.locationRegional || null;
+        // Viewer must declare and match. Unknown-regional DTUs fall
+        // through to the default (published) behavior.
+        if (dtuRegional) {
+          if (!viewerLoc.declaredRegional) return false;
+          if (viewerLoc.declaredRegional !== dtuRegional) return false;
+        }
+      } else if (tier === "national") {
+        const dtuNational = d.location_national || d.locationNational || null;
+        if (dtuNational) {
+          if (!viewerLoc.declaredNational) return false;
+          if (viewerLoc.declaredNational !== dtuNational) return false;
+        }
+      }
+      // tier === "global" — always visible, no extra check
+    }
+
     return true;
   });
+}
+
+/**
+ * Invalidate the cached declared region/nation for a user. Called
+ * after /api/auth/choose-universe so the feed picks up the new
+ * location immediately instead of waiting for the 30s TTL.
+ */
+function invalidateViewerLocation(userId) {
+  if (!userId) return;
+  _VIEWER_LOC_CACHE.delete(userId);
 }
 function dtusByIds(ids=[]) {
   const out = [];
@@ -23496,7 +23585,11 @@ app.use("/api/auth", createAuthRouter({
   generateCsrfToken,
   uid,
   structuredLog,
-  saveAuthData
+  saveAuthData,
+  // Pass through so choose-universe can invalidate the viewer
+  // location cache and the feed picks up the new region / nation
+  // without waiting for the 30s TTL.
+  invalidateViewerLocation,
 }));
 
 // ---- OAuth Endpoints (Google & Apple Sign-In) ----
@@ -49291,16 +49384,52 @@ try {
               // Position: actionParams.position or scatter near
               // the triggering player / city origin
               const pos = f.actionParams?.position || ctx || {};
+              // ── Appearance randomization ─────────────────────────
+              // If the mechanic doesn't provide an explicit appearance
+              // pick one from deterministic pools so every NPC the
+              // frontend renders has skin tone, hair, and outfit that
+              // matches their occupation. Keeps cities from being a
+              // sea of identical silhouettes.
+              const SKIN = ["#c8956c", "#8d5524", "#e0ac69", "#5a3218", "#f1c27d", "#ffdbac"];
+              const HAIR = ["#3d2314", "#1a1a1a", "#5a3e1c", "#8b6f47", "#c4a87a", "#2a2a2a"];
+              const HAIR_STYLES = ["short", "medium", "long", "bald", "ponytail"];
+              const BODY_TYPES = ["slim", "average", "muscular", "heavy"];
+              // Occupation-colored outfits so players can read NPC
+              // roles at a glance: guards wear blue, merchants green,
+              // artisans brown, scholars purple, citizens muted.
+              const occupation = String(f.actionParams?.occupation || "citizen");
+              const OUTFIT_BY_OCC = {
+                guard:    { top: "#1e3a8a", bottom: "#1e293b" },
+                merchant: { top: "#166534", bottom: "#422006" },
+                artisan:  { top: "#78350f", bottom: "#451a03" },
+                scholar:  { top: "#581c87", bottom: "#1e1b4b" },
+                medic:    { top: "#b91c1c", bottom: "#374151" },
+                farmer:   { top: "#14532d", bottom: "#713f12" },
+                citizen:  { top: "#475569", bottom: "#334155" },
+              };
+              const outfit = OUTFIT_BY_OCC[occupation] || OUTFIT_BY_OCC.citizen;
+              const rand = (arr) => arr[Math.floor(Math.random() * arr.length)];
+              const appearance = f.actionParams?.appearance || {
+                skinColor: rand(SKIN),
+                hairColor: rand(HAIR),
+                hairStyle: rand(HAIR_STYLES),
+                bodyType: rand(BODY_TYPES),
+                clothing: {
+                  top:    { color: outfit.top,    type: "shirt" },
+                  bottom: { color: outfit.bottom, type: "pants" },
+                },
+              };
               cityPresence.spawnNpc({
                 cityId,
                 name: f.actionParams?.name || f.actionParams?.entityId || `NPC-${existingNpcs + 1}`,
-                occupation: f.actionParams?.occupation || "citizen",
+                occupation,
                 x: Number(pos.x || 0) + (Math.random() - 0.5) * 10,
                 y: 0,
                 z: Number(pos.z || 0) + (Math.random() - 0.5) * 10,
                 health: Number(f.actionParams?.health) || 100,
                 isHostile: f.actionParams?.isHostile === true,
                 patrolPath: Array.isArray(f.actionParams?.patrolPath) ? f.actionParams.patrolPath : [],
+                appearance,
               });
               break;
             }
@@ -49323,23 +49452,212 @@ try {
               });
               break;
             }
-            case "award_xp":
-            case "award_currency":
-            case "give_item":
-            case "apply_buff":
-            case "teleport_player":
-            case "spawn_object":
-            case "change_weather":
-              // These delegate to existing lens handlers. For now we
-              // log them — full execution is follow-up work per action.
+            case "teleport_player": {
+              // Snap a player to a location. Uses the same path as
+              // respawnPlayer so chunk membership / dirty flag are
+              // updated correctly and the frontend receives the new
+              // position on the next broadcast tick.
+              const targetUserId = f.actionParams?.userId || ctx?.userId;
+              if (!targetUserId) break;
+              const tx = Number(f.actionParams?.x ?? 0);
+              const ty = Number(f.actionParams?.y ?? 0);
+              const tz = Number(f.actionParams?.z ?? 0);
+              try {
+                cityPresence.respawnPlayer(targetUserId, { cityId, x: tx, y: ty, z: tz });
+              } catch (_e) { /* player may not be online */ }
               realtimeEmit("world:action", {
                 cityId,
-                userId: ctx?.userId,
-                action: f.action,
-                params: f.actionParams || {},
+                userId: targetUserId,
+                action: "teleport_player",
+                params: { x: tx, y: ty, z: tz },
                 reward: f.reward,
               });
               break;
+            }
+            case "award_xp": {
+              // Grant XP to the triggering user's gameProfile.
+              // Falls through to the broadcast so the client HUD
+              // can animate the XP bar in real time.
+              const targetUserId = f.actionParams?.userId || ctx?.userId;
+              const xpAmount = Number(f.actionParams?.amount ?? f.reward ?? 10);
+              if (targetUserId && xpAmount > 0) {
+                if (!STATE.gameProfiles) STATE.gameProfiles = new Map();
+                if (!STATE.gameProfiles.has(targetUserId)) {
+                  STATE.gameProfiles.set(targetUserId, { userId: targetUserId, xp: 0, level: 1, questsCompleted: 0, badges: [] });
+                }
+                const profile = STATE.gameProfiles.get(targetUserId);
+                profile.xp = (profile.xp || 0) + xpAmount;
+                profile.level = Math.floor(profile.xp / 1000) + 1;
+              }
+              realtimeEmit("world:action", {
+                cityId,
+                userId: targetUserId,
+                action: "award_xp",
+                params: { amount: xpAmount },
+                reward: f.reward,
+              });
+              break;
+            }
+            case "give_item": {
+              // Insert directly into the player_inventory table so the
+              // item persists and shows up in /sim/inventory/:userId
+              // without a round-trip to the REST API.
+              const targetUserId = f.actionParams?.userId || ctx?.userId;
+              const itemId = String(f.actionParams?.itemId || `mech-${Date.now().toString(36)}`);
+              const qty = Math.max(1, Number(f.actionParams?.quantity || 1));
+              if (targetUserId && db) {
+                try {
+                  const existing = db.prepare(
+                    "SELECT quantity FROM player_inventory WHERE user_id = ? AND item_id = ?"
+                  ).get(targetUserId, itemId);
+                  if (existing) {
+                    db.prepare(
+                      "UPDATE player_inventory SET quantity = quantity + ? WHERE user_id = ? AND item_id = ?"
+                    ).run(qty, targetUserId, itemId);
+                  } else {
+                    db.prepare(
+                      "INSERT INTO player_inventory (user_id, item_id, quantity, slot, metadata) VALUES (?, ?, ?, ?, ?)"
+                    ).run(
+                      targetUserId,
+                      itemId,
+                      qty,
+                      f.actionParams?.slot || null,
+                      JSON.stringify(f.actionParams?.metadata || { name: f.actionParams?.name, type: f.actionParams?.type }),
+                    );
+                  }
+                } catch (_e) { /* table may not exist yet */ }
+              }
+              realtimeEmit("world:action", {
+                cityId,
+                userId: targetUserId,
+                action: "give_item",
+                params: { itemId, quantity: qty },
+                reward: f.reward,
+              });
+              break;
+            }
+            case "apply_buff": {
+              // Buffs stamp the player's clientState JSON bag so it
+              // round-trips through loadPlayerState / save. Short
+              // buffs (< 60s) can live only in memory.
+              const targetUserId = f.actionParams?.userId || ctx?.userId;
+              const buffId = String(f.actionParams?.buffId || "generic");
+              const durationMs = Number(f.actionParams?.durationMs ?? 30_000);
+              if (targetUserId) {
+                try {
+                  const pos = cityPresence.getUserPosition(targetUserId);
+                  if (pos) {
+                    const cs = pos.clientState || {};
+                    cs.buffs = cs.buffs || {};
+                    cs.buffs[buffId] = {
+                      appliedAt: Date.now(),
+                      expiresAt: Date.now() + durationMs,
+                      stats: f.actionParams?.stats || {},
+                    };
+                    pos.clientState = cs;
+                    pos.dirty = true;
+                  }
+                } catch (_e) { /* non-fatal */ }
+              }
+              realtimeEmit("world:action", {
+                cityId,
+                userId: targetUserId,
+                action: "apply_buff",
+                params: { buffId, durationMs },
+                reward: f.reward,
+              });
+              break;
+            }
+            case "spawn_object": {
+              // Create a lightweight DTU-shaped object and place it
+              // in the world so it shows up in the district layer.
+              // The full building DTU path has auth / rights checks we
+              // don't want fired from a mechanic, so we write a minimal
+              // synthetic DTU.
+              const objName = String(f.actionParams?.name || "spawned_object");
+              const objId = `world_obj_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+              const ox = Number(f.actionParams?.x ?? ctx?.x ?? 0);
+              const oy = Number(f.actionParams?.y ?? 0);
+              const oz = Number(f.actionParams?.z ?? ctx?.z ?? 0);
+              try {
+                if (STATE.dtus && !STATE.dtus.has(objId)) {
+                  STATE.dtus.set(objId, {
+                    id: objId,
+                    title: objName,
+                    kind: "world_object",
+                    source: "mechanic",
+                    ownerId: null,
+                    visibility: "public",
+                    scope: "local",
+                    createdAt: nowISO(),
+                    updatedAt: nowISO(),
+                    meta: {
+                      world: {
+                        cityId,
+                        position: { x: ox, y: oy, z: oz },
+                        mechanicTriggered: true,
+                      },
+                    },
+                  });
+                }
+              } catch (_e) { /* non-fatal */ }
+              realtimeEmit("world:action", {
+                cityId,
+                action: "spawn_object",
+                params: { objectId: objId, name: objName, x: ox, y: oy, z: oz },
+                reward: f.reward,
+              });
+              break;
+            }
+            case "change_weather": {
+              // Stamp the city's weather in STATE so new joiners pick
+              // it up via the district endpoint, then broadcast so
+              // currently-connected players animate immediately.
+              const weatherKind = String(f.actionParams?.weather || "clear");
+              const intensity = Number(f.actionParams?.intensity ?? 0.5);
+              try {
+                if (!STATE.cityWeather) STATE.cityWeather = new Map();
+                STATE.cityWeather.set(cityId, {
+                  weather: weatherKind,
+                  intensity,
+                  setAt: nowISO(),
+                });
+              } catch (_e) { /* non-fatal */ }
+              realtimeEmit("world:weather", {
+                cityId,
+                weather: weatherKind,
+                intensity,
+                setAt: nowISO(),
+              });
+              realtimeEmit("world:action", {
+                cityId,
+                action: "change_weather",
+                params: { weather: weatherKind, intensity },
+                reward: f.reward,
+              });
+              break;
+            }
+            case "award_currency": {
+              // Currency goes into the user's gameProfile.concordCoin.
+              const targetUserId = f.actionParams?.userId || ctx?.userId;
+              const amount = Number(f.actionParams?.amount ?? f.reward ?? 1);
+              if (targetUserId && amount > 0) {
+                if (!STATE.gameProfiles) STATE.gameProfiles = new Map();
+                if (!STATE.gameProfiles.has(targetUserId)) {
+                  STATE.gameProfiles.set(targetUserId, { userId: targetUserId, xp: 0, level: 1, concordCoin: 0, badges: [] });
+                }
+                const profile = STATE.gameProfiles.get(targetUserId);
+                profile.concordCoin = (profile.concordCoin || 0) + amount;
+              }
+              realtimeEmit("world:action", {
+                cityId,
+                userId: targetUserId,
+                action: "award_currency",
+                params: { amount },
+                reward: f.reward,
+              });
+              break;
+            }
             default:
               // Unknown action — still audit-log it below, don't crash
               break;

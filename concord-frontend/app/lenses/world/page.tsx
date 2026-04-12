@@ -32,6 +32,7 @@ const ChatSystem = dynamic(() => import('@/components/world-lens/ChatSystem'), {
 const InventoryPanel = dynamic(() => import('@/components/world-lens/InventoryPanel'), { ssr: false });
 const QuestPanel = dynamic(() => import('@/components/world-lens/QuestPanel'), { ssr: false });
 const PlayerPresence = dynamic(() => import('@/components/world-lens/PlayerPresence'), { ssr: false });
+const CombatSystem = dynamic(() => import('@/components/world-lens/CombatSystem'), { ssr: false });
 const MapNavigation = dynamic(() => import('@/components/world-lens/MapNavigation'), { ssr: false });
 const PlayerProfile = dynamic(() => import('@/components/world-lens/PlayerProfile'), { ssr: false });
 const CraftingPanel = dynamic(() => import('@/components/world-lens/CraftingPanel'), { ssr: false });
@@ -91,6 +92,7 @@ import {
   Wrench, Package, Code2, Terminal, Diff, BookOpen, BoxSelect,
   FileCode, GitBranch, Activity, Gauge, ShoppingCart,
   Award, Stamp, FlaskConical, History, Clapperboard, ChevronRight,
+  Swords,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '@/lib/api/client';
@@ -598,7 +600,7 @@ export default function WorldLensPage() {
 
   // 3D Explore mode state
   const [cameraMode, setCameraMode] = useState<'isometric' | 'follow' | 'free' | 'interior' | 'cinematic'>('follow');
-  const [showPanel, setShowPanel] = useState<'none' | 'inventory' | 'quests' | 'chat' | 'map' | 'crafting' | 'players' | 'profile' | 'collaboration' | 'livecollab' | 'events' | 'socialproof' | 'notifications' | 'smartnotify' | 'moderation' | 'ownership' | 'federation' | 'voice' | 'voiceassist'>('none');
+  const [showPanel, setShowPanel] = useState<'none' | 'inventory' | 'quests' | 'chat' | 'map' | 'crafting' | 'players' | 'profile' | 'collaboration' | 'livecollab' | 'events' | 'socialproof' | 'notifications' | 'smartnotify' | 'moderation' | 'ownership' | 'federation' | 'voice' | 'voiceassist' | 'combat'>('none');
   // Local player avatar — mutable so moves update it in place. On
   // first mount we ask the server for saved state (via player:load)
   // and land back wherever the user logged off.
@@ -630,6 +632,83 @@ export default function WorldLensPage() {
     currentAnimation: 'idle' | 'walk' | 'run' | 'sit' | 'build' | 'emote' | 'wave' | 'dance' | 'cheer' | 'point' | 'nod' | 'shake' | 'clap' | 'bow' | 'laugh' | 'cry' | 'think' | 'celebrate' | 'craft' | 'paint' | 'play' | 'write' | 'read' | 'mentor' | 'construct' | 'sweep' | 'lecture';
     timestamp: number;
   }>>([]);
+
+  // ── Combat state ────────────────────────────────────────────────
+  // Source of truth for combat HUD. Mirrors what the server sends
+  // back on combat:attack:ack / combat:hit / player:respawn:ack so
+  // damage numbers, health bars, and the death overlay all render
+  // from server-authoritative state. The `target` field doubles as
+  // the PvP click-target — clicking a player in PlayerPresence sets
+  // it and combat:attack sends to that id.
+  type CombatTargetInfo = {
+    id: string;
+    name: string;
+    health: number;
+    maxHealth: number;
+    level: number;
+    type: 'enemy' | 'player';
+  };
+  const [combatState, setCombatState] = useState<{
+    health: number;
+    maxHealth: number;
+    stamina: number;
+    maxStamina: number;
+    armor: number;
+    weapon: { name: string; damage: number; speed: number; type: string } | null;
+    target: CombatTargetInfo | null;
+    coverBonus: number;
+    isDead: boolean;
+    damageNumbers: Array<{ id: string; amount: number; isCrit: boolean; timestamp: number }>;
+    combatLog: Array<{ id: string; message: string; type: 'damage-dealt' | 'damage-taken' | 'block' | 'heal' | 'death' | 'info'; timestamp: string }>;
+    damageFlash: boolean;
+  }>({
+    health: 100,
+    maxHealth: 100,
+    stamina: 100,
+    maxStamina: 100,
+    armor: 10,
+    weapon: { name: 'Fists', damage: 8, speed: 1.5, type: 'melee' },
+    target: null,
+    coverBonus: 0,
+    isDead: false,
+    damageNumbers: [],
+    combatLog: [],
+    damageFlash: false,
+  });
+  const combatLogIdRef = useRef(0);
+  const dmgNumIdRef = useRef(0);
+  // Live mirror so socket handlers can read the current target / stamina
+  // without stale closures. Updated below via useEffect.
+  const combatStateRef = useRef<typeof combatState>({
+    health: 100,
+    maxHealth: 100,
+    stamina: 100,
+    maxStamina: 100,
+    armor: 10,
+    weapon: { name: 'Fists', damage: 8, speed: 1.5, type: 'melee' },
+    target: null,
+    coverBonus: 0,
+    isDead: false,
+    damageNumbers: [],
+    combatLog: [],
+    damageFlash: false,
+  });
+  const pushCombatLog = useCallback(
+    (message: string, type: 'damage-dealt' | 'damage-taken' | 'block' | 'heal' | 'death' | 'info') => {
+      combatLogIdRef.current++;
+      const now = new Date();
+      const ts = `${now.getMinutes()}:${String(now.getSeconds()).padStart(2, '0')}`;
+      setCombatState((prev) => ({
+        ...prev,
+        combatLog: [
+          { id: `cl-${combatLogIdRef.current}`, message, type, timestamp: ts },
+          ...prev.combatLog,
+        ].slice(0, 40),
+      }));
+    },
+    [],
+  );
+
   const [visibleLayers, setVisibleLayers] = useState(new Set(['water', 'power', 'drainage', 'road', 'data']));
   const [showValidation, setShowValidation] = useState(false);
   const [showWeather, setShowWeather] = useState(false);
@@ -725,17 +804,211 @@ export default function WorldLensPage() {
       });
     };
 
+    // ── Anti-cheat / move-rejection reconciliation ─────────────────
+    // The server validates every player:move and rejects speed-hacks,
+    // teleports, and rate-floods. When that happens it sends back the
+    // player's last known good position; we snap the local avatar
+    // back so the client can't silently drift out of sync.
+    const handleMoveNack = (msg: unknown) => {
+      const data = msg as {
+        reason?: string;
+        prev?: { x: number; y: number; z: number };
+      };
+      if (!data?.prev) return;
+      setPlayerAvatar((prev) => ({
+        ...prev,
+        position: { x: data.prev!.x, y: data.prev!.y, z: data.prev!.z },
+      }));
+      if (data.reason === 'speed_hack_detected' || data.reason === 'teleport_detected') {
+        pushCombatLog(`Movement rejected: ${data.reason.replace(/_/g, ' ')}`, 'info');
+      }
+    };
+
+    // ── Combat ack: our attack landed (or didn't) ──────────────────
+    const handleCombatAck = (msg: unknown) => {
+      const data = msg as {
+        ok: boolean;
+        error?: string;
+        damage?: number;
+        isCrit?: boolean;
+        targetHealth?: number;
+        targetMaxHealth?: number;
+        targetKilled?: boolean;
+        attackerStamina?: number;
+      };
+      if (!data?.ok) {
+        if (data?.error === 'out_of_range')       pushCombatLog('Target out of range.', 'info');
+        else if (data?.error === 'insufficient_stamina') pushCombatLog('Too tired to attack.', 'info');
+        else if (data?.error === 'different_city') pushCombatLog('Target is in another city.', 'info');
+        else if (data?.error === 'target_not_found') pushCombatLog('Target lost.', 'info');
+        else if (data?.error) pushCombatLog(`Attack failed: ${data.error.replace(/_/g, ' ')}`, 'info');
+        return;
+      }
+      dmgNumIdRef.current++;
+      setCombatState((prev) => ({
+        ...prev,
+        stamina: typeof data.attackerStamina === 'number' ? data.attackerStamina : prev.stamina,
+        target: prev.target
+          ? {
+              ...prev.target,
+              health: typeof data.targetHealth === 'number' ? data.targetHealth : prev.target.health,
+              maxHealth: typeof data.targetMaxHealth === 'number' ? data.targetMaxHealth : prev.target.maxHealth,
+            }
+          : prev.target,
+        damageNumbers: [
+          ...prev.damageNumbers,
+          {
+            id: `dmg-${dmgNumIdRef.current}`,
+            amount: data.damage ?? 0,
+            isCrit: !!data.isCrit,
+            timestamp: Date.now(),
+          },
+        ].slice(-12),
+      }));
+      const targetName = data.targetKilled
+        ? (combatStateRef.current.target?.name ?? 'target')
+        : (combatStateRef.current.target?.name ?? 'target');
+      pushCombatLog(
+        `You hit ${targetName} for ${data.damage} damage${data.isCrit ? ' (crit)' : ''}.`,
+        'damage-dealt',
+      );
+      if (data.targetKilled) {
+        pushCombatLog(`${targetName} defeated!`, 'death');
+        // Clear the killed target; the server will despawn it.
+        setCombatState((prev) => ({ ...prev, target: null }));
+      }
+    };
+
+    // ── Combat hit: broadcast — someone (including us) landed a hit ─
+    // We only care when WE'RE the target; otherwise the nearby-effect
+    // particle layer can render it but it doesn't touch our HUD.
+    const handleCombatHit = (msg: unknown) => {
+      const data = msg as {
+        attackerId: string;
+        targetId: string;
+        damage: number;
+        isCrit: boolean;
+        targetHealth: number;
+        targetMaxHealth: number;
+      };
+      if (!data) return;
+      if (data.targetId !== playerAvatar.id) return; // not us
+      setCombatState((prev) => ({
+        ...prev,
+        health: data.targetHealth,
+        maxHealth: data.targetMaxHealth,
+        damageFlash: true,
+      }));
+      pushCombatLog(
+        `Took ${data.damage} damage${data.isCrit ? ' (crit)' : ''}.`,
+        'damage-taken',
+      );
+      // Clear the flash after 300ms so pulsing red overlay fades
+      setTimeout(() => {
+        setCombatState((prev) => ({ ...prev, damageFlash: false }));
+      }, 300);
+    };
+
+    // ── Combat kill: someone died. If it's us, toggle the death overlay.
+    const handleCombatKill = (msg: unknown) => {
+      const data = msg as { attackerId: string; targetId: string };
+      if (!data) return;
+      if (data.targetId === playerAvatar.id) {
+        setCombatState((prev) => ({ ...prev, isDead: true, health: 0 }));
+        pushCombatLog('You have fallen. Respawn to continue.', 'death');
+      }
+    };
+
+    // ── Respawn ack: HP/stamina restored, position snapped to hub ──
+    const handleRespawnAck = (msg: unknown) => {
+      const data = msg as {
+        ok: boolean;
+        position?: { x: number; y: number; z: number };
+        health?: number;
+      };
+      if (!data?.ok) return;
+      setCombatState((prev) => ({
+        ...prev,
+        health: data.health ?? prev.maxHealth,
+        stamina: prev.maxStamina,
+        isDead: false,
+        damageFlash: false,
+      }));
+      if (data.position) {
+        setPlayerAvatar((prev) => ({
+          ...prev,
+          position: { x: data.position!.x, y: data.position!.y, z: data.position!.z },
+        }));
+      }
+      pushCombatLog('Respawned at district hub.', 'info');
+    };
+
+    // ── World notifications & mechanic actions ─────────────────────
+    // When a world-mechanic fires show_notification / world:action
+    // we thread it through the combat log so players see feedback
+    // without needing the notifications panel open.
+    const handleWorldNotification = (msg: unknown) => {
+      const data = msg as { message?: string };
+      if (!data?.message) return;
+      pushCombatLog(data.message, 'info');
+    };
+
+    const handleWorldAction = (msg: unknown) => {
+      const data = msg as {
+        action: string;
+        params?: Record<string, unknown>;
+        userId?: string;
+      };
+      if (!data?.action) return;
+      // Only surface actions targeted at us (or global ones).
+      if (data.userId && data.userId !== playerAvatar.id) return;
+      if (data.action === 'award_xp') {
+        pushCombatLog(`Awarded XP: +${data.params?.amount ?? 0}`, 'info');
+      } else if (data.action === 'give_item') {
+        pushCombatLog(`Received item: ${data.params?.itemId ?? 'unknown'}`, 'info');
+      } else if (data.action === 'teleport_player' && data.params) {
+        const p = data.params as { x?: number; y?: number; z?: number };
+        setPlayerAvatar((prev) => ({
+          ...prev,
+          position: { x: Number(p.x ?? 0), y: Number(p.y ?? 0), z: Number(p.z ?? 0) },
+        }));
+        pushCombatLog('Teleported by world mechanic.', 'info');
+      } else {
+        pushCombatLog(`World action: ${data.action}`, 'info');
+      }
+    };
+
     worldSocket.on('player:load:ack', handleLoadAck);
     worldSocket.on('city:positions', handleCityPositions);
     worldSocket.on('player:move:ack', handleMoveAck);
+    worldSocket.on('player:move:nack', handleMoveNack);
+    worldSocket.on('combat:attack:ack', handleCombatAck);
+    worldSocket.on('combat:hit', handleCombatHit);
+    worldSocket.on('combat:kill', handleCombatKill);
+    worldSocket.on('player:respawn:ack', handleRespawnAck);
+    worldSocket.on('world:notification', handleWorldNotification);
+    worldSocket.on('world:action', handleWorldAction);
 
     return () => {
       worldSocket.off('player:load:ack', handleLoadAck);
       worldSocket.off('city:positions', handleCityPositions);
       worldSocket.off('player:move:ack', handleMoveAck);
+      worldSocket.off('player:move:nack', handleMoveNack);
+      worldSocket.off('combat:attack:ack', handleCombatAck);
+      worldSocket.off('combat:hit', handleCombatHit);
+      worldSocket.off('combat:kill', handleCombatKill);
+      worldSocket.off('player:respawn:ack', handleRespawnAck);
+      worldSocket.off('world:notification', handleWorldNotification);
+      worldSocket.off('world:action', handleWorldAction);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [worldSocket.isConnected, activeDistrict.id]);
+
+  // Keep the live combat-state mirror fresh so socket handlers can
+  // read the latest target / stamina / etc. without re-registering.
+  useEffect(() => {
+    combatStateRef.current = combatState;
+  }, [combatState]);
 
   // Check first visit
   useEffect(() => {
@@ -768,6 +1041,57 @@ export default function WorldLensPage() {
   }, [_buildingItems, runWorldAction]);
 
   // ── Handlers ──────────────────────────────────────────────────
+
+  // ── Combat handlers ───────────────────────────────────────────
+  const handleSelectCombatTarget = useCallback((p: { id: string; name: string; type: 'enemy' | 'player' }) => {
+    setCombatState((prev) => ({
+      ...prev,
+      target: {
+        id: p.id,
+        name: p.name,
+        type: p.type,
+        health: 100,
+        maxHealth: 100,
+        level: 1,
+      },
+    }));
+    setShowPanel('combat');
+  }, []);
+
+  const handleAttack = useCallback(() => {
+    const target = combatStateRef.current.target;
+    if (!target) {
+      pushCombatLog('No target selected.', 'info');
+      return;
+    }
+    if (!worldSocket.isConnected) return;
+    worldSocket.emit('combat:attack', {
+      targetId: target.id,
+      baseDamage: combatStateRef.current.weapon?.damage ?? 10,
+      range: 3,
+      armorPierce: 0,
+    });
+  }, [worldSocket, pushCombatLog]);
+
+  const handleBlock = useCallback(() => {
+    // Block raises cover bonus briefly; reflects client-side until
+    // the server-side block action is wired.
+    setCombatState((prev) => ({ ...prev, coverBonus: Math.max(prev.coverBonus, 20) }));
+    pushCombatLog('Blocking — damage reduced while holding.', 'block');
+    setTimeout(() => {
+      setCombatState((prev) => ({ ...prev, coverBonus: 0 }));
+    }, 2000);
+  }, [pushCombatLog]);
+
+  const handleRespawn = useCallback(() => {
+    if (!worldSocket.isConnected) return;
+    worldSocket.emit('player:respawn', {
+      cityId: activeDistrict.id,
+      x: 0,
+      y: 0,
+      z: 0,
+    });
+  }, [worldSocket, activeDistrict.id]);
 
   const handleBuildingClick = useCallback((building: PlacedBuildingDTU) => {
     setSelectedBuilding(building);
@@ -1077,6 +1401,7 @@ export default function WorldLensPage() {
               { key: 'federation', label: 'Fed', icon: Network },
               { key: 'voice', label: 'Voice', icon: Mic },
               { key: 'voiceassist', label: 'Assist', icon: AudioLines },
+              { key: 'combat', label: 'Combat', icon: Swords },
             ] as const).map(({ key, label, icon: Icon }) => (
               <button
                 key={key}
@@ -1125,7 +1450,25 @@ export default function WorldLensPage() {
           )}
           {showPanel === 'players' && (
             <div className="absolute top-4 left-4 z-20 w-80 max-h-[70vh] overflow-auto pointer-events-auto">
-              <PlayerPresence />
+              <PlayerPresence
+                players={otherPlayers.map((op) => ({
+                  id: op.id,
+                  name: op.name,
+                  profession: 'Citizen',
+                  activity: (op.currentAnimation === 'build' ? 'building' :
+                             op.currentAnimation === 'walk' ? 'exploring' :
+                             op.currentAnimation === 'idle' ? 'idle' : 'socializing') as 'building' | 'trading' | 'exploring' | 'socializing' | 'mentoring' | 'spectating' | 'idle',
+                  online: true,
+                  distance: Math.round(
+                    Math.hypot(
+                      op.position.x - playerAvatar.position.x,
+                      op.position.z - playerAvatar.position.z,
+                    ),
+                  ),
+                }))}
+                instancePlayerCount={otherPlayers.length + 1}
+                onTargetPlayer={(t) => handleSelectCombatTarget({ id: t.id, name: t.name, type: 'player' })}
+              />
             </div>
           )}
           {showPanel === 'profile' && (
@@ -1219,6 +1562,21 @@ export default function WorldLensPage() {
             <div className="absolute top-4 left-4 z-20 w-80 max-h-[70vh] overflow-auto pointer-events-auto">
               <VoiceAssistant />
             </div>
+          )}
+          {/* Combat HUD — renders its own fixed-position overlays
+              (health bar, target panel, floating damage numbers,
+              combat log, death overlay). Surfaces whenever the
+              Combat panel is toggled, an active target is set, the
+              player is dead, or we've taken recent damage. */}
+          {(showPanel === 'combat' || combatState.target || combatState.isDead || combatState.damageFlash) && (
+            <CombatSystem
+              combatState={combatState}
+              combatMode="pve"
+              onAttack={handleAttack}
+              onBlock={handleBlock}
+              onUseItem={() => pushCombatLog('No consumable equipped.', 'info')}
+              onRespawn={handleRespawn}
+            />
           )}
         </div>
       ) : viewMode === 'streams' ? (

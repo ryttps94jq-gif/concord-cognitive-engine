@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import {
   Users, Eye, EyeOff, Shield, Lock, UserPlus, MessageSquare,
   User, Hammer, TrendingUp, Compass, Heart, GraduationCap,
-  Monitor, Clock, ChevronDown, X, Search,
+  Monitor, Clock, ChevronDown, X, Search, Swords,
 } from 'lucide-react';
 
 /* ── Types ─────────────────────────────────────────────────────── */
@@ -43,6 +43,12 @@ interface PlayerPresenceProps {
   onAddFriend?: (playerId: string) => void;
   onViewProfile?: (playerId: string) => void;
   onVisibilityChange?: (mode: VisibilityMode) => void;
+  /**
+   * Called when the player targets another player for PvP combat.
+   * Passes the target's id + name so the world page can set its
+   * combat target and start firing attacks.
+   */
+  onTargetPlayer?: (target: { id: string; name: string; type: 'player' }) => void;
 }
 
 /* ── Constants ─────────────────────────────────────────────────── */
@@ -93,6 +99,7 @@ export default function PlayerPresence({
   onAddFriend,
   onViewProfile,
   onVisibilityChange,
+  onTargetPlayer,
 }: PlayerPresenceProps) {
   const [tab, setTab] = useState<ListTab>('nearby');
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
@@ -160,6 +167,17 @@ export default function PlayerPresence({
           <UserPlus size={12} /> Add Friend
         </button>
       </div>
+      {onTargetPlayer && (
+        <button
+          onClick={() => {
+            onTargetPlayer({ id: player.id, name: player.name, type: 'player' });
+            setSelectedPlayer(null);
+          }}
+          className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded bg-red-600/80 hover:bg-red-500 text-white text-xs font-medium transition-colors"
+        >
+          <Swords size={12} /> Target for Combat
+        </button>
+      )}
       <button onClick={() => onViewProfile?.(player.id)} className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded bg-white/5 hover:bg-white/10 text-white/70 text-xs transition-colors">
         <User size={12} /> View Profile
       </button>

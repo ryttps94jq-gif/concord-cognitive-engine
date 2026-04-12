@@ -89,7 +89,8 @@ export default function createAuthRouter({
   generateCsrfToken,
   uid,
   structuredLog,
-  saveAuthData
+  saveAuthData,
+  invalidateViewerLocation,
 }) {
   const router = express.Router();
 
@@ -411,6 +412,11 @@ export default function createAuthRouter({
         primaryLens: nextPrimaryLens,
         ip: req.ip,
       });
+
+      // Drop the cached viewer-location so userVisibleDTUs sees the
+      // new region / nation on the very next feed query instead of
+      // waiting out the TTL.
+      try { invalidateViewerLocation?.(req.user.id); } catch (_e) { /* best-effort */ }
 
       return res.json({
         ok: true,
