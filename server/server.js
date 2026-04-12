@@ -66,6 +66,7 @@ import { getExemplarArtifact } from "./lib/exemplar-artifacts.js";
 import "./lib/vocabularies.js";
 import { BoundedMap } from "./lib/bounded-map.js";
 import { generateEntityName, migrateEntityNames as runEntityNameMigration, isFunctionLabel as isEntityFunctionLabel } from "./lib/entity-naming.js";
+import { validateSafeFetchUrl as _ssrfValidate, isUrlSafeAsync as _ssrfIsSafeAsync, fetchWithPinnedIp as _ssrfFetchPinned } from "./lib/ssrf-guard.js";
 import {
   bridgeMindSpace, bridgeSubconscious,
   bridgeCognitiveBridge, bridgeMultiSpaceHandler
@@ -7256,7 +7257,13 @@ async function runMacro(domain, name, input, ctx) {
     reproduction: new Set(["compatible-pairs", "status"]),
     lineage: new Set(["tree", "get"]),
     rights: new Set(["list", "get", "profile", "status", "metrics"]),
-    admin: new Set(["dashboard", "stats", "metrics", "audit", "logs", "queue", "backup", "ssl", "governance-rejections", "repair"]),
+    // SECURITY: admin macros are NEVER publicly callable. Audit logs,
+    // queue state, repair history, backup metadata — all require an
+    // explicit admin/owner/founder role checked INSIDE the handler.
+    // Previously these lived in publicReadDomains, which let any
+    // authenticated user pull system logs via `admin.logs`.
+    // Each admin macro now enforces requireAdmin() itself.
+    admin: new Set(),
     heartbeat: new Set(["status", "history", "metrics"]),
     ai: new Set(["search", "gaps", "embeddings"]),
     feedback: new Set(["aggregate"]),
@@ -8550,7 +8557,10 @@ register("worldmodel", "status", (ctx, _input = {}) => {
 
 register("worldmodel", "create_entity", (ctx, input = {}) => {
   enforceEthosInvariant("worldmodel_create_entity");
-  return createWorldEntity(input);
+  // SECURITY: stamp the creator from the authenticated actor so downstream
+  // update/delete macros can verify ownership. Never trust input.createdBy.
+  const createdBy = ctx?.actor?.userId || ctx?.actor?.id || "anon";
+  return createWorldEntity({ ...input, createdBy });
 }, { public: false });
 
 register("worldmodel", "create_relation", (ctx, input = {}) => {
@@ -8746,6 +8756,28 @@ register("worldmodel", "update_entity", (ctx, input = {}) => {
   const entity = ctx.state.worldModel.entities.get(entityId);
   if (!entity) return { ok: false, error: "Entity not found" };
 
+  // SECURITY: ownership check — only the creator or an admin can modify.
+  // Without this, any authenticated user could rewrite another user's
+  // entity by calling update_entity with a foreign entityId.
+  {
+    const userId = ctx?.actor?.userId || ctx?.actor?.id || ctx?.actor?.odId;
+    const role = ctx?.actor?.role || "guest";
+    const isAdmin = ["owner", "admin", "founder"].includes(role);
+    const ownerField = entity.source?.createdBy || entity.createdBy || entity.ownerId;
+    const isOwner = userId && ownerField && ownerField === userId;
+    if (!isAdmin) {
+      if (!userId || userId === "anon") {
+        return { ok: false, error: "Authentication required" };
+      }
+      if (!ownerField || ownerField === "system") {
+        return { ok: false, error: "unauthorized: system entity requires admin to modify" };
+      }
+      if (!isOwner) {
+        return { ok: false, error: "unauthorized: you can only update your own entities" };
+      }
+    }
+  }
+
   // Update allowed fields
   if (input.name) entity.name = String(input.name).slice(0, 200);
   if (input.description) entity.description = String(input.description).slice(0, 2000);
@@ -8771,6 +8803,26 @@ register("worldmodel", "delete_entity", (ctx, input = {}) => {
 
   const entity = ctx.state.worldModel.entities.get(entityId);
   if (!entity) return { ok: false, error: "Entity not found" };
+
+  // SECURITY: same ownership gate as update_entity — only creator or admin.
+  {
+    const userId = ctx?.actor?.userId || ctx?.actor?.id || ctx?.actor?.odId;
+    const role = ctx?.actor?.role || "guest";
+    const isAdmin = ["owner", "admin", "founder"].includes(role);
+    const ownerField = entity.source?.createdBy || entity.createdBy || entity.ownerId;
+    const isOwner = userId && ownerField && ownerField === userId;
+    if (!isAdmin) {
+      if (!userId || userId === "anon") {
+        return { ok: false, error: "Authentication required" };
+      }
+      if (!ownerField || ownerField === "system") {
+        return { ok: false, error: "unauthorized: system entity requires admin to delete" };
+      }
+      if (!isOwner) {
+        return { ok: false, error: "unauthorized: you can only delete your own entities" };
+      }
+    }
+  }
 
   // Delete associated relations
   const relationsToDelete = Array.from(ctx.state.worldModel.relations.entries())
@@ -10239,8 +10291,17 @@ function restoreDTUVersion(dtuId, version) {
   // Save current state as new version before restoring
   saveDTUVersion(dtu, "restore");
 
-  // Restore fields from snapshot
-  Object.assign(dtu, v.snapshot, { updatedAt: nowISO() });
+  // SECURITY: Object.assign does not filter out __proto__ / constructor /
+  // prototype keys, so a tampered version snapshot could pollute the DTU
+  // prototype chain and escalate privileges. Copy own enumerable keys
+  // only and skip any dangerous key.
+  const DANGEROUS_KEYS = new Set(["__proto__", "constructor", "prototype"]);
+  const snap = v.snapshot && typeof v.snapshot === "object" ? v.snapshot : {};
+  for (const [key, value] of Object.entries(snap)) {
+    if (DANGEROUS_KEYS.has(key)) continue;
+    dtu[key] = value;
+  }
+  dtu.updatedAt = nowISO();
   upsertDTU(dtu);
 
   return { ok: true, restoredTo: version, dtu };
@@ -16062,7 +16123,10 @@ register("dtu", "create", async (ctx, input) => {
   // ── Daily DTU soft cap tracking ───────────────────────────────────────
   const DAILY_DTU_SOFT_CAP = 200;
   const _dtuTodayKey = new Date().toISOString().slice(0, 10);
-  const _dtuUserId = ctx?.actor?.id || ctx?.actor?.userId || input.authorId || "anon";
+  // SECURITY: identity comes ONLY from authenticated session context — never
+  // from the request body. A previous `|| input.authorId` fallback let
+  // unauthenticated callers forge authorship.
+  const _dtuUserId = ctx?.actor?.userId || ctx?.actor?.id || "anon";
   if (!STATE._dailyDtuCount) STATE._dailyDtuCount = {};
   if (!STATE._dailyDtuCount[_dtuTodayKey]) STATE._dailyDtuCount = { [_dtuTodayKey]: {} };
   if (!STATE._dailyDtuCount[_dtuTodayKey][_dtuUserId]) STATE._dailyDtuCount[_dtuTodayKey][_dtuUserId] = 0;
@@ -16078,7 +16142,10 @@ register("dtu", "create", async (ctx, input) => {
   // ── Usage Rights Enforcement: check parent DTU consent ─────────────
   // If this DTU derives from another user's DTU, verify they allow citations.
   // Can't have people stealing work — consent must be explicit.
-  const _creatorId = ctx?.actor?.userId || ctx?.actor?.id || input.authorId || "anon";
+  // SECURITY: derive creator ONLY from authenticated actor so a caller can't
+  // forge `authorId` in the request body and match themselves as the parent's
+  // owner to bypass the consent check below.
+  const _creatorId = ctx?.actor?.userId || ctx?.actor?.id || "anon";
   const _lineageViolations = [];
   for (const parentRef of lineage) {
     const parentId = typeof parentRef === "string" ? parentRef : parentRef?.id;
@@ -16129,7 +16196,9 @@ register("dtu", "create", async (ctx, input) => {
     lineage,
     source,
     meta,
-    ownerId: ctx?.actor?.userId || ctx?.actor?.id || input.authorId || null,
+    // SECURITY: ownerId always comes from the authenticated actor — never
+    // from input.authorId, which would let callers forge ownership.
+    ownerId: ctx?.actor?.userId || ctx?.actor?.id || null,
     visibility: input.visibility || "private",
     consent: {
       publishToMarketplace: false,
@@ -16232,6 +16301,28 @@ register("dtu", "update", async (ctx, input) => {
   const existing = STATE.dtus.get(id);
   if (!existing) return { ok: false, error: "DTU not found" };
 
+  // SECURITY: ownership gate — only the DTU's owner (or admin) can update
+  // it. Without this check, any authenticated user could modify any
+  // other user's DTUs via `dtu.update({ id: bob_dtu, title: "pwned" })`.
+  // System/seed DTUs (no ownerId) are only modifiable by admins.
+  const userId = ctx?.actor?.userId || ctx?.actor?.id || ctx?.actor?.odId;
+  const role = ctx?.actor?.role || "guest";
+  const isAdmin = ["owner", "admin", "founder"].includes(role);
+  const ownerField = existing.ownerId || existing.createdBy || existing.createdByUser || existing.authorId;
+  const isOwner = userId && ownerField && ownerField === userId;
+  // Unowned DTUs (system/seed) — admin only. Anonymous actors cannot write.
+  if (!isAdmin) {
+    if (!userId || userId === "anon") {
+      return { ok: false, error: "Authentication required" };
+    }
+    if (!ownerField) {
+      return { ok: false, error: "unauthorized: system DTU requires admin to modify" };
+    }
+    if (!isOwner) {
+      return { ok: false, error: "unauthorized: you can only update your own DTUs" };
+    }
+  }
+
   // ---- Optimistic Locking (Category 2: Concurrency) ----
   // If client sends expectedVersion, reject if stale
   if (input.expectedVersion !== undefined) {
@@ -16314,9 +16405,17 @@ register("dtu", "delete", async (ctx, input) => {
     realtimeEmit("dtu:deleted", { id, title: dtu.title });
   } catch (e) { log("ws.warn", `dtu:deleted broadcast: ${e?.message}`); }
 
-  // Optionally notify federation
+  // Optionally notify federation. The recipient side already queues
+  // dtu:deleted events for human/council review rather than auto-applying
+  // them, but we still include the local actor + origin node so the
+  // reviewer has full provenance for the delete claim.
   if (_c3Federation.enabled) {
-    federationPublish("dtu:deleted", { id, deletedAt: nowISO() }).catch((err) => { console.error('[federation] Publish deletion failed:', err); });
+    federationPublish("dtu:deleted", {
+      id,
+      deletedAt: nowISO(),
+      deletedBy: ctx?.actor?.userId || ctx?.actor?.id || "system",
+      originNodeId: process.env.NODE_ID || "local",
+    }).catch((err) => { console.error('[federation] Publish deletion failed:', err); });
   }
 
   ctx.log("dtu.delete", `Deleted DTU: ${dtu.title}`, { id });
@@ -19265,41 +19364,33 @@ function stripHtml(html="") {
     .trim();
 }
 
-// SSRF protection helper
+// SSRF protection helpers — the full async validator lives in
+// ./lib/ssrf-guard.js (imported at the top of this file). This wrapper
+// preserves the legacy sync shape for callers that can't await.
 function isUrlSafe(urlStr) {
   try {
     const u = new URL(urlStr);
-    // Block non-HTTP(S) protocols
-    if (!["http:", "https:"].includes(u.protocol)) return { safe: false, reason: "Invalid protocol" };
-    // Block internal IPs and localhost
-    const host = u.hostname.toLowerCase();
-    if (host === "localhost" || host === "127.0.0.1" || host === "0.0.0.0" || host === "::1") {
-      return { safe: false, reason: "Internal host blocked" };
+    if (!["http:", "https:"].includes(u.protocol)) {
+      return { safe: false, reason: "Invalid protocol" };
     }
-    // Block private IP ranges
-    const ipMatch = host.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
-    if (ipMatch) {
-      const [, a, b] = ipMatch.map(Number);
-      if (a === 10) return { safe: false, reason: "Private IP blocked" };
-      if (a === 172 && b >= 16 && b <= 31) return { safe: false, reason: "Private IP blocked" };
-      if (a === 192 && b === 168) return { safe: false, reason: "Private IP blocked" };
-      if (a === 169 && b === 254) return { safe: false, reason: "Link-local IP blocked" };
-    }
-    // Block cloud metadata endpoints
-    if (host === "169.254.169.254" || host.endsWith(".internal") || host.endsWith(".local")) {
-      return { safe: false, reason: "Metadata endpoint blocked" };
+    if (u.username || u.password) {
+      return { safe: false, reason: "URL credentials not allowed" };
     }
     return { safe: true };
   } catch { return { safe: false, reason: "Invalid URL" }; }
+}
+async function isUrlSafeAsync(urlStr) {
+  return _ssrfIsSafeAsync(urlStr);
 }
 
 register("ingest", "url", async (ctx, input) => {
   const url = String(input.url || "");
   if (!url) return { ok:false, error:"url required" };
 
-  // SSRF protection
-  const urlCheck = isUrlSafe(url);
-  if (!urlCheck.safe) return { ok:false, error: urlCheck.reason };
+  // SSRF protection (async — resolves DNS and rejects private ranges,
+  // CGNAT, IPv4-mapped IPv6, etc.).
+  const ssrfCheck = await _ssrfValidate(url);
+  if (!ssrfCheck.ok) return { ok:false, error: ssrfCheck.error };
 
   const prompt = String(input.prompt || "");
   const tags = Array.isArray(input.tags) ? input.tags : ["ingest"];
@@ -19309,7 +19400,11 @@ register("ingest", "url", async (ctx, input) => {
   const timeout = setTimeout(() => controller.abort(), 15000);
   let res;
   try {
-    res = await fetch(url, { method:"GET", signal: controller.signal });
+    // Pinned fetch — the TCP connect lands on the IP we validated, so
+    // a malicious DNS server can't rebind to 127.0.0.1 between check and
+    // connect. Redirects are NOT followed; if we want to chase a redirect
+    // we'd need to validate each hop separately.
+    res = await _ssrfFetchPinned(ssrfCheck, { method:"GET", signal: controller.signal, redirect: "manual" });
   } catch (e) {
     clearTimeout(timeout);
     return { ok:false, error: e.name === "AbortError" ? "Request timeout" : String(e.message) };
@@ -21325,16 +21420,19 @@ register("crawl","fetch", async (ctx, input) => {
   const url = String(input.url||"").trim();
   if (!url) return { ok:false, error:"url required" };
 
-  // SSRF protection
-  const urlCheck = isUrlSafe(url);
-  if (!urlCheck.safe) return { ok:false, error: urlCheck.reason };
+  // SSRF protection (async — full range check + DNS rebinding guard)
+  const ssrfCheck = await _ssrfValidate(url);
+  if (!ssrfCheck.ok) return { ok:false, error: ssrfCheck.error };
 
   // Add timeout for fetch
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 20000);
   let resp;
   try {
-    resp = await fetch(url, { redirect: "follow", signal: controller.signal });
+    // redirect: "manual" because each hop would need its own SSRF check;
+    // following redirects unchecked lets a public-looking URL 302 to
+    // http://127.0.0.1/admin and bypass the whole guard.
+    resp = await _ssrfFetchPinned(ssrfCheck, { redirect: "manual", signal: controller.signal });
   } catch (e) {
     clearTimeout(timeout);
     return { ok:false, error: e.name === "AbortError" ? "Request timeout" : String(e.message) };
@@ -23779,8 +23877,13 @@ function startHeartbeat() {
       }
     } catch (err) { console.error('[system] Biological systems tick error:', err); }
 
-    // Plugin system tick — runs tick() on all loaded plugins
-    try { tickPlugins(STATE); } catch (err) { console.error('[system] Plugin tick error:', err); }
+    // Plugin system tick — runs tick() on all loaded plugins.
+    // tickPlugins is async and enforces a per-plugin timeout so one
+    // bad plugin can't freeze the heartbeat. We fire-and-forget the
+    // promise on purpose — the next heartbeat doesn't wait for the
+    // previous tick to finish, and failures surface through the
+    // returned `errors` and `unloaded` arrays.
+    tickPlugins(STATE).catch(err => console.error('[system] Plugin tick error:', err));
 
     // ── Want Engine: hourly decay (runs every 240th heartbeat @ 15s = ~hourly) ──
     if (_heartbeatCount % 240 === 0) {
@@ -26006,7 +26109,20 @@ register("persona", "delete", (ctx, input) => {
 });
 
 // ---- Admin Dashboard Endpoints ----
-register("admin", "dashboard", (_ctx, _input) => {
+// SECURITY: every admin macro runs through requireAdminRole() first so
+// they CANNOT be invoked by regular users even if they reach the macro
+// dispatcher directly. Previously these relied on being in
+// publicReadDomains which treated them as safe reads — fine for a
+// "status" macro but catastrophic for logs/metrics that leak system
+// internals and secrets from log lines.
+function requireAdminRole(ctx) {
+  const role = ctx?.actor?.role || "guest";
+  if (["owner", "admin", "founder"].includes(role)) return null;
+  return { ok: false, error: "unauthorized: admin role required" };
+}
+
+register("admin", "dashboard", (ctx, _input) => {
+  const denied = requireAdminRole(ctx); if (denied) return denied;
   const uptime = process.uptime();
   const memory = process.memoryUsage();
 
@@ -26064,6 +26180,7 @@ register("admin", "dashboard", (_ctx, _input) => {
 });
 
 register("admin", "logs", (ctx, input) => {
+  const denied = requireAdminRole(ctx); if (denied) return denied;
   const limit = clamp(Number(input.limit || 100), 1, 1000);
   const type = input.type || null;
 
@@ -26074,7 +26191,8 @@ register("admin", "logs", (ctx, input) => {
   return { ok: true, logs, count: logs.length };
 });
 
-register("admin", "metrics", (_ctx, _input) => {
+register("admin", "metrics", (ctx, _input) => {
+  const denied = requireAdminRole(ctx); if (denied) return denied;
   const chicken2 = STATE.__chicken2 || {};
   const growth = STATE.growth || {};
   const abstraction = STATE.abstraction || {};
@@ -36906,7 +37024,12 @@ app.post("/api/workspaces/:id/dtus", (req, res) => {
 
 app.post("/api/workspaces/:id/members", (req, res) => {
   try {
-    const result = addWorkspaceMember(req.params.id, req.body.userId, req.body.role);
+    // SECURITY: workspace owners can only add members if they're
+    // authenticated. The invited user's id comes from the body (this is
+    // an invite, not a self-action), but the inviter must be authenticated.
+    const inviterId = req.user?.id;
+    if (!inviterId) return res.status(401).json({ ok: false, error: "Authentication required" });
+    const result = addWorkspaceMember(req.params.id, req.body.userId, req.body.role, { inviterId });
     res.json(result);
   } catch (e) {
     res.status(500).json({ ok: false, error: String(e?.message || e) });
@@ -37165,7 +37288,10 @@ app.get("/api/onboarding", (req, res) => {
 
 app.post("/api/onboarding/complete", (req, res) => {
   try {
-    const userId = req.user?.id || req.body.userId || "anonymous";
+    // SECURITY: userId from the authenticated session. Anonymous onboarding
+    // progress is tracked per-IP so callers can't write progress for
+    // another user by supplying userId in the body.
+    const userId = req.user?.id || `anon-${req.ip}`;
     const result = completeOnboardingStep(userId, req.body.stepId);
     res.json(result);
   } catch (e) {
@@ -44897,7 +45023,10 @@ app.post("/api/bounties", (req, res) => {
 });
 
 app.post("/api/bounties/:id/claim", (req, res) => {
-  const result = claimBounty(req.params.id, req.body.userId);
+  // SECURITY: only the authenticated user can claim a bounty for themselves.
+  const userId = req.user?.id;
+  if (!userId) return res.status(401).json({ ok: false, error: "Authentication required" });
+  const result = claimBounty(req.params.id, userId);
   res.json(result);
 });
 
@@ -45580,7 +45709,10 @@ app.get("/api/twin", (req, res) => {
 
 app.post("/api/twin/update", (req, res) => {
   try {
-    const twin = updateCognitiveDigitalTwin(req.body.userId);
+    // SECURITY: twin updates are scoped to the authenticated user.
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ ok: false, error: "Authentication required" });
+    const twin = updateCognitiveDigitalTwin(userId);
     res.json({ ok: true, twin });
   } catch (e) {
     res.status(500).json({ ok: false, error: String(e?.message || e) });
@@ -47415,7 +47547,11 @@ app.get("/api/adaptive/layout", (req, res) => {
 });
 
 app.post("/api/adaptive/track", (req, res) => {
-  recordUsage(req.body.userId, req.body);
+  // SECURITY: adaptive layout tracking is scoped to the authenticated user;
+  // falling back to an IP-bucketed id for anonymous callers so they can't
+  // pollute another user's layout profile.
+  const userId = req.user?.id || `anon-${req.ip}`;
+  recordUsage(userId, req.body);
   res.json({ ok: true });
 });
 
@@ -47467,7 +47603,12 @@ function stopRecording(recordingId) {
 }
 
 app.post("/api/replay/start", (req, res) => {
-  const recording = startRecording(req.body.userId);
+  // SECURITY: only the authenticated user can start recording their own
+  // session — preventing one user from starting a recording attributed to
+  // another.
+  const userId = req.user?.id;
+  if (!userId) return res.status(401).json({ ok: false, error: "Authentication required" });
+  const recording = startRecording(userId);
   res.json({ ok: true, recording: { id: recording.id, startedAt: recording.startedAt } });
 });
 
@@ -58940,6 +59081,7 @@ setTimeout(() => { try { runBackup(); } catch (_e) { logger.debug('server', 'sil
 setInterval(() => { try { runBackup(); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); } }, _BACKUP_INTERVAL_MS);
 
 register("admin", "backup", (ctx, _input = {}) => {
+  const denied = requireAdminRole(ctx); if (denied) return denied;
   return runBackup();
 }, { summary: "Run a manual backup of all state data." });
 

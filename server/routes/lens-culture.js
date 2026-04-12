@@ -94,14 +94,21 @@ export default function createLensCultureRouter({ db, requireAuth }) {
   });
 
   // ── Resonance & Reflections ───────────────────────────────────────
+  // SECURITY: userId is derived from the authenticated session only.
+  // Previously we trusted req.body.userId, which let any caller act as any
+  // user by forging the field in the request body.
   router.post("/culture/:id/resonate", (req, res) => {
-    const result = resonateCulture(db, { userId: req.body.userId, dtuId: req.params.id });
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ ok: false, error: "Authentication required" });
+    const result = resonateCulture(db, { userId, dtuId: req.params.id });
     res.status(result.ok ? 200 : 400).json(result);
   });
 
   router.post("/culture/:id/reflect", (req, res) => {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ ok: false, error: "Authentication required" });
     const result = reflectOnCulture(db, {
-      userId: req.body.userId,
+      userId,
       dtuId: req.params.id,
       body: req.body.body,
       media: req.body.media,

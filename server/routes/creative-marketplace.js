@@ -217,43 +217,46 @@ export default function createCreativeMarketplaceRouter({ db, requireAuth, detec
   });
 
   router.post("/artifacts/:id/promote", (req, res) => {
-    const result = promoteArtifact(db, {
-      artifactId: req.params.id,
-      promotedBy: req.body.promotedBy,
-    });
+    // SECURITY: promotedBy comes from the authenticated session — never
+    // from req.body. Previously any caller could forge the promoter.
+    const promotedBy = req.user?.id;
+    if (!promotedBy) return res.status(401).json({ ok: false, error: "Authentication required" });
+    const result = promoteArtifact(db, { artifactId: req.params.id, promotedBy });
     res.status(result.ok ? 200 : 400).json(result);
   });
 
   // ── Artifact Lifecycle ──────────────────────────────────────────────
+  // SECURITY: creatorId is derived from the authenticated session, never
+  // from req.body. Previously, any caller could pause/resume/delist or
+  // re-price someone else's artifact by forging creatorId in the body.
 
   router.post("/artifacts/:id/pause", (req, res) => {
-    const result = pauseArtifact(db, {
-      artifactId: req.params.id,
-      creatorId: req.body.creatorId,
-    });
+    const creatorId = req.user?.id;
+    if (!creatorId) return res.status(401).json({ ok: false, error: "Authentication required" });
+    const result = pauseArtifact(db, { artifactId: req.params.id, creatorId });
     res.status(result.ok ? 200 : 400).json(result);
   });
 
   router.post("/artifacts/:id/resume", (req, res) => {
-    const result = resumeArtifact(db, {
-      artifactId: req.params.id,
-      creatorId: req.body.creatorId,
-    });
+    const creatorId = req.user?.id;
+    if (!creatorId) return res.status(401).json({ ok: false, error: "Authentication required" });
+    const result = resumeArtifact(db, { artifactId: req.params.id, creatorId });
     res.status(result.ok ? 200 : 400).json(result);
   });
 
   router.post("/artifacts/:id/delist", (req, res) => {
-    const result = delistArtifact(db, {
-      artifactId: req.params.id,
-      creatorId: req.body.creatorId,
-    });
+    const creatorId = req.user?.id;
+    if (!creatorId) return res.status(401).json({ ok: false, error: "Authentication required" });
+    const result = delistArtifact(db, { artifactId: req.params.id, creatorId });
     res.status(result.ok ? 200 : 400).json(result);
   });
 
   router.put("/artifacts/:id/price", (req, res) => {
+    const creatorId = req.user?.id;
+    if (!creatorId) return res.status(401).json({ ok: false, error: "Authentication required" });
     const result = updateArtifactPrice(db, {
       artifactId: req.params.id,
-      creatorId: req.body.creatorId,
+      creatorId,
       newPrice: req.body.newPrice,
     });
     res.status(result.ok ? 200 : 400).json(result);
