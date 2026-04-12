@@ -3645,7 +3645,7 @@ const AuthDB = {
 
   getUser(userId) {
     if (db) {
-      const stmt = db.prepare("SELECT * FROM users WHERE id = ? AND is_active = 1");
+      const stmt = db.prepare("SELECT id, username, email, password_hash, role, scopes, created_at, last_login_at FROM users WHERE id = ? AND is_active = 1");
       const row = stmt.get(userId);
       if (row) {
         return {
@@ -3666,7 +3666,7 @@ const AuthDB = {
 
   getUserByUsername(username) {
     if (db) {
-      const stmt = db.prepare("SELECT * FROM users WHERE username = ? AND is_active = 1");
+      const stmt = db.prepare("SELECT id, username, email, password_hash, role, scopes, created_at, last_login_at FROM users WHERE username = ? AND is_active = 1");
       const row = stmt.get(username);
       if (row) {
         return {
@@ -3690,7 +3690,7 @@ const AuthDB = {
 
   getUserByEmail(email) {
     if (db) {
-      const stmt = db.prepare("SELECT * FROM users WHERE email = ? AND is_active = 1");
+      const stmt = db.prepare("SELECT id, username, email, password_hash, role, scopes, created_at, last_login_at FROM users WHERE email = ? AND is_active = 1");
       const row = stmt.get(email);
       if (row) {
         return {
@@ -3748,7 +3748,7 @@ const AuthDB = {
 
   getApiKeyByHash(keyHash) {
     if (db) {
-      const stmt = db.prepare("SELECT * FROM api_keys WHERE key_hash = ? AND is_active = 1");
+      const stmt = db.prepare("SELECT id, user_id, name, key_hash, key_prefix, scopes, created_at, last_used_at FROM api_keys WHERE key_hash = ? AND is_active = 1");
       const row = stmt.get(keyHash);
       if (row) {
         return {
@@ -3781,7 +3781,7 @@ const AuthDB = {
 
   getApiKeysByUser(userId) {
     if (db) {
-      const stmt = db.prepare("SELECT * FROM api_keys WHERE user_id = ? AND is_active = 1");
+      const stmt = db.prepare("SELECT id, user_id, name, key_prefix, scopes, created_at, last_used_at FROM api_keys WHERE user_id = ? AND is_active = 1");
       return stmt.all(userId).map(row => ({
         id: row.id,
         userId: row.user_id,
@@ -3818,7 +3818,7 @@ const AuthDB = {
 
   getAllApiKeys() {
     if (db) {
-      const stmt = db.prepare("SELECT * FROM api_keys WHERE is_active = 1");
+      const stmt = db.prepare("SELECT id, user_id, name, key_hash, key_prefix, scopes, created_at, last_used_at FROM api_keys WHERE is_active = 1");
       return stmt.all().map(row => ({
         id: row.id,
         userId: row.user_id,
@@ -4066,14 +4066,97 @@ function createRefreshToken(userId) {
 function verifyToken(token) {
   if (!jwt) return null;
   try {
-    const decoded = jwt.verify(token, EFFECTIVE_JWT_SECRET);
+    // Pin algorithms — without this, jsonwebtoken would accept any
+    // algorithm listed in the token header, including `none`. Our
+    // tokens are signed with HS256.
+    const decoded = jwt.verify(token, EFFECTIVE_JWT_SECRET, {
+      algorithms: ["HS256"],
+    });
     // ---- Token Revocation Check (Tier 1: Auth Hardening) ----
     if (decoded.jti && _TOKEN_BLACKLIST.isRevoked(decoded.jti)) {
       return null; // Token has been revoked
     }
+    // Sliding idle timeout: if the token's jti hasn't been seen in
+    // IDLE_TIMEOUT_MS (bootstrapped from iat on first sight), reject it.
+    if (decoded.jti && _SESSION_ACTIVITY.isIdleTimedOut(decoded.jti, decoded.iat)) {
+      return null;
+    }
     return decoded;
-  } catch { return null; }
+  } catch (err) {
+    // SECURITY: log the failure reason server-side but never surface
+    // it to the caller — a verbose error tells an attacker whether
+    // their forgery is close.
+    if (err?.name === "JsonWebTokenError" || err?.name === "TokenExpiredError" || err?.name === "NotBeforeError") {
+      // Routine: bad/expired/premature token.
+      if (process.env.DEBUG_AUTH === "true") {
+        structuredLog("debug", "jwt_verify_failed", { reason: err.name, message: err.message });
+      }
+    } else {
+      // Something unexpected — algorithm confusion, malformed JWT, etc.
+      structuredLog("warn", "jwt_verify_unexpected", { reason: err?.name, message: err?.message });
+    }
+    return null;
+  }
 }
+
+// ---- Sliding Idle Session Timeout ----
+// On top of the absolute JWT expiry (7 days), we track last-seen per
+// JTI and reject tokens that have been idle longer than IDLE_TIMEOUT_MS.
+// This protects against stolen tokens that are never used by the
+// legitimate owner again: after 30 minutes of silence they stop working
+// even though the JWT exp is still in the future.
+const _SESSION_ACTIVITY = {
+  IDLE_TIMEOUT_MS: Number(process.env.SESSION_IDLE_TIMEOUT_MS || 30 * 60 * 1000), // 30 min default
+  MAX_ENTRIES: 100000,
+  lastSeen: new Map(), // jti -> timestamp (ms)
+
+  touch(jti) {
+    if (!jti) return;
+    this.lastSeen.set(jti, Date.now());
+    if (this.lastSeen.size > this.MAX_ENTRIES) {
+      // Evict oldest entries
+      const it = this.lastSeen.keys();
+      for (let i = 0, n = this.lastSeen.size - this.MAX_ENTRIES; i < n; i++) {
+        this.lastSeen.delete(it.next().value);
+      }
+    }
+  },
+
+  /**
+   * Check if the token has been idle too long.
+   * @param {string} jti - JWT ID
+   * @param {number} [iatSec] - JWT `iat` claim in seconds. Used as the
+   *   bootstrap last-seen when we've never tracked this jti before, so
+   *   a token that was issued weeks ago and is used for the first time
+   *   today still times out correctly.
+   */
+  isIdleTimedOut(jti, iatSec) {
+    if (!jti) return false; // Tokens without jti skip this check
+    const now = Date.now();
+    let last = this.lastSeen.get(jti);
+    if (last === undefined) {
+      // Never seen: use the token's issued-at as the bootstrap. If the
+      // token is very fresh this is equivalent to "just now"; if it's
+      // old the idle check below will correctly reject it.
+      last = typeof iatSec === "number" ? iatSec * 1000 : now;
+      this.lastSeen.set(jti, last);
+    }
+    return now - last > this.IDLE_TIMEOUT_MS;
+  },
+
+  clear(jti) {
+    if (jti) this.lastSeen.delete(jti);
+  },
+};
+
+// Periodic cleanup to keep the map bounded even without eviction pressure
+setInterval(() => {
+  const now = Date.now();
+  const cutoff = now - _SESSION_ACTIVITY.IDLE_TIMEOUT_MS * 2;
+  for (const [jti, last] of _SESSION_ACTIVITY.lastSeen) {
+    if (last < cutoff) _SESSION_ACTIVITY.lastSeen.delete(jti);
+  }
+}, 10 * 60 * 1000).unref?.();
 
 // ---- Token Blacklist (Tier 1: Auth Hardening) ----
 // In-memory blacklist with Redis support (when available) and SQLite persistence
@@ -4378,8 +4461,13 @@ function csrfMiddleware(req, res, next) {
   // In AUTH_MODE=public, skip CSRF — anonymous users have no session to protect
   if (AUTH_MODE === "public") return next();
 
-  // In development, CSRF is optional
-  if (NODE_ENV !== "production") return next();
+  // SECURITY: CSRF is now enforced in ALL environments by default. The
+  // previous `NODE_ENV !== "production"` bypass was a footgun — a
+  // reachable staging/preview instance running with NODE_ENV=development
+  // (or unset) had NO CSRF protection at all. Operators who genuinely
+  // need to disable it for local dev can set CONCORD_DISABLE_CSRF=true
+  // explicitly.
+  if (process.env.CONCORD_DISABLE_CSRF === "true") return next();
 
   // Validate CSRF token
   const headerToken = req.headers["x-csrf-token"] || req.headers["x-xsrf-token"];
@@ -4631,6 +4719,8 @@ function authMiddleware(req, res, next) {
         if (user) {
           req.user = user;
           req.authMethod = "cookie";
+          // Update sliding idle timer so active sessions stay alive.
+          if (decoded.jti) _SESSION_ACTIVITY.touch(decoded.jti);
           return _sovereignGate();
         }
       }
@@ -4644,6 +4734,7 @@ function authMiddleware(req, res, next) {
         if (user) {
           req.user = user;
           req.authMethod = "jwt";
+          if (decoded.jti) _SESSION_ACTIVITY.touch(decoded.jti);
           return _sovereignGate();
         }
       }
@@ -5802,28 +5893,57 @@ async function tryInitWebSockets(server) {
 
     // Room management
     socket.on("room:join", ({ room }) => {
-      if (room) {
-        // Authorization check: require authenticated user (in production)
-        if (!socket.data.userId && !socket.data.authenticated) {
-          console.warn('[ws] Unauthorized room join attempt:', { userId: socket.data.userId, room });
-          socket.emit('error', { code: 'UNAUTHORIZED', message: 'Not authorized to join this room' });
+      if (!room || typeof room !== "string") return;
+
+      // Authorization check: require authenticated user (in production)
+      if (!socket.data.userId && !socket.data.authenticated) {
+        console.warn('[ws] Unauthorized room join attempt:', { userId: socket.data.userId, room });
+        socket.emit('error', { code: 'UNAUTHORIZED', message: 'Not authorized to join this room' });
+        return;
+      }
+
+      // SECURITY: session-scoped rooms must verify the session BELONGS
+      // TO the connecting user. Previously we only checked that the
+      // session existed, which let user A join `session:<bob-private>`
+      // as long as the session was valid — exposing Bob's realtime
+      // events to A. Now we also verify ownership.
+      const sessionMatch = room.match(/^session:(.+)$/);
+      if (sessionMatch) {
+        const sessionId = sessionMatch[1];
+        const sess = STATE.sessions?.get(sessionId);
+        if (!sess) {
+          socket.emit('error', { code: 'UNAUTHORIZED', message: 'Session not found' });
           return;
         }
-
-        // For session-scoped rooms, verify the session exists and user has access
-        const sessionMatch = room.match(/^session:(.+)$/);
-        if (sessionMatch) {
-          const sessionId = sessionMatch[1];
-          if (!STATE.sessions.has(sessionId)) {
-            console.warn('[ws] Unauthorized room join attempt:', { userId: socket.data.userId, room });
-            socket.emit('error', { code: 'UNAUTHORIZED', message: 'Not authorized to join this room' });
-            return;
-          }
+        const uid = socket.data.userId;
+        const sessOwner = sess.userId || sess.ownerId || sess.createdBy;
+        const participants = Array.isArray(sess.participants) ? sess.participants : [];
+        const allowed =
+          !sessOwner || // legacy sessions without owner — allow (back-compat)
+          sessOwner === uid ||
+          participants.includes(uid);
+        if (!allowed) {
+          console.warn('[ws] Cross-user session room join blocked:', { userId: uid, room, sessOwner });
+          socket.emit('error', { code: 'UNAUTHORIZED', message: 'Not authorized to join this session' });
+          return;
         }
-
-        socket.join(room);
-        socket.emit("room:joined", { room, ts: nowISO() });
       }
+
+      // SECURITY: `org:<id>` rooms must also verify the connecting user
+      // belongs to that org, not just that the org id is well-formed.
+      const orgMatch = room.match(/^org:(.+)$/);
+      if (orgMatch) {
+        const orgId = orgMatch[1];
+        const userOrgId = socket.data.orgId || socket.data.actor?.orgId;
+        if (userOrgId && userOrgId !== orgId) {
+          console.warn('[ws] Cross-org room join blocked:', { userId: socket.data.userId, room, userOrgId });
+          socket.emit('error', { code: 'UNAUTHORIZED', message: 'Not authorized to join this org' });
+          return;
+        }
+      }
+
+      socket.join(room);
+      socket.emit("room:joined", { room, ts: nowISO() });
     });
 
     socket.on("room:leave", ({ room }) => {
@@ -5845,13 +5965,32 @@ async function tryInitWebSockets(server) {
         return;
       }
 
-      if (sessionId && STATE.sessions.has(sessionId)) {
-        c.sessionId = sessionId;
-        socket.join(`session:${sessionId}`);
+      // SECURITY: subscribe must verify the user owns / is a
+      // participant of the session before joining its room. Same gap
+      // that `room:join` had.
+      if (sessionId) {
+        const sess = STATE.sessions?.get(sessionId);
+        if (sess) {
+          const uid = socket.data.userId;
+          const sessOwner = sess.userId || sess.ownerId || sess.createdBy;
+          const participants = Array.isArray(sess.participants) ? sess.participants : [];
+          const allowed = !sessOwner || sessOwner === uid || participants.includes(uid);
+          if (allowed) {
+            c.sessionId = sessionId;
+            socket.join(`session:${sessionId}`);
+          } else {
+            socket.emit('error', { code: 'UNAUTHORIZED', message: 'Not authorized to subscribe to this session' });
+          }
+        }
       }
       if (orgId) {
-        c.orgId = orgId;
-        socket.join(`org:${orgId}`);
+        const userOrgId = socket.data.orgId || socket.data.actor?.orgId;
+        if (!userOrgId || userOrgId === orgId) {
+          c.orgId = orgId;
+          socket.join(`org:${orgId}`);
+        } else {
+          socket.emit('error', { code: 'UNAUTHORIZED', message: 'Not authorized to subscribe to this org' });
+        }
       }
       socket.emit("subscribed", { sessionId: c.sessionId, orgId: c.orgId, ts: nowISO() });
     });
@@ -7178,8 +7317,14 @@ function listMacros(domain) {
 }
 
 async function runMacro(domain, name, input, ctx) {
-  // v3: permissioned cognition (macro-level ACL). Defaults open for local-first dev.
-  const actor = ctx?.actor || { role: "owner", scopes: ["*"] };
+  // v3: permissioned cognition (macro-level ACL).
+  // SECURITY: previously defaulted to `{ role: "owner", scopes: ["*"] }`
+  // when no actor was supplied, which meant any caller that forgot to
+  // thread a ctx.actor through (API key dispatch, internal helpers) got
+  // root privileges. Now we default to the anonymous viewer so forgotten
+  // actor context fails closed instead of open. System-internal callers
+  // must explicitly mark themselves via `ctx.actor.internal = true`.
+  const actor = ctx?.actor || { userId: "anon", role: "viewer", scopes: ["read"] };
   // ACL check is deferred until after publicReadDomains is evaluated (see below).
 
   // Rate limit check for expensive macros (Phase 5.2)
@@ -9661,9 +9806,34 @@ function makeCtx(req=null) {
     try { affectPolicy = ATS.getSessionPolicy(req._atsSessionId); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
   }
 
+  // SECURITY: construct actor from (in order): req.actor (set by auth
+  // middleware from a verified session), req.user (from JWT verify),
+  // or a strictly-anonymous viewer. Previously, running under
+  // AUTH_MODE=public gave every anonymous caller `role: "member"` with
+  // `write` scope by default — that's too permissive for a
+  // default-deny-on-write-verbs world. Anonymous = viewer, read-only.
+  let resolvedActor;
+  if (req && req.actor) {
+    resolvedActor = req.actor;
+  } else if (req && req.user && req.user.id) {
+    resolvedActor = {
+      userId: req.user.id,
+      id: req.user.id,
+      orgId: req.user.orgId || "default",
+      role: req.user.role || "member",
+      scopes: Array.isArray(req.user.scopes) ? req.user.scopes : ["read", "write"],
+    };
+  } else {
+    resolvedActor = {
+      userId: "anon",
+      orgId: "public",
+      role: "viewer",
+      scopes: ["read"],
+    };
+  }
   return {
     state: STATE,
-    actor: (req && req.actor) ? req.actor : { userId: "anon", orgId: "public", role: AUTH_MODE === "public" ? "member" : "viewer", scopes: AUTH_MODE === "public" ? ["read", "write"] : ["read"] },
+    actor: resolvedActor,
     env: {
       version: VERSION,
       llmReady: LLM_READY,
@@ -23241,6 +23411,24 @@ function allowDomain(domain, { roles=["owner","admin","member"], scopes=["*"] } 
   MACRO_ACL_DOMAIN.set(domain, { roles, scopes });
 }
 
+// SECURITY: verbs that mutate state must NEVER be callable by an
+// anonymous viewer through the default-allow dev fallback. If a macro
+// uses any of these verbs and has no explicit ACL rule, it falls
+// through to default-deny regardless of environment.
+const _WRITE_VERB_PATTERNS = [
+  /^create/i, /^update/i, /^delete/i, /^remove/i, /^destroy/i,
+  /^purge/i, /^reset/i, /^wipe/i, /^drop/i, /^revoke/i,
+  /^approve/i, /^deny/i, /^promote/i, /^demote/i,
+  /^admin/i, /^grant/i, /^impersonate/i, /^override/i,
+  /^federate/i, /^broadcast/i, /^publish/i,
+  /^shutdown/i, /^restart/i, /^migrate/i,
+  /^bulk/i, /^import/i, /^install/i, /^uninstall/i,
+  /^configure/i, /^setConfig/i, /^set_config/i,
+];
+function _looksLikeWriteVerb(name) {
+  return _WRITE_VERB_PATTERNS.some((re) => re.test(name));
+}
+
 function _canRunMacro(actor, domain, name) {
   // Internal system calls (emergent ticks, autogen, repair cortex, etc.) are trusted
   // server-side processes that bypass ACL enforcement entirely.
@@ -23258,7 +23446,16 @@ function _canRunMacro(actor, domain, name) {
   // 2. Domain-level default
   const domRule = MACRO_ACL_DOMAIN.get(domain);
   if (domRule) return _checkRule(domRule);
-  // 3. No rule: open in development, default-deny in production
+  // 3. No rule: default-deny for write verbs (regardless of NODE_ENV),
+  //    default-deny in production for everything else, default-allow in
+  //    dev only for obviously read-only macros.
+  if (_looksLikeWriteVerb(name) || /^(admin|system|federation|governance|backup|repair|plugin|migration)$/i.test(domain)) {
+    // Write / admin-ish macros always need an explicit allowlist entry.
+    if (actor.role !== "admin" && actor.role !== "owner" && actor.role !== "founder") {
+      console.warn(`[MacroACL] DENY (write-verb default-deny): ${domain}.${name} actor=${actor.role}`);
+      return false;
+    }
+  }
   if (NODE_ENV === "production") {
     console.warn(`[MacroACL] DENY: no ACL rule for ${domain}.${name}`);
     return false;
@@ -24805,6 +25002,58 @@ function startChicken3Cron() {
 
 // Optional federation (local-first). Does NOT auto-commit remote DTUs.
 let _c3Federation = { enabled:false, client:null, channel:"lattice_broadcast" };
+// Federation replay protection — per-node state:
+//   lastSeq        : highest sequence number seen (reject seq <= lastSeq)
+//   nonces         : LRU of recently-seen nonces (reject duplicates)
+//   lastTs         : timestamp of last accepted event (reject stale ts)
+const _federationReplayState = new Map(); // nodeId -> { lastSeq, nonces: Set, lastTs }
+const FEDERATION_NONCE_WINDOW = 512;                   // ring size per node
+const FEDERATION_MAX_TS_SKEW_MS = 10 * 60 * 1000;      // 10 min
+
+function _checkFederationReplay(envelope) {
+  if (!envelope || typeof envelope !== "object") return { ok: false, reason: "malformed_envelope" };
+  const { nodeId, seq, nonce, ts } = envelope;
+  if (!nodeId || typeof nodeId !== "string") return { ok: false, reason: "missing_nodeId" };
+  if (typeof seq !== "number") return { ok: false, reason: "missing_seq" };
+  if (!nonce || typeof nonce !== "string") return { ok: false, reason: "missing_nonce" };
+  if (!ts) return { ok: false, reason: "missing_ts" };
+
+  // Reject events older than FEDERATION_MAX_TS_SKEW_MS to bound the
+  // nonce window we have to remember.
+  const tsMs = Date.parse(ts);
+  if (!Number.isFinite(tsMs)) return { ok: false, reason: "invalid_ts" };
+  const age = Date.now() - tsMs;
+  if (age > FEDERATION_MAX_TS_SKEW_MS) return { ok: false, reason: "stale_ts" };
+  if (age < -FEDERATION_MAX_TS_SKEW_MS) return { ok: false, reason: "future_ts" };
+
+  let entry = _federationReplayState.get(nodeId);
+  if (!entry) {
+    entry = { lastSeq: 0, nonces: new Set(), nonceRing: [], lastTs: 0 };
+    _federationReplayState.set(nodeId, entry);
+  }
+
+  // Replay: duplicate nonce
+  if (entry.nonces.has(nonce)) return { ok: false, reason: "replay_nonce" };
+
+  // Rollback: seq must be strictly greater than the last accepted seq.
+  // Allow wraparound (seq smaller than lastSeq but only by a lot — ie
+  // the counter rolled through 2^32).
+  if (seq <= entry.lastSeq && entry.lastSeq - seq < 0x7fffffff) {
+    return { ok: false, reason: "stale_seq", seq, lastSeq: entry.lastSeq };
+  }
+
+  // Accept — update state, evict oldest nonce if ring is full.
+  entry.nonces.add(nonce);
+  entry.nonceRing.push(nonce);
+  if (entry.nonceRing.length > FEDERATION_NONCE_WINDOW) {
+    const evict = entry.nonceRing.shift();
+    entry.nonces.delete(evict);
+  }
+  entry.lastSeq = seq;
+  entry.lastTs = tsMs;
+  return { ok: true };
+}
+
 async function startChicken3Federation() {
   try {
     const on = (String(process.env.FEDERATION_ENABLED || "").toLowerCase() === "true") || Boolean(STATE.__chicken3?.federationEnabled);
@@ -24818,13 +25067,33 @@ async function startChicken3Federation() {
     client.on("error", (err) => console.error("[Chicken3][Federation] redis error:", err));
     await client.connect();
 
+    const ownNodeId = process.env.NODE_ID || "local";
     const channel = String(process.env.FEDERATION_CHANNEL || "lattice_broadcast");
     await client.subscribe(channel, (message) => {
       try {
+        const obj = safeJson(message, null);
+
+        // SECURITY: drop messages we sent ourselves — Redis pub/sub
+        // delivers to every subscriber including the publisher, which
+        // would otherwise inflate federationRx and poison the replay
+        // ring with our own nonces.
+        if (obj?.nodeId && obj.nodeId === ownNodeId) return;
+
+        // Replay protection: reject stale/duplicate/rolled-back events.
+        const replay = _checkFederationReplay(obj);
+        if (!replay.ok) {
+          structuredLog("warn", "federation_replay_rejected", {
+            reason: replay.reason,
+            nodeId: obj?.nodeId,
+            type: obj?.type,
+            seq: obj?.seq,
+          });
+          return;
+        }
+
         STATE.__chicken3.stats.federationRx++;
         STATE.__chicken3.lastFederationAt = nowISO();
         // Local-first safety: do not auto apply. Queue for human/council review.
-        const obj = safeJson(message, null);
         const proposal = { id: uid("federation"), type:"FEDERATION_RX", createdAt: nowISO(), content: message.slice(0, 20000), meta: { parsed: obj } };
         STATE.queues.metaProposals.push({ id: proposal.id, type:"META_DTU_PROPOSAL", createdAt: proposal.createdAt, proposerOrganId: "federation", maturity: 1, content: `[FEDERATION] ${proposal.content.slice(0, 800)}`, tags:["meta","federation"], meta: proposal.meta });
         saveStateDebounced();
@@ -24840,17 +25109,26 @@ async function startChicken3Federation() {
   }
 }
 
+// Monotonic sequence counter for outbound federation events. Combined
+// with the nodeId, (nodeId, seq) forms a unique message identity that
+// peers can use to reject replays.
+let _federationOutSeq = 0;
+
 // Publish DTU/event to federation channel (Redis pub/sub)
 async function federationPublish(eventType, payload) {
   if (!_c3Federation.enabled || !_c3Federation.client) {
     return { ok: false, reason: "federation_not_enabled" };
   }
   try {
+    _federationOutSeq = (_federationOutSeq + 1) >>> 0;
+    const nonce = crypto.randomBytes(16).toString("hex");
     const msg = JSON.stringify({
       type: eventType,
       nodeId: process.env.NODE_ID || "local",
       payload,
-      ts: nowISO()
+      ts: nowISO(),
+      seq: _federationOutSeq,
+      nonce,
     });
     // Redis publish requires a separate client (subscriber can't publish)
     // Create a publisher client on first use
@@ -33979,6 +34257,30 @@ function isApiRateLimited(keyId, maxPerMinute) {
   return false;
 }
 
+// SECURITY: when dispatching via an API key, strip identity fields from
+// the request body before spreading into macro input. Otherwise a
+// client could put `authorId: "victim"` in the body and some macro
+// down the line might read it as the author despite the dispatcher
+// passing userId. Also stamp a proper `ctx.actor` so in-macro
+// role/ownership checks work — previously this path passed
+// `{ userId, source: "api" }` without `actor`, which combined with the
+// (now fixed) runMacro default meant every API-key call ran as owner.
+const _FORBIDDEN_BODY_KEYS = new Set([
+  "userId", "authorId", "ownerId", "createdBy", "createdByUser",
+  "actorId", "creatorId", "promotedBy", "hostUserId",
+  "role", "scopes", "internal", "actor",
+]);
+function _sanitizeApiInput(body) {
+  if (!body || typeof body !== "object") return {};
+  const out = {};
+  for (const [k, v] of Object.entries(body)) {
+    if (_FORBIDDEN_BODY_KEYS.has(k)) continue;
+    if (k === "__proto__" || k === "constructor" || k === "prototype") continue;
+    out[k] = v;
+  }
+  return out;
+}
+
 app.post("/api/v1/lens/:domain/:action", requireApiKey(), async (req, res) => {
   const { domain, action } = req.params;
   const userId = req.apiKey.userId;
@@ -33994,7 +34296,21 @@ app.post("/api/v1/lens/:domain/:action", requireApiKey(), async (req, res) => {
   }
 
   try {
-    const result = await runMacro(domain, action, { ...req.body, userId }, { userId, source: "api" });
+    const safeInput = { ..._sanitizeApiInput(req.body), userId };
+    const apiCtx = {
+      state: STATE,
+      userId,
+      source: "api",
+      actor: {
+        userId,
+        id: userId,
+        orgId: "api",
+        role: req.apiKey.role || "member",
+        scopes: Array.isArray(req.apiKey.scopes) ? req.apiKey.scopes : ["read", "write"],
+      },
+      reqMeta: { path: req.path, method: req.method, apiKeyId: req.apiKey.id },
+    };
+    const result = await runMacro(domain, action, safeInput, apiCtx);
 
     if (result && result.dtuId) {
       const dtu = STATE.dtus.get(result.dtuId);
@@ -34008,7 +34324,9 @@ app.post("/api/v1/lens/:domain/:action", requireApiKey(), async (req, res) => {
     trackApiUsage(req.apiKey.id, domain, action);
     res.json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    // SECURITY: don't leak internal error details to API clients
+    console.error("[api:v1/lens] macro error", { domain, action, err: err?.message, stack: err?.stack });
+    res.status(500).json({ error: "Internal error" });
   }
 });
 
