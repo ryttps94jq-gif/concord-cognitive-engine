@@ -3827,153 +3827,695 @@ function MetricBar({ label, value, color }: { label: string; value: number; colo
   );
 }
 
+interface TutorMessage {
+  role: 'user' | 'tutor';
+  text: string;
+  citations?: Array<{ id: string; title?: string }>;
+  socratic?: boolean;
+}
+
+interface TutorApiResponse {
+  response?: string;
+  answer?: string;
+  citations?: Array<{ id: string; title?: string }>;
+}
+
 function TutorPanel() {
   const [query, setQuery] = useState('');
   const [domain, setDomain] = useState('general');
-  const ask = useMutation({
-    mutationFn: async () => {
-      const r = await fetch('/api/learning/tutor/ask', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query, domain }),
-      });
-      return r.json();
+  const [socratic, setSocratic] = useState(false);
+  const [messages, setMessages] = useState<TutorMessage[]>([]);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+  }, [messages]);
+
+  const ask = useMutation<TutorApiResponse, Error, string>({
+    mutationFn: async (q: string) => {
+      const url = socratic ? '/api/learning/tutor/socratic' : '/api/learning/tutor/ask';
+      const r = await api.post(url, { query: q, domain });
+      return r.data as TutorApiResponse;
+    },
+    onSuccess: (res) => {
+      setMessages(prev => [
+        ...prev,
+        {
+          role: 'tutor',
+          text: res.response ?? res.answer ?? '(no response)',
+          citations: res.citations ?? [],
+          socratic,
+        },
+      ]);
+    },
+    onError: (err) => {
+      setMessages(prev => [
+        ...prev,
+        { role: 'tutor', text: `Tutor unavailable: ${err.message}` },
+      ]);
     },
   });
+
+  const submit = () => {
+    if (!query.trim()) return;
+    const q = query.trim();
+    setMessages(prev => [...prev, { role: 'user', text: q }]);
+    setQuery('');
+    ask.mutate(q);
+  };
+
   return (
-    <PanelShell title="Entity Tutor" subtitle="AI mentors per domain" icon={User} accent="neon-cyan">
-      <div className="space-y-3">
-        <div className="flex gap-2">
-          <select value={domain} onChange={e => setDomain(e.target.value)} className="p-2 bg-lattice-deep border border-lattice-border rounded-lg text-sm text-white">
-            <option value="general">General</option>
-            <option value="math">Math</option>
-            <option value="physics">Physics</option>
-            <option value="code">Code</option>
-            <option value="philosophy">Philosophy</option>
-          </select>
-          <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Ask your tutor…" className="flex-1 p-2 bg-lattice-deep border border-lattice-border rounded-lg text-sm text-white" />
-          <button onClick={() => ask.mutate()} disabled={!query || ask.isPending} className="px-4 py-2 bg-neon-cyan/20 text-neon-cyan border border-neon-cyan/30 rounded-lg text-sm">Ask</button>
-        </div>
-        {ask.data?.response && (
-          <div className="p-3 bg-lattice-deep border border-lattice-border rounded-lg text-sm text-gray-300 whitespace-pre-wrap">{ask.data.response}</div>
+    <PanelShell
+      title="Entity Tutor"
+      subtitle="AI mentors per domain — every answer is cited to DTU evidence"
+      icon={GraduationCap}
+      accent="neon-cyan"
+    >
+      <div className="flex flex-wrap gap-2 mb-3">
+        <select
+          value={domain}
+          onChange={e => setDomain(e.target.value)}
+          className="p-2 bg-lattice-deep border border-lattice-border rounded-lg text-sm text-white"
+        >
+          <option value="general">General</option>
+          <option value="math">Math</option>
+          <option value="physics">Physics</option>
+          <option value="code">Code</option>
+          <option value="philosophy">Philosophy</option>
+          <option value="history">History</option>
+          <option value="biology">Biology</option>
+          <option value="art">Art</option>
+        </select>
+        <button
+          type="button"
+          onClick={() => setSocratic(!socratic)}
+          className={cn(
+            'flex items-center gap-2 px-3 py-2 rounded-lg border text-sm transition-colors',
+            socratic
+              ? 'bg-neon-purple/20 text-neon-purple border-neon-purple/30'
+              : 'bg-lattice-deep text-gray-400 border-lattice-border',
+          )}
+        >
+          <Brain className="w-4 h-4" />
+          Socratic Mode {socratic ? 'ON' : 'OFF'}
+        </button>
+      </div>
+
+      <div
+        ref={scrollRef}
+        className="h-72 overflow-y-auto bg-lattice-deep border border-lattice-border rounded-lg p-3 space-y-3 mb-3"
+      >
+        {messages.length === 0 && (
+          <p className="text-sm text-gray-500">Ask your domain tutor anything. In Socratic mode, the tutor asks back instead of telling.</p>
+        )}
+        {messages.map((m, i) => (
+          <div
+            key={i}
+            className={cn(
+              'rounded-lg p-3 text-sm',
+              m.role === 'user'
+                ? 'bg-neon-cyan/10 border border-neon-cyan/30 text-white ml-8'
+                : 'bg-lattice-surface border border-lattice-border text-gray-200 mr-8',
+            )}
+          >
+            <div className="flex items-center gap-1 mb-1 text-[10px] uppercase tracking-wider text-gray-500">
+              {m.role === 'user' ? <User className="w-3 h-3" /> : <GraduationCap className="w-3 h-3" />}
+              {m.role}
+              {m.socratic && <span className="text-neon-purple">· socratic</span>}
+            </div>
+            <p className="whitespace-pre-wrap">{m.text}</p>
+            {m.citations && m.citations.length > 0 && (
+              <div className="mt-2 pt-2 border-t border-lattice-border">
+                <p className="text-[10px] uppercase text-gray-500 mb-1">Cited DTUs</p>
+                <div className="flex flex-wrap gap-1">
+                  {m.citations.map(c => (
+                    <span key={c.id} className="text-[10px] px-1.5 py-0.5 bg-neon-cyan/10 text-neon-cyan rounded">
+                      {c.title ?? c.id}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+        {ask.isPending && (
+          <div className="text-xs text-gray-500 flex items-center gap-2">
+            <Loader2 className="w-3 h-3 animate-spin" /> tutor thinking…
+          </div>
         )}
       </div>
+
+      <form
+        onSubmit={e => { e.preventDefault(); submit(); }}
+        className="flex gap-2"
+      >
+        <input
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          placeholder="Ask your tutor…"
+          className="flex-1 p-2 bg-lattice-deep border border-lattice-border rounded-lg text-sm text-white"
+        />
+        <button
+          type="submit"
+          disabled={!query || ask.isPending}
+          className="flex items-center gap-2 px-4 py-2 bg-neon-cyan/20 text-neon-cyan border border-neon-cyan/30 rounded-lg text-sm disabled:opacity-50"
+        >
+          <Send className="w-4 h-4" />
+          Ask
+        </button>
+      </form>
     </PanelShell>
   );
+}
+
+interface CohortMember {
+  id: string;
+  name?: string;
+  mastery?: number;
+}
+
+interface Cohort {
+  id: string;
+  name?: string;
+  domain?: string;
+  members?: CohortMember[];
+}
+
+interface CohortApiResponse {
+  ok?: boolean;
+  cohorts?: Cohort[];
 }
 
 function CohortPanel() {
-  const { data } = useQuery({
+  const queryClient = useQueryClient();
+  const [newCohortDomain, setNewCohortDomain] = useState('');
+  const [newCohortName, setNewCohortName] = useState('');
+
+  const mineQuery = useQuery<CohortApiResponse | null>({
     queryKey: ['learning', 'cohort', 'mine'],
     queryFn: async () => {
-      try { const r = await fetch('/api/learning/cohort/mine'); return await r.json(); } catch { return null; }
+      try {
+        const r = await api.get('/api/learning/cohort/mine');
+        return r.data as CohortApiResponse;
+      } catch {
+        return null;
+      }
     },
   });
+
+  const matchQuery = useQuery<CohortApiResponse | null>({
+    queryKey: ['learning', 'cohort', 'match'],
+    queryFn: async () => {
+      try {
+        const r = await api.get('/api/learning/cohort/match');
+        return r.data as CohortApiResponse;
+      } catch {
+        return null;
+      }
+    },
+  });
+
+  const formCohort = useMutation({
+    mutationFn: async () => {
+      const r = await api.post('/api/learning/cohort/form', {
+        name: newCohortName,
+        domain: newCohortDomain,
+      });
+      return r.data;
+    },
+    onSuccess: () => {
+      setNewCohortDomain('');
+      setNewCohortName('');
+      queryClient.invalidateQueries({ queryKey: ['learning', 'cohort'] });
+    },
+  });
+
+  const peerTeach = useMutation({
+    mutationFn: async (payload: { cohortId: string; peerId: string }) => {
+      const r = await api.post('/api/learning/cohort/teach', payload);
+      return r.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['learning', 'earnings'] });
+    },
+  });
+
+  const myCohorts = mineQuery.data?.cohorts ?? [];
+  const matches = matchQuery.data?.cohorts ?? [];
+
   return (
-    <PanelShell title="Learning Cohorts" subtitle="Peer-matched learning groups" icon={Users} accent="neon-purple">
-      {!data?.cohorts?.length && <p className="text-sm text-gray-500">No cohorts yet. Form one from the dashboard.</p>}
-      {data?.cohorts?.map((c: Record<string, unknown>, i: number) => (
-        <div key={i} className="p-3 bg-lattice-deep border border-lattice-border rounded-lg mb-2">
-          <p className="text-sm text-white">{String(c.name || `Cohort ${i + 1}`)}</p>
-          <p className="text-xs text-gray-500">{String(c.domain || 'mixed')} · {(c.members as unknown[])?.length || 0} members</p>
+    <PanelShell title="Learning Cohorts" subtitle="Peer-matched learning groups — teach to earn" icon={Users} accent="neon-purple">
+      <div className="p-3 bg-lattice-deep border border-lattice-border rounded-lg mb-4">
+        <h4 className="text-xs uppercase text-neon-purple mb-2">Form a Cohort</h4>
+        <div className="flex flex-col md:flex-row gap-2">
+          <input
+            value={newCohortName}
+            onChange={e => setNewCohortName(e.target.value)}
+            placeholder="Cohort name"
+            className="flex-1 p-2 bg-lattice-surface border border-lattice-border rounded-lg text-sm text-white"
+          />
+          <input
+            value={newCohortDomain}
+            onChange={e => setNewCohortDomain(e.target.value)}
+            placeholder="Domain"
+            className="flex-1 p-2 bg-lattice-surface border border-lattice-border rounded-lg text-sm text-white"
+          />
+          <button
+            type="button"
+            onClick={() => formCohort.mutate()}
+            disabled={!newCohortName || !newCohortDomain || formCohort.isPending}
+            className="flex items-center gap-2 px-4 py-2 bg-neon-purple/20 text-neon-purple border border-neon-purple/30 rounded-lg text-sm disabled:opacity-50"
+          >
+            <UserPlus className="w-4 h-4" /> Form
+          </button>
         </div>
-      ))}
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <h4 className="text-xs uppercase text-neon-cyan mb-2">My Cohorts</h4>
+          {mineQuery.isLoading && <p className="text-sm text-gray-500">Loading…</p>}
+          {!mineQuery.isLoading && myCohorts.length === 0 && (
+            <p className="text-sm text-gray-500">No cohorts yet. Form one above.</p>
+          )}
+          <div className="space-y-2">
+            {myCohorts.map(c => (
+              <div key={c.id} className="p-3 bg-lattice-deep border border-lattice-border rounded-lg">
+                <div className="flex items-center justify-between mb-2">
+                  <div>
+                    <p className="text-sm text-white">{c.name ?? `Cohort ${c.id}`}</p>
+                    <p className="text-xs text-gray-500">{c.domain ?? 'mixed'} · {(c.members ?? []).length} members</p>
+                  </div>
+                </div>
+                {(c.members ?? []).slice(0, 5).map(m => (
+                  <div key={m.id} className="flex items-center justify-between py-1 text-xs">
+                    <span className="text-gray-300 truncate">{m.name ?? m.id}</span>
+                    <button
+                      type="button"
+                      onClick={() => peerTeach.mutate({ cohortId: c.id, peerId: m.id })}
+                      disabled={peerTeach.isPending}
+                      className="px-2 py-0.5 bg-neon-cyan/10 text-neon-cyan border border-neon-cyan/30 rounded text-[10px] hover:bg-neon-cyan/20 disabled:opacity-50"
+                    >
+                      <MessageSquare className="w-3 h-3 inline mr-0.5" /> Teach
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <h4 className="text-xs uppercase text-neon-pink mb-2">Matching Your Genome</h4>
+          {matchQuery.isLoading && <p className="text-sm text-gray-500">Finding matches…</p>}
+          {!matchQuery.isLoading && matches.length === 0 && (
+            <p className="text-sm text-gray-500">No match suggestions yet.</p>
+          )}
+          <div className="space-y-2">
+            {matches.map(c => (
+              <div key={c.id} className="p-3 bg-lattice-deep border border-lattice-border rounded-lg">
+                <p className="text-sm text-white">{c.name ?? `Cohort ${c.id}`}</p>
+                <p className="text-xs text-gray-500">{c.domain ?? 'mixed'} · {(c.members ?? []).length} members</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
     </PanelShell>
   );
 }
+
+type AssessmentQuestionType = 'synthesis' | 'application' | 'contradiction' | 'gap';
+
+interface AssessmentQuestion {
+  id: string;
+  type: AssessmentQuestionType | string;
+  prompt: string;
+}
+
+interface AssessmentApiResponse {
+  ok?: boolean;
+  assessmentId?: string;
+  questions?: AssessmentQuestion[];
+}
+
+interface AssessmentGradeResponse {
+  ok?: boolean;
+  grades?: Array<{ questionId: string; score: number; feedback?: string }>;
+  overall?: number;
+}
+
+const QUESTION_TYPE_META: Record<string, { color: string; label: string }> = {
+  synthesis: { color: 'text-neon-cyan', label: 'Synthesis' },
+  application: { color: 'text-neon-purple', label: 'Application' },
+  contradiction: { color: 'text-neon-pink', label: 'Contradiction' },
+  gap: { color: 'text-amber-400', label: 'Gap' },
+};
 
 function AssessmentPanel() {
   const [domain, setDomain] = useState('general');
-  const gen = useMutation({
+  const [responses, setResponses] = useState<Record<string, string>>({});
+
+  const gen = useMutation<AssessmentApiResponse, Error, void>({
     mutationFn: async () => {
-      const r = await fetch('/api/learning/assessment/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ domain }),
+      const r = await api.post('/api/learning/assessment/generate', { domain });
+      return r.data as AssessmentApiResponse;
+    },
+    onSuccess: () => setResponses({}),
+  });
+
+  const grade = useMutation<AssessmentGradeResponse, Error, void>({
+    mutationFn: async () => {
+      const r = await api.post('/api/learning/assessment/grade', {
+        assessmentId: gen.data?.assessmentId,
+        responses: Object.entries(responses).map(([questionId, answer]) => ({ questionId, answer })),
       });
-      return r.json();
+      return r.data as AssessmentGradeResponse;
     },
   });
+
+  const questions = gen.data?.questions ?? [];
+
   return (
-    <PanelShell title="STSVK Assessment" subtitle="Ungameable tests — synthesis, not recall" icon={GraduationCap} accent="neon-pink">
-      <div className="flex gap-2 mb-3">
-        <input value={domain} onChange={e => setDomain(e.target.value)} className="flex-1 p-2 bg-lattice-deep border border-lattice-border rounded-lg text-sm text-white" placeholder="Domain" />
-        <button onClick={() => gen.mutate()} disabled={gen.isPending} className="px-4 py-2 bg-neon-pink/20 text-neon-pink border border-neon-pink/30 rounded-lg text-sm">
-          {gen.isPending ? 'Generating…' : 'Generate'}
+    <PanelShell title="STSVK Assessment" subtitle="Ungameable tests — synthesis, not recall" icon={ClipboardCheck} accent="neon-pink">
+      <div className="flex gap-2 mb-4">
+        <input
+          value={domain}
+          onChange={e => setDomain(e.target.value)}
+          placeholder="Domain (e.g. math, code, philosophy)"
+          className="flex-1 p-2 bg-lattice-deep border border-lattice-border rounded-lg text-sm text-white"
+        />
+        <button
+          type="button"
+          onClick={() => gen.mutate()}
+          disabled={gen.isPending || !domain}
+          className="px-4 py-2 bg-neon-pink/20 text-neon-pink border border-neon-pink/30 rounded-lg text-sm disabled:opacity-50"
+        >
+          {gen.isPending ? 'Generating…' : 'Generate Assessment'}
         </button>
       </div>
-      {gen.data?.questions?.map((q: Record<string, unknown>, i: number) => (
-        <div key={i} className="p-3 bg-lattice-deep border border-lattice-border rounded-lg mb-2">
-          <p className="text-xs uppercase text-neon-cyan mb-1">{String(q.type || 'question')}</p>
-          <p className="text-sm text-gray-300">{String(q.prompt || '')}</p>
+
+      {questions.length > 0 && (
+        <div className="space-y-3">
+          {questions.map((q, i) => {
+            const meta = QUESTION_TYPE_META[q.type as string] ?? { color: 'text-gray-400', label: String(q.type) };
+            const gradeItem = grade.data?.grades?.find(g => g.questionId === q.id);
+            return (
+              <div key={q.id ?? i} className="p-4 bg-lattice-deep border border-lattice-border rounded-lg">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-[10px] uppercase text-gray-500">Q{i + 1}</span>
+                  <span className={cn('text-[10px] uppercase font-semibold', meta.color)}>{meta.label}</span>
+                </div>
+                <p className="text-sm text-white mb-3">{q.prompt}</p>
+                <textarea
+                  value={responses[q.id] ?? ''}
+                  onChange={e => setResponses({ ...responses, [q.id]: e.target.value })}
+                  placeholder="Your response…"
+                  rows={3}
+                  className="w-full p-2 bg-lattice-surface border border-lattice-border rounded-lg text-sm text-white"
+                  disabled={!!grade.data}
+                />
+                {gradeItem && (
+                  <div className="mt-2 p-2 bg-lattice-surface border border-lattice-border rounded text-xs">
+                    <span className="text-neon-cyan">Score: {Math.round(gradeItem.score * 100)}%</span>
+                    {gradeItem.feedback && <p className="text-gray-400 mt-1">{gradeItem.feedback}</p>}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+
+          {!grade.data && (
+            <button
+              type="button"
+              onClick={() => grade.mutate()}
+              disabled={grade.isPending || Object.keys(responses).length === 0}
+              className="px-4 py-2 bg-neon-cyan/20 text-neon-cyan border border-neon-cyan/30 rounded-lg text-sm disabled:opacity-50"
+            >
+              {grade.isPending ? 'Grading…' : 'Submit Responses'}
+            </button>
+          )}
+
+          {grade.data?.overall != null && (
+            <div className="p-3 bg-neon-pink/10 border border-neon-pink/30 rounded-lg text-center">
+              <p className="text-xs text-gray-400 uppercase">Overall</p>
+              <p className="text-2xl font-bold text-neon-pink">{Math.round((grade.data.overall ?? 0) * 100)}%</p>
+            </div>
+          )}
         </div>
-      ))}
+      )}
+
+      {!gen.data && (
+        <p className="text-xs text-gray-500">Generate an assessment to see 4 question types — synthesis, application, contradiction, and gap.</p>
+      )}
     </PanelShell>
   );
 }
 
+interface CredentialMetrics {
+  dtusStudied?: number;
+  dtusMastered?: number;
+  dtusCreated?: number;
+  timesTaught?: number;
+  averageMastery?: number;
+  citationsReceived?: number;
+}
+
+interface CredentialApiResponse {
+  ok?: boolean;
+  credential?: {
+    credentialId?: string;
+    studentId?: string;
+    domain?: string;
+    issuedAt?: string;
+    hash?: string;
+    verifyUrl?: string;
+    metrics?: CredentialMetrics;
+  };
+}
+
+const METRIC_LABELS: Record<keyof CredentialMetrics, string> = {
+  dtusStudied: 'DTUs Studied',
+  dtusMastered: 'DTUs Mastered',
+  dtusCreated: 'DTUs Created',
+  timesTaught: 'Times Taught',
+  averageMastery: 'Avg Mastery',
+  citationsReceived: 'Citations Recv.',
+};
+
 function CredentialsPanel() {
   const [domain, setDomain] = useState('general');
-  const issue = useMutation({
+
+  const issue = useMutation<CredentialApiResponse, Error, void>({
     mutationFn: async () => {
-      const r = await fetch(`/api/learning/credential/me/${domain}`);
-      return r.json();
+      const r = await api.get(`/api/learning/credential/me/${encodeURIComponent(domain)}`);
+      return r.data as CredentialApiResponse;
     },
   });
+
+  const credential = issue.data?.credential;
+  const metrics = credential?.metrics ?? {};
+
   return (
     <PanelShell title="Credential Genome" subtitle="Living, verifiable proof of understanding" icon={Award} accent="neon-cyan">
-      <div className="flex gap-2 mb-3">
-        <input value={domain} onChange={e => setDomain(e.target.value)} className="flex-1 p-2 bg-lattice-deep border border-lattice-border rounded-lg text-sm text-white" placeholder="Domain" />
-        <button onClick={() => issue.mutate()} disabled={issue.isPending} className="px-4 py-2 bg-neon-cyan/20 text-neon-cyan border border-neon-cyan/30 rounded-lg text-sm">Generate</button>
+      <div className="flex gap-2 mb-4">
+        <input
+          value={domain}
+          onChange={e => setDomain(e.target.value)}
+          placeholder="Domain"
+          className="flex-1 p-2 bg-lattice-deep border border-lattice-border rounded-lg text-sm text-white"
+        />
+        <button
+          type="button"
+          onClick={() => issue.mutate()}
+          disabled={issue.isPending || !domain}
+          className="flex items-center gap-2 px-4 py-2 bg-neon-cyan/20 text-neon-cyan border border-neon-cyan/30 rounded-lg text-sm disabled:opacity-50"
+        >
+          <Award className="w-4 h-4" />
+          {issue.isPending ? 'Generating…' : 'Generate Credential'}
+        </button>
       </div>
-      {issue.data?.credential && (
-        <div className="p-3 bg-lattice-deep border border-lattice-border rounded-lg">
-          <p className="text-xs text-gray-500">Credential ID: <span className="text-neon-cyan font-mono">{String(issue.data.credential.credentialId)}</span></p>
-          <div className="grid grid-cols-2 gap-2 mt-2 text-xs">
-            {Object.entries(issue.data.credential.metrics || {}).slice(0, 6).map(([k, v]) => (
-              <div key={k}><span className="text-gray-500">{k}:</span> <span className="text-white">{String(v)}</span></div>
-            ))}
+
+      {issue.isError && (
+        <p className="text-sm text-amber-400">Credential unavailable for this domain yet.</p>
+      )}
+
+      {credential && (
+        <div className="p-4 bg-gradient-to-br from-cyan-500/10 to-purple-500/5 border border-neon-cyan/30 rounded-xl space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-[10px] uppercase tracking-wider text-neon-cyan">Verifiable Credential</p>
+              <p className="text-sm text-white font-mono">{credential.credentialId ?? '—'}</p>
+            </div>
+            <Award className="w-8 h-8 text-neon-cyan" />
           </div>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+            {(Object.keys(METRIC_LABELS) as Array<keyof CredentialMetrics>).map(key => {
+              const raw = metrics[key];
+              const display = raw == null ? '—' : key === 'averageMastery' ? `${Math.round((raw as number) * 100)}%` : String(raw);
+              return (
+                <div key={key} className="p-2 bg-lattice-deep border border-lattice-border rounded-lg">
+                  <p className="text-[10px] uppercase text-gray-500">{METRIC_LABELS[key]}</p>
+                  <p className="text-sm text-white font-semibold">{display}</p>
+                </div>
+              );
+            })}
+          </div>
+          {credential.hash && (
+            <div className="pt-2 border-t border-lattice-border text-xs">
+              <p className="text-gray-500 uppercase text-[10px]">Hash</p>
+              <p className="text-neon-purple font-mono truncate">{credential.hash}</p>
+            </div>
+          )}
+          {credential.verifyUrl && (
+            <a
+              href={credential.verifyUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-xs text-neon-cyan hover:underline"
+            >
+              <ExternalLink className="w-3 h-3" /> Verify this credential
+            </a>
+          )}
         </div>
       )}
     </PanelShell>
   );
 }
 
+interface EarningsApiResponse {
+  ok?: boolean;
+  earnings?: {
+    total?: number;
+    count?: number;
+    teachCount?: number;
+    citationCount?: number;
+    byAction?: Record<string, number>;
+  };
+}
+
+interface LeaderboardEntry {
+  rank?: number;
+  userId?: string;
+  name?: string;
+  total?: number;
+}
+
+interface LeaderboardApiResponse {
+  ok?: boolean;
+  leaderboard?: LeaderboardEntry[];
+}
+
+interface RatesApiResponse {
+  ok?: boolean;
+  rates?: {
+    earning?: Record<string, number>;
+  };
+}
+
 function EarningsPanel() {
-  const { data } = useQuery({
+  const earningsQuery = useQuery<EarningsApiResponse | null>({
     queryKey: ['learning', 'earnings'],
     queryFn: async () => {
-      try { const r = await fetch('/api/learning/earnings/me'); return await r.json(); } catch { return null; }
+      try {
+        const r = await api.get('/api/learning/earnings/me');
+        return r.data as EarningsApiResponse;
+      } catch {
+        return null;
+      }
     },
   });
-  const { data: rates } = useQuery({
+
+  const leaderboardQuery = useQuery<LeaderboardApiResponse | null>({
+    queryKey: ['learning', 'leaderboard'],
+    queryFn: async () => {
+      try {
+        const r = await api.get('/api/learning/leaderboard');
+        return r.data as LeaderboardApiResponse;
+      } catch {
+        return null;
+      }
+    },
+  });
+
+  const ratesQuery = useQuery<RatesApiResponse | null>({
     queryKey: ['learning', 'rates'],
     queryFn: async () => {
-      try { const r = await fetch('/api/learning/rates'); return await r.json(); } catch { return null; }
+      try {
+        const r = await api.get('/api/learning/rates');
+        return r.data as RatesApiResponse;
+      } catch {
+        return null;
+      }
     },
   });
+
+  const earnings = earningsQuery.data?.earnings;
+  const byAction = earnings?.byAction ?? {};
+
   return (
-    <PanelShell title="Education Earnings" subtitle="Learn free. Teaching earns." icon={Award} accent="neon-purple">
+    <PanelShell title="Education Earnings" subtitle="Learn free. Teaching earns." icon={Coins} accent="neon-purple">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-        <StatCard label="Total CC" value={data?.earnings?.total ?? 0} />
-        <StatCard label="Events" value={data?.earnings?.count ?? 0} />
-        <StatCard label="Taught" value={data?.earnings?.teachCount ?? 0} />
-        <StatCard label="Citations" value={data?.earnings?.citationCount ?? 0} />
+        <StatCard label="Total CC" value={earnings?.total ?? 0} />
+        <StatCard label="Events" value={earnings?.count ?? 0} />
+        <StatCard label="Taught" value={earnings?.teachCount ?? 0} />
+        <StatCard label="Citations" value={earnings?.citationCount ?? 0} />
       </div>
-      {rates?.rates?.earning && (
-        <div className="p-3 bg-lattice-deep border border-lattice-border rounded-lg">
-          <p className="text-xs text-gray-500 uppercase mb-2">Rate Card</p>
-          <div className="grid grid-cols-2 gap-1 text-xs">
-            {Object.entries(rates.rates.earning).map(([k, v]) => (
-              <div key={k} className="flex justify-between">
-                <span className="text-gray-400">{k}</span>
-                <span className="text-neon-cyan">+{String(v)} CC</span>
+
+      {Object.keys(byAction).length > 0 && (
+        <div className="p-3 bg-lattice-deep border border-lattice-border rounded-lg mb-4">
+          <p className="text-xs text-gray-500 uppercase mb-2">Earnings by Action</p>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-1 text-xs">
+            {Object.entries(byAction).map(([action, value]) => (
+              <div key={action} className="flex justify-between bg-lattice-surface rounded px-2 py-1">
+                <span className="text-gray-400">{action}</span>
+                <span className="text-neon-cyan">{value} CC</span>
               </div>
             ))}
           </div>
         </div>
       )}
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="p-3 bg-lattice-deep border border-lattice-border rounded-lg">
+          <div className="flex items-center gap-2 mb-2">
+            <Trophy className="w-4 h-4 text-amber-400" />
+            <p className="text-xs text-gray-500 uppercase">Leaderboard</p>
+          </div>
+          {leaderboardQuery.isLoading && <p className="text-xs text-gray-500">Loading…</p>}
+          {!leaderboardQuery.isLoading && (leaderboardQuery.data?.leaderboard ?? []).length === 0 && (
+            <p className="text-xs text-gray-500">No leaderboard data yet.</p>
+          )}
+          <div className="space-y-1">
+            {(leaderboardQuery.data?.leaderboard ?? []).slice(0, 10).map((entry, i) => (
+              <div key={entry.userId ?? i} className="flex items-center justify-between text-xs">
+                <span className="text-gray-400">#{entry.rank ?? i + 1}</span>
+                <span className="flex-1 mx-2 text-white truncate">{entry.name ?? entry.userId ?? '—'}</span>
+                <span className="text-neon-cyan">{entry.total ?? 0} CC</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="p-3 bg-lattice-deep border border-lattice-border rounded-lg">
+          <div className="flex items-center gap-2 mb-2">
+            <Coins className="w-4 h-4 text-neon-cyan" />
+            <p className="text-xs text-gray-500 uppercase">Rate Card</p>
+          </div>
+          {ratesQuery.data?.rates?.earning ? (
+            <div className="grid grid-cols-1 gap-1 text-xs">
+              {Object.entries(ratesQuery.data.rates.earning).map(([k, v]) => (
+                <div key={k} className="flex justify-between">
+                  <span className="text-gray-400">{k}</span>
+                  <span className="text-neon-cyan">+{v} CC</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-gray-500">Rates unavailable.</p>
+          )}
+        </div>
+      </div>
     </PanelShell>
   );
 }
