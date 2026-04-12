@@ -69,6 +69,10 @@ import { generateEntityName, migrateEntityNames as runEntityNameMigration, isFun
 import { validateSafeFetchUrl as _ssrfValidate, isUrlSafeAsync as _ssrfIsSafeAsync, fetchWithPinnedIp as _ssrfFetchPinned } from "./lib/ssrf-guard.js";
 import { registerCitation as economyRegisterCitation } from "./economy/royalty-cascade.js";
 import { checkAccess as economyCheckAccess } from "./economy/rights-enforcement.js";
+// World Lens / MMO presence system
+import * as cityPresence from "./lib/city-presence.js";
+import * as worldMechanics from "./lib/world-mechanics.js";
+import { getDistrictByLens as _worldGetDistrictByLens, placeWorldObject as _worldPlaceObject } from "./lib/world-engine.js";
 import {
   bridgeMindSpace, bridgeSubconscious,
   bridgeCognitiveBridge, bridgeMultiSpaceHandler
@@ -6009,11 +6013,74 @@ async function tryInitWebSockets(server) {
       socket.emit("pong", { ts: nowISO() });
     });
 
+    // ── World Lens / MMO: player movement sync ──────────────────────
+    // Frontend emits this every ~50-100ms from AvatarSystem3D while
+    // the local player is moving. We update the in-memory presence
+    // map (which broadcasts to nearby clients on the 100ms tick) and
+    // optionally fire chunk/zone-boundary triggers.
+    //
+    // Rate-limit: accept at most ~30Hz per socket so a misbehaving
+    // client can't flood the broadcast loop.
+    const _moveRateState = { last: 0 };
+    socket.on("player:move", (data) => {
+      const userId = socket.data?.userId;
+      if (!userId) return; // Unauthenticated — silently drop
+      if (!data || typeof data !== "object") return;
+      const now = Date.now();
+      if (now - _moveRateState.last < 33) return; // ~30Hz cap
+      _moveRateState.last = now;
+      try {
+        const pos = cityPresence.updateUserPosition(userId, {
+          cityId: String(data.cityId || "concordia-central"),
+          x: Number(data.x) || 0,
+          y: Number(data.y) || 0,
+          z: Number(data.z) || 0,
+          direction: Number(data.direction) || 0,
+          rotation: Number(data.rotation) || 0,
+          action: typeof data.action === "string" ? data.action.slice(0, 32) : "idle",
+          currentAnimation: typeof data.currentAnimation === "string" ? data.currentAnimation.slice(0, 32) : "idle",
+          districtId: typeof data.districtId === "string" ? data.districtId.slice(0, 64) : null,
+        });
+        // Ack back with the nearby-users payload so the client can
+        // render remote avatars even if the broadcast tick hasn't
+        // fired yet.
+        socket.emit("player:move:ack", {
+          ok: true,
+          nearby: pos.nearby || [],
+          chunkCrossed: !!pos.chunkCrossed,
+        });
+      } catch (err) {
+        logger.debug?.("server", "player_move_failed", { error: err?.message });
+      }
+    });
+
+    // Load saved state when a client asks — lets the frontend
+    // rehydrate the last position without a full HTTP round-trip.
+    socket.on("player:load", () => {
+      const userId = socket.data?.userId;
+      if (!userId) return;
+      try {
+        const state = cityPresence.loadPlayerState(userId);
+        socket.emit("player:load:ack", { ok: true, state });
+      } catch (err) {
+        socket.emit("player:load:ack", { ok: false, error: err?.message });
+      }
+    });
+
     socket.on("disconnect", () => {
+      // Persist final position before dropping from memory.
+      const userId = socket.data?.userId;
+      if (userId) {
+        try { cityPresence.removeUser(userId); } catch (_e) { /* ignore */ }
+      }
       REALTIME.clients.delete(clientId);
     });
 
     socket.on("error", () => {
+      const userId = socket.data?.userId;
+      if (userId) {
+        try { cityPresence.removeUser(userId); } catch (_e) { /* ignore */ }
+      }
       REALTIME.clients.delete(clientId);
     });
   });
@@ -16589,6 +16656,39 @@ register("dtu", "create", async (ctx, input) => {
 
   // Notify event bus of DTU creation
   try { eventBus.emit("dtu.created", { id: dtu.id, title: dtu.title, domain: dtu.domain, creatorId: dtu.authorId || source }); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
+
+  // ── MMO auto-placement ────────────────────────────────────────────
+  // When a DTU is created in a lens that maps to a world district,
+  // automatically place it as a world object in that district so the
+  // creator's work shows up in the MMO immediately. Music DTU → music
+  // district. Art DTU → art district. Code DTU → code district. The
+  // district mapping lives in world-engine.js and is driven by the
+  // DTU's `domain` / `lens` field.
+  //
+  // Placement is best-effort and never blocks DTU creation. The
+  // coordinates are pseudo-random within the district radius so many
+  // DTUs from the same lens spread out naturally instead of piling
+  // on the district center.
+  try {
+    const lensKey = String(dtu.domain || input.lens || meta?.lens || "").toLowerCase();
+    if (lensKey) {
+      const district = _worldGetDistrictByLens(lensKey);
+      if (district) {
+        const radius = (district.radius || 100) * 0.7;
+        const angle = (crypto.createHash("sha256").update(dtu.id).digest().readUInt32BE(0) % 360) * (Math.PI / 180);
+        const dist = (crypto.createHash("sha256").update(dtu.id).digest().readUInt32BE(4) % Math.floor(radius)) || 0;
+        _worldPlaceObject(dtu.id, {
+          districtId: district.id,
+          x: (district.position?.x || 0) + Math.cos(angle) * dist,
+          y: 0,
+          z: (district.position?.z || 0) + Math.sin(angle) * dist,
+          type: "dtu_display",
+        });
+      }
+    }
+  } catch (_e) {
+    logger.debug('server', 'mmo_auto_placement_failed', { error: _e?.message });
+  }
 
   // ── Auto-register citation lineage ──────────────────────────────────
   // When a DTU is created with a lineage/parents, we automatically
@@ -49102,6 +49202,49 @@ const server = SHOULD_LISTEN ? app.listen(PORT, () => {
 // Optional: enable thin realtime mirror (WebSockets) for queues/jobs/panels.
 try { await tryInitWebSockets(server); } catch (e) {
   structuredLog("error", "websocket_init_failed", { error: String(e?.message || e), stack: String(e?.stack || "").slice(0, 500) });
+}
+
+// ── World Lens / MMO presence system ──────────────────────────────────────
+// Wires the presence broadcast loop (100ms tick) + SQLite flush (30s tick) +
+// world-mechanics trigger firing on chunk/zone boundary crossings. This is
+// the "make the MMO actually multiplayer" wire: without it, city-presence.js
+// sits there as an orphaned module with nothing importing it.
+try {
+  cityPresence.configurePresence({
+    db,
+    fireTrigger: (cityId, triggerId, ctx) => {
+      const result = worldMechanics.fireTrigger(cityId, triggerId, ctx);
+      // Log fired mechanics for audit/replay.
+      if (db && result?.fired?.length > 0) {
+        try {
+          const stmt = db.prepare(`
+            INSERT INTO world_events_log
+              (id, city_id, user_id, trigger_id, mechanic_id, action, reward, context_json, fired_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+          `);
+          for (const f of result.fired) {
+            stmt.run(
+              `we_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
+              cityId,
+              ctx?.userId || null,
+              triggerId,
+              f.mechanicId || null,
+              f.action || null,
+              f.reward || null,
+              JSON.stringify(ctx || {}),
+            );
+          }
+        } catch (_e) { /* world_events_log may not exist yet on older deploys */ }
+      }
+      return result;
+    },
+  });
+  const _stopPresenceBroadcast = cityPresence.startPresenceBroadcast(realtimeEmit, 100);
+  // Cleanup on process exit so the last in-flight positions land on disk.
+  process.once("beforeExit", () => { try { _stopPresenceBroadcast(); } catch { /* ignore */ } });
+  structuredLog("info", "world_presence_enabled", { tickMs: 100, flushMs: 30000 });
+} catch (e) {
+  structuredLog("error", "world_presence_init_failed", { error: String(e?.message || e) });
 }
 
 

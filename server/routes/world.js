@@ -1489,10 +1489,41 @@ export default function createWorldRoutes({ requireAuth } = {}) {
     });
   }));
 
-  router.post("/sim/scene/player-update", auth, wrap((req, res) => {
-    // Receives player position/rotation/animation for multiplayer sync
-    const update = { userId: req.user?.id || 'anonymous', ...req.body, timestamp: Date.now() };
-    res.json({ ok: true, update });
+  router.post("/sim/scene/player-update", auth, wrap(async (req, res) => {
+    // Receives player position/rotation/animation for multiplayer sync.
+    // Previously this endpoint just echoed the request back — now it
+    // routes into city-presence.js which owns the spatial-chunking,
+    // nearby-query, trigger-firing, and SQLite-flush logic. The
+    // socket.on('player:move') path is preferred (lower latency, no
+    // per-request auth overhead), but this HTTP route is kept so
+    // clients that can't hold a socket open (mobile PWA background
+    // tabs, intermittent connections) still work.
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ ok: false, error: "Authentication required" });
+
+    try {
+      const { updateUserPosition } = await import("../lib/city-presence.js");
+      const result = updateUserPosition(userId, {
+        cityId: String(req.body.cityId || "concordia-central"),
+        x: Number(req.body.x) || 0,
+        y: Number(req.body.y) || 0,
+        z: Number(req.body.z) || 0,
+        direction: Number(req.body.direction) || 0,
+        rotation: Number(req.body.rotation) || 0,
+        action: typeof req.body.action === "string" ? req.body.action.slice(0, 32) : "idle",
+        currentAnimation: typeof req.body.currentAnimation === "string" ? req.body.currentAnimation.slice(0, 32) : "idle",
+        districtId: typeof req.body.districtId === "string" ? req.body.districtId.slice(0, 64) : null,
+      });
+      res.json({
+        ok: true,
+        userId,
+        timestamp: Date.now(),
+        nearby: result.nearby || [],
+        chunkCrossed: !!result.chunkCrossed,
+      });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: "player_update_failed" });
+    }
   }));
 
   // ── Accessibility Preferences API ────────────────────────────────

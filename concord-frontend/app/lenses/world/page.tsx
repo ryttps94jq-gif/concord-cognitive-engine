@@ -580,6 +580,10 @@ export default function WorldLensPage() {
 
   const router = useRouter();
   const { isLive, lastUpdated } = useRealtimeLens('world');
+  // World-lens socket for player movement + nearby-player broadcasts.
+  // The CityStreamingSection component already uses its own useSocket
+  // for stream events — this instance is dedicated to multiplayer.
+  const worldSocket = useSocket({ autoConnect: true });
 
   // ── State ─────────────────────────────────────────────────────
   const [viewMode, setViewMode] = useState<ViewMode>('concordia');
@@ -595,7 +599,10 @@ export default function WorldLensPage() {
   // 3D Explore mode state
   const [cameraMode, setCameraMode] = useState<'isometric' | 'follow' | 'free' | 'interior' | 'cinematic'>('follow');
   const [showPanel, setShowPanel] = useState<'none' | 'inventory' | 'quests' | 'chat' | 'map' | 'crafting' | 'players' | 'profile' | 'collaboration' | 'livecollab' | 'events' | 'socialproof' | 'notifications' | 'smartnotify' | 'moderation' | 'ownership' | 'federation' | 'voice' | 'voiceassist'>('none');
-  const [playerAvatar] = useState({
+  // Local player avatar — mutable so moves update it in place. On
+  // first mount we ask the server for saved state (via player:load)
+  // and land back wherever the user logged off.
+  const [playerAvatar, setPlayerAvatar] = useState({
     id: 'player-1',
     name: 'You',
     appearance: {
@@ -612,6 +619,17 @@ export default function WorldLensPage() {
     rotation: 0,
     currentAnimation: 'idle' as const,
   });
+  // Other players in the same chunk(s), updated via city:positions
+  // socket broadcasts.
+  const [otherPlayers, setOtherPlayers] = useState<Array<{
+    id: string;
+    name: string;
+    appearance: typeof playerAvatar.appearance;
+    position: { x: number; y: number; z: number };
+    rotation: number;
+    currentAnimation: 'idle' | 'walk' | 'run' | 'sit' | 'build' | 'emote' | 'wave' | 'dance' | 'cheer' | 'point' | 'nod' | 'shake' | 'clap' | 'bow' | 'laugh' | 'cry' | 'think' | 'celebrate' | 'craft' | 'paint' | 'play' | 'write' | 'read' | 'mentor' | 'construct' | 'sweep' | 'lecture';
+    timestamp: number;
+  }>>([]);
   const [visibleLayers, setVisibleLayers] = useState(new Set(['water', 'power', 'drainage', 'road', 'data']));
   const [showValidation, setShowValidation] = useState(false);
   const [showWeather, setShowWeather] = useState(false);
@@ -632,6 +650,92 @@ export default function WorldLensPage() {
   useEffect(() => {
     cacheMaterials(materials);
   }, [materials]);
+
+  // ── MMO multiplayer wiring ──────────────────────────────────────────
+  // On mount: ask the server for our last-saved position, subscribe
+  // to city:positions broadcasts (100ms tick) that populate other
+  // players in the same chunk, and to player:load:ack + player:move:ack
+  // for rehydration + low-latency nearby updates.
+  useEffect(() => {
+    if (!worldSocket.isConnected) return;
+
+    // Request saved state on first connect
+    worldSocket.emit('player:load');
+
+    const handleLoadAck = (msg: unknown) => {
+      const data = msg as { ok: boolean; state?: { x: number; y: number; z: number; rotation?: number; currentAnimation?: string } | null };
+      if (data?.ok && data.state) {
+        setPlayerAvatar((prev) => ({
+          ...prev,
+          position: { x: data.state!.x, y: data.state!.y, z: data.state!.z },
+          rotation: data.state!.rotation ?? 0,
+          currentAnimation: (data.state!.currentAnimation as typeof prev.currentAnimation) ?? 'idle',
+        }));
+      }
+    };
+
+    // Convert city:positions broadcast chunks into a flat otherPlayers
+    // array. The broadcast is per-chunk so multiple events may arrive
+    // in a single tick — we dedupe by user id and prefer the most
+    // recent entry per user.
+    const handleCityPositions = (msg: unknown) => {
+      const data = msg as {
+        cityId: string;
+        users: Array<{
+          userId: string;
+          x: number; y: number; z: number;
+          direction?: number; rotation?: number;
+          action?: string; avatar?: unknown;
+          displayName?: string;
+        }>;
+      };
+      if (!data?.users?.length) return;
+      setOtherPlayers((prev) => {
+        const byId = new Map(prev.map((p) => [p.id, p]));
+        for (const u of data.users) {
+          if (u.userId === playerAvatar.id) continue;
+          byId.set(u.userId, {
+            id: u.userId,
+            name: u.displayName || u.userId.slice(0, 12),
+            // Reuse the local player's appearance config shape — the
+            // server doesn't send an avatar yet so we render a default
+            // silhouette until the profile lookup is wired.
+            appearance: playerAvatar.appearance,
+            position: { x: u.x, y: u.y, z: u.z },
+            rotation: u.rotation ?? u.direction ?? 0,
+            currentAnimation: (u.action as typeof playerAvatar.currentAnimation) || 'idle',
+            timestamp: Date.now(),
+          });
+        }
+        // Drop stale entries (>5s without update) so ghosts don't linger
+        const cutoff = Date.now() - 5000;
+        const fresh = Array.from(byId.values()).filter((p) => p.timestamp >= cutoff);
+        return fresh;
+      });
+    };
+
+    const handleMoveAck = (msg: unknown) => {
+      const data = msg as { nearby?: Array<{ userId: string; x: number; y: number; z: number; direction?: number; action?: string; displayName?: string }>; };
+      if (!data?.nearby?.length) return;
+      // Short-circuit: if the ack includes nearby players we apply
+      // them immediately without waiting for the next broadcast tick.
+      handleCityPositions({
+        cityId: activeDistrict.id,
+        users: data.nearby.map((n) => ({ ...n, rotation: n.direction })),
+      });
+    };
+
+    worldSocket.on('player:load:ack', handleLoadAck);
+    worldSocket.on('city:positions', handleCityPositions);
+    worldSocket.on('player:move:ack', handleMoveAck);
+
+    return () => {
+      worldSocket.off('player:load:ack', handleLoadAck);
+      worldSocket.off('city:positions', handleCityPositions);
+      worldSocket.off('player:move:ack', handleMoveAck);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [worldSocket.isConnected, activeDistrict.id]);
 
   // Check first visit
   useEffect(() => {
@@ -887,10 +991,43 @@ export default function WorldLensPage() {
           <div className="absolute inset-0 pointer-events-none">
             <AvatarSystem3D
               playerAvatar={playerAvatar}
-              otherPlayers={[]}
+              otherPlayers={otherPlayers}
               npcs={[]}
-              onMove={(pos) => { void pos; }}
-              onEmote={(emote) => { void emote; }}
+              onMove={(pos, rotation) => {
+                // Update local avatar immediately for snappy
+                // response, then emit to the server so other players
+                // see us move. The server rate-limits to ~30Hz.
+                setPlayerAvatar((prev) => ({ ...prev, position: pos, rotation }));
+                if (worldSocket.isConnected) {
+                  worldSocket.emit('player:move', {
+                    cityId: activeDistrict.id,
+                    districtId: activeDistrict.id,
+                    x: pos.x,
+                    y: pos.y,
+                    z: pos.z,
+                    rotation,
+                    direction: rotation,
+                    action: 'walk',
+                    currentAnimation: 'walk',
+                  });
+                }
+              }}
+              onEmote={(emote) => {
+                setPlayerAvatar((prev) => ({ ...prev, currentAnimation: emote }));
+                if (worldSocket.isConnected) {
+                  worldSocket.emit('player:move', {
+                    cityId: activeDistrict.id,
+                    districtId: activeDistrict.id,
+                    x: playerAvatar.position.x,
+                    y: playerAvatar.position.y,
+                    z: playerAvatar.position.z,
+                    rotation: playerAvatar.rotation,
+                    direction: playerAvatar.rotation,
+                    action: emote,
+                    currentAnimation: emote,
+                  });
+                }
+              }}
             />
           </div>
           {/* Camera mode controls */}
