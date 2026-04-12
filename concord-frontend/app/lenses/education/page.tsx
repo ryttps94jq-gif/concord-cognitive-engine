@@ -3300,89 +3300,530 @@ function PanelShell({ title, subtitle, icon: Icon, accent = 'neon-cyan', childre
   );
 }
 
+interface GenomeSummary {
+  totalKnown?: number;
+  totalMastered?: number;
+  gapCount?: number;
+  strongestDomain?: string;
+  velocity?: number;
+}
+
+interface GenomeApiResponse {
+  ok?: boolean;
+  summary?: GenomeSummary;
+  nodes?: Array<{ id: string; title?: string; domain?: string; mastery?: number; gap?: boolean; tier?: string }>;
+  dtus?: Array<{ id: string; title?: string; domain?: string; mastery?: number }>;
+}
+
+interface GenomeGraphApiResponse {
+  ok?: boolean;
+  nodes?: Array<{ id: string; title?: string; domain?: string; mastery?: number; gap?: boolean }>;
+  edges?: Array<{ source: string; target: string }>;
+}
+
 function GenomePanel() {
-  const { data, isLoading } = useQuery({
+  const [selectedNode, setSelectedNode] = useState<GenomeNode | null>(null);
+
+  const genomeQuery = useQuery<GenomeApiResponse | null>({
     queryKey: ['learning', 'genome'],
     queryFn: async () => {
       try {
-        const r = await fetch('/api/learning/genome');
-        return await r.json();
-      } catch { return null; }
+        const r = await api.get('/api/learning/genome');
+        return r.data as GenomeApiResponse;
+      } catch {
+        return null;
+      }
     },
   });
+
+  const graphQuery = useQuery<GenomeGraphApiResponse | null>({
+    queryKey: ['learning', 'genome', 'graph'],
+    queryFn: async () => {
+      try {
+        const r = await api.get('/api/learning/genome/graph');
+        return r.data as GenomeGraphApiResponse;
+      } catch {
+        return null;
+      }
+    },
+  });
+
+  const summary: GenomeSummary = genomeQuery.data?.summary ?? {};
+
+  const { nodes, edges } = useMemo<{ nodes: GenomeNode[]; edges: GenomeEdge[] }>(() => {
+    const graph = graphQuery.data;
+    if (graph?.nodes && graph.nodes.length > 0) {
+      return {
+        nodes: graph.nodes.map(n => ({
+          id: n.id,
+          title: n.title ?? n.id,
+          domain: n.domain,
+          mastery: n.mastery ?? 0,
+          gap: !!n.gap,
+        })),
+        edges: graph.edges ?? [],
+      };
+    }
+    // fall back to genome nodes list if graph not available
+    const raw = genomeQuery.data?.nodes ?? genomeQuery.data?.dtus ?? [];
+    return {
+      nodes: raw.map(n => ({
+        id: n.id,
+        title: n.title ?? n.id,
+        domain: n.domain,
+        mastery: (n as { mastery?: number }).mastery ?? 0,
+        gap: !!(n as { gap?: boolean }).gap,
+      })),
+      edges: [],
+    };
+  }, [genomeQuery.data, graphQuery.data]);
+
+  const isLoading = genomeQuery.isLoading || graphQuery.isLoading;
+
   return (
-    <PanelShell title="Knowledge Genome" subtitle="Your intellectual DNA" icon={Sparkles}>
+    <PanelShell title="Knowledge Genome" subtitle="Your intellectual DNA, rendered as a living graph" icon={Dna} accent="neon-cyan">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
+        <StatCard label="Known" value={summary.totalKnown ?? nodes.length} />
+        <StatCard label="Mastered" value={summary.totalMastered ?? 0} />
+        <StatCard label="Gaps" value={summary.gapCount ?? nodes.filter(n => n.gap).length} />
+        <StatCard label="Strongest" value={summary.strongestDomain ?? '—'} />
+        <StatCard label="Velocity" value={summary.velocity != null ? `${summary.velocity}/wk` : '—'} />
+      </div>
+
       {isLoading && <p className="text-sm text-gray-500">Loading genome…</p>}
-      {data?.ok === false && <p className="text-sm text-amber-400">Genome not available yet. Interact with DTUs to build your genome.</p>}
-      {data?.ok && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <StatCard label="Known" value={data.summary?.totalKnown ?? 0} />
-          <StatCard label="Mastered" value={data.summary?.totalMastered ?? 0} />
-          <StatCard label="Gaps" value={data.summary?.gapCount ?? 0} />
-          <StatCard label="Strongest" value={data.summary?.strongestDomain ?? '—'} />
+
+      <GenomeGraph
+        nodes={nodes}
+        edges={edges}
+        height={440}
+        selectedId={selectedNode?.id ?? null}
+        onSelect={(n) => setSelectedNode(n)}
+      />
+
+      {selectedNode && (
+        <div className="mt-3 p-3 bg-lattice-bg border border-neon-cyan/30 rounded-lg">
+          <div className="flex items-center justify-between">
+            <div className="min-w-0">
+              <p className="text-xs text-gray-500 uppercase">Selected DTU</p>
+              <p className="text-sm text-white font-medium truncate">{selectedNode.title}</p>
+              <p className="text-xs text-gray-400">
+                {selectedNode.domain ?? 'unknown domain'}
+                {' · '}
+                mastery {Math.round((selectedNode.mastery ?? 0) * 100)}%
+                {selectedNode.gap && ' · GAP'}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setSelectedNode(null)}
+              className="text-xs text-gray-500 hover:text-white"
+            >
+              Clear
+            </button>
+          </div>
         </div>
       )}
-      <p className="text-xs text-gray-500 mt-4">Mastery updates every time you read, cite, create, test, or teach a DTU.</p>
+
+      <p className="text-xs text-gray-500 mt-4">
+        Mastery updates every time you read, cite, create, test, or teach a DTU. Gaps (red) are inferred by the feasibility manifold as pre-requisites for unreachable frontier nodes.
+      </p>
     </PanelShell>
   );
+}
+
+interface FrontierApiResponse {
+  ok?: boolean;
+  frontier?: Array<{
+    id?: string;
+    dtuId?: string;
+    title?: string;
+    kind?: string;
+    domain?: string;
+    readiness?: number;
+    estimatedMinutes?: number;
+    summary?: string;
+  }>;
+}
+
+interface PathApiResponse {
+  ok?: boolean;
+  path?: Array<{
+    id?: string;
+    dtuId?: string;
+    title?: string;
+    kind?: string;
+    domain?: string;
+    readiness?: number;
+    estimatedMinutes?: number;
+    summary?: string;
+    order?: number;
+  }>;
 }
 
 function LearningPathPanel() {
-  const { data, isLoading } = useQuery({
+  const queryClient = useQueryClient();
+  const [goal, setGoal] = useState('');
+  const [startingId, setStartingId] = useState<string | null>(null);
+
+  const frontierQuery = useQuery<FrontierApiResponse | null>({
     queryKey: ['learning', 'frontier'],
     queryFn: async () => {
       try {
-        const r = await fetch('/api/learning/frontier');
-        return await r.json();
-      } catch { return null; }
+        const r = await api.get('/api/learning/frontier');
+        return r.data as FrontierApiResponse;
+      } catch {
+        return null;
+      }
     },
   });
+
+  const pathMutation = useMutation<PathApiResponse, Error, string>({
+    mutationFn: async (targetGoal: string) => {
+      const r = await api.post('/api/learning/path', { goal: targetGoal });
+      return r.data as PathApiResponse;
+    },
+  });
+
+  const startMutation = useMutation({
+    mutationFn: async (step: PathStep) => {
+      const dtuId = step.dtuId ?? step.id;
+      if (!dtuId) throw new Error('No DTU id on step');
+      const r = await api.post('/api/learning/interaction', { dtuId, kind: 'start' });
+      return r.data;
+    },
+    onMutate: (step) => {
+      setStartingId(step.dtuId ?? step.id ?? null);
+    },
+    onSettled: () => {
+      setStartingId(null);
+      queryClient.invalidateQueries({ queryKey: ['learning', 'genome'] });
+    },
+  });
+
+  const frontierSteps = useMemo<PathStep[]>(() => {
+    const f = frontierQuery.data?.frontier ?? [];
+    return f.slice(0, 12).map((s, i) => ({
+      id: s.id ?? s.dtuId,
+      dtuId: s.dtuId ?? s.id,
+      order: i + 1,
+      title: s.title ?? (s.id ?? 'Untitled'),
+      kind: s.kind ?? 'study',
+      domain: s.domain,
+      readiness: s.readiness,
+      estimatedMinutes: s.estimatedMinutes,
+      summary: s.summary,
+    }));
+  }, [frontierQuery.data]);
+
+  const pathSteps = useMemo<PathStep[]>(() => {
+    const p = pathMutation.data?.path ?? [];
+    return p.map((s, i) => ({
+      id: s.id ?? s.dtuId,
+      dtuId: s.dtuId ?? s.id,
+      order: s.order ?? i + 1,
+      title: s.title ?? (s.id ?? 'Untitled'),
+      kind: s.kind ?? 'study',
+      domain: s.domain,
+      readiness: s.readiness,
+      estimatedMinutes: s.estimatedMinutes,
+      summary: s.summary,
+    }));
+  }, [pathMutation.data]);
+
   return (
-    <PanelShell title="Learning Path" subtitle="Navigate the feasibility manifold" icon={TrendingUp} accent="neon-purple">
-      {isLoading && <p className="text-sm text-gray-500">Computing frontier…</p>}
-      {!data?.frontier?.length && <p className="text-sm text-gray-500">No reachable frontier yet. Start with a core DTU.</p>}
-      {data?.frontier?.slice(0, 10).map((step: Record<string, unknown>, i: number) => (
-        <div key={i} className="flex items-center gap-3 p-3 bg-lattice-deep border border-lattice-border rounded-lg mb-2">
-          <span className="w-6 h-6 flex items-center justify-center text-xs bg-neon-purple/20 text-neon-purple rounded-full">{i + 1}</span>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm text-white truncate">{String(step.title || step.id)}</p>
-            <p className="text-xs text-gray-500">readiness {Math.round(Number(step.readiness || 0) * 100)}% · ~{Number(step.estimatedMinutes || 15)}m</p>
+    <PanelShell
+      title="Learning Path"
+      subtitle="Navigate the feasibility manifold — reachable frontier first, full path on demand"
+      icon={Route}
+      accent="neon-purple"
+    >
+      <div className="flex flex-col md:flex-row gap-2 mb-4">
+        <input
+          value={goal}
+          onChange={e => setGoal(e.target.value)}
+          placeholder="Learning goal (e.g. 'understand general relativity')"
+          className="flex-1 p-2 bg-lattice-deep border border-lattice-border rounded-lg text-sm text-white"
+        />
+        <button
+          type="button"
+          onClick={() => goal && pathMutation.mutate(goal)}
+          disabled={!goal || pathMutation.isPending}
+          className="px-4 py-2 bg-neon-purple/20 text-neon-purple border border-neon-purple/30 rounded-lg hover:bg-neon-purple/30 text-sm disabled:opacity-50"
+        >
+          {pathMutation.isPending ? 'Computing…' : 'Plan Path'}
+        </button>
+      </div>
+
+      {pathSteps.length > 0 && (
+        <div className="mb-6">
+          <h4 className="text-xs uppercase tracking-wider text-neon-purple mb-2">Current Path</h4>
+          <div className="space-y-2">
+            {pathSteps.map(step => (
+              <PathStepCard
+                key={`${step.order}-${step.id ?? step.title}`}
+                step={step}
+                starting={startingId === (step.dtuId ?? step.id)}
+                onStart={() => startMutation.mutate(step)}
+              />
+            ))}
           </div>
         </div>
-      ))}
+      )}
+
+      <div>
+        <h4 className="text-xs uppercase tracking-wider text-neon-cyan mb-2">Reachable Frontier</h4>
+        {frontierQuery.isLoading && <p className="text-sm text-gray-500">Computing frontier…</p>}
+        {!frontierQuery.isLoading && frontierSteps.length === 0 && (
+          <p className="text-sm text-gray-500">No reachable frontier yet. Start with a core DTU from the Path Planner above.</p>
+        )}
+        <div className="space-y-2">
+          {frontierSteps.map(step => (
+            <PathStepCard
+              key={`frontier-${step.order}-${step.id ?? step.title}`}
+              step={step}
+              starting={startingId === (step.dtuId ?? step.id)}
+              onStart={() => startMutation.mutate(step)}
+            />
+          ))}
+        </div>
+      </div>
     </PanelShell>
   );
 }
 
+interface CitationDTU {
+  id: string;
+  title: string;
+  domain?: string;
+  tier?: string;
+}
+
+interface SubmissionResponse {
+  ok?: boolean;
+  published?: boolean;
+  submission?: {
+    id?: string;
+    claim?: string;
+    grade?: number;
+    createdAt?: string;
+  };
+  evaluation?: {
+    grade?: number;
+    citationIntegrity?: number;
+    coherence?: number;
+    novelty?: number;
+    depth?: number;
+    c2Pass?: boolean;
+    feedback?: string;
+  };
+  newDtu?: { id: string };
+}
+
 function ProofByCitationPanel() {
+  const queryClient = useQueryClient();
   const [claim, setClaim] = useState('');
-  const [citations, setCitations] = useState('');
-  const submit = useMutation({
-    mutationFn: async () => {
-      const r = await fetch('/api/learning/submit', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ claim, citations: citations.split(',').map(s => s.trim()).filter(Boolean) }),
-      });
-      return r.json();
+  const [selectedCitations, setSelectedCitations] = useState<CitationDTU[]>([]);
+  const [search, setSearch] = useState('');
+  const [searchResults, setSearchResults] = useState<CitationDTU[]>([]);
+  const [searching, setSearching] = useState(false);
+
+  const pastQuery = useQuery<{ submissions?: SubmissionResponse['submission'][] } | null>({
+    queryKey: ['learning', 'submissions', 'mine'],
+    queryFn: async () => {
+      try {
+        const r = await api.get('/api/learning/submissions/mine');
+        return r.data as { submissions?: SubmissionResponse['submission'][] };
+      } catch {
+        return null;
+      }
     },
   });
+
+  const searchCitations = useCallback(async (q: string) => {
+    if (!q.trim()) {
+      setSearchResults([]);
+      return;
+    }
+    setSearching(true);
+    try {
+      const r = await api.get('/api/learning/dtus/search', { params: { q } });
+      const payload = r.data as { dtus?: CitationDTU[]; results?: CitationDTU[] };
+      setSearchResults(payload.dtus ?? payload.results ?? []);
+    } catch {
+      setSearchResults([]);
+    } finally {
+      setSearching(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const t = setTimeout(() => searchCitations(search), 280);
+    return () => clearTimeout(t);
+  }, [search, searchCitations]);
+
+  const submit = useMutation<SubmissionResponse, Error, void>({
+    mutationFn: async () => {
+      const r = await api.post('/api/learning/submit', {
+        claim,
+        citations: selectedCitations.map(c => c.id),
+      });
+      return r.data as SubmissionResponse;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['learning', 'submissions', 'mine'] });
+      queryClient.invalidateQueries({ queryKey: ['learning', 'genome'] });
+    },
+  });
+
+  const addCitation = (c: CitationDTU) => {
+    if (!selectedCitations.some(s => s.id === c.id)) {
+      setSelectedCitations([...selectedCitations, c]);
+    }
+    setSearch('');
+    setSearchResults([]);
+  };
+
+  const removeCitation = (id: string) => {
+    setSelectedCitations(selectedCitations.filter(c => c.id !== id));
+  };
+
+  const evaluation = submit.data?.evaluation;
+
   return (
-    <PanelShell title="Proof by Citation" subtitle="Prove understanding by citing DTU evidence" icon={BookOpen} accent="neon-pink">
-      <div className="space-y-3">
-        <textarea value={claim} onChange={e => setClaim(e.target.value)} placeholder="Your claim…" className="w-full p-3 bg-lattice-deep border border-lattice-border rounded-lg text-sm text-white" rows={3} />
-        <input value={citations} onChange={e => setCitations(e.target.value)} placeholder="DTU IDs (comma-separated)" className="w-full p-3 bg-lattice-deep border border-lattice-border rounded-lg text-sm text-white" />
-        <button onClick={() => submit.mutate()} disabled={!claim || submit.isPending} className="px-4 py-2 bg-neon-pink/20 text-neon-pink border border-neon-pink/30 rounded-lg hover:bg-neon-pink/30 text-sm">
+    <PanelShell title="Proof by Citation" subtitle="Prove understanding by citing DTU evidence — passing submissions become new DTUs" icon={FileCheck} accent="neon-pink">
+      <div className="space-y-4">
+        <div>
+          <label className="text-xs uppercase text-gray-500 mb-1 block">Your Claim</label>
+          <textarea
+            value={claim}
+            onChange={e => setClaim(e.target.value)}
+            placeholder="Articulate a non-trivial synthesis or argument…"
+            className="w-full p-3 bg-lattice-deep border border-lattice-border rounded-lg text-sm text-white"
+            rows={4}
+          />
+        </div>
+
+        <div>
+          <label className="text-xs uppercase text-gray-500 mb-1 block">Citations</label>
+          <div className="flex flex-wrap gap-1 mb-2">
+            {selectedCitations.map(c => (
+              <span
+                key={c.id}
+                className="flex items-center gap-1 px-2 py-1 bg-neon-pink/10 border border-neon-pink/30 text-neon-pink rounded-full text-xs"
+              >
+                {c.title}
+                <button type="button" onClick={() => removeCitation(c.id)} className="hover:text-white">
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            ))}
+            {selectedCitations.length === 0 && (
+              <span className="text-xs text-gray-500">No citations yet. Search to add DTUs.</span>
+            )}
+          </div>
+          <div className="relative">
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search DTUs to cite…"
+              className="w-full p-2 pl-8 bg-lattice-deep border border-lattice-border rounded-lg text-sm text-white"
+            />
+            <Search className="w-4 h-4 text-gray-500 absolute left-2 top-1/2 -translate-y-1/2" />
+            {searching && <Loader2 className="w-4 h-4 text-gray-500 absolute right-2 top-1/2 -translate-y-1/2 animate-spin" />}
+            {searchResults.length > 0 && (
+              <div className="absolute z-10 w-full mt-1 bg-lattice-deep border border-lattice-border rounded-lg max-h-48 overflow-auto">
+                {searchResults.map(r => (
+                  <button
+                    type="button"
+                    key={r.id}
+                    onClick={() => addCitation(r)}
+                    className="w-full text-left px-3 py-2 hover:bg-lattice-surface text-sm text-white border-b border-lattice-border last:border-0"
+                  >
+                    <div className="truncate">{r.title}</div>
+                    <div className="text-xs text-gray-500">{r.domain ?? 'unknown'}{r.tier ? ` · ${r.tier}` : ''}</div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => submit.mutate()}
+          disabled={!claim || selectedCitations.length === 0 || submit.isPending}
+          className="flex items-center gap-2 px-4 py-2 bg-neon-pink/20 text-neon-pink border border-neon-pink/30 rounded-lg hover:bg-neon-pink/30 text-sm disabled:opacity-50"
+        >
+          {submit.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
           {submit.isPending ? 'Evaluating…' : 'Submit for Evaluation'}
         </button>
-        {submit.data?.ok && (
-          <div className="p-3 bg-lattice-deep border border-lattice-border rounded-lg text-xs text-gray-300">
-            Grade: {Math.round((submit.data.evaluation?.grade || 0) * 100)}%
-            {submit.data.published && ' · Published as DTU'}
+
+        {evaluation && (
+          <div className="p-4 bg-lattice-deep border border-lattice-border rounded-lg space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs uppercase text-gray-500">Evaluation</span>
+              <span className={cn(
+                'text-xs font-semibold px-2 py-0.5 rounded',
+                evaluation.c2Pass ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400',
+              )}>
+                {evaluation.c2Pass ? 'C2 PASS' : 'C2 FAIL'}
+              </span>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+              <MetricBar label="Integrity" value={evaluation.citationIntegrity ?? 0} color="text-neon-cyan" />
+              <MetricBar label="Coherence" value={evaluation.coherence ?? 0} color="text-neon-purple" />
+              <MetricBar label="Novelty" value={evaluation.novelty ?? 0} color="text-neon-pink" />
+              <MetricBar label="Depth" value={evaluation.depth ?? 0} color="text-amber-400" />
+            </div>
+            <div className="text-lg font-semibold text-white">
+              Grade: {Math.round((evaluation.grade ?? 0) * 100)}%
+            </div>
+            {submit.data?.published && (
+              <div className="text-xs text-emerald-400">Published as new DTU {submit.data.newDtu?.id ?? ''}</div>
+            )}
+            {evaluation.feedback && (
+              <div className="text-xs text-gray-400 whitespace-pre-wrap border-t border-lattice-border pt-2">{evaluation.feedback}</div>
+            )}
           </div>
         )}
+
+        <div>
+          <h4 className="text-xs uppercase tracking-wider text-gray-400 mb-2">Past Submissions</h4>
+          {pastQuery.isLoading && <p className="text-sm text-gray-500">Loading…</p>}
+          {pastQuery.data?.submissions && pastQuery.data.submissions.length > 0 ? (
+            <div className="space-y-2">
+              {pastQuery.data.submissions.slice(0, 8).map((s, i) => (
+                <div key={s?.id ?? i} className="p-3 bg-lattice-deep border border-lattice-border rounded-lg text-sm">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-white truncate">{s?.claim ?? 'Untitled submission'}</p>
+                    <span className="text-xs text-gray-400 shrink-0">
+                      {Math.round((s?.grade ?? 0) * 100)}%
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-gray-500">No submissions yet.</p>
+          )}
+        </div>
       </div>
     </PanelShell>
+  );
+}
+
+function MetricBar({ label, value, color }: { label: string; value: number; color: string }) {
+  const pct = Math.round(Math.max(0, Math.min(1, value)) * 100);
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-0.5">
+        <span className="text-gray-500 uppercase text-[10px]">{label}</span>
+        <span className={cn('text-[10px]', color)}>{pct}%</span>
+      </div>
+      <div className="h-1.5 bg-lattice-bg rounded-full overflow-hidden">
+        <div className={cn('h-full rounded-full', color.replace('text-', 'bg-'))} style={{ width: `${pct}%` }} />
+      </div>
+    </div>
   );
 }
 
