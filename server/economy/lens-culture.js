@@ -57,7 +57,7 @@ export function postCultureDTU(db, {
   }
 
   // Look up user's declared location
-  const user = db.prepare("SELECT * FROM users WHERE id = ?").get(creatorId);
+  const user = db.prepare("SELECT id, role, declared_regional, declared_national FROM users WHERE id = ?").get(creatorId);
   if (!user) return { ok: false, error: "user_not_found" };
 
   // Emergent check — emergents CANNOT post to culture
@@ -125,7 +125,7 @@ export function getCultureDTU(db, dtuId, { viewerId } = {}) {
 
   // If merge hasn't happened, enforce gating
   if (!mergeComplete && viewerId) {
-    const viewer = db.prepare("SELECT * FROM users WHERE id = ?").get(viewerId);
+    const viewer = db.prepare("SELECT id, role, declared_regional, declared_national FROM users WHERE id = ?").get(viewerId);
     if (viewer) {
       if (row.culture_tier === "regional" && viewer.declared_regional !== row.regional) {
         return { restricted: true, error: "not_your_region" };
@@ -155,7 +155,7 @@ export function browseCulture(db, {
 
   // Before merge, enforce gating
   if (!mergeComplete && viewerId) {
-    const viewer = db.prepare("SELECT * FROM users WHERE id = ?").get(viewerId);
+    const viewer = db.prepare("SELECT id, role, declared_regional, declared_national FROM users WHERE id = ?").get(viewerId);
     if (viewer) {
       if (cultureTier === "regional" && regional && viewer.declared_regional !== regional) {
         return { ok: false, error: "not_your_region" };
@@ -203,7 +203,7 @@ export function resonateCulture(db, { userId, dtuId }) {
   if (!dtu) return { ok: false, error: "dtu_not_found" };
 
   // Verify residency
-  const user = db.prepare("SELECT * FROM users WHERE id = ?").get(userId);
+  const user = db.prepare("SELECT id, role, declared_regional, declared_national FROM users WHERE id = ?").get(userId);
   if (!user) return { ok: false, error: "user_not_found" };
 
   if (dtu.culture_tier === "regional" && user.declared_regional !== dtu.regional) {
@@ -246,7 +246,7 @@ export function reflectOnCulture(db, { userId, dtuId, body, media }) {
   if (!dtu) return { ok: false, error: "dtu_not_found" };
 
   // Verify residency
-  const user = db.prepare("SELECT * FROM users WHERE id = ?").get(userId);
+  const user = db.prepare("SELECT id, role, declared_regional, declared_national FROM users WHERE id = ?").get(userId);
   if (!user) return { ok: false, error: "user_not_found" };
 
   if (dtu.culture_tier === "regional" && user.declared_regional !== dtu.regional) {
