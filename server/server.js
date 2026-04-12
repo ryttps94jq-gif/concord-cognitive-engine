@@ -24414,6 +24414,18 @@ try { app.use("/api/browser", createBrowserRoutes({ requireAuth })); } catch (e)
 import registerCanonicalRoutes from "./routes/canonical.js";
 try { registerCanonicalRoutes(app, { db, requireAuth, STATE, structuredLog }); } catch (e) { structuredLog("warn", "canonical_routes_skip", { error: e.message }); }
 
+import registerChicken2Routes from "./routes/chicken2.js";
+try {
+  registerChicken2Routes(app, {
+    dtuStore: STATE?.dtus || null,
+    manifoldStore: app._feasibilityManifold || null,
+    qualityGate: null,
+    requireAuth,
+    requireRole,
+    log: structuredLog,
+  });
+} catch (e) { structuredLog("warn", "chicken2_routes_skip", { error: e.message }); }
+
 import createAttributionRoutes from "./routes/attribution.js";
 try { app.use("/api/attribution", createAttributionRoutes({ requireAuth })); } catch (e) { structuredLog("warn", "attribution_routes_skip", { error: e.message }); }
 

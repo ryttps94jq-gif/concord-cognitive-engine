@@ -957,6 +957,15 @@ export const LENS_MANIFESTS: LensManifest[] = [
     category: 'creative',
   },
   {
+    domain: 'answers',
+    label: 'The Answers',
+    artifacts: ['answer', 'problem', 'equation', 'implementation', 'section'],
+    macros: { list: 'lens.answers.list', get: 'lens.answers.get', create: 'lens.answers.create', update: 'lens.answers.update', delete: 'lens.answers.delete', run: 'lens.answers.run', export: 'lens.answers.export' },
+    exports: ['json', 'md', 'pdf'],
+    actions: ['browse', 'ask_oracle', 'expand', 'link_implementation', 'export'],
+    category: 'knowledge',
+  },
+  {
     domain: 'app-maker',
     label: 'App Maker',
     artifacts: ['app', 'screen', 'widget', 'flow', 'deploy'],

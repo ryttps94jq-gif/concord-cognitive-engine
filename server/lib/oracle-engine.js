@@ -107,6 +107,195 @@ export function createOracleEngine(opts = {}) {
     catch { /* logger may be unavailable in tests */ }
   };
 
+  // ── Brain Service Bridge ───────────────────────────────────────────────
+  //
+  // The Oracle tries three increasingly-best-effort strategies to talk to a
+  // brain:
+  //   1. Use `opts.brain.query(name, req)` if the injector gave us one.
+  //   2. Dynamic-import './brain-service.js'. The CJS module exports the
+  //      `BrainService` class, which we lazily instantiate and reuse.
+  //   3. Fail gracefully — every call site is wrapped in try/catch and has
+  //      a heuristic fallback.
+
+  /** @type {object|null} Lazily-instantiated fallback BrainService instance */
+  let _brainFallback = null;
+  /** @type {boolean} set to true once we've tried (and possibly failed) the
+   *  dynamic import, so we don't re-try on every single call. */
+  let _brainFallbackTried = false;
+
+  async function _getFallbackBrain() {
+    if (_brainFallback) return _brainFallback;
+    if (_brainFallbackTried) return null;
+    _brainFallbackTried = true;
+    try {
+      // brain-service.js is CommonJS and exports the class on module.exports.
+      // Under ESM dynamic import the class lands on the `default` property.
+      const mod = await import('./brain-service.js');
+      const BrainService = mod?.default || mod?.BrainService || mod;
+      if (typeof BrainService === 'function') {
+        _brainFallback = new BrainService();
+        return _brainFallback;
+      }
+      // Some environments export a plain { query } map — accept it.
+      if (mod && typeof mod.query === 'function') {
+        _brainFallback = mod;
+        return _brainFallback;
+      }
+    } catch (e) {
+      log('debug', 'brain_fallback_import_failed', { error: e?.message });
+    }
+    return null;
+  }
+
+  /**
+   * Call a brain by name. Prefer the injected `opts.brain`, fall back to
+   * a lazily-imported brain-service.js instance. Increments the
+   * `brainCallsMade` stat on success.
+   *
+   * Graceful: returns `null` on any failure (caller must handle that).
+   *
+   * @param {string} brainName   — conscious|subconscious|utility|repair
+   * @param {object} request     — { prompt, taskType?, context?, systemPrompt?, ... }
+   * @returns {Promise<object|null>}
+   */
+  async function _callBrain(brainName, request) {
+    const req = { ...(request || {}) };
+    // If a system prompt was passed, stitch it into the prompt so that
+    // brain-service implementations which do not have a dedicated
+    // `systemPrompt` field still see the instructions.
+    if (req.systemPrompt && req.prompt && !req._systemPromptMerged) {
+      req.prompt = `[SYSTEM]\n${req.systemPrompt}\n[/SYSTEM]\n\n${req.prompt}`;
+      req._systemPromptMerged = true;
+    }
+
+    // Strategy 1: injected brain
+    if (brain && typeof brain.query === 'function') {
+      try {
+        const resp = await brain.query(brainName, req);
+        stats.brainCallsMade++;
+        return resp;
+      } catch (e) {
+        log('debug', 'brain_injected_call_failed', {
+          brain: brainName, error: e?.message,
+        });
+      }
+    }
+
+    // Strategy 2: fallback brain-service
+    const fb = await _getFallbackBrain();
+    if (fb && typeof fb.query === 'function') {
+      try {
+        const resp = await fb.query(brainName, req);
+        stats.brainCallsMade++;
+        return resp;
+      } catch (e) {
+        log('debug', 'brain_fallback_call_failed', {
+          brain: brainName, error: e?.message,
+        });
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Extract a textual content field from a brain response in a
+   * resilient way (different brain implementations use slightly
+   * different shapes).
+   */
+  function _brainText(resp) {
+    if (!resp) return '';
+    if (typeof resp === 'string') return resp;
+    return String(
+      resp.content ??
+      resp.text ??
+      resp.message ??
+      resp.output ??
+      ''
+    );
+  }
+
+  /**
+   * Try to parse a strict-JSON object out of a brain response. Handles
+   * common LLM quirks: leading prose, markdown code fences, trailing
+   * commentary. Returns `null` on any parse failure.
+   */
+  function _parseJSONFromBrain(text) {
+    if (!text) return null;
+    const s = String(text).trim();
+    // Direct parse
+    try { return JSON.parse(s); } catch { /* fall through */ }
+    // Strip ```json fences
+    const fenced = s.match(/```(?:json)?\s*([\s\S]*?)```/i);
+    if (fenced && fenced[1]) {
+      try { return JSON.parse(fenced[1]); } catch { /* fall through */ }
+    }
+    // First balanced object heuristic
+    const first = s.indexOf('{');
+    const last = s.lastIndexOf('}');
+    if (first >= 0 && last > first) {
+      try { return JSON.parse(s.slice(first, last + 1)); } catch { /* fall through */ }
+    }
+    return null;
+  }
+
+  // ── Embeddings Bridge ──────────────────────────────────────────────────
+
+  /** @type {object|null} Cached dynamic-import of embeddings.js */
+  let _embeddingsModule = null;
+  let _embeddingsImportTried = false;
+
+  async function _getEmbeddings() {
+    if (_embeddingsModule) return _embeddingsModule;
+    if (_embeddingsImportTried) return null;
+    _embeddingsImportTried = true;
+    try {
+      _embeddingsModule = await import('../embeddings.js');
+      return _embeddingsModule;
+    } catch (e) {
+      log('debug', 'embeddings_import_failed', { error: e?.message });
+      return null;
+    }
+  }
+
+  // ── Royalty Cascade Bridge ─────────────────────────────────────────────
+
+  /** @type {object|null} Cached dynamic-import of royalty-cascade.js */
+  let _royaltyModule = null;
+  let _royaltyImportTried = false;
+
+  async function _getRoyalty() {
+    if (_royaltyModule) return _royaltyModule;
+    if (_royaltyImportTried) return null;
+    _royaltyImportTried = true;
+    try {
+      _royaltyModule = await import('../economy/royalty-cascade.js');
+      return _royaltyModule;
+    } catch (e) {
+      log('debug', 'royalty_import_failed', { error: e?.message });
+      return null;
+    }
+  }
+
+  // ── Quality Gate Bridge ────────────────────────────────────────────────
+
+  /** @type {object|null} Cached dynamic-import of quality-gate.js */
+  let _qualityGateModule = null;
+  let _qualityGateImportTried = false;
+
+  async function _getQualityGate() {
+    if (_qualityGateModule) return _qualityGateModule;
+    if (_qualityGateImportTried) return null;
+    _qualityGateImportTried = true;
+    try {
+      _qualityGateModule = await import('./quality-gate.js');
+      return _qualityGateModule;
+    } catch (e) {
+      log('debug', 'quality_gate_import_failed', { error: e?.message });
+      return null;
+    }
+  }
+
   // ── Deep-question detection & Answer-DTU preference ────────────────────
 
   /**
@@ -258,7 +447,12 @@ export function createOracleEngine(opts = {}) {
    * @param {string} query
    * @returns {Promise<{ taskType: string, domain: string|null, isFormal: boolean }>}
    */
-  async function analyze(query) {
+  /**
+   * Heuristic fallback classifier — used when the utility brain is
+   * unavailable or returns unparseable JSON. Mirrors the original keyword
+   * logic but returns the richer shape expected by Phase 2 and Phase 3.
+   */
+  function _heuristicAnalyze(query) {
     const q = String(query || '').toLowerCase();
 
     const formalHints = [
@@ -268,24 +462,155 @@ export function createOracleEngine(opts = {}) {
     ];
     const narrativeHints = ['story', 'narrative', 'character', 'worldbuild'];
     const conversationalHints = ['hi ', 'hello', 'thanks', 'how are you'];
+    const simHints = ['simulate', 'simulation', 'run a sim', 'model the'];
+    const domainKeywords = {
+      physics: ['physics', 'force', 'momentum', 'energy', 'wave', 'quantum'],
+      math: ['math', 'proof', 'theorem', 'equation', 'algebra', 'calculus'],
+      chem: ['chem', 'reaction', 'molecule', 'bond', 'catalyst'],
+      bio: ['bio', 'cell', 'organism', 'dna', 'protein', 'ecosystem'],
+      cs: ['algorithm', 'complexity', 'program', 'runtime', 'code'],
+    };
 
     const hasAny = (arr) => arr.some(w => q.includes(w));
 
-    let taskType = 'general';
-    if (hasAny(formalHints)) taskType = 'formal';
-    else if (hasAny(narrativeHints)) taskType = 'narrative';
-    else if (hasAny(conversationalHints)) taskType = 'conversational';
+    let queryType = 'general';
+    if (hasAny(formalHints)) queryType = 'formal';
+    else if (hasAny(simHints)) queryType = 'computational';
+    else if (hasAny(narrativeHints)) queryType = 'narrative';
+    else if (hasAny(conversationalHints)) queryType = 'conversational';
 
-    const isFormal = taskType === 'formal';
-
-    // crude domain routing: pick first registered domain handler whose name
-    // appears in the query, else null
-    let domain = null;
+    const primaryDomains = [];
+    for (const [d, kws] of Object.entries(domainKeywords)) {
+      if (kws.some(k => q.includes(k))) primaryDomains.push(d);
+    }
+    // also accept registered domain handler names directly
     for (const name of Object.keys(domainHandlers)) {
-      if (q.includes(name.toLowerCase())) { domain = name; break; }
+      if (q.includes(name.toLowerCase()) && !primaryDomains.includes(name)) {
+        primaryDomains.push(name);
+      }
     }
 
-    return { taskType, domain, isFormal };
+    const requiredSystems = [];
+    if (queryType === 'formal' || queryType === 'computational') {
+      requiredSystems.push('physics_modules', 'validation', 'stsvk');
+    }
+    if (hasAny(simHints)) requiredSystems.push('simulation');
+    if (requiredSystems.length === 0) requiredSystems.push('retrieval');
+
+    // Complexity heuristic: longer multi-term queries → more complex.
+    const terms = q.split(/\W+/).filter(t => t.length > 3);
+    let complexity = 'simple';
+    if (terms.length > 30) complexity = 'research';
+    else if (terms.length > 15) complexity = 'complex';
+    else if (terms.length > 6) complexity = 'moderate';
+    else if (terms.length < 2) complexity = 'trivial';
+
+    // Epistemic class heuristic.
+    let epistemicClass = 'probable';
+    if (queryType === 'formal') epistemicClass = 'known';
+    else if (q.includes('unknown') || q.includes("don't know")) epistemicClass = 'unknown';
+    else if (q.includes('maybe') || q.includes('might')) epistemicClass = 'uncertain';
+
+    return {
+      primaryDomains,
+      secondaryDomains: [],
+      queryType,
+      complexity,
+      requiredSystems,
+      epistemicClass,
+      // legacy fields retained for downstream consumers:
+      taskType: queryType,
+      domain: primaryDomains[0] || null,
+      isFormal: queryType === 'formal',
+      crossDomainAssociations: [],
+      _heuristic: true,
+    };
+  }
+
+  /**
+   * Phase 1 — Analyze.
+   *
+   * Upgraded: uses the utility brain for classification, asks for strict
+   * JSON, and supplements with a subconscious-brain pass for cross-domain
+   * associations. Falls back to `_heuristicAnalyze` on any failure.
+   *
+   * @param {string} query
+   * @returns {Promise<object>} analysis
+   */
+  async function analyze(query) {
+    const q = String(query || '');
+    const baseHeuristic = _heuristicAnalyze(q);
+
+    // Ask the utility brain to classify.
+    let classified = null;
+    try {
+      const resp = await _callBrain('utility', {
+        prompt: CLASSIFICATION_PROMPT(q),
+        taskType: 'classification',
+        temperature: 0.1,
+        maxTokens: 400,
+      });
+      const text = _brainText(resp);
+      const parsed = _parseJSONFromBrain(text);
+      if (parsed && typeof parsed === 'object') {
+        classified = parsed;
+      }
+    } catch (e) {
+      log('debug', 'analyze_utility_brain_failed', { error: e?.message });
+    }
+
+    // Merge: prefer brain output, fall back field-by-field to heuristic.
+    const primaryDomains = Array.isArray(classified?.primaryDomains) && classified.primaryDomains.length
+      ? classified.primaryDomains.map(String)
+      : baseHeuristic.primaryDomains;
+    const secondaryDomains = Array.isArray(classified?.secondaryDomains)
+      ? classified.secondaryDomains.map(String)
+      : baseHeuristic.secondaryDomains;
+    const queryType = classified?.queryType || baseHeuristic.queryType;
+    const complexity = classified?.complexity || baseHeuristic.complexity;
+    const requiredSystems = Array.isArray(classified?.requiredSystems) && classified.requiredSystems.length
+      ? classified.requiredSystems.map(String)
+      : baseHeuristic.requiredSystems;
+    const epistemicClass = classified?.epistemicClass || baseHeuristic.epistemicClass;
+
+    // Ask the subconscious brain for cross-domain associations (best-effort).
+    let crossDomainAssociations = [];
+    try {
+      const resp = await _callBrain('subconscious', {
+        prompt:
+          `List up to 5 short cross-domain associations (comma-separated, ` +
+          `one per line) for the query below. Think laterally — which other ` +
+          `fields or theories connect to this?\n\nQuery: ${q}`,
+        taskType: 'pattern_recognition',
+        temperature: 0.7,
+        maxTokens: 200,
+      });
+      const text = _brainText(resp);
+      if (text) {
+        crossDomainAssociations = text
+          .split(/[\n,]/)
+          .map(s => s.replace(/^[\s\-*•\d.]+/, '').trim())
+          .filter(Boolean)
+          .slice(0, 5);
+      }
+    } catch (e) {
+      log('debug', 'analyze_subconscious_brain_failed', { error: e?.message });
+    }
+
+    return {
+      primaryDomains,
+      secondaryDomains,
+      queryType,
+      complexity,
+      requiredSystems,
+      epistemicClass,
+      crossDomainAssociations,
+      // legacy fields kept for backward compatibility with downstream code:
+      taskType: queryType,
+      domain: primaryDomains[0] || null,
+      isFormal: queryType === 'formal',
+      _classifiedBy: classified ? 'utility_brain' : 'heuristic',
+    };
   }
 
   // ── Phase 2: Retrieve ───────────────────────────────────────────────────
@@ -299,47 +624,17 @@ export function createOracleEngine(opts = {}) {
    * @param {object} analysis
    * @returns {Promise<{ dtus: object[] }>}
    */
-  async function retrieve(query, analysis) {
-    if (!dtuStore || typeof dtuStore.values !== 'function') {
-      return { dtus: [], deepQuestion: false, primaryAnswerDTU: null };
-    }
-
+  /**
+   * Tag/term fallback search — used when embeddings are unavailable. Kept
+   * as a standalone helper so it can be reused by the retrieval pipeline
+   * and the deep-question short-circuit.
+   */
+  function _tagTermSearch(query, candidates, limit = 24) {
     const q = String(query || '').toLowerCase();
     const terms = q.split(/\W+/).filter(t => t.length > 3);
     const out = [];
-
-    // Deep-question preference: scan for answer-seed DTUs first and boost
-    // their relevance. These are the pre-seeded canonical answers to the
-    // 120-ish philosophical/physical/mathematical questions the oracle is
-    // expected to handle.
-    const isDeep = detectDeepQuestion(query, analysis);
-    let primaryAnswerDTU = null;
-
-    if (isDeep) {
-      const scored = [];
-      for (const dtu of dtuStore.values()) {
-        if (!_isAnswerSeedDTU(dtu)) continue;
-        const base = _scoreAnswerDTU(query, dtu);
-        // 2x boost on answer-seed DTUs when the query is deep.
-        const boosted = Math.min(1, base * 2);
-        if (boosted > 0) scored.push({ dtu, score: boosted });
-      }
-      scored.sort((a, b) => b.score - a.score);
-      // Strong-match threshold: >0.8 boosted score wins as PRIMARY source.
-      if (scored.length > 0 && scored[0].score > 0.8) {
-        primaryAnswerDTU = scored[0].dtu;
-      }
-      // Always fold the top-N answer seeds into the retrieval output so they
-      // appear in citations & compute synthesis.
-      for (const { dtu } of scored.slice(0, 6)) {
-        out.push(dtu);
-      }
-    }
-
-    for (const dtu of dtuStore.values()) {
+    for (const dtu of candidates) {
       if (!dtu || typeof dtu !== 'object') continue;
-      // Skip duplicates we already surfaced as answer seeds.
-      if (out.includes(dtu)) continue;
       const hay = [
         dtu.id,
         dtu.title,
@@ -352,11 +647,251 @@ export function createOracleEngine(opts = {}) {
       const termMatch = terms.some(t => hay.includes(t));
       if (tagMatch || termMatch) {
         out.push(dtu);
-        if (out.length >= 24) break;
+        if (out.length >= limit) break;
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Build the candidate list for semantic search. If the analysis has
+   * primary domains, prefer DTUs tagged with those; otherwise take the
+   * first N DTUs from the store.
+   */
+  function _buildCandidates(analysis, limit = 500) {
+    if (!dtuStore || typeof dtuStore.values !== 'function') return [];
+
+    const primaryDomains = (analysis?.primaryDomains || []).map(d => String(d).toLowerCase());
+    const candidates = [];
+    const seen = new Set();
+
+    if (primaryDomains.length > 0) {
+      for (const dtu of dtuStore.values()) {
+        if (!dtu || typeof dtu !== 'object') continue;
+        const tags = (dtu.tags || []).map(t => String(t).toLowerCase());
+        const inDomain = primaryDomains.some(d => tags.includes(d))
+          || primaryDomains.some(d => String(dtu.id || '').toLowerCase().includes(d));
+        if (inDomain) {
+          candidates.push(dtu);
+          seen.add(dtu.id);
+          if (candidates.length >= limit) break;
+        }
       }
     }
 
-    return { dtus: out, deepQuestion: isDeep, primaryAnswerDTU };
+    if (candidates.length < limit) {
+      for (const dtu of dtuStore.values()) {
+        if (!dtu || typeof dtu !== 'object') continue;
+        if (seen.has(dtu.id)) continue;
+        candidates.push(dtu);
+        if (candidates.length >= limit) break;
+      }
+    }
+
+    return candidates;
+  }
+
+  /**
+   * Phase 2 — Retrieve.
+   *
+   * Upgraded: uses real semantic search via embeddings.js when available.
+   * Combines semantic, tag/term, domain-specific, prior-answer, and
+   * entity-insight sources into a rich retrieval bundle.
+   *
+   * @param {string} query
+   * @param {object} analysis
+   * @returns {Promise<object>}
+   */
+  async function retrieve(query, analysis) {
+    if (!dtuStore || typeof dtuStore.values !== 'function') {
+      return {
+        dtus: [],
+        semantic: [],
+        domainSpecific: [],
+        priorAnswers: [],
+        entityInsights: [],
+        crossDomainConnections: [],
+        deepQuestion: false,
+        primaryAnswerDTU: null,
+        totalSources: 0,
+      };
+    }
+
+    const q = String(query || '');
+    const isDeep = detectDeepQuestion(query, analysis);
+
+    // ── Deep-question answer-seed preference ────────────────────────────
+    const deepOut = [];
+    let primaryAnswerDTU = null;
+    if (isDeep) {
+      const scored = [];
+      for (const dtu of dtuStore.values()) {
+        if (!_isAnswerSeedDTU(dtu)) continue;
+        const base = _scoreAnswerDTU(query, dtu);
+        const boosted = Math.min(1, base * 2);
+        if (boosted > 0) scored.push({ dtu, score: boosted });
+      }
+      scored.sort((a, b) => b.score - a.score);
+      if (scored.length > 0 && scored[0].score > 0.8) {
+        primaryAnswerDTU = scored[0].dtu;
+      }
+      for (const { dtu } of scored.slice(0, 6)) deepOut.push(dtu);
+    }
+
+    // ── Semantic search ─────────────────────────────────────────────────
+    let semantic = [];
+    const candidates = _buildCandidates(analysis, 500);
+    try {
+      const emb = await _getEmbeddings();
+      if (emb && typeof emb.semanticSearch === 'function' && typeof emb.isEmbeddingAvailable === 'function' && emb.isEmbeddingAvailable()) {
+        semantic = await emb.semanticSearch(q, candidates, { topK: 50 });
+        stats.embeddingSearches++;
+      } else if (emb && typeof emb.semanticSearch === 'function') {
+        // Try anyway — semanticSearch returns [] if embed() fails.
+        semantic = await emb.semanticSearch(q, candidates, { topK: 50 });
+        stats.embeddingSearches++;
+      }
+    } catch (e) {
+      log('debug', 'retrieve_semantic_failed', { error: e?.message });
+      semantic = [];
+    }
+
+    // Fallback: tag/term search if semantic came up empty.
+    if (!Array.isArray(semantic) || semantic.length === 0) {
+      semantic = _tagTermSearch(q, candidates, 24);
+    }
+
+    // ── Domain-specific retrieval ───────────────────────────────────────
+    const domainSpecific = [];
+    const primaryDomains = analysis?.primaryDomains || [];
+    for (const domain of primaryDomains) {
+      try {
+        const handler = domainHandlers?.[domain];
+        if (!handler) continue;
+        // Accept any of a few plausible listing APIs.
+        let listFn = null;
+        if (typeof handler.list === 'function') listFn = handler.list;
+        else if (typeof handler.listAction === 'function') listFn = handler.listAction;
+        else if (typeof handler === 'function') listFn = handler;
+        if (!listFn) continue;
+        const result = await listFn({ query: q, domain, analysis });
+        if (Array.isArray(result)) domainSpecific.push(...result);
+        else if (result && Array.isArray(result.items)) domainSpecific.push(...result.items);
+      } catch (e) {
+        log('debug', 'retrieve_domain_list_failed', { domain, error: e?.message });
+      }
+    }
+
+    // ── Prior oracle_answer DTUs (memory) ───────────────────────────────
+    const priorAnswers = [];
+    try {
+      const qLower = q.toLowerCase();
+      const qTerms = qLower.split(/\W+/).filter(t => t.length > 3);
+      for (const dtu of dtuStore.values()) {
+        if (!dtu || typeof dtu !== 'object') continue;
+        if (dtu.type !== 'oracle_answer') continue;
+        const prevQ = String(dtu.core?.query || '').toLowerCase();
+        if (!prevQ) continue;
+        if (prevQ === qLower) {
+          priorAnswers.push(dtu);
+        } else if (qTerms.length > 0) {
+          const overlap = qTerms.filter(t => prevQ.includes(t)).length;
+          if (overlap / qTerms.length >= 0.6) priorAnswers.push(dtu);
+        }
+        if (priorAnswers.length >= 6) break;
+      }
+    } catch (e) {
+      log('debug', 'retrieve_prior_answers_failed', { error: e?.message });
+    }
+
+    // ── Entity insights ─────────────────────────────────────────────────
+    const entityInsights = [];
+    try {
+      if (entities && primaryDomains.length > 0) {
+        // `entities` may be a Map, plain object, or array — probe shape.
+        const iter = typeof entities.values === 'function'
+          ? entities.values()
+          : (Array.isArray(entities) ? entities : Object.values(entities));
+        let count = 0;
+        for (const ent of iter) {
+          if (!ent || typeof ent !== 'object') continue;
+          const entDomains = ent.domains || ent.expertise || [];
+          const match = Array.isArray(entDomains)
+            && entDomains.some(d => primaryDomains.includes(String(d).toLowerCase()));
+          if (match) {
+            entityInsights.push({
+              id: ent.id || ent.name,
+              name: ent.name || ent.id,
+              domains: entDomains,
+              perspective: ent.perspective || ent.bio || null,
+            });
+            count++;
+            if (count >= 5) break;
+          }
+        }
+      }
+    } catch (e) {
+      log('debug', 'retrieve_entity_insights_failed', { error: e?.message });
+    }
+
+    // ── Cross-domain connections (via embeddings) ───────────────────────
+    const crossDomainConnections = [];
+    try {
+      const emb = await _getEmbeddings();
+      if (emb && typeof emb.findCrossDomainConnections === 'function') {
+        const allDTUs = Array.from(dtuStore.values());
+        const seeds = [
+          primaryAnswerDTU,
+          ...(Array.isArray(semantic) ? semantic.slice(0, 3) : []),
+        ].filter(Boolean);
+        const seenIds = new Set();
+        for (const seed of seeds) {
+          if (!seed?.id) continue;
+          const conns = await emb.findCrossDomainConnections(seed.id, allDTUs, 3);
+          for (const c of (conns || [])) {
+            if (c?.id && !seenIds.has(c.id)) {
+              crossDomainConnections.push(c);
+              seenIds.add(c.id);
+            }
+          }
+          if (crossDomainConnections.length >= 8) break;
+        }
+      }
+    } catch (e) {
+      log('debug', 'retrieve_cross_domain_failed', { error: e?.message });
+    }
+
+    // ── Merge into a unified dtus[] list (order: deep, semantic, domain, prior) ──
+    const merged = [];
+    const mergedIds = new Set();
+    const push = (d) => {
+      if (!d || typeof d !== 'object') return;
+      if (!d.id || mergedIds.has(d.id)) return;
+      merged.push(d);
+      mergedIds.add(d.id);
+    };
+    for (const d of deepOut) push(d);
+    for (const d of semantic) push(d);
+    for (const d of domainSpecific) push(d);
+    for (const d of priorAnswers) push(d);
+
+    const totalSources =
+      (Array.isArray(semantic) ? semantic.length : 0) +
+      domainSpecific.length +
+      priorAnswers.length +
+      entityInsights.length;
+
+    return {
+      dtus: merged.slice(0, 50),
+      semantic: Array.isArray(semantic) ? semantic : [],
+      domainSpecific,
+      priorAnswers,
+      entityInsights,
+      crossDomainConnections,
+      deepQuestion: isDeep,
+      primaryAnswerDTU,
+      totalSources,
+    };
   }
 
   // ── STSVK: Load theorems from the DTU lattice ──────────────────────────
@@ -557,32 +1092,150 @@ export function createOracleEngine(opts = {}) {
    * @param {object} retrieval
    * @returns {Promise<{ answer: string, stsvk: object|null }>}
    */
+  /**
+   * Try to invoke an action on a domain handler via a variety of common
+   * API shapes. Returns `null` on any failure.
+   */
+  async function _invokeDomainAction(handler, action, payload) {
+    if (!handler) return null;
+    try {
+      if (typeof handler[action] === 'function') {
+        return await handler[action](payload);
+      }
+      if (typeof handler.invoke === 'function') {
+        return await handler.invoke(action, payload);
+      }
+      if (typeof handler.run === 'function') {
+        return await handler.run(action, payload);
+      }
+    } catch (e) {
+      log('debug', 'domain_action_failed', {
+        action, error: e?.message,
+      });
+    }
+    return null;
+  }
+
+  /**
+   * Phase 3 — Compute.
+   *
+   * Upgraded: runs real domain modules (physics, math, chem, quantum, sim)
+   * and the quality gate when the analysis asks for them. Always runs the
+   * STSVK constraint check (same logic as before — that's the one part of
+   * compute() that was already real and we keep it exactly).
+   *
+   * Note: this phase NO LONGER produces the user-facing answer string.
+   * That now lives in `synthesize()`. compute() returns raw computation
+   * results which synthesize() will feed to the conscious brain.
+   *
+   * @param {string} query
+   * @param {object} analysis
+   * @param {object} retrieval
+   * @returns {Promise<object>}
+   */
   async function compute(query, analysis, retrieval) {
-    const sources = retrieval?.dtus || [];
-    const bullets = sources
-      .slice(0, 6)
-      .map(d => `- [${d.id}] ${d.human?.summary || d.title || ''}`)
-      .join('\n');
+    const requiredSystems = Array.isArray(analysis?.requiredSystems)
+      ? analysis.requiredSystems
+      : [];
+    const primaryDomains = analysis?.primaryDomains || [];
 
-    const answer =
-      `Query: ${query}\n` +
-      `Task: ${analysis.taskType}\n` +
-      (bullets ? `Relevant DTUs:\n${bullets}\n` : `No directly matched DTUs.\n`) +
-      `Synthesis: (answer derived from retrieved lattice context)`;
+    const results = {};
+    let computationCount = 0;
+    let hasProofs = false;
+    let hasSimulation = false;
 
-    // STSVK constraint check for formal/computational/theoretical queries.
+    // ── Physics / math / chem / quantum modules ─────────────────────────
+    const wantsPhysicsModules =
+      requiredSystems.includes('physics_modules') ||
+      requiredSystems.includes('physics') ||
+      primaryDomains.some(d => ['physics', 'math', 'chem', 'quantum'].includes(String(d).toLowerCase()));
+
+    if (wantsPhysicsModules) {
+      const candidates = ['physics', 'math', 'chem', 'quantum'];
+      for (const name of candidates) {
+        const handler = domainHandlers?.[name];
+        if (!handler) continue;
+        const analysisResult = await _invokeDomainAction(handler, 'analyze', {
+          query, analysis, retrieval,
+        });
+        if (analysisResult) {
+          results[`${name}_analyze`] = analysisResult;
+          computationCount++;
+        }
+        const computeResult = await _invokeDomainAction(handler, 'compute', {
+          query, analysis, retrieval,
+        });
+        if (computeResult) {
+          results[`${name}_compute`] = computeResult;
+          computationCount++;
+          // Heuristic proof detection on the result payload.
+          const serialized = typeof computeResult === 'string'
+            ? computeResult
+            : JSON.stringify(computeResult);
+          if (/proof|theorem|QED|∎/.test(serialized)) hasProofs = true;
+        }
+      }
+    }
+
+    // ── Simulation ──────────────────────────────────────────────────────
+    if (requiredSystems.includes('simulation')) {
+      const sim = domainHandlers?.sim || domainHandlers?.simulation;
+      if (sim) {
+        const simResult = await _invokeDomainAction(sim, 'run', {
+          query, analysis, retrieval,
+        }) || await _invokeDomainAction(sim, 'simulate', {
+          query, analysis, retrieval,
+        });
+        if (simResult) {
+          results.simulation = simResult;
+          computationCount++;
+          hasSimulation = true;
+        }
+      }
+    }
+
+    // ── Validation (quality gate on any produced artifact) ──────────────
+    if (requiredSystems.includes('validation')) {
+      try {
+        const qg = await _getQualityGate();
+        const validateFn =
+          qg?.validateArtifact ||
+          qg?.validateForRender ||
+          null;
+        if (validateFn && Object.keys(results).length > 0) {
+          // Pick the first domain-produced artifact-ish result.
+          const [firstKey, firstResult] = Object.entries(results)[0];
+          const domain = firstKey.split('_')[0];
+          const action = firstKey.split('_').slice(1).join('_') || 'compute';
+          const gateResult = validateFn(domain, action, firstResult);
+          results.qualityGate = gateResult;
+          computationCount++;
+        }
+      } catch (e) {
+        log('debug', 'compute_quality_gate_failed', { error: e?.message });
+      }
+    }
+
+    // ── STSVK constraint check ──────────────────────────────────────────
+    //
+    // Kept exactly as it was — this is the bit that already worked. We use
+    // a lightweight "surface" built from the query + result keys so the
+    // STSVK invariant matcher has something to scan before the final
+    // synthesized answer exists.
     let stsvk = null;
     const needsFormalCheck =
       analysis.isFormal ||
+      analysis.queryType === 'formal' ||
       analysis.taskType === 'formal' ||
+      analysis.queryType === 'computational' ||
       analysis.taskType === 'computational' ||
+      analysis.queryType === 'theoretical' ||
       analysis.taskType === 'theoretical';
 
     if (needsFormalCheck) {
       try {
         const allTheorems = await loadSTSVKTheorems();
         if (allTheorems.length > 0) {
-          // Filter theorems to those relevant to the query's domain / terms.
           const q = String(query).toLowerCase();
           const terms = q.split(/\W+/).filter(t => t.length > 3);
           const relevant = allTheorems.filter(t => {
@@ -594,15 +1247,14 @@ export function createOracleEngine(opts = {}) {
             ].filter(Boolean).join(' ').toLowerCase();
             return terms.some(term => hay.includes(term));
           });
-
-          // If nothing matched, still validate against the root identity theorem.
           const toCheck = relevant.length > 0
             ? relevant
             : allTheorems.filter(t => String(t.id).startsWith('dtu_root_fixed_point'));
 
-          stsvk = await runSTSVKConstraintCheck(answer, toCheck);
+          // Surface string: query + serialized result keys (cheap pre-check).
+          const surface = `${query}\n${JSON.stringify(results).slice(0, 4000)}`;
+          stsvk = await runSTSVKConstraintCheck(surface, toCheck);
         } else {
-          // Graceful skip — STSVK DTUs not loaded yet.
           stsvk = {
             violatedTheorems: [],
             satisfiedTheorems: [],
@@ -625,7 +1277,142 @@ export function createOracleEngine(opts = {}) {
       }
     }
 
-    return { answer, stsvk };
+    return {
+      results,
+      computationCount,
+      hasProofs,
+      hasSimulation,
+      stsvk,
+    };
+  }
+
+  // ── Phase 4: Synthesize ─────────────────────────────────────────────────
+
+  /**
+   * Phase 4 — Synthesize.
+   *
+   * Build a rich context object and ask the conscious brain to produce
+   * the final Oracle answer. Returns the answer plus structured side data:
+   * sources, computations, connections, epistemic breakdown.
+   *
+   * Graceful degrade: if no brain is reachable, fall back to a templated
+   * synthesis that still cites sources and lists computations so the
+   * downstream phases have something valid to validate and record.
+   *
+   * @param {string} query
+   * @param {object} analysis
+   * @param {object} retrieval
+   * @param {object} computation
+   * @returns {Promise<object>}
+   */
+  async function synthesize(query, analysis, retrieval, computation) {
+    const sources = Array.isArray(retrieval?.dtus) ? retrieval.dtus : [];
+    const topSources = sources.slice(0, 10);
+    const computationResults = computation?.results || {};
+    const crossDomainConnections = retrieval?.crossDomainConnections || [];
+    const entityInsights = retrieval?.entityInsights || [];
+    const priorAnswers = retrieval?.priorAnswers || [];
+
+    // Build a compact source block the LLM can cite against.
+    const sourceBlock = topSources.map((d, i) => {
+      const summary = d.human?.summary || d.title || '';
+      const bullets = Array.isArray(d.human?.bullets) ? d.human.bullets.slice(0, 3) : [];
+      return `[${d.id}] (source ${i + 1}) ${summary}` +
+        (bullets.length ? `\n  - ${bullets.join('\n  - ')}` : '');
+    }).join('\n');
+
+    const computationBlock = Object.entries(computationResults).map(([k, v]) => {
+      const val = typeof v === 'string' ? v : JSON.stringify(v);
+      return `- ${k}: ${val.slice(0, 400)}`;
+    }).join('\n');
+
+    const entityBlock = entityInsights.map(e => {
+      return `- ${e.name || e.id} [${(e.domains || []).join(', ')}]${e.perspective ? ': ' + String(e.perspective).slice(0, 120) : ''}`;
+    }).join('\n');
+
+    const priorBlock = priorAnswers.slice(0, 3).map(p => {
+      return `- [${p.id}] ${p.core?.query || ''} -> ${String(p.core?.answer || '').slice(0, 200)}`;
+    }).join('\n');
+
+    const connectionsBlock = crossDomainConnections.slice(0, 5).map(c => {
+      return `- [${c.id}] ${c.title || ''} (cross-domain score ${c.score?.toFixed?.(2) ?? c.score})`;
+    }).join('\n');
+
+    const fullContext =
+      `# Query\n${query}\n\n` +
+      `# Classification\n` +
+      `- primary domains: ${(analysis.primaryDomains || []).join(', ') || 'n/a'}\n` +
+      `- query type: ${analysis.queryType || analysis.taskType || 'general'}\n` +
+      `- complexity: ${analysis.complexity || 'n/a'}\n` +
+      `- epistemic class: ${analysis.epistemicClass || 'n/a'}\n\n` +
+      (sourceBlock ? `# Top DTU Sources (cite by ID)\n${sourceBlock}\n\n` : '') +
+      (computationBlock ? `# Computation Results (ground truth — never contradict)\n${computationBlock}\n\n` : '') +
+      (entityBlock ? `# Entity Perspectives\n${entityBlock}\n\n` : '') +
+      (priorBlock ? `# Prior Oracle Answers\n${priorBlock}\n\n` : '') +
+      (connectionsBlock ? `# Cross-Domain Connections\n${connectionsBlock}\n\n` : '') +
+      `# Task\nProduce the Oracle answer for this query. Follow every rule ` +
+      `in the system prompt. End your answer with two sections titled ` +
+      `"Epistemic Breakdown:" (listing KNOWN/PROBABLE/UNCERTAIN/UNKNOWN ` +
+      `claim counts) and "Follow-ups:".`;
+
+    let answer = null;
+    let brainResponse = null;
+    try {
+      brainResponse = await _callBrain('conscious', {
+        prompt: fullContext,
+        systemPrompt: ORACLE_SYSTEM_PROMPT,
+        taskType: 'reasoning',
+        temperature: 0.3,
+        maxTokens: 2000,
+      });
+      answer = _brainText(brainResponse);
+    } catch (e) {
+      log('debug', 'synthesize_conscious_brain_failed', { error: e?.message });
+    }
+
+    // Fallback templated synthesis when the brain is unreachable.
+    if (!answer) {
+      const bullets = topSources
+        .map(d => `- [${d.id}] ${d.human?.summary || d.title || ''}`)
+        .join('\n');
+      answer =
+        `Query: ${query}\n` +
+        `Task: ${analysis.queryType || analysis.taskType || 'general'}\n` +
+        (bullets ? `Relevant DTUs:\n${bullets}\n` : `No directly matched DTUs.\n`) +
+        (computationBlock ? `Computations:\n${computationBlock}\n` : '') +
+        `Synthesis: (fallback answer — conscious brain unavailable; ` +
+        `above sources and computations are the ground truth.)\n` +
+        `Epistemic Breakdown: KNOWN=0 PROBABLE=${topSources.length} UNCERTAIN=0 UNKNOWN=0\n` +
+        `Follow-ups: consider asking for a formal derivation or additional DTUs.`;
+    }
+
+    // Best-effort extraction of an epistemic breakdown from the answer text.
+    const epistemicBreakdown = {
+      known: 0, probable: 0, uncertain: 0, unknown: 0,
+    };
+    try {
+      const upper = String(answer).toUpperCase();
+      epistemicBreakdown.known     = (upper.match(/\bKNOWN\b/g)     || []).length;
+      epistemicBreakdown.probable  = (upper.match(/\bPROBABLE\b/g)  || []).length;
+      epistemicBreakdown.uncertain = (upper.match(/\bUNCERTAIN\b/g) || []).length;
+      epistemicBreakdown.unknown   = (upper.match(/\bUNKNOWN\b/g)   || []).length;
+    } catch { /* noop */ }
+
+    return {
+      answer,
+      sources: topSources.map(d => ({
+        id: d.id,
+        title: d.title || d.human?.summary || '',
+      })),
+      computations: Object.keys(computationResults),
+      connections: crossDomainConnections.slice(0, 5).map(c => ({
+        id: c.id,
+        title: c.title,
+        score: c.score,
+      })),
+      epistemicBreakdown,
+      _brainResponse: brainResponse ? { id: brainResponse.id, brain: brainResponse.brain } : null,
+    };
   }
 
   // ── Phase 4: Cite ───────────────────────────────────────────────────────
@@ -667,6 +1454,99 @@ export function createOracleEngine(opts = {}) {
     const nDtus = (retrieval?.dtus || []).length;
     const coverage = Math.min(1, nDtus / 8);
     const stsvkScore = stsvk && !stsvk.skipped ? stsvk.constraintScore : 1;
+    const sources = extras.sources || retrieval?.dtus || [];
+
+    // ── Multi-layer validation (Phase 5 upgrade) ─────────────────────────
+    //
+    // Three independent checks run in Promise.all:
+    //   1. Repair brain fact-check — tries to catch hallucinations
+    //   2. Quality gate — structural validation of the artifact
+    //   3. STSVK constraint check — already run in compute() and passed in
+    //
+    // Each produces a [0,1] score. The final confidence is a weighted mean.
+
+    const factCheckPromise = (async () => {
+      try {
+        const sourceSummary = (Array.isArray(sources) ? sources : [])
+          .slice(0, 8)
+          .map(s => `[${s.id || s}] ${s.title || s.human?.summary || ''}`)
+          .join('\n');
+        const resp = await _callBrain('repair', {
+          task: 'factCheck',
+          taskType: 'diagnosis',
+          temperature: 0.1,
+          maxTokens: 300,
+          prompt:
+            `Fact-check the following Oracle answer against the provided ` +
+            `sources. Reply with a strict JSON object:\n` +
+            `{ "score": number (0..1), "issues": [string], "verdict": ` +
+            `"pass"|"warn"|"fail" }\n\n` +
+            `# Sources\n${sourceSummary || '(none)'}\n\n` +
+            `# Answer\n${String(answer || '').slice(0, 4000)}`,
+        });
+        const text = _brainText(resp);
+        const parsed = _parseJSONFromBrain(text);
+        if (parsed && typeof parsed === 'object') {
+          return {
+            score: typeof parsed.score === 'number'
+              ? Math.max(0, Math.min(1, parsed.score))
+              : 0.7,
+            issues: Array.isArray(parsed.issues) ? parsed.issues : [],
+            verdict: parsed.verdict || 'warn',
+            available: true,
+          };
+        }
+        // Brain replied but not JSON — heuristic: look for keywords.
+        if (text) {
+          const lower = text.toLowerCase();
+          let verdict = 'warn';
+          if (/\bpass\b|\bok\b|\baccurate\b/.test(lower)) verdict = 'pass';
+          if (/\bfail\b|\bwrong\b|\bhallucinat/.test(lower)) verdict = 'fail';
+          const score = verdict === 'pass' ? 0.85 : verdict === 'fail' ? 0.2 : 0.6;
+          return { score, issues: [], verdict, available: true };
+        }
+        return { score: 0.7, issues: [], verdict: 'skipped', available: false };
+      } catch (e) {
+        log('debug', 'validate_fact_check_failed', { error: e?.message });
+        return { score: 0.7, issues: [], verdict: 'error', available: false };
+      }
+    })();
+
+    const qualityGatePromise = (async () => {
+      try {
+        const qg = await _getQualityGate();
+        const validateFn = qg?.validateArtifact || qg?.validateForRender;
+        if (!validateFn) {
+          return { score: 0.7, pass: true, issues: [], available: false };
+        }
+        // Build a minimal artifact-shaped payload from the answer.
+        const artifact = {
+          content: String(answer || ''),
+          sources: (Array.isArray(sources) ? sources : []).map(s => s.id || s),
+          query: extras.query,
+        };
+        const domain = extras.analysis?.primaryDomains?.[0] || 'oracle';
+        const action = 'synthesize';
+        const result = validateFn(domain, action, artifact);
+        if (result && typeof result === 'object') {
+          return {
+            score: typeof result.score === 'number' ? result.score : (result.pass ? 1 : 0.5),
+            pass: !!result.pass,
+            issues: Array.isArray(result.issues) ? result.issues : [],
+            available: true,
+          };
+        }
+        return { score: 0.7, pass: true, issues: [], available: false };
+      } catch (e) {
+        log('debug', 'validate_quality_gate_failed', { error: e?.message });
+        return { score: 0.7, pass: true, issues: [], available: false };
+      }
+    })();
+
+    const [factCheck, qualityGate] = await Promise.all([
+      factCheckPromise,
+      qualityGatePromise,
+    ]);
 
     // Chicken2 Gate — lazy, graceful degrade. Runs on the synthesized answer.
     let chicken2 = null;
@@ -689,9 +1569,15 @@ export function createOracleEngine(opts = {}) {
     }
 
     // Base weighting: if STSVK was actually applied, weight it heavily.
-    const baseConfidence = stsvk && !stsvk.skipped
-      ? 0.4 * coverage + 0.6 * stsvkScore
-      : 0.7 * coverage + 0.3 * stsvkScore;
+    // The new multi-layer validators (factCheck + qualityGate) contribute
+    // 20% each when they return a non-default score.
+    const stsvkWeighted = stsvk && !stsvk.skipped
+      ? 0.3 * coverage + 0.5 * stsvkScore
+      : 0.6 * coverage + 0.2 * stsvkScore;
+    const multiLayerBonus =
+      0.1 * (factCheck.available ? factCheck.score : 0.7) +
+      0.1 * (qualityGate.available ? qualityGate.score : 0.7);
+    const baseConfidence = stsvkWeighted + multiLayerBonus;
 
     // Blend Chicken2 Gate @ 30% when it produced a real (non-unavailable)
     // result. We detect "real" by the presence of a numeric confidence AND
@@ -731,12 +1617,42 @@ export function createOracleEngine(opts = {}) {
       capped = Math.min(capped, 0.4);
     }
 
+    // Collect warnings surfaced by any validator.
+    const warnings = [];
+    if (factCheck.verdict === 'fail') warnings.push('fact_check_failed');
+    if (factCheck.verdict === 'warn') warnings.push('fact_check_warning');
+    if (Array.isArray(factCheck.issues) && factCheck.issues.length > 0) {
+      warnings.push(...factCheck.issues.map(s => `fact_check:${String(s).slice(0, 80)}`));
+    }
+    if (qualityGate.available && qualityGate.pass === false) warnings.push('quality_gate_failed');
+    if (Array.isArray(qualityGate.issues) && qualityGate.issues.length > 0) {
+      warnings.push(...qualityGate.issues.map(s => {
+        const msg = typeof s === 'string' ? s : (s.issue || JSON.stringify(s));
+        return `quality_gate:${String(msg).slice(0, 80)}`;
+      }));
+    }
+    if (stsvk && !stsvk.skipped && violationRatio > 0) {
+      warnings.push(`stsvk_violation_ratio:${violationRatio.toFixed(2)}`);
+    }
+    if (gateAvailable && chicken2.passed === false) warnings.push('chicken2_gate_failed');
+    if (manifoldAvailable && manifold.inside === false) warnings.push('outside_feasibility_manifold');
+
+    // Hard caps based on multi-layer verdicts.
+    if (factCheck.verdict === 'fail') capped = Math.min(capped, 0.35);
+    if (qualityGate.available && qualityGate.pass === false) capped = Math.min(capped, 0.45);
+
     return {
       confidence: Math.round(capped * 1000) / 1000,
+      factCheck,
+      qualityGate,
+      stsvk,
+      warnings,
       components: {
         coverage,
         stsvkScore,
         violationRatio,
+        factCheckScore: factCheck.score,
+        qualityGateScore: qualityGate.score,
         chicken2Confidence: gateAvailable ? chicken2.confidence : null,
         manifoldScore: manifoldAvailable ? manifold.score : null,
       },
@@ -758,7 +1674,7 @@ export function createOracleEngine(opts = {}) {
    * @param {object|null} stsvk
    * @returns {{ id: string } | null}
    */
-  function record(query, answer, citations, validation, stsvk, extras = {}) {
+  async function record(query, answer, citations, validation, stsvk, extras = {}) {
     if (!dtuStore || typeof dtuStore.set !== 'function') return null;
 
     const id = `dtu_oracle_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -824,14 +1740,97 @@ export function createOracleEngine(opts = {}) {
       updatedAt: nowISO,
     };
 
+    let recordedId = null;
     try {
       dtuStore.set(id, dtu);
       stats.totalDTUsCreated++;
-      return { id };
+      recordedId = id;
     } catch (e) {
       log('warn', 'oracle_record_failed', { error: e?.message });
       return null;
     }
+
+    // ── Royalty cascade ─────────────────────────────────────────────────
+    //
+    // For each cited source DTU, register a citation link from the new
+    // oracle_answer DTU to the source. Then, if we have a userId, fire a
+    // notional-amount royalty distribution (default 10 CC per oracle
+    // answer). Every step is best-effort — royalty failures never block
+    // the oracle's ability to return an answer.
+    const userId = extras.userId || null;
+    const royaltySummary = {
+      citationsRegistered: 0,
+      payouts: [],
+      totalRoyalties: 0,
+      errors: [],
+    };
+
+    try {
+      if (db && Array.isArray(citations.sources) && citations.sources.length > 0) {
+        const royalty = await _getRoyalty();
+        if (royalty && typeof royalty.registerCitation === 'function') {
+          for (const sourceId of citations.sources) {
+            try {
+              // Look up the source DTU for its creatorId.
+              let sourceDTU = null;
+              if (typeof dtuStore.get === 'function') {
+                sourceDTU = dtuStore.get(sourceId);
+              }
+              const parentCreatorId =
+                sourceDTU?.creatorId ||
+                sourceDTU?.core?.creatorId ||
+                sourceDTU?.machine?.creatorId ||
+                'oracle_system';
+              const reg = royalty.registerCitation(db, {
+                childId: recordedId,
+                parentId: sourceId,
+                creatorId: userId || 'oracle_system',
+                parentCreatorId,
+              });
+              if (reg?.ok) {
+                royaltySummary.citationsRegistered++;
+                stats.royaltiesCascaded++;
+              } else if (reg?.error) {
+                royaltySummary.errors.push(`citation:${sourceId}:${reg.error}`);
+              }
+            } catch (e) {
+              royaltySummary.errors.push(`citation:${sourceId}:${e?.message}`);
+            }
+          }
+        }
+
+        if (
+          royalty &&
+          typeof royalty.distributeRoyalties === 'function' &&
+          userId &&
+          royaltySummary.citationsRegistered > 0
+        ) {
+          try {
+            const txAmount = Number(extras.transactionAmount) || 10;
+            const dist = royalty.distributeRoyalties(db, {
+              contentId: recordedId,
+              transactionAmount: txAmount,
+              sourceTxId: `oracle_${recordedId}`,
+              buyerId: userId,
+              sellerId: 'oracle_system',
+            });
+            if (dist?.ok) {
+              royaltySummary.payouts = dist.payouts || [];
+              royaltySummary.totalRoyalties = dist.totalRoyalties || 0;
+            } else if (dist?.error) {
+              royaltySummary.errors.push(`distribute:${dist.error}`);
+            }
+          } catch (e) {
+            royaltySummary.errors.push(`distribute:${e?.message}`);
+          }
+        }
+      }
+    } catch (e) {
+      log('debug', 'oracle_royalty_cascade_failed', { error: e?.message });
+      royaltySummary.errors.push(`cascade:${e?.message}`);
+    }
+
+    return { id: recordedId, royalty: royaltySummary };
   }
 
   // ── Top-level: solve() ─────────────────────────────────────────────────
@@ -851,7 +1850,13 @@ export function createOracleEngine(opts = {}) {
     try { analysis.deepQuestion = detectDeepQuestion(query, analysis); } catch { /* noop */ }
 
     const retrieval = await retrieve(query, analysis);
-    const { answer, stsvk } = await compute(query, analysis, retrieval);
+    const computation = await compute(query, analysis, retrieval);
+    const stsvk = computation?.stsvk || null;
+
+    // Phase 4 — synthesize the user-facing answer via the conscious brain.
+    const synthesis = await synthesize(query, analysis, retrieval, computation);
+    const answer = synthesis.answer;
+
     const citations = cite(retrieval, stsvk);
 
     // Classify the answer into an STSVK regime (binary / continuous / mixed).
@@ -859,12 +1864,20 @@ export function createOracleEngine(opts = {}) {
     try { regime = await _classifyRegime(answer); } catch { /* keep default */ }
     analysis.regime = regime;
 
-    const validation = await validate(retrieval, stsvk, answer, { query, analysis });
+    const validation = await validate(retrieval, stsvk, answer, {
+      query,
+      analysis,
+      sources: retrieval?.dtus,
+    });
 
-    const recorded = record(query, answer, citations, validation, stsvk, {
+    const recorded = await record(query, answer, citations, validation, stsvk, {
       regime,
       manifoldCheck: validation.manifoldCheck,
       chicken2Gate: validation.chicken2Gate,
+      userId: context?.userId || null,
+      transactionAmount: context?.transactionAmount,
+      synthesis,
+      computation,
     });
 
     // Update running stats.
@@ -887,6 +1900,24 @@ export function createOracleEngine(opts = {}) {
       deepQuestion: !!retrieval.deepQuestion,
       primaryAnswerDTU: retrieval.primaryAnswerDTU?.id || null,
       recordedDTU: recorded?.id || null,
+      royalty: recorded?.royalty || null,
+      synthesis: {
+        connections: synthesis?.connections || [],
+        computations: synthesis?.computations || [],
+        epistemicBreakdown: synthesis?.epistemicBreakdown || null,
+      },
+      retrieval: {
+        totalSources: retrieval?.totalSources || 0,
+        semanticHits: (retrieval?.semantic || []).length,
+        domainHits: (retrieval?.domainSpecific || []).length,
+        priorAnswerHits: (retrieval?.priorAnswers || []).length,
+        crossDomainHits: (retrieval?.crossDomainConnections || []).length,
+      },
+      computation: {
+        computationCount: computation?.computationCount || 0,
+        hasProofs: !!computation?.hasProofs,
+        hasSimulation: !!computation?.hasSimulation,
+      },
       elapsedMs: Date.now() - started,
       context,
     };
@@ -949,6 +1980,7 @@ export function createOracleEngine(opts = {}) {
     analyze,
     retrieve,
     compute,
+    synthesize,
     cite,
     validate,
     record,
