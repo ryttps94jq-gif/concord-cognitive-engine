@@ -16326,11 +16326,17 @@ register("dtu", "create", async (ctx, input) => {
   //      the rights-enforcement layer (dtu_licenses) — this is the
   //      marketplace wire: buying usage rights unlocks derivation.
   //
+  // We also track, per parent, WHICH path unlocked the gate. Path 3
+  // (purchased license) is remembered on _lineageUnlockedByLicense so
+  // the subsequent auto-citation call can pass hasPurchasedLicense=true
+  // and skip the user-level consent check on the parent creator.
+  //
   // SECURITY: creator is derived ONLY from the authenticated actor so a
   // caller can't forge `authorId` in the body to look like the parent's
   // owner and bypass the gate.
   const _creatorId = ctx?.actor?.userId || ctx?.actor?.id || "anon";
   const _lineageViolations = [];
+  const _lineageUnlockedByLicense = new Set();
   for (const parentRef of lineage) {
     const parentId = typeof parentRef === "string" ? parentRef : parentRef?.id;
     if (!parentId) continue;
@@ -16376,7 +16382,10 @@ register("dtu", "create", async (ctx, input) => {
     } catch (e) {
       logger.debug('server', 'license_check_failed', { error: e?.message });
     }
-    if (purchasedLicense) continue;
+    if (purchasedLicense) {
+      _lineageUnlockedByLicense.add(parentId);
+      continue;
+    }
 
     _lineageViolations.push({ parentId, parentTitle: parentDtu.title, owner: parentDtu.ownerId, reason: "no_usage_license_or_consent" });
   }
@@ -16556,6 +16565,10 @@ register("dtu", "create", async (ctx, input) => {
           creatorId: dtu.ownerId,
           parentCreatorId: parentDtu.ownerId,
           parentDtu, // DTU-aware check: public/global/council-approved bypass user consent
+          // If the lineage gate unlocked via path 3 (purchased license),
+          // selling usage rights IS consent to citation — the cascade
+          // should register so royalties flow correctly.
+          hasPurchasedLicense: _lineageUnlockedByLicense.has(parentId),
           generation: 1,
         });
         if (!result?.ok && result?.error !== "citation_cycle_detected") {

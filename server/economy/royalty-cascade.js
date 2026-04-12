@@ -53,18 +53,26 @@ export function calculateGenerationalRate(generation, initialRate = DEFAULT_INIT
  * @param {string} opts.parentCreatorId — creator of the parent content
  * @param {number} [opts.generation=1] — generation distance (1 = direct citation)
  */
-export function registerCitation(db, { childId, parentId, creatorId, parentCreatorId, parentDtu, generation = 1 }) {
+export function registerCitation(db, { childId, parentId, creatorId, parentCreatorId, parentDtu, hasPurchasedLicense, generation = 1 }) {
   if (!childId || !parentId) return { ok: false, error: "missing_content_ids" };
   if (childId === parentId) return { ok: false, error: "self_citation_not_allowed" };
   if (!creatorId || !parentCreatorId) return { ok: false, error: "missing_creator_ids" };
 
-  // Consent gate: public / published / global-scoped parents are always
-  // citable (the council already approved them or the creator posted
-  // them publicly). For everything else, the parent creator must have
-  // opted into citations via user-level consent.
-  const cited = parentDtu
-    ? canCiteSpecificDtu(db, parentDtu)
-    : canCiteDtu(db, parentCreatorId);
+  // Citation gate, three paths:
+  //   1. Parent is public / published / global-scoped (DTU-aware check)
+  //   2. Parent creator toggled allow_citation globally
+  //   3. Caller holds a purchased usage/remix license on the parent —
+  //      selling usage rights IS consenting to citation by that buyer.
+  //      Otherwise buyers would pay for remix rights and then find
+  //      their derivatives stranded out of the royalty cascade.
+  let cited = false;
+  if (hasPurchasedLicense === true) {
+    cited = true;
+  } else if (parentDtu) {
+    cited = canCiteSpecificDtu(db, parentDtu);
+  } else {
+    cited = canCiteDtu(db, parentCreatorId);
+  }
   if (!cited) {
     return { ok: false, error: "citation_consent_not_granted" };
   }
