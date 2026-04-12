@@ -27,6 +27,32 @@ function nowISO() {
 }
 
 /**
+ * Send a generic DB error response.
+ *
+ * SECURITY: previously we returned `e.message` directly, which leaks
+ * SQLite error text (table names, column names, constraint names) to
+ * the client. We now log the full error server-side and return a
+ * generic "Internal error" to the caller. "Not found" messages are
+ * preserved because they're safe + useful.
+ */
+function sendDbError(res, e, context) {
+  const msg = String(e?.message || e || "");
+  // Preserve "not found" as 404 for client UX
+  if (msg.toLowerCase().includes("not found")) {
+    return res.status(404).json({ error: "Not found" });
+  }
+  // Preserve validation-style errors (short, no sql internals)
+  if (msg && msg.length < 120 && !/sqlite|constraint|syntax|prepare|column/i.test(msg)) {
+    return res.status(500).json({ error: msg });
+  }
+  // Log server-side with full context, respond generically
+  try {
+    console.error(`[durable] ${context || "db"} error:`, msg);
+  } catch { /* ignore */ }
+  return res.status(500).json({ error: "Internal error" });
+}
+
+/**
  * Log an event to the events table.
  */
 function logEvent(db, type, actorUserId, payload, requestId) {
@@ -208,7 +234,7 @@ export function registerDurableEndpoints(app, db) {
 
       res.json({ ok: true, ...result, facets });
     } catch (e) {
-      res.status(500).json({ error: e.message });
+      sendDbError(res, e, "durable");
     }
   });
 
@@ -241,7 +267,7 @@ export function registerDurableEndpoints(app, db) {
 
       res.json({ ok: true, ...result, facets });
     } catch (e) {
-      res.status(500).json({ error: e.message });
+      sendDbError(res, e, "durable");
     }
   });
 
@@ -276,7 +302,7 @@ export function registerDurableEndpoints(app, db) {
 
       res.json({ ok: true, ...result, facets });
     } catch (e) {
-      res.status(500).json({ error: e.message });
+      sendDbError(res, e, "durable");
     }
   });
 
@@ -303,7 +329,7 @@ export function registerDurableEndpoints(app, db) {
 
       res.json({ ok: true, ...result, facets });
     } catch (e) {
-      res.status(500).json({ error: e.message });
+      sendDbError(res, e, "durable");
     }
   });
 
@@ -367,7 +393,7 @@ export function registerDurableEndpoints(app, db) {
         version: { id: versionId, version: 1, sha256: putResult.sha256, size_bytes: putResult.size },
       });
     } catch (e) {
-      res.status(500).json({ error: e.message });
+      sendDbError(res, e, "durable");
     }
   });
 
@@ -414,8 +440,8 @@ export function registerDurableEndpoints(app, db) {
       res.setHeader("Content-Disposition", `attachment; filename="${safeFilename}"`);
       file.stream.pipe(res);
     } catch (e) {
-      if (e.message?.includes("not found")) return res.status(404).json({ error: e.message });
-      res.status(500).json({ error: e.message });
+      if (e.message?.includes("not found")) return res.status(404).json({ error: "Not found" });
+      sendDbError(res, e, "durable");
     }
   });
 
@@ -440,7 +466,7 @@ export function registerDurableEndpoints(app, db) {
         links,
       });
     } catch (e) {
-      res.status(500).json({ error: e.message });
+      sendDbError(res, e, "durable");
     }
   });
 
@@ -469,7 +495,7 @@ export function registerDurableEndpoints(app, db) {
 
       res.json({ ok: true, listing: { id, title, visibility: "draft", price_cents, currency } });
     } catch (e) {
-      res.status(500).json({ error: e.message });
+      sendDbError(res, e, "durable");
     }
   });
 
@@ -493,7 +519,7 @@ export function registerDurableEndpoints(app, db) {
 
       res.json({ ok: true });
     } catch (e) {
-      res.status(500).json({ error: e.message });
+      sendDbError(res, e, "durable");
     }
   });
 
@@ -518,7 +544,7 @@ export function registerDurableEndpoints(app, db) {
 
       res.json({ ok: true, message: "Published" });
     } catch (e) {
-      res.status(500).json({ error: e.message });
+      sendDbError(res, e, "durable");
     }
   });
 
@@ -534,7 +560,7 @@ export function registerDurableEndpoints(app, db) {
 
       res.json({ ok: true, listing, assets });
     } catch (e) {
-      res.status(500).json({ error: e.message });
+      sendDbError(res, e, "durable");
     }
   });
 
@@ -562,7 +588,7 @@ export function registerDurableEndpoints(app, db) {
 
       res.json({ ok: true, entitlement_id: entId });
     } catch (e) {
-      res.status(500).json({ error: e.message });
+      sendDbError(res, e, "durable");
     }
   });
 
@@ -585,7 +611,7 @@ export function registerDurableEndpoints(app, db) {
 
       res.json({ ok: true, project: { id, name, bpm, key, scale, genre } });
     } catch (e) {
-      res.status(500).json({ error: e.message });
+      sendDbError(res, e, "durable");
     }
   });
 
@@ -603,7 +629,7 @@ export function registerDurableEndpoints(app, db) {
       const projects = db.prepare(`SELECT * FROM studio_projects ${where} ORDER BY updated_at DESC LIMIT ? OFFSET ?`).all(...params, Number(limit), Number(offset));
       res.json({ ok: true, projects, total });
     } catch (e) {
-      res.status(500).json({ error: e.message });
+      sendDbError(res, e, "durable");
     }
   });
 
@@ -647,7 +673,7 @@ export function registerDurableEndpoints(app, db) {
         renders,
       });
     } catch (e) {
-      res.status(500).json({ error: e.message });
+      sendDbError(res, e, "durable");
     }
   });
 
@@ -680,7 +706,7 @@ export function registerDurableEndpoints(app, db) {
       const updated = db.prepare("SELECT * FROM studio_projects WHERE id = ?").get(req.params.id);
       res.json({ ok: true, project: updated });
     } catch (e) {
-      res.status(500).json({ error: e.message });
+      sendDbError(res, e, "durable");
     }
   });
 
@@ -701,7 +727,7 @@ export function registerDurableEndpoints(app, db) {
 
       res.json({ ok: true, track: { id, name, type, instrument_id, color } });
     } catch (e) {
-      res.status(500).json({ error: e.message });
+      sendDbError(res, e, "durable");
     }
   });
 
@@ -722,7 +748,7 @@ export function registerDurableEndpoints(app, db) {
 
       res.json({ ok: true, clip: { id, name, start_ms, duration_ms } });
     } catch (e) {
-      res.status(500).json({ error: e.message });
+      sendDbError(res, e, "durable");
     }
   });
 
@@ -741,7 +767,7 @@ export function registerDurableEndpoints(app, db) {
 
       res.json({ ok: true, effect_chain: { id, chain } });
     } catch (e) {
-      res.status(500).json({ error: e.message });
+      sendDbError(res, e, "durable");
     }
   });
 
@@ -753,7 +779,7 @@ export function registerDurableEndpoints(app, db) {
       db.prepare("UPDATE studio_projects SET updated_at = ? WHERE id = ?").run(nowISO(), req.params.projectId);
       res.json({ ok: true });
     } catch (e) {
-      res.status(500).json({ error: e.message });
+      sendDbError(res, e, "durable");
     }
   });
 
@@ -803,7 +829,7 @@ export function registerDurableEndpoints(app, db) {
         },
       });
     } catch (e) {
-      res.status(500).json({ error: e.message });
+      sendDbError(res, e, "durable");
     }
   });
 
@@ -862,7 +888,7 @@ export function registerDurableEndpoints(app, db) {
 
       res.json({ ok: true, job_id: jobId, render_id: renderId });
     } catch (e) {
-      res.status(500).json({ error: e.message });
+      sendDbError(res, e, "durable");
     }
   });
 
@@ -905,7 +931,7 @@ export function registerDurableEndpoints(app, db) {
 
       res.json({ ok: true, job_id: jobId, analysis: analysisResult });
     } catch (e) {
-      res.status(500).json({ error: e.message });
+      sendDbError(res, e, "durable");
     }
   });
 
@@ -940,7 +966,7 @@ export function registerDurableEndpoints(app, db) {
 
       res.json({ ok: true, job_id: jobId });
     } catch (e) {
-      res.status(500).json({ error: e.message });
+      sendDbError(res, e, "durable");
     }
   });
 
@@ -974,7 +1000,7 @@ export function registerDurableEndpoints(app, db) {
 
       res.json({ ok: true, job_id: jobId });
     } catch (e) {
-      res.status(500).json({ error: e.message });
+      sendDbError(res, e, "durable");
     }
   });
 
@@ -1024,7 +1050,7 @@ export function registerDurableEndpoints(app, db) {
         release: { id: releaseId, title: title || artifact.title, artifact_id, hash_proof: version?.sha256, visibility },
       });
     } catch (e) {
-      res.status(500).json({ error: e.message });
+      sendDbError(res, e, "durable");
     }
   });
 
@@ -1048,7 +1074,7 @@ export function registerDurableEndpoints(app, db) {
 
       res.json({ ok: true, lens_item_id: id });
     } catch (e) {
-      res.status(500).json({ error: e.message });
+      sendDbError(res, e, "durable");
     }
   });
 
@@ -1058,7 +1084,7 @@ export function registerDurableEndpoints(app, db) {
       const items = db.prepare("SELECT * FROM lens_items WHERE lens_id = ? ORDER BY added_at DESC").all(req.params.lensId);
       res.json({ ok: true, items, total: items.length });
     } catch (e) {
-      res.status(500).json({ error: e.message });
+      sendDbError(res, e, "durable");
     }
   });
 
@@ -1081,7 +1107,7 @@ export function registerDurableEndpoints(app, db) {
         .all(...params, Number(limit), Number(offset));
       res.json({ ok: true, events, total });
     } catch (e) {
-      res.status(500).json({ error: e.message });
+      sendDbError(res, e, "durable");
     }
   });
 
@@ -1111,7 +1137,7 @@ export function registerDurableEndpoints(app, db) {
 
       res.json({ ok: true, dtu: { id, title, visibility, tier, created_at: now } });
     } catch (e) {
-      res.status(500).json({ error: e.message });
+      sendDbError(res, e, "durable");
     }
   });
 
