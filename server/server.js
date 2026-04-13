@@ -10662,6 +10662,42 @@ function upsertDTU(dtu, { broadcast = true, federate = false } = {}) {
     try { sanitizeDTUInput(dtu); } catch (e) { structuredLog("error", "dtu_sanitization_failed", { id: dtu?.id, error: String(e) }); }
   }
 
+  // Content shield: PII / copyright / advice framing scan on user+import DTUs.
+  // Annotates dtu.meta.contentShield with detections; blocks writes flagged
+  // as CRITICAL risk. Runs only if the module was exposed at boot.
+  try {
+    const shield = globalThis._contentShieldModule;
+    if (shield?.scanContentFull && (dtu.source === "user" || dtu.source === "import")) {
+      const bodyText = [
+        dtu.title || "",
+        ...(dtu.core?.definitions || []),
+        ...(dtu.core?.claims || []),
+        dtu.body || "",
+      ].filter(Boolean).join("\n");
+      if (bodyText.length > 0) {
+        const scan = shield.scanContentFull(STATE, bodyText, { dtuId: dtu.id });
+        if (scan && (scan.pii?.length || scan.copyright?.length || scan.advice?.length || scan.risk)) {
+          if (!dtu.meta) dtu.meta = {};
+          dtu.meta.contentShield = {
+            risk: scan.risk || "LOW",
+            pii: (scan.pii || []).map(p => p.type).slice(0, 10),
+            copyright: (scan.copyright || []).map(c => c.type).slice(0, 10),
+            advice: (scan.advice || []).map(a => a.domain).slice(0, 10),
+            scannedAt: new Date().toISOString(),
+          };
+          if (scan.risk === "CRITICAL") {
+            structuredLog("warn", "dtu_write_blocked_content_shield", {
+              id: dtu.id,
+              title: dtu.title?.slice(0, 60),
+              risk: scan.risk,
+            });
+            return dtu; // silently drop — do not persist CRITICAL-risk DTUs
+          }
+        }
+      }
+    }
+  } catch (e) { observe(e, "dtu_content_shield_scan"); }
+
   const isNew = !STATE.dtus.has(dtu.id);
 
   // Dedup gate: block system-generated template/duplicate DTUs
@@ -23487,6 +23523,30 @@ try {
 }
 // ===== END EMERGENT =====
 
+// ===== WIRING: Expose injection-defense module globally for inline fast-path scans =====
+// detectContentInjection() (server.js ~line 530) reaches for globalThis._injectionDefenseModule
+// to run the full deep-scan. Without this load, the deep scan is silently skipped.
+try {
+  const injectionDefense = await import("./emergent/injection-defense.js");
+  globalThis._injectionDefenseModule = injectionDefense;
+  log("wiring.injection_defense", "Injection defense module exposed for inline scans");
+} catch (e) {
+  structuredLog("warn", "injection_defense_load_failed", { error: String(e?.message || e) });
+}
+// ===== END INJECTION DEFENSE WIRING =====
+
+// ===== WIRING: Expose content-shield module globally for DTU write-path scans =====
+// pipelineCommitDTU / upsertDTU consult globalThis._contentShieldModule to scan
+// incoming DTUs for PII, copyright signals, and risky advice before persisting.
+try {
+  const contentShield = await import("./emergent/content-shield.js");
+  globalThis._contentShieldModule = contentShield;
+  log("wiring.content_shield", "Content shield module exposed for DTU write path");
+} catch (e) {
+  structuredLog("warn", "content_shield_load_failed", { error: String(e?.message || e) });
+}
+// ===== END CONTENT SHIELD WIRING =====
+
 // ===== EXISTENTIAL OS (QUALIA ENGINE) =====
 try {
   const qualiaEngine = new QualiaEngine(STATE);
@@ -26437,6 +26497,23 @@ async function governorTick(reason="heartbeat") {
         const metaMod = await import("./emergent/meta-derivation.js").catch(() => null);
         if (metaMod?.triggerMetaDerivationCycle) {
           try { metaMod.triggerMetaDerivationCycle(STATE); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
+        }
+      }
+
+      // Feedback Engine — process user feedback queue every FEEDBACK.PROCESS_INTERVAL ticks
+      // Groups like/dislike/report/feature_request signals, generates council proposals,
+      // and adjusts lens authority weights. Non-blocking — errors skip one cycle.
+      if (_tick % FEEDBACK.PROCESS_INTERVAL === 0 && _tick > 0) {
+        const feedbackMod = await import("./lib/feedback-engine.js").catch(() => null);
+        if (feedbackMod?.processFeedbackQueue) {
+          try {
+            await feedbackMod.processFeedbackQueue(STATE, {
+              minRequestsForProposal: FEEDBACK.MIN_REQUESTS_FOR_PROPOSAL,
+              minReportsForRepair: FEEDBACK.MIN_REPORTS_FOR_REPAIR,
+              negativeSentimentThreshold: FEEDBACK.NEGATIVE_SENTIMENT_THRESHOLD,
+              authorityAdjustmentRate: FEEDBACK.AUTHORITY_ADJUSTMENT_RATE,
+            });
+          } catch (e) { structuredLog("warn", "feedback_engine_tick_failed", { error: String(e?.message || e) }); }
         }
       }
 
