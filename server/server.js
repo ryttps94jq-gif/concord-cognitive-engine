@@ -149,6 +149,10 @@ import { initializeSynthesis, getSynthesisMetrics, getCorrelations as synthesisG
 import { initializeNeural, getNeuralMetrics, assessReadiness as neuralAssessReadiness } from "./lib/foundation-neural.js";
 import { initializeProtocol, getProtocolMetrics } from "./lib/foundation-protocol.js";
 import registerFoundationRoutes from "./routes/foundation.js";
+// Entity Economy / Autonomy / Conflict — REST wrappers for previously orphaned macros
+import registerEntityEconomyRoutes from "./routes/entity-economy.js";
+import registerAutonomyRoutes from "./routes/autonomy.js";
+import registerConflictRoutes from "./routes/conflict.js";
 // Foundation Intelligence — 3-tier intelligence architecture
 import { initializeIntelligence, getIntelligenceMetrics, getPublicIntelligence, getAllPublicCategories, getResearchIntelligence, getResearchSynthesis, getResearchArchive, submitResearchApplication, reviewResearchApplication, getResearchApplicationStatus, getSovereignVaultStatus, getClassifierStatus, processSignalIntelligence, detectIntelIntent, intelligenceHeartbeatTick } from "./lib/foundation-intelligence.js";
 import registerFoundationIntelRoutes from "./routes/foundation-intel.js";
@@ -4695,6 +4699,8 @@ function authMiddleware(req, res, next) {
     "/api/reproduction", "/api/lineage", "/api/teaching",
     "/api/trust", "/api/creative", "/api/rights",
     "/api/resonance", "/api/sse",
+    // Entity autonomy + conflict resolution (REST wrappers for orphaned macros)
+    "/api/autonomy", "/api/conflict",
     // Artifact & feedback
     "/api/artifact", "/api/feedback",
     // Export (GET only)
@@ -7623,6 +7629,10 @@ async function runMacro(domain, name, input, ctx) {
     reproduction: new Set(["compatible-pairs", "status"]),
     lineage: new Set(["tree", "get"]),
     rights: new Set(["list", "get", "profile", "status", "metrics"]),
+    // Entity economy / autonomy / conflict (REST wrappers in routes/)
+    entity_economy: new Set(["list_accounts", "get_account", "market_rates", "wealth", "metrics"]),
+    autonomy: new Set(["rights", "profile", "metrics"]),
+    conflict: new Set(["get_dispute", "list_disputes", "find_precedent", "metrics"]),
     // SECURITY: admin macros are NEVER publicly callable. Audit logs,
     // queue state, repair history, backup metadata — all require an
     // explicit admin/owner/founder role checked INSIDE the handler.
@@ -7697,6 +7707,8 @@ async function runMacro(domain, name, input, ctx) {
     "/api/reproduction", "/api/lineage", "/api/teaching",
     "/api/trust", "/api/creative", "/api/rights",
     "/api/resonance", "/api/sse", "/api/notifications",
+    // Entity autonomy + conflict resolution
+    "/api/autonomy", "/api/conflict",
     // Artifact & feedback
     "/api/artifact", "/api/feedback",
     // Export (GET only)
@@ -24428,6 +24440,12 @@ registerMeshRoutes(app, {
 registerFoundationRoutes(app, {
   STATE, makeCtx, runMacro, uiJson, uid, validate, perEndpointRateLimit,
 });
+
+// ---- Entity Economy / Autonomy / Conflict Routes (REST wrappers for
+// macros that previously had no HTTP surface) ----
+registerEntityEconomyRoutes(app, { makeCtx, runMacro });
+registerAutonomyRoutes(app, { makeCtx, runMacro });
+registerConflictRoutes(app, { makeCtx, runMacro });
 
 // ---- Foundation Intelligence Routes (extracted to routes/foundation-intel.js) ----
 registerFoundationIntelRoutes(app, {
