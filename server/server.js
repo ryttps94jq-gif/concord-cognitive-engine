@@ -149,6 +149,10 @@ import { initializeSynthesis, getSynthesisMetrics, getCorrelations as synthesisG
 import { initializeNeural, getNeuralMetrics, assessReadiness as neuralAssessReadiness } from "./lib/foundation-neural.js";
 import { initializeProtocol, getProtocolMetrics } from "./lib/foundation-protocol.js";
 import registerFoundationRoutes from "./routes/foundation.js";
+// Entity Economy / Autonomy / Conflict — REST wrappers for previously orphaned macros
+import registerEntityEconomyRoutes from "./routes/entity-economy.js";
+import registerAutonomyRoutes from "./routes/autonomy.js";
+import registerConflictRoutes from "./routes/conflict.js";
 // Foundation Intelligence — 3-tier intelligence architecture
 import { initializeIntelligence, getIntelligenceMetrics, getPublicIntelligence, getAllPublicCategories, getResearchIntelligence, getResearchSynthesis, getResearchArchive, submitResearchApplication, reviewResearchApplication, getResearchApplicationStatus, getSovereignVaultStatus, getClassifierStatus, processSignalIntelligence, detectIntelIntent, intelligenceHeartbeatTick } from "./lib/foundation-intelligence.js";
 import registerFoundationIntelRoutes from "./routes/foundation-intel.js";
@@ -4695,6 +4699,8 @@ function authMiddleware(req, res, next) {
     "/api/reproduction", "/api/lineage", "/api/teaching",
     "/api/trust", "/api/creative", "/api/rights",
     "/api/resonance", "/api/sse",
+    // Entity autonomy + conflict resolution (REST wrappers for orphaned macros)
+    "/api/autonomy", "/api/conflict",
     // Artifact & feedback
     "/api/artifact", "/api/feedback",
     // Export (GET only)
@@ -7623,6 +7629,10 @@ async function runMacro(domain, name, input, ctx) {
     reproduction: new Set(["compatible-pairs", "status"]),
     lineage: new Set(["tree", "get"]),
     rights: new Set(["list", "get", "profile", "status", "metrics"]),
+    // Entity economy / autonomy / conflict (REST wrappers in routes/)
+    entity_economy: new Set(["list_accounts", "get_account", "market_rates", "wealth", "metrics"]),
+    autonomy: new Set(["rights", "profile", "metrics"]),
+    conflict: new Set(["get_dispute", "list_disputes", "find_precedent", "metrics"]),
     // SECURITY: admin macros are NEVER publicly callable. Audit logs,
     // queue state, repair history, backup metadata — all require an
     // explicit admin/owner/founder role checked INSIDE the handler.
@@ -7697,6 +7707,8 @@ async function runMacro(domain, name, input, ctx) {
     "/api/reproduction", "/api/lineage", "/api/teaching",
     "/api/trust", "/api/creative", "/api/rights",
     "/api/resonance", "/api/sse", "/api/notifications",
+    // Entity autonomy + conflict resolution
+    "/api/autonomy", "/api/conflict",
     // Artifact & feedback
     "/api/artifact", "/api/feedback",
     // Export (GET only)
@@ -10661,6 +10673,42 @@ function upsertDTU(dtu, { broadcast = true, federate = false } = {}) {
   if (typeof sanitizeDTUInput === "function") {
     try { sanitizeDTUInput(dtu); } catch (e) { structuredLog("error", "dtu_sanitization_failed", { id: dtu?.id, error: String(e) }); }
   }
+
+  // Content shield: PII / copyright / advice framing scan on user+import DTUs.
+  // Annotates dtu.meta.contentShield with detections; blocks writes flagged
+  // as CRITICAL risk. Runs only if the module was exposed at boot.
+  try {
+    const shield = globalThis._contentShieldModule;
+    if (shield?.scanContentFull && (dtu.source === "user" || dtu.source === "import")) {
+      const bodyText = [
+        dtu.title || "",
+        ...(dtu.core?.definitions || []),
+        ...(dtu.core?.claims || []),
+        dtu.body || "",
+      ].filter(Boolean).join("\n");
+      if (bodyText.length > 0) {
+        const scan = shield.scanContentFull(STATE, bodyText, { dtuId: dtu.id });
+        if (scan && (scan.pii?.length || scan.copyright?.length || scan.advice?.length || scan.risk)) {
+          if (!dtu.meta) dtu.meta = {};
+          dtu.meta.contentShield = {
+            risk: scan.risk || "LOW",
+            pii: (scan.pii || []).map(p => p.type).slice(0, 10),
+            copyright: (scan.copyright || []).map(c => c.type).slice(0, 10),
+            advice: (scan.advice || []).map(a => a.domain).slice(0, 10),
+            scannedAt: new Date().toISOString(),
+          };
+          if (scan.risk === "CRITICAL") {
+            structuredLog("warn", "dtu_write_blocked_content_shield", {
+              id: dtu.id,
+              title: dtu.title?.slice(0, 60),
+              risk: scan.risk,
+            });
+            return dtu; // silently drop — do not persist CRITICAL-risk DTUs
+          }
+        }
+      }
+    }
+  } catch (e) { observe(e, "dtu_content_shield_scan"); }
 
   const isNew = !STATE.dtus.has(dtu.id);
 
@@ -23487,6 +23535,30 @@ try {
 }
 // ===== END EMERGENT =====
 
+// ===== WIRING: Expose injection-defense module globally for inline fast-path scans =====
+// detectContentInjection() (server.js ~line 530) reaches for globalThis._injectionDefenseModule
+// to run the full deep-scan. Without this load, the deep scan is silently skipped.
+try {
+  const injectionDefense = await import("./emergent/injection-defense.js");
+  globalThis._injectionDefenseModule = injectionDefense;
+  log("wiring.injection_defense", "Injection defense module exposed for inline scans");
+} catch (e) {
+  structuredLog("warn", "injection_defense_load_failed", { error: String(e?.message || e) });
+}
+// ===== END INJECTION DEFENSE WIRING =====
+
+// ===== WIRING: Expose content-shield module globally for DTU write-path scans =====
+// pipelineCommitDTU / upsertDTU consult globalThis._contentShieldModule to scan
+// incoming DTUs for PII, copyright signals, and risky advice before persisting.
+try {
+  const contentShield = await import("./emergent/content-shield.js");
+  globalThis._contentShieldModule = contentShield;
+  log("wiring.content_shield", "Content shield module exposed for DTU write path");
+} catch (e) {
+  structuredLog("warn", "content_shield_load_failed", { error: String(e?.message || e) });
+}
+// ===== END CONTENT SHIELD WIRING =====
+
 // ===== EXISTENTIAL OS (QUALIA ENGINE) =====
 try {
   const qualiaEngine = new QualiaEngine(STATE);
@@ -24368,6 +24440,12 @@ registerMeshRoutes(app, {
 registerFoundationRoutes(app, {
   STATE, makeCtx, runMacro, uiJson, uid, validate, perEndpointRateLimit,
 });
+
+// ---- Entity Economy / Autonomy / Conflict Routes (REST wrappers for
+// macros that previously had no HTTP surface) ----
+registerEntityEconomyRoutes(app, { makeCtx, runMacro });
+registerAutonomyRoutes(app, { makeCtx, runMacro });
+registerConflictRoutes(app, { makeCtx, runMacro });
 
 // ---- Foundation Intelligence Routes (extracted to routes/foundation-intel.js) ----
 registerFoundationIntelRoutes(app, {
@@ -26437,6 +26515,23 @@ async function governorTick(reason="heartbeat") {
         const metaMod = await import("./emergent/meta-derivation.js").catch(() => null);
         if (metaMod?.triggerMetaDerivationCycle) {
           try { metaMod.triggerMetaDerivationCycle(STATE); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
+        }
+      }
+
+      // Feedback Engine — process user feedback queue every FEEDBACK.PROCESS_INTERVAL ticks
+      // Groups like/dislike/report/feature_request signals, generates council proposals,
+      // and adjusts lens authority weights. Non-blocking — errors skip one cycle.
+      if (_tick % FEEDBACK.PROCESS_INTERVAL === 0 && _tick > 0) {
+        const feedbackMod = await import("./lib/feedback-engine.js").catch(() => null);
+        if (feedbackMod?.processFeedbackQueue) {
+          try {
+            await feedbackMod.processFeedbackQueue(STATE, {
+              minRequestsForProposal: FEEDBACK.MIN_REQUESTS_FOR_PROPOSAL,
+              minReportsForRepair: FEEDBACK.MIN_REPORTS_FOR_REPAIR,
+              negativeSentimentThreshold: FEEDBACK.NEGATIVE_SENTIMENT_THRESHOLD,
+              authorityAdjustmentRate: FEEDBACK.AUTHORITY_ADJUSTMENT_RATE,
+            });
+          } catch (e) { structuredLog("warn", "feedback_engine_tick_failed", { error: String(e?.message || e) }); }
         }
       }
 
