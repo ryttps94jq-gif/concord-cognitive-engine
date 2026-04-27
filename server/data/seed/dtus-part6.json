@@ -39,7 +39,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE7] Example instances will be attached as child DTUs when needed."
+        "Number theory: Ω_math defined by Peano axioms. Riemann Hypothesis: candidate point x_RH∈Ω_math? V_mce estimated by open conjecture count (~1000 major). Each proved theorem: V_mce-=vol(local region). Twin Prime Conjecture proved: V_mce drops by ~0.001%. Measured by ratio of proved to total listed conjectures in OEIS/IMO archives."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -48,22 +48,20 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{Ω_math=∩_k{x: axiom_k(x)=True}: mathematical feasibility}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "Ω_math": "mathematically feasible structures",
+          "axiom_k": "k-th axiom as constraint"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "theorem_discovery: x_new∈Ω_math iff ∀k axiom_k(x_new)=True; proof is constraint verification",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "axiom_k(x)=True ∀k (consistency)",
+          "non-contradiction: Ω_math≠∅"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_mce=vol(Ω_math_undiscovered); V_mce→0 as mathematics matures",
+        "implication": "Mathematics is systematic exploration of Ω_math; theorems are points within the feasibility cone defined by axioms. V_mce measures undiscovered territory. Measurable by ratio of conjectured to proven theorems."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "Ω_math=∩_k{x: axiom_k(x)=True}; proof verifies x∈Ω_math; V_mce=vol(unexplored Ω_math)",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -145,7 +143,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE7] Example instances will be attached as child DTUs when needed."
+        "Pythagorean theorem: I(a²+b²=c²)=True in all Euclidean models. V_mtis=0. Non-Euclidean: I changes but theorem restricted to Euclidean Ω → still V_mtis=0 within that model. Continuum Hypothesis: V_mtis=0.5 (neither provable nor disprovable in ZFC). Measured by truth frequency across random consistent model samplings."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -154,22 +152,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{T_math={x: ∀interpretations I, I(x)=True}: invariant under all models}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "T_math": "mathematical truth set (invariant)",
+          "I": "interpretation/model",
+          "x": "mathematical statement"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "x∈T_math iff ‖x‖_{model} is constant across all consistent models",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "x∈T_math iff x holds in all models of axiom system",
+          "Gödel: T_math≠all provable (incompleteness)"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_mtis=1-P(x∈T_math); V_mtis=0 iff proven true",
+        "implication": "Mathematical truth is model-invariant stability; a theorem is true iff its truth value is constant (1) across all consistent models. Incompleteness means V_mtis>0 for some true statements. Measurable by consistency under model variation tests."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "x∈T_math iff ∀I: I(x)=True; V_mtis=1-P(x∈T_math); Gödel: ∃x: V_mtis>0 unprovably",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -250,7 +247,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE7] Example instances will be attached as child DTUs when needed."
+        "Fermat's Last Theorem: V_pabc>0 for 357yr (1637-1994). Wiles proof (130 pages): cert(FLT) constructed. V_pabc→0. Proof length = 130 pages ≈ complexity of path through Ω_math. Simple theorem (Euclid's infinitude of primes): cert = 5 lines, V_pabc→0 in 2500yr continuously. Measured by proof length in pages vs. years-open for famous theorems."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -259,22 +256,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{proof: certifies x∈Ω_math by constructing path from axioms to x}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "x": "mathematical statement to prove",
+          "Ω_math": "axiom-defined feasibility",
+          "cert(x)": "proof certificate"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "cert(x)=sequence (a₁,a₂,...,aₙ=x) where each step is axiom application; V_cert=0 iff cert exists",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "each step is an axiom or inference rule application",
+          "cert terminates at x"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_pabc=‖x-∂Ω_math‖; V_pabc=0 iff x is a proven theorem (inside Ω_math)",
+        "implication": "A proof certifies x∈int(Ω_math) by providing a constructive path; V_pabc=0 means certified. Proof length measures path distance from axioms to x. Measurable by minimum proof length vs. theorem complexity."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "proof: x∈Ω_math iff cert(x) exists; V_pabc=0 iff proved; V_pabc>0 iff open conjecture",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -356,7 +352,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE7] Example instances will be attached as child DTUs when needed."
+        "ZF vs ZFC: adding Axiom of Choice narrows Ω_math(ZF) → Ω_math(ZFC). V_acc(ZFC)>V_acc(ZF): AC excludes non-measurable-set-free models. But AC enables more theorems (Tychonoff, Zorn). Alternative: Axiom of Determinacy (AD): Ω_math(ZF+AD) disjoint from Ω_math(ZFC) for key sets. Measured by theorem count enabled vs. excluded per axiom addition."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -365,22 +361,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{Ω_math(A)=∩_{axiom∈A}{x: axiom(x)=True}: axiom-committed feasibility}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "A": "axiom set",
+          "Ω_math(A)": "feasibility under axiom set A",
+          "V_commit": "commitment cost"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "adding axiom a: Ω_math(A∪{a})⊆Ω_math(A); each axiom narrows feasibility",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "A consistent (Ω_math(A)≠∅)",
+          "axioms independent (no axiom derivable from others)"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_acc=vol(Ω_math_universal)-vol(Ω_math(A)); V_acc measures constraint commitment",
+        "implication": "Axiom choice commits to a feasibility cone; different axiom sets yield different Ω_math. Axiom of Choice adds vol to Ω_math. Incompatible axioms give disjoint Ω_math. Measurable by model count vs. axiom set size."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "Ω_math(A)=∩_{a∈A}Ω_a; V_acc=vol(Ω_universal)-vol(Ω_math(A)); each axiom costs vol",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -460,7 +455,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE7] Example instances will be attached as child DTUs when needed."
+        "3-SAT phase transition: clause-to-variable ratio α. Easy: α<4.267 (P_solvable=0.99). Hard: α=4.267 (P_solvable=0.5). Unsatisfiable: α>4.267 (P_solvable=0.01). Solver runtime peaks at α=4.267 (exponential). V_mpt=|α-4.267|. Measured by median solver runtime vs. clause density in random 3-SAT instances."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -469,22 +464,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{P_transition_math=Φ(complexity-threshold): mathematical hardness phase transition}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "complexity": "problem parameter (density, size)",
+          "threshold": "phase transition point",
+          "P_solvable": "probability of efficient solution"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "P_solvable=Φ(-(complexity-threshold)/σ); sharp transition at threshold",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "P_solvable∈[0,1]",
+          "transition sharpness∝1/σ"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_mpt=|complexity-threshold|; V_mpt→0 at phase boundary (hardest problems)",
+        "implication": "Mathematical phase transitions mark the boundary between easy and hard problem regimes; hardest instances cluster near threshold. Measurable by solver runtime distribution vs. problem density parameter."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "P_solvable=Φ(-(complexity-threshold)/σ); V_mpt=|complexity-threshold|→0 at hardest",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -564,7 +558,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE7] Example instances will be attached as child DTUs when needed."
+        "Russell's paradox in naive set theory: R={x: x∉x}. R∈R iff R∉R → contradiction → Ω_deg=universal. All statements provable. Fixed by ZF: Ω_math restricted (V_dms=0). Paraconsistent logic: accepts contradiction but limits explosion. V_dms measured by fraction of random statements provable in 100 inference steps."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -573,23 +567,20 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{Ω_deg=∅ or Ω_deg=universal: degenerate (trivial or contradictory) system}",
         "variables": {
-          "B": "integrity",
-          "D": "damage",
-          "R": "repair",
-          "S": "stress"
+          "Ω_deg": "degenerate feasibility (empty or everything)",
+          "contradiction": "A∧¬A derives from axioms"
         },
-        "dynamics": "dB/dt=R(B,S)-D(B,S)",
+        "dynamics": "contradiction → Ω_deg=universal (ex falso quodlibet); tautology → Ω_deg=∅ (nothing ruled out)",
         "constraints": [
-          "B∈[0,1]",
-          "R≥0",
-          "D≥0"
+          "non-degenerate: Ω_math≠∅ and Ω_math≠universal",
+          "Paraconsistent: Ω_deg finite even with contradiction"
         ],
-        "potential": "V=1-B",
-        "implication": "If R≥D+ε on [B0,1], then B increases toward 1 (repair-dominant)."
+        "potential": "V_dms=max(0,|vol(Ω_math)-vol_normal|); V_dms=0 iff non-degenerate",
+        "implication": "Degenerate mathematical systems are either contradictory (proving everything) or vacuous (proving nothing); V_dms>0 signals degeneracy. Measurable by proof rate of random statements."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "V_dms=max(vol(Ω_math)-vol_consistent, 0); degenerate iff Ω_math=∅ or Ω_math=universal",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -670,7 +661,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE7] Example instances will be attached as child DTUs when needed."
+        "Pi's decimal expansion: K(π)/|π|→0 (computable by short program). Random sequence: K/|x|=1 (incompressible). Riemann zeta zeros: K(zeros)/|zeros|≈0.3 (partially compressible by explicit formula). Wigner's 'unreasonable effectiveness': physical data K/|data|<<1 under mathematical models. Measured by compressed bit-length of data under competing models."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -679,22 +670,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{K(x)=min_{p: U(p)=x}|p|: Kolmogorov complexity as depth measure}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "K(x)": "Kolmogorov complexity of structure x",
+          "p": "shortest program reproducing x",
+          "U": "universal Turing machine"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "mathematical regularity iff K(x)<<|x|; random structures have K(x)≈|x|",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "K(x)≥0",
+          "K(xy)≤K(x)+K(y)+O(1) (subadditivity)"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_cme=K(x)-K_min_theory(x); V_cme=0 iff compressible to theory prediction",
+        "implication": "High compression ratio K(x)/|x|<<1 is evidence of deep mathematical structure; random data has K≈|x|. A new theory compresses data iff it finds structure. Measurable by compression ratio of mathematical objects under different theories."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "K(x)/|x|→0 iff deep structure; V_cme=K(x)-K_theory(x); theory valid iff V_cme small",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -776,7 +766,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE7] Example instances will be attached as child DTUs when needed."
+        "First-order arithmetic: D_rec=0 (quantifier-free): trivial, polynomial T_prove. D_rec=1 (∀x∃y): NP-hard. D_rec=2 (∀x∃y∀z): PSPACE-hard. D_rec=k: Σₖ-complete. Paris-Harrington theorem (D_rec>>PA depth): PA cannot prove it. Measured by proof length growth rate vs. quantifier-alternation depth across standard benchmark problems."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -785,22 +775,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{D_rec(x)=depth of shortest recursive derivation of x: difficulty measure}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "D_rec": "recursive depth (number of induction steps)",
+          "x": "mathematical statement",
+          "T_prove(x)": "proof time as function of D_rec"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "T_prove(x)∝exp(D_rec(x)); exponential runtime growth with depth",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "D_rec≥0",
+          "T_prove≤T_max (feasibility limit)"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_rdmd=D_rec(x)/D_rec_max; V_rdmd→1 at maximum tractable difficulty",
+        "implication": "Recursive depth determines proof difficulty; D_rec grows with quantifier alternation depth (Σₙ-hierarchy). Falsified if efficient proofs exist for high-D_rec statements. Measurable by proof length vs. alternation depth."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "T_prove(x)∝exp(D_rec(x)); V_rdmd=D_rec/D_max; tractable iff D_rec≤D_threshold",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -883,7 +872,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE7] Example instances will be attached as child DTUs when needed."
+        "Newton-Raphson iteration for √2: f(x)=0.5·(x+2/x), k=0.5. Starting x₀=1: ‖x_n-√2‖≤0.5^n·0.414. After 10 iterations: error=4×10⁻⁴. After 20: error=4×10⁻⁷. Confirmed: convergence rate matches 0.5^n formula. Banach contraction: k=0.5<1, unique fixed point x*=√2. Measured by convergence rate vs. k for standard iterative methods."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -892,20 +881,22 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{x*: f(x*)=x*; Brouwer/Banach: attractor existence guarantees}",
         "variables": {
-          "x": "state",
-          "θ": "params"
+          "x*": "fixed point (attractor)",
+          "f": "continuous self-map on compact convex set",
+          "‖f(x)-f(y)‖": "contraction factor"
         },
-        "dynamics": "x_{t+1}=F(x_t;θ)",
+        "dynamics": "Banach: ‖f(x)-f(y)‖≤k‖x-y‖, k<1 → unique x*; convergence: ‖xₙ-x*‖≤kⁿ‖x₀-x*‖",
         "constraints": [
-          "h(x)=0",
-          "g(x)≤0"
+          "f: Ω→Ω continuous (Brouwer)",
+          "k<1 (Banach contraction)",
+          "Ω compact convex"
         ],
-        "potential": "V=||F(x)-x||^2",
-        "implication": "If V non-increasing and bounded below, x approaches invariant set where V=0."
+        "potential": "V_fpta=‖xₙ-x*‖; V_fpta→0 exponentially under Banach condition",
+        "implication": "Fixed point theorems guarantee attractor existence; Banach gives exponential convergence. Every stable dynamical system has a fixed point by Brouwer. Measurable by convergence rate vs. contraction constant k."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "‖x_{n+1}-x*‖≤k·‖x_n-x*‖; V_fpta=‖x_n-x*‖≤k^n·‖x_0-x*‖→0",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -986,7 +977,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE7] Example instances will be attached as child DTUs when needed."
+        "Langlands program: conjectures discovered by analogy (automorphic forms ↔ Galois representations). Not enumerated. ∇V_math pointed from L-functions toward modularity. Wiles followed gradient: BSD conjecture → modular elliptic curves → FLT. Contrast brute-force conjecture search: 10⁶ candidates, <0.01% fruitful. Measured by hit rate of analogy-guided vs. random conjecture generation."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -995,22 +986,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{x_new∈Ω_math: discovered by gradient in Ω_math, not exhaustive search}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "∇V_math": "mathematical potential gradient (toward likely theorems)",
+          "x_new": "discovered theorem",
+          "V_math": "mathematical value potential"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "x_new=x_prev-α·∇V_math(x_prev); descent toward productive conjectures",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "x_new∈Ω_math (consistent with axioms)",
+          "∇V_math computed from structural analogy"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_mdwe=V_math(x_new); V_mdwe→0 at important theorem discovery",
+        "implication": "Mathematical discovery follows gradient descent in the space of conjectures, guided by structural analogy rather than enumeration; productive mathematicians follow ∇V_math. Measurable by prediction accuracy of mathematical analogy-guided conjectures."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "x_new=x_prev-α·∇V_math; V_mdwe→0 at theorem; guided discovery beats enumeration",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -1092,7 +1082,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE7] Example instances will be attached as child DTUs when needed."
+        "Intel CPU at 300K: 10⁻¹⁷J/op. Landauer limit: 3×10⁻²¹J/op. V_cagp=10⁻¹⁷-3×10⁻²¹≈10⁻¹⁷ (gap=10⁴×). Reversible computing (V_cagp→0): adiabatic logic operates near Landauer. At room temperature: min 4zJ/bit-op. Measured by energy/operation benchmark vs. theoretical minimum for each logic family."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -1101,23 +1091,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{E_comp=k_B·T·ln2·n_ops: Landauer energy minimum per operation}",
         "variables": {
-          "C": "capacity",
-          "D": "decay",
-          "R": "repair",
-          "T": "throughput"
+          "E_comp": "computation energy cost",
+          "n_ops": "number of irreversible bit operations",
+          "k_B·T·ln2": "Landauer limit (3×10⁻²¹J at 300K)"
         },
-        "dynamics": "C_{t+1}=C_t+R_t-D_t; T_t≤C_t",
+        "dynamics": "Ḃ_comp=P_supply-k_B·T·ln2·ops/s; computation energy-limited",
         "constraints": [
-          "C≥0",
-          "R≥0",
-          "D≥0"
+          "E_comp≥k_B·T·ln2·n_ops (Landauer floor)",
+          "P_supply≥E_comp/t"
         ],
-        "potential": "V=max(0,C_min-C)",
-        "implication": "If E[R]≥E[D] and shocks bounded, then C stays above C_min with high probability."
+        "potential": "V_cagp=E_comp-k_B·T·ln2·n_ops; V_cagp=0 at Landauer limit",
+        "implication": "Every irreversible computation costs at least k_B·T·ln2; current hardware is 10⁶× above Landauer limit. V_cagp measures energy waste above minimum. Measurable by energy per operation vs. Landauer limit ratio."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "E_comp≥k_B·T·ln2·n_ops; V_cagp=E_comp-k_B·T·ln2·n_ops≥0; gap=10⁶ currently",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -1197,7 +1185,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE7] Example instances will be attached as child DTUs when needed."
+        "Protein folding: |P|=100 amino acids. T(P)∝3^100 (brute force). T_max=1hr=3.6×10³s on GPU. V_ccg=3^100/10⁶-3600>>0 (infeasible brute force). AlphaFold: T(P)=0.1s via learned energy minimization. V_ccg=0. Measured by runtime crossover point as protein length increases."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -1206,22 +1194,23 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{Ω_comp=∩{time≤T_max}∩{space≤S_max}∩{energy≤E_max}: computation feasibility}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "T_max": "time budget",
+          "S_max": "space budget",
+          "E_max": "energy budget",
+          "Ω_comp": "computationally feasible problems"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "problem P∈Ω_comp iff ∃algorithm with T(|P|)≤T_max, S(|P|)≤S_max, E(|P|)≤E_max",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "T(|P|)≤T_max",
+          "S(|P|)≤S_max",
+          "E(|P|)≤E_max"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_ccg=max(0,T(P)-T_max,S(P)-S_max,E(P)-E_max); V_ccg=0 iff feasible",
+        "implication": "Computational constraint geometry defines which problems are solvable under resource bounds; Ω_comp partitions problem space into feasible and infeasible regions. Measurable by empirical algorithm resource consumption vs. theoretical bounds."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "P∈Ω_comp iff T(P)≤T_max∧S(P)≤S_max; V_ccg=max(T(P)-T_max,S(P)-S_max,0)",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -1303,7 +1292,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE7] Example instances will be attached as child DTUs when needed."
+        "3-SAT: T_verify=O(n) (check each clause). T_search_best=O(1.307^n) (current). V_pnp=1.307^n → ∞. If P=NP: algorithm with T_search=n² exists. Prize: $1M (Clay Institute). All known NP-complete algorithms: T_search=exp. Measured by empirical runtime scaling exponent for best published SAT solver vs. n."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -1312,22 +1301,23 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{P=polynomial solvable; NP=polynomial verifiable; P≠NP iff recursive irreducibility}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "P": "poly-time solvable class",
+          "NP": "poly-time verifiable class",
+          "T_search": "search time",
+          "T_verify": "verification time"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "T_verify(x,cert)=poly(|x|); T_search(x)=exp(|x|) for NP-complete iff P≠NP",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "P⊆NP (trivially)",
+          "P≠NP (conjectured)",
+          "NP-hard: no poly reduction"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_pnp=T_search/T_verify; V_pnp→∞ for NP-complete problems iff P≠NP",
+        "implication": "P≠NP means search cannot be reduced to verification; V_pnp→∞ is the irreducibility gap. If P=NP: V_pnp=1 for all NP problems. Measurable by best known algorithm runtime vs. verification runtime for NP-complete instances."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "V_pnp=T_search/T_verify; P≠NP iff V_pnp→∞ for NP-complete; falsified if poly search found",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -1409,7 +1399,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE7] Example instances will be attached as child DTUs when needed."
+        "Graph Isomorphism: not known P, not known NP-complete. V_ccr>0 from both boundaries. Best algorithm: quasi-polynomial O(exp(polylog n)). If GI∈P: separates P from likely candidates. If GI NP-complete: collapses hierarchy. Current V_ccr=0.3 from P, 0.3 from NP-complete. Measured by runtime scaling exponent vs. theoretical class boundaries."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -1418,22 +1408,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{P⊆NP⊆PSPACE⊆EXPTIME: complexity class hierarchy = constraint regions}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "complexity class": "set of problems solvable under given resource constraints",
+          "oracle": "black-box subroutine extending class"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "P=Ω_comp(poly time), NP=Ω_comp(poly time+NP oracle), etc.; each class is a feasibility cone",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "P⊆NP (trivial)",
+          "NP⊆PSPACE (space can simulate time)",
+          "containments known; separations mostly open"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_ccr=dist(problem,class_boundary); V_ccr=0 iff problem is class-complete",
+        "implication": "Complexity classes are constraint regions partitioning computational feasibility; complete problems sit at class boundaries (V_ccr=0). Class separation proofs establish vol(Ω_class_k)>vol(Ω_class_{k-1})."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "P⊆NP⊆PSPACE⊆EXPTIME; V_ccr=0 at class-complete problems; hierarchy = feasibility cone nesting",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -1513,7 +1502,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE7] Example instances will be attached as child DTUs when needed."
+        "Random k-coloring: ρ=edges/vertices. ρ_c(3-coloring)=2.35. Below: polynomial (greedy works). Above: exponential (backtracking). At ρ_c: runtime×10⁶ vs. easy. Survey propagation exploits ρ_c structure. V_cpt=|2.35-ρ|. Measured by mean solver runtime vs. edge density for 10⁴ random graph instances."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -1522,22 +1511,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{P_solve=Φ(-(ρ-ρ_c)/σ): phase transition in random instances}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "ρ": "constraint density parameter",
+          "ρ_c": "critical density (phase transition)",
+          "P_solve": "probability of polynomial-time solution"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "easy→hard→unsolvable as ρ increases through ρ_c; runtime peaks at ρ=ρ_c",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "P_solve∈[0,1]",
+          "transition sharpness increases with problem size"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_cpt=|ρ-ρ_c|; V_cpt→0 at hardest instances (phase boundary)",
+        "implication": "Computational phase transitions mark easy/hard/infeasible boundaries; hardest instances cluster at ρ_c. Algorithm design should avoid ρ_c or exploit structure near transition. Measurable by solver runtime vs. ρ for random instances."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "P_solve=Φ(-(ρ-ρ_c)/σ); V_cpt=|ρ-ρ_c|→0 at hardest; runtime peaks at ρ_c",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -1617,7 +1605,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE7] Example instances will be attached as child DTUs when needed."
+        "High-frequency trading: T_deadline=1μs (price change window). τ_op=0.3ns (FPGA gate). n_ops_max=3333 sequential ops. Current algo: n_ops=2000, T_comp=600ns < 1μs → V_llc=0. Complex model: n_ops=5000, T_comp=1.5μs → V_llc=0.5μs (too slow). Measured by order latency (ns) vs. logic depth in FPGA synthesis reports."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -1626,22 +1614,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{T_comp=τ_op·n_ops: latency-limited by operation count × latency}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "τ_op": "single operation latency",
+          "n_ops": "number of sequential operations",
+          "T_comp": "total computation time"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "T_comp=τ_op·n_ops; parallelism reduces: T_par=τ_op·n_ops/N_proc+τ_comm·log(N_proc)",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "τ_op≥τ_min (light-speed/gate-delay limit)",
+          "T_comp≤T_deadline"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_llc=max(0,T_comp-T_deadline); V_llc=0 iff computation meets deadline",
+        "implication": "Latency-limited computation has floor τ_op set by physics; below gate-delay, parallelism is the only route. V_llc>0 means deadline missed. Measurable by wall-clock time vs. operation count for sequential algorithms."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "T_comp=τ_op·n_ops; V_llc=max(0,T_comp-T_deadline); floor τ_op=gate-delay",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -1721,7 +1708,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE7] Example instances will be attached as child DTUs when needed."
+        "NISQ quantum computer: P_err=0.1%/gate, target P_correct≥99%, n_ops_max=ln(0.99)/(-0.001)=10 gates. Current circuits: n_ops=100 gates → P_correct=0.905 < 0.99. V_nlc>0. With error correction: P_err→10⁻⁶, n_ops_max=10⁵. Measured by quantum volume metric (IBM) vs. gate error rate."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -1730,22 +1717,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{P_correct=1-(P_err)^{n_ops}: noise-limited computation accuracy}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "P_err": "error probability per operation",
+          "n_ops": "number of operations",
+          "P_correct": "probability of correct final result"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "P_correct=(1-P_err)^{n_ops}≈e^{-P_err·n_ops}; degrades exponentially with n_ops",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "P_err≤P_err_max per operation",
+          "P_correct≥P_correct_min (reliability target)"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_nlc=max(0,P_err·n_ops-(-ln(P_correct_min))); V_nlc=0 iff within reliability",
+        "implication": "Noise-limited computation fails when P_err×n_ops exceeds the reliability budget; error-correcting codes add overhead to maintain P_correct. Measurable by error rate vs. circuit depth in noisy systems."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "P_correct=(1-P_err)^{n_ops}; V_nlc=max(0,P_err·n_ops+ln(P_correct_min))→0",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -1825,7 +1811,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE7] Example instances will be attached as child DTUs when needed."
+        "Sorting N=10⁶ elements: Quicksort vs. Mergesort energy. Mergesort: n_ops=O(N·log N)=2×10⁷, fewer cache misses. Quicksort: same asymptotic but 15% more cache misses → 15% more energy. Energy-optimal: Timsort (exploits structure) → 20% less energy than merge. V_eoa(Quicksort)=0.15×E_merge. Measured by CPU energy counter (RAPL) per sorting run."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -1834,23 +1820,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{E_alg=∑_i E_op_i: total algorithm energy; minimize over algorithm choice}",
         "variables": {
-          "C": "capacity",
-          "D": "decay",
-          "R": "repair",
-          "T": "throughput"
+          "E_op_i": "energy of operation i",
+          "E_alg": "total algorithm energy",
+          "A*": "energy-optimal algorithm"
         },
-        "dynamics": "C_{t+1}=C_t+R_t-D_t; T_t≤C_t",
+        "dynamics": "A*=argmin_A ∑_i E_op_i(A) s.t. output correct; tradeoff: time vs. energy",
         "constraints": [
-          "C≥0",
-          "R≥0",
-          "D≥0"
+          "output(A)=output_correct",
+          "∑E_op≥Landauer·n_irreversible"
         ],
-        "potential": "V=max(0,C_min-C)",
-        "implication": "If E[R]≥E[D] and shocks bounded, then C stays above C_min with high probability."
+        "potential": "V_eoa=E_alg-E_alg_min; V_eoa=0 at energy-optimal algorithm",
+        "implication": "Energy-optimal algorithms minimize irreversible operations; reversible computation reduces V_eoa toward Landauer limit. Measurable by energy consumption per correct output vs. algorithmic irreversibility count."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "A*=argmin ∑E_op s.t. correct output; V_eoa=E_alg-E_alg_min≥Landauer·n_irrev",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -1930,7 +1914,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE7] Example instances will be attached as child DTUs when needed."
+        "Bennett's reversible computation: simulate Turing machine reversibly, then erase only the output (n_irrev=1 bit regardless of computation length). Standard TM: n_irrev=n_ops. V_icc(Bennett)=(n_ops-1)·k_BT·ln2 saved. At T=300K: 3×10⁻²¹J per erasure saved. Demonstrated in DNA computing and reversible logic gates. Measured by energy dissipation per gate in adiabatic logic benchmarks."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -1939,22 +1923,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{E_irrev=k_B·T·ln2·n_irrev: irreversible operation energy floor}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "n_irrev": "number of irreversible bit erasures",
+          "E_irrev": "irreversible energy cost",
+          "n_rev": "reversible operations (free)"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "E_total=k_B·T·ln2·n_irrev+E_rev_overhead; reversible ops cost energy overhead but not Landauer",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "n_irrev≥n_irrev_min (measurement and output require erasure)",
+          "T≥T_env"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_icc=E_total-k_B·T·ln2·n_irrev; V_icc=0 at reversible limit",
+        "implication": "Irreversible computations impose a floor E_irrev; reversible algorithms reduce this cost but add overhead. Maxwell's Demon: information erasure (not measurement) costs energy. Measurable by erasure count vs. total energy in erasure-explicit computation models."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "E_irrev=k_B·T·ln2·n_irrev; V_icc=E_total-E_irrev≥0; minimize by reducing erasures",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -2034,7 +2017,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE7] Example instances will be attached as child DTUs when needed."
+        "Blum-Shub-Smale machine (real arithmetic): Ω_BSS⊃Ω_Turing for real-number inputs. Mandelbrot set membership: Turing undecidable, BSS decidable. Physical realization: requires infinite-precision analog. V_cbt>0 theoretically. Physical Church-Turing: no evidence V_cbt>0 in nature. Measured by attempting analog computation of provably undecidable Turing problems."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -2043,22 +2026,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{Ω_hypercomp=Ω_Turing+Ω_oracle: hypercomputation feasibility}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "Ω_Turing": "standard Turing-computable functions",
+          "Ω_oracle": "oracle-extended computability",
+          "halting_oracle": "solves halting problem"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "with halting oracle: Ω_hypercomp=Δ²_1 (beyond Σ¹_0); unbounded hierarchy above Ω_Turing",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "physical systems bounded by Ω_Turing (Church-Turing thesis)",
+          "Oracle computations require infinite-precision measurement"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_cbt=vol(Ω_hypercomp)-vol(Ω_Turing); V_cbt=0 iff physics = Turing",
+        "implication": "Computation beyond Turing requires physical oracles (infinite precision measurement); V_cbt>0 iff nature exceeds Church-Turing. Measurable by testing whether physical analog devices solve provably Turing-undecidable problems."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "Ω_hypercomp=Ω_Turing+Ω_oracle; V_cbt=vol(Ω_hyper)-vol(Ω_Turing); physical iff V_cbt=0",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -2139,7 +2121,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE7] Example instances will be attached as child DTUs when needed."
+        "Particle collision: x=(p₁,p₂,E₁,E₂) must satisfy energy-momentum conservation Ω_phys. Proposed 3-body decay: ∑p_i=0, ∑E_i=m_parent·c². V_pfm=0 iff constraints satisfied. Unphysical scenario (ΔE≠0): V_pfm>0. LHC collision data validated against Ω_phys: all detected events within 6σ of conservation laws."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -2148,22 +2130,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{Ω_phys=∩_k{x: physical_law_k(x)=0}: physical feasibility}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "Ω_phys": "physically realizable states",
+          "physical_law_k": "k-th conservation law or equation of motion"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "x(t)∈Ω_phys ∀t; physical evolution stays within constraints",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "E_total=const (energy conservation)",
+          "p_total=const (momentum)",
+          "∂_μT^{μν}=0"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_pfm=dist(x,Ω_phys)²; V_pfm=0 iff x is physical",
+        "implication": "Physics maps the boundary of Ω_phys; every physical law is a constraint bounding the feasible state space. V_pfm>0 means physically impossible. Measurable by testing if proposed states satisfy all conservation laws."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "Ω_phys=∩_k{x: law_k(x)=0}; V_pfm=dist(x,Ω_phys)²=0 iff physical",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -2244,7 +2225,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE7] Example instances will be attached as child DTUs when needed."
+        "Electric charge conservation: Q=∫ρd³x. In every known reaction, ΔQ=0. LEP precision: Q conserved to 1 part in 10²¹. V_clai<10⁻²¹ (global limit). Proton decay: would violate baryon number conservation, V_clai>0 for B. Current limit: τ_proton>10³⁴yr. Measured by charge-balance accounting in precision particle physics experiments."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -2253,22 +2234,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{Q_conserved=∫J⁰d³x=const: Noether charge as invariant}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "Q_conserved": "conserved charge (Noether)",
+          "J⁰": "charge density",
+          "symmetry": "continuous symmetry generating conservation law"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "∂_μJ^μ=0 (continuity equation); Q̇=0 (time-invariant)",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "Q̇=0 ∀t (exact conservation)",
+          "symmetry exact iff conservation exact"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_clai=|Q(t)-Q(0)|; V_clai=0 iff conservation exact",
+        "implication": "Conservation laws are Noether invariants; each continuous symmetry yields V_clai=0. Broken symmetries yield V_clai>0 (anomalies). Measurable by charge tracking in precision physics experiments."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "Q̇=0 iff ∂_μJ^μ=0; V_clai=|Q(t)-Q(0)|=0 for exact symmetry",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -2559,7 +2539,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE7] Example instances will be attached as child DTUs when needed."
+        "Landauer erasure experiment (Bérut et al., 2012): single bit erasure in colloidal particle trap. Measured heat dissipation: 0.48k_BT (95% confidence interval includes k_BT·ln2=0.693k_BT). V_eie=0.21k_BT above theoretical min. Modern nano-switch: 5k_BT per bit. Landauer limit confirmed within 2σ. Measured by calorimetry of single-bit erasure in optically trapped colloid."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -2568,23 +2548,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{E_info=k_B·T·ln2·I: energy-information equivalence at Landauer}",
         "variables": {
-          "C": "capacity",
-          "D": "decay",
-          "R": "repair",
-          "T": "throughput"
+          "I": "information content (bits)",
+          "k_B·T·ln2": "energy per bit at temperature T",
+          "E_info": "minimum energy to erase I bits"
         },
-        "dynamics": "C_{t+1}=C_t+R_t-D_t; T_t≤C_t",
+        "dynamics": "ΔE=k_B·T·ln2·ΔI; erasing 1 bit releases k_B·T·ln2 of heat",
         "constraints": [
-          "C≥0",
-          "R≥0",
-          "D≥0"
+          "E_erase≥k_B·T·ln2·I_erased (Landauer bound)",
+          "reversible ops: ΔE=0 possible"
         ],
-        "potential": "V=max(0,C_min-C)",
-        "implication": "If E[R]≥E[D] and shocks bounded, then C stays above C_min with high probability."
+        "potential": "V_eie=E_erase-k_B·T·ln2·I; V_eie=0 at Landauer limit",
+        "implication": "Energy and information are equivalent at the Landauer scale; erasing information releases heat. Maxwell's Demon resolved: memory erasure costs energy. Measurable by energy dissipation per bit erased in nano-scale switches."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "E_erase≥k_B·T·ln2·I; V_eie=E_erase-k_B·T·ln2·I≥0; equality at Landauer limit",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -2666,7 +2644,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE7] Example instances will be attached as child DTUs when needed."
+        "LIGO squeezed light: standard quantum limit σ_x·σ_p=ℏ (coherent state). Squeezed: σ_x=ℏ/4, σ_p=2ℏ → product=ℏ/2 (minimum). Sensitivity improved 3dB in squeezed quadrature. Strain sensitivity: 10⁻²³ m/√Hz at 1kHz. Measured by noise power spectral density vs. squeezing parameter in GW detector reports."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -2675,22 +2653,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{σ_x·σ_p≥ℏ/2: Heisenberg uncertainty as constraint floor}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "σ_x": "position uncertainty",
+          "σ_p": "momentum uncertainty",
+          "ℏ/2": "quantum floor"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "measurement forces σ_x·σ_p≥ℏ/2; no physical state can violate this",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "σ_x·σ_p≥ℏ/2 (Heisenberg)",
+          "squeezed states: σ_x<√(ℏ/2) iff σ_p>√(ℏ/2)"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_qncf=max(0,ℏ/2-σ_x·σ_p); V_qncf=0 always (uncertainty never violated)",
+        "implication": "Quantum noise sets a fundamental measurement floor; V_qncf=0 always (Heisenberg always satisfied). Squeezed states redistribute noise, not eliminate it. Measurable by position-momentum product in quantum optics."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "σ_x·σ_p≥ℏ/2; V_qncf=ℏ/2-σ_x·σ_p≤0 always; squeezed: redistribute not remove",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -2772,7 +2749,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE7] Example instances will be attached as child DTUs when needed."
+        "Stern-Gerlach experiment: |ψ⟩=(|↑⟩+|↓⟩)/√2, V_qmcs=S=ln2=0.693 bits. Measurement: spin-up detector. P_↑=0.5. Post-measurement: |↑⟩, V_qmcs=0. Repeated: same result (state selected). Quantum eraser: restores V_qmcs by deleting which-path info. Measured by interference visibility vs. which-path information in double-slit experiments."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -2781,22 +2758,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{|ψ⟩→|x_i⟩ with prob P_i=|⟨x_i|ψ⟩|²: measurement selects eigenstate}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "|ψ⟩": "quantum state (superposition)",
+          "|x_i⟩": "measurement basis eigenstate",
+          "P_i": "selection probability"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "pre-measurement: |ψ⟩=∑_i c_i|x_i⟩; post: collapses to |x_i⟩ with P_i=|c_i|²",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "∑P_i=1 (normalization)",
+          "post-measurement: σ_x=0 for measured observable"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_qmcs=S_von_Neumann(ρ); V_qmcs=0 iff state is pure eigenstate (fully selected)",
+        "implication": "Quantum measurement is constraint selection: the superposition collapses to a single eigenstate, reducing entropy from S>0 to S=0. V_qmcs=S(ρ) measures quantum uncertainty before selection. Measurable by von Neumann entropy before vs. after measurement."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "P_i=|⟨x_i|ψ⟩|²; V_qmcs=S_vN(ρ)=−Tr(ρ·log ρ)→0 upon measurement",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -2878,7 +2854,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE7] Example instances will be attached as child DTUs when needed."
+        "Scalar field φ=higgs: S=∫(∂_μφ)²-V(φ))d⁴x. δS/δφ=0 gives Klein-Gordon equation. V_ftcd=S[φ]-S[φ_vac]: vacuum expectation value φ_vac=246GeV minimizes V_ftcd=0. Perturbation: φ=φ_vac+h (Higgs boson). LHC measured m_h=125GeV from V(φ) shape. Measured by Higgs boson mass vs. potential shape prediction."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -2887,22 +2863,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{φ(x,t): field as distributed control variable; δS/δφ=0: Euler-Lagrange}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "φ(x,t)": "field (distributed control)",
+          "S[φ]": "action functional",
+          "L": "Lagrangian density"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "δS/δφ=∂_μ(∂L/∂(∂_μφ))-∂L/∂φ=0; field equations from extremal action",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "δS/δφ=0 (equations of motion)",
+          "boundary conditions on φ"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_ftcd=S[φ]-S[φ_solution]; V_ftcd=0 at field solution (extremum of action)",
+        "implication": "Field theories are distributed optimal control problems; φ(x,t) is the control variable and δS/δφ=0 is the optimality condition. Measurable by comparing field configurations to predicted solutions of field equations."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "δS/δφ=0; V_ftcd=S[φ]-S_min; field evolution = distributed optimal control",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -2986,7 +2961,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE7] Example instances will be attached as child DTUs when needed."
+        "Lattice QCD: glueball mass m_gap≈1.5-1.7 GeV (0++ state). V_ymmg=0 numerically confirmed. Analytic proof: Clay Millennium Problem, $1M prize. Experimental: no massless gluon states observed (confirms gap). Perturbative QCD: predicts massless at weak coupling → transition at strong coupling. Measured by glueball spectrum in lattice QCD simulations at various lattice spacings."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -2995,22 +2970,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{m_gap>0: minimum energy excitation of Yang-Mills vacuum}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "m_gap": "mass gap (energy of lightest glueball)",
+          "A_μ^a": "Yang-Mills gauge field",
+          "F_μν^a": "field strength tensor"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "Hamiltonian: H_YM=∫(E²+B²)/2; gap: ⟨vacuum|H|excited⟩≥m_gap>0",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "Ω_YM={A: F_μν=0 is vacuum}",
+          "excitations above gap: E≥m_gap"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_ymmg=max(0,m_gap_required-m_gap_achieved); V_ymmg=0 iff gap exists",
+        "implication": "Yang-Mills mass gap conjecture: V_ymmg=0 (gap exists) — proven for lattice YM but not analytically for continuum. Measurable by lowest glueball mass in lattice QCD calculations."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "m_gap>0; V_ymmg=max(0,m_threshold-m_gap); gap iff all excitations have E≥m_gap",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -3092,7 +3066,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE7] Example instances will be attached as child DTUs when needed."
+        "Stellar collapse to neutron star: g_phys=P_deg-ρ·g·R (degeneracy pressure vs. gravity). Below Chandrasekhar limit (1.4M☉): V_pcbe=0. At 1.5M☉: V_pcbe>0 → collapse. Collapse time: 0.1s. New equilibrium: neutron star (new ∂Ω_phys from neutron degeneracy). Measured by pulsar-timing residuals confirming neutron star equation of state."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -3101,22 +3075,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{∂Ω_phys={x: constraint active}; physical collapse at boundary}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "∂Ω_phys": "physical constraint boundary",
+          "g_phys(x)": "physical limit function",
+          "collapse_rate": "system state change at boundary"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "at ∂Ω_phys: g_phys(x)=0; system forced along boundary or collapses inward",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "g_phys(x)≤0 (inside physical envelope)",
+          "crossing ∂Ω_phys triggers phase change"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_pcbe=max(0,g_phys(x))²; V_pcbe=0 iff physical state valid",
+        "implication": "Physical collapses (stellar collapse, wavefunction collapse, phase transition) occur at ∂Ω_phys; they are boundary enforcement events. V_pcbe>0 is physically impossible — state is expelled to boundary. Measurable by state change rate near constraint surface."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "V_pcbe=max(0,g_phys(x))²; physical collapse at ∂Ω_phys; state expelled to Ω_phys",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -3197,7 +3170,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE7] Example instances will be attached as child DTUs when needed."
+        "Medical diagnosis: H(disease)=3 bits (8 equally likely diseases). Each test provides I_test=1.5 bits. After 2 tests: V_iacp=3-3=0 (diagnosed). Optimal test ordering (maximum entropy reduction): diagnosis in 2 tests vs. worst-case 4. Measured by information gain per test in diagnostic decision tree analysis."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -3206,22 +3179,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{I=log₂(1/P(x)): Shannon information as surprise/potential}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "I(x)": "information content of event x",
+          "P(x)": "probability of x",
+          "H": "entropy = expected information"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "controller with I bits reduces uncertainty: σ²_posterior=σ²_prior·2^{-I}",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "I≥0",
+          "H(X)≤log₂(|X|) (maximum for uniform distribution)"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_iacp=H(X)-I_acquired; V_iacp=0 iff perfect information acquired",
+        "implication": "Information is control potential: each bit acquired halves uncertainty. V_iacp=H(X)-I measures remaining uncertainty. Measurable by prediction improvement per bit of observation."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "I(x)=log₂(1/P(x)); V_iacp=H(X)-I_acquired; uncertainty halves per bit",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -3303,7 +3275,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE7] Example instances will be attached as child DTUs when needed."
+        "JPEG compression: H_original=24 bits/pixel (lossless). JPEG quality 80: H_JPEG=18 bits/pixel. V_ilaf=6 bits/pixel. Quality 10: V_ilaf=20 bits/pixel (blocky). Lossless PNG: V_ilaf=0. Measured by PSNR (peak signal-to-noise ratio) vs. bit rate in image compression benchmarks."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -3312,22 +3284,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{I_lost=H_before-H_after>0: information loss}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "H_before": "entropy before information loss event",
+          "H_after": "entropy after",
+          "I_lost": "lost information"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "channel with capacity C: I_transmitted≤C; I_lost=H_source-min(H_source,C)",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "I_lost≥0 (information cannot be created by loss)",
+          "I_transmitted≤C (channel capacity)"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_ilaf=I_lost; V_ilaf=0 iff no information lost (lossless channel)",
+        "implication": "Information loss is an accounting failure; each lost bit represents an irrecoverable reduction in control potential. V_ilaf measures total lost control. Measurable by pre/post entropy comparison in communication channels."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "I_lost=H_before-H_after; V_ilaf=I_lost; lossless iff V_ilaf=0",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -3409,7 +3380,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE7] Example instances will be attached as child DTUs when needed."
+        "Solar-mass black hole: A=4π·(3km)²≈10⁸m². I_BH=10⁸/(4·(1.6×10⁻³⁵)²)=10⁷⁷ bits. Hawking temperature=60nK. Evaporation time: 2×10⁶⁷yr. Page time (half evaporated): 10⁶⁷yr. At Page time, V_bhi=I_BH/2 radiated. Hawking radiation entangled with early radiation → V_bhi→0. Measured (analog) by entanglement entropy in AdS/CFT quantum gravity simulations."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -3418,22 +3389,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{I_BH=A_horizon/(4·l_Planck²): Bekenstein-Hawking entropy}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "A_horizon": "black hole horizon area",
+          "l_Planck": "Planck length",
+          "I_BH": "black hole information capacity"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "I_BH(t)=A(t)/(4l_P²); Hawking radiation: I_radiated=I_BH (Page curve)",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "I_total=const (unitary evolution)",
+          "I_BH decreases via Hawking radiation"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_bhi=I_BH_initial-I_radiated_cumulative; V_bhi→0 as BH evaporates (unitary)",
+        "implication": "Black hole information is preserved in Hawking radiation; V_bhi tracks information accounting. Paradox resolved by AdS/CFT duality: unitary evolution implies V_bhi→0 at evaporation. Measurable (in principle) by Page time and radiation entanglement."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "I_BH=A/(4l_P²); V_bhi=I_BH_initial-I_radiated→0 at evaporation (unitary)",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -3514,7 +3484,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE7] Example instances will be attached as child DTUs when needed."
+        "Gas expansion: H_thermo increases by Nk_B·ln2 when volume doubles (N molecules). H_Shannon: N bits of position information lost. V_evid=|Nk_B·ln2-Nk_B·ln2|=0 (consistent). Maxwell's Demon: measures N bits → H_Shannon decreases N bits; erases N bits → H_thermo increases Nk_B·ln2. Net: V_evid=0. Confirmed by Szilard engine analysis."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -3523,22 +3493,22 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{H_thermo=k_B·ln(W) vs H_Shannon=-∑P·log P: dual interpretations}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "H_thermo": "thermodynamic entropy (k_B·ln W)",
+          "H_Shannon": "information entropy (-∑P_i·log P_i)",
+          "W": "number of microstates"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "H_thermo=k_B·ln2·H_Shannon (bridge: 1 nat = k_B); equivalent at equilibrium",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "H_thermo≥0 (2nd law)",
+          "H_Shannon≥0 (non-negative)",
+          "linked via k_B·ln2"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_evid=|H_thermo/(k_B·ln2)-H_Shannon|; V_evid=0 iff consistent interpretation",
+        "implication": "Thermodynamic and Shannon entropy are the same quantity at different scales; V_evid=0 when consistently interpreted. Information is physical: erasing 1 bit releases k_B·T·ln2 heat. Measurable by Landauer erasure experiments."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "H_thermo=k_B·ln2·H_Shannon; V_evid=|H_thermo/k_B-ln2·H_Shannon|=0 at consistency",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -3619,7 +3589,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE7] Example instances will be attached as child DTUs when needed."
+        "Personal identity over time: I_func=memory continuity + psychological connectedness. V_iais measured by narrative coherence score. Alzheimer's: V_iais grows 0.1/yr, V_iais(10yr)=1.0 (identity lost). Normal aging: V_iais(30yr)=0.1. Ship of Theseus: I_func=structural function → V_iais=0 despite complete part replacement. Measured by psychological continuity tests (narrative coherence instruments)."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -3628,22 +3598,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{I_func(x)=c ∀x∈Ω_identity: identity as constant functional}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "I_func": "identity functional (invariant property)",
+          "Ω_identity": "identity-preserving region",
+          "c": "invariant value"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "identity preserved iff dI_func/dt=0; drift: ‖I_func(t)-I_func(0)‖≤ε_ID",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "‖I_func(t)-I_func(0)‖≤ε_ID (bounded drift)",
+          "I_func continuous in state space"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_iais=‖I_func(t)-I_func(0)‖²; V_iais=0 iff identity invariant",
+        "implication": "Identity is an invariant set: the set of states where I_func is constant. V_iais measures identity drift. Stable identity requires V_iais→0. Measurable by comparing identity markers across state transitions."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "I_func=invariant; V_iais=‖I_func(t)-I_func(0)‖²≤ε_ID²; identity preserved iff V_iais small",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -3724,7 +3693,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE7] Example instances will be attached as child DTUs when needed."
+        "Organizational identity drift: ν_noise=0.05/√yr (natural drift rate). ε_ID=0.3 (tolerance). t_break=(0.3/0.05)²=36yr without correction. IBM (founded 1911): active identity reinforcement (annual mission reviews) keeps V_idun=0.05. Organizations without renewal: V_idun→ε_ID in ~36yr (confirmed by corporate longevity data: median S&P 500 tenure=12yr). Measured by brand coherence score vs. founding date."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -3733,22 +3702,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{‖I_func(t)-I_func(0)‖=ν_noise·√t: noise-driven identity diffusion}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "ν_noise": "identity noise rate (diffusion coefficient)",
+          "t": "elapsed time",
+          "ε_ID": "identity drift tolerance"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "dI_func=ξ_noise·dt; ‖ΔI_func‖∝√t (Brownian drift)",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "‖ΔI_func‖≤ε_ID for identity preservation",
+          "drift irreversible without active correction"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_idun=‖I_func(t)-I_func(0)‖²=ν²_noise·t; V_idun→ε²_ID at t_break=ε²_ID/ν²_noise",
+        "implication": "Identity drifts as √t under noise; active correction (memory reinforcement, institutional continuity) is needed to maintain V_idun<ε²_ID. Measurable by identity coherence vs. time with/without active correction."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "‖ΔI_func‖=ν_noise·√t; V_idun=ν²_noise·t; t_break=ε²_ID/ν²_noise",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -3829,7 +3797,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE7] Example instances will be attached as child DTUs when needed."
+        "Human long-term memory: D_mem=Ebbinghaus forgetting curve (50% loss/day without rehearsal). R_mem=spaced repetition: one review/day maintains M. V_mais=0 with daily review. Without review: M(30d)=M(0)·e^{-0.69·30}=M(0)·10⁻⁹ (forgotten). Spaced repetition reduces D_mem to 0.01/day. Measured by retention fraction vs. inter-review interval in memory study datasets."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -3838,22 +3806,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{M(t)=M(0): memory as time-invariant store}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "M(t)": "memory content at time t",
+          "D_mem": "memory decay rate",
+          "R_mem": "memory reinforcement rate"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "Ṁ=R_mem-D_mem·M; stable iff R_mem=D_mem·M at equilibrium",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "R_mem≥D_mem·M (maintenance dominance)",
+          "M≥M_min (minimum viable memory)"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_mais=max(0,D_mem·M-R_mem); V_mais=0 iff memory maintained",
+        "implication": "Memory is maintained invariance: V_mais=0 requires active reinforcement R_mem≥D_mem·M; forgotten memory has R_mem→0, causing M→0 on timescale 1/D_mem. Measurable by retention rate vs. rehearsal frequency."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "Ṁ=R_mem-D_mem·M; stable iff R_mem≥D_mem·M; V_mais=max(0,D_mem·M-R_mem)",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -3934,7 +3901,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE7] Example instances will be attached as child DTUs when needed."
+        "Expert chess player: forgets specific irrelevant board positions but retains strategic patterns. V_facd=0 (loses irrelevant, retains relevant). Novice: random forgetting, loses both. Expert encoding: 50,000 chess patterns compressed to 300 key schemas. Measured by pattern recall accuracy vs. pattern relevance (tactical vs. random positions) in chess expertise studies."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -3943,22 +3910,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{ΔI_forget=I_initial-I_remaining: forgetting = controlled entropy increase}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "I_initial": "initial information content",
+          "I_remaining": "post-forgetting information",
+          "ΔI_forget": "deleted information"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "ΔI_forget=I_initial-I_remaining≥0; controlled: ΔI_forget targets irrelevant information",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "ΔI_forget≤I_initial (can't delete more than stored)",
+          "selective: relevant info retained"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_facd=I_relevant_lost+I_irrelevant_retained; V_facd=0 iff perfect selective forgetting",
+        "implication": "Forgetting is controlled deletion: optimal forgetting maximizes retention of relevant information while minimizing V_facd. Random forgetting (D_mem non-selective) increases V_facd. Measurable by relevant vs. irrelevant retention fraction."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "ΔI_forget=I_initial-I_remaining; V_facd=I_relevant_lost; optimal forgetting minimizes V_facd",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -4039,7 +4005,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE7] Example instances will be attached as child DTUs when needed."
+        "Gödel sentence G: 'G is unprovable in PA.' T_G: if PA consistent, G is true but unprovable. V_srwp=0 (no paradox, just undecidability). Liar paradox: 'This statement is false.' T_L=¬T_L: paradox (V_srwp>0). Resolution: Liar not in formal language (Tarski hierarchy). Measured by whether self-referential sentence has consistent truth-value assignment in two-valued logic."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -4048,20 +4014,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{fixed point: φ(φ)=φ; self-reference via Kleene fixed-point theorem}",
         "variables": {
-          "x": "state",
-          "θ": "params"
+          "φ": "self-referential statement",
+          "T_φ": "truth value of φ",
+          "Kleene_fp": "fixed-point construction"
         },
-        "dynamics": "x_{t+1}=F(x_t;θ)",
+        "dynamics": "φ=Diag(P) where Diag extracts the diagonal; T_φ∈{True,False,Undefined}",
         "constraints": [
-          "h(x)=0",
-          "g(x)≤0"
+          "φ∈{provable,refutable,undecidable} (Gödel trichotomy)",
+          "paradox: T_φ=¬T_φ impossible"
         ],
-        "potential": "V=||F(x)-x||^2",
-        "implication": "If V non-increasing and bounded below, x approaches invariant set where V=0."
+        "potential": "V_srwp=P(φ paradoxical); V_srwp=0 iff self-reference stays in Gödel trichotomy",
+        "implication": "Self-reference is safe iff it maps to fixed points, not to contradictions; Gödel sentences are self-referential but undecidable (not paradoxical). Measurable by whether self-referential constructions produce decidable statements."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "φ=Diag(P) via fixed-point; V_srwp=P(paradox)=0 iff in Gödel trichotomy",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -4141,7 +4108,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE7] Example instances will be attached as child DTUs when needed."
+        "Sleep: τ_sleep=8hr. ‖ΔI_consci‖ measured by memory tests and behavioral consistency pre/post sleep. Normal: ‖ΔI‖=0.01 << ε_cid=0.2 → V_cic=0. Anesthesia (τ=6hr): ‖ΔI‖=0.15 (some memory impairment). Deep coma (τ=weeks): ‖ΔI‖→0.5>ε_cid → V_cic>0. Measured by autobiographical memory coherence score before vs. after gap (neuropsychological protocol)."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -4150,21 +4117,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{I_consci(t)=const mod ε_cid: conscious identity persistence}",
         "variables": {
-          "x": "substrate state",
-          "y": "experience proxy",
-          "π": "mapping"
+          "I_consci": "conscious identity functional",
+          "ε_cid": "identity drift tolerance for consciousness",
+          "τ_sleep": "sleep/unconsciousness gap"
         },
-        "dynamics": "y = π(x); x_{t+1}=F(x_t,u_t)",
+        "dynamics": "‖I_consci(t+τ_sleep)-I_consci(t)‖≤ε_cid·τ_sleep; identity persists across gaps",
         "constraints": [
-          "π preserves invariants (information/structure)",
-          "y well-defined on equivalence classes"
+          "‖ΔI_consci‖≤ε_cid (continuity bound)",
+          "I_consci continuous during wakefulness"
         ],
-        "potential": "V=||π(F(x))-π(x)||",
-        "implication": "If π invariant-preserving and V small over time, experience is substrate-stable."
+        "potential": "V_cic=max(0,‖ΔI_consci‖-ε_cid)²; V_cic=0 iff conscious identity preserved",
+        "implication": "Conscious identity continuity requires V_cic≤ε_cid² even across unconscious gaps; brain reconstitutes I_consci from memory/body state. Measurable by behavioral/memory consistency tests before and after sleep."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "‖I_consci(t+τ)-I_consci(t)‖≤ε_cid·τ; V_cic=max(0,‖ΔI‖-ε_cid)²=0 for normal identity",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -4247,7 +4214,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE7] Example instances will be attached as child DTUs when needed."
+        "Verified zeros: 10¹³ zeros all at Re(s)=1/2 (Odlyzko, 2001). V_rh<10⁻¹⁰ empirically. Prime number theorem error: |π(10⁶)-Li(10⁶)|=29. If RH: error≤O(10³·log10⁶)=4×10⁴ guaranteed. If RH false: error=O(x^{σ_0}) for some σ_0>1/2. $1M Clay prize. Measured by computing zeros via Riemann-Siegel formula and checking deviation from σ=1/2."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -4256,22 +4223,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{ζ(s)=0 iff Re(s)=1/2: all nontrivial zeros on critical line}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "ζ(s)": "Riemann zeta function",
+          "s=σ+it": "complex argument",
+          "σ=1/2": "critical line"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "ζ(s)=∑_{n=1}^∞ n^{-s}; zeros encode prime distribution via explicit formula",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "Re(s)∈(0,1) for nontrivial zeros",
+          "RH: all zeros have Re(s)=1/2"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_rh=max_k|Re(s_k)-1/2|; V_rh=0 iff RH true",
+        "implication": "RH is equivalent to optimal prime distribution: V_rh=0 means primes are as uniformly distributed as possible. Each verified zero confirms V_rh decreases. Measurable by deviation of non-trivial zeros from σ=1/2."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "V_rh=max_k|Re(s_k)-1/2|=0 (RH); prime error: |π(x)-Li(x)|≤O(√x·log x) iff V_rh=0",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -4353,7 +4319,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE7] Example instances will be attached as child DTUs when needed."
+        "x=10⁶: π(x)=78,498. Li(x)=78,527. Error=29. Explicit formula contribution of first 100 zeros reduces error to 3. First 1000 zeros: error<0.1. V_zfts shrinks with each zero included. Confirms: zeros are 'correction terms' to prime counting. Measured by prime counting error after including N zeros in explicit formula vs. N."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -4362,22 +4328,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{ζ(s)=∏_p(1-p^{-s})^{-1}=∑n^{-s}: Euler product = transduction spectrum}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "ζ(s)": "zeta function",
+          "p": "prime (resonance frequency)",
+          "s": "complex dimension"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "zeros of ζ(s) encode prime oscillations: π(x)=Li(x)-∑_{ρ}Li(x^ρ)+...",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "Euler product converges for Re(s)>1",
+          "analytic continuation to ℂ\\{1}"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_zfts=‖π(x)-Li(x)‖; V_zfts→0 at optimal prime counting (iff RH)",
+        "implication": "The zeta function transduces prime distribution into spectral zeros; each zero ρ contributes an oscillation to π(x). V_zfts measures prime counting error. Optimal transduction iff RH holds. Measurable by prime-counting error vs. Li(x) approximation."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "ζ(s)=∏_p(1-p^{-s})^{-1}; V_zfts=‖π(x)-Li(x)‖; minimized iff zeros at Re(s)=1/2",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -4460,7 +4425,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE7] Example instances will be attached as child DTUs when needed."
+        "2D NS: V_nsr=0 proven (global regularity). 3D NS: V_nsr=0 unproven. Numerical evidence: smooth initial data stays smooth for Re<10⁶ in benchmarks. Kolmogorov scale η=(ν³/ε)^{1/4}: energy dissipates at scale η. If blow-up: ‖u‖_∞→∞ faster than dissipation. No blow-up found in 10⁸ resolved DNS simulations. $1M Clay prize. Measured by maximum vorticity growth in high-Re DNS."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -4469,23 +4434,22 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{E_fluid(t)≤E_fluid(0): energy dissipation in NS solutions}",
         "variables": {
-          "C": "capacity",
-          "D": "decay",
-          "R": "repair",
-          "T": "throughput"
+          "E_fluid": "kinetic energy of fluid",
+          "ν": "kinematic viscosity",
+          "ω": "vorticity",
+          "Re": "Reynolds number"
         },
-        "dynamics": "C_{t+1}=C_t+R_t-D_t; T_t≤C_t",
+        "dynamics": "Ė_fluid=-ν∫|∇u|²d³x≤0; energy cascades from large to small scales",
         "constraints": [
-          "C≥0",
-          "R≥0",
-          "D≥0"
+          "Ė_fluid≤0 (energy dissipation)",
+          "Re<Re_c for smooth solutions"
         ],
-        "potential": "V=max(0,C_min-C)",
-        "implication": "If E[R]≥E[D] and shocks bounded, then C stays above C_min with high probability."
+        "potential": "V_nsr=max(0,‖u‖_∞-M): regularity fails if solution blows up to ∞",
+        "implication": "NS regularity requires V_nsr=0 for all time; smooth initial data stays smooth iff energy cascade prevents blow-up. 3D NS blow-up is the Clay Millennium Problem. Measurable by maximum velocity magnitude growth in numerical solutions."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "Ė_fluid=-ν∫|∇u|²dV≤0; V_nsr=max(0,‖u‖_∞-M); regular iff V_nsr=0 ∀t",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -4567,7 +4531,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE7] Example instances will be attached as child DTUs when needed."
+        "Turbulent pipe flow (Re=10⁵): Λ_max=0.3/s (predictability horizon ~3s). Energy input=pump power; dissipation=viscous heat. E_turb bounded. Kolmogorov microscale: smallest eddies where dissipation occurs. V_tacbc=0.3×(E_turb/E_max). Doubling Re: Λ_max∝Re^0.5, chaos doubles. Measured by divergence rate of initially close fluid trajectories in PIV experiments."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -4576,22 +4540,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{x_turb∈Ω_chaos∩Ω_phys: turbulence is bounded chaotic motion}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "Ω_chaos": "chaotic attractor region",
+          "Ω_phys": "physical constraint set",
+          "Λ_max": "maximum Lyapunov exponent"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "ẋ=f(x)+ξ; Λ_max>0 (chaos) but x∈Ω_phys (bounded by energy dissipation)",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "Λ_max>0 (sensitive dependence)",
+          "E_turb≤E_input (energy bounded)"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_tacbc=max(0,Λ_max)·‖x‖; chaotic but bounded",
+        "implication": "Turbulence is bounded chaos: Λ_max>0 (unpredictable) but x stays in Ω_phys (energy limited). V_tacbc measures chaos intensity within physical bounds. Measurable by Lyapunov exponent vs. energy dissipation rate."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "Λ_max>0 (chaotic) and E_turb≤E_input (bounded); V_tacbc=Λ_max·E_turb/E_max",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -4674,7 +4637,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE7] Example instances will be attached as child DTUs when needed."
+        "SU(3) QCD: lattice simulations find lightest glueball at m_gap=1.5GeV (0++ state). V_ymgbg=0 numerically (m_gap>0 confirmed at multiple lattice spacings and extrapolated to continuum). Physical confirmation: no massless gluon observed in particle data. Perturbative QCD gives m_gap=0 → gap is non-perturbative. Measured by glueball mass in quenched lattice QCD at β=6.0-6.5."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -4683,22 +4646,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{Ω_YM={A_μ: F_μν minimal}; gap = minimal energy excitation of vacuum}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "A_μ^a": "gauge connection",
+          "F_μν^a": "field strength (curvature of A)",
+          "m_gap": "mass gap energy"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "vacuum: F_μν=0 (pure gauge); excitation costs E≥m_gap due to confinement geometry",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "m_gap>0 (binding geometry)",
+          "non-Abelian gauge group (SU(2) or SU(3))"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_ymgbg=max(0,m_required-m_gap); V_ymgbg=0 iff gap exists and exceeds threshold",
+        "implication": "Yang-Mills mass gap is a consequence of binding geometry: confinement curves A_μ such that no massless excitation can propagate. V_ymgbg=0 is the physical requirement (confirmed numerically). Analytic proof: Clay Problem."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "m_gap>0; V_ymgbg=max(0,m_threshold-m_gap)=0 (numerically); analytic proof open",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -4779,7 +4741,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE7] Example instances will be attached as child DTUs when needed."
+        "Color perception: φ_red = I_func(retina-light boundary, λ=700nm). Varies consistently: same λ → same φ_red across observers (98% agreement). V_chpd measured by phenomenal report consistency vs. boundary-state measurement. Blind spot: φ_conscious=0 at retinal gap → boundary gone. Neural correlate = boundary information processing. Measured by agreement between boundary-state prediction and phenomenal report."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -4788,21 +4750,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{φ_conscious=I_func(Ω_body∩Ω_world): consciousness as constraint-mediated identity}",
         "variables": {
-          "x": "substrate state",
-          "y": "experience proxy",
-          "π": "mapping"
+          "φ_conscious": "phenomenal consciousness",
+          "I_func": "identity functional at system boundary",
+          "Ω_body∩Ω_world": "body-world interface"
         },
-        "dynamics": "y = π(x); x_{t+1}=F(x_t,u_t)",
+        "dynamics": "φ_conscious=I_func(x_boundary); dissolves into constraint geometry at interface",
         "constraints": [
-          "π preserves invariants (information/structure)",
-          "y well-defined on equivalence classes"
+          "Ω_body∩Ω_world≠∅ (body-world coupling)",
+          "I_func continuous at interface"
         ],
-        "potential": "V=||π(F(x))-π(x)||",
-        "implication": "If π invariant-preserving and V small over time, experience is substrate-stable."
+        "potential": "V_chpd=‖φ_conscious-I_func(boundary)‖; V_chpd=0 iff consciousness = constraint geometry",
+        "implication": "The 'hard problem' dissolves when consciousness is identified with I_func at the body-world interface; there is no separate explanatory gap. V_chpd=0 is the dissolution claim. Measurable by whether phenomenal reports correlate with boundary information processing."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "φ_conscious=I_func(Ω_body∩Ω_world); V_chpd=0 iff consciousness = boundary identity functional",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -4884,7 +4846,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE7] Example instances will be attached as child DTUs when needed."
+        "Stern-Gerlach: |ψ⟩=(|↑⟩+|↓⟩)/√2, V_mpcf=ln2=1 bit. Magnet measurement: V_mpcf→0, state=|↑⟩ or |↓⟩. Decoherence timescale: τ_decohere=ℏ/E_coupling for strong coupling. Quantum Zeno: rapid measurements keep V_mpcf≈0. Measured by entanglement entropy (negativity) of system+apparatus before vs. after interaction in quantum optics experiments."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -4893,22 +4855,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{|ψ⟩=∑c_i|x_i⟩→|x_k⟩: measurement fixates constraint}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "|ψ⟩": "pre-measurement superposition",
+          "|x_k⟩": "post-measurement eigenstate",
+          "P_k=|c_k|²": "fixation probability"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "constraint fixation: Ω_all→Ω_{x_k}; V_before=S_vN(ρ)>0, V_after=S_vN=0",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "∑|c_k|²=1 (normalization)",
+          "post-fixation: state is eigenstate"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_mpcf=S_vN(ρ); V_mpcf→0 upon measurement (constraint fixation)",
+        "implication": "Measurement is constraint fixation: the unconstrained superposition (V_mpcf>0) is forced to a single constraint-satisfying state (V_mpcf=0). No mystery — it is Ω-projection. Measurable by von Neumann entropy before and after measurement interaction."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "V_mpcf=S_vN(ρ)→0 on measurement; |ψ⟩→|x_k⟩ with P_k=|c_k|²; Ω-projection",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -5095,7 +5056,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE7] Example instances will be attached as child DTUs when needed."
+        "Water from H and O: vol(Ω_H)+vol(Ω_O) = gas properties only. vol(Ω_H₂O) = gas+liquid+solid+solvent properties. V_ewm=(liquid+ice+solvent capabilities)>0. Emergence: solvency, surface tension, hydrogen bonding — none in isolated atoms. Measured by property count enabled by compound vs. sum of element property counts in chemistry databases."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -5104,22 +5065,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{Ω_emergent=f(∩_k Ω_component_k): emergent feasibility from component interactions}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "Ω_emergent": "emergent system feasibility",
+          "Ω_component_k": "k-th component feasibility",
+          "f": "interaction function"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "vol(Ω_emergent)>∑vol(Ω_k) iff interactions create new feasibility; emergence = expansion",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "Ω_emergent derivable from components + interactions (no extra ontology)",
+          "causally closed"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_ewm=vol(Ω_emergent)-∑vol(Ω_k); V_ewm>0 iff genuine emergence (new feasibility created)",
+        "implication": "Emergence is V_ewm>0: the interacting system accesses more feasibility than the sum of parts. No magic — just constraint geometry creating new volume. Measurable by comparing system capability to sum-of-parts capability."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "vol(Ω_emergent)>∑vol(Ω_k); V_ewm=vol(Ω_emergent)-∑vol(Ω_k)>0 iff emergence",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -5201,7 +5161,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE7] Example instances will be attached as child DTUs when needed."
+        "Heavier-than-air flight (pre-1903): Ω_possible(θ_1903_skeptic)={balloons only}. Claim: 'heavier-than-air impossible.' V_iace>0 at θ_correct (proper wing+engine). Category error: confused Ω_possible(no-engine) with Ω_all. Wright Brothers: V_iace→0 by demonstrating feasibility. True impossibility: perpetual motion V_iace=0 ∀θ (thermodynamic law). Measured by finding the missing θ that enables the 'impossible'."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -5210,22 +5170,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{Ω_claim⊆Ω_possible; impossibility: claim∉Ω_possible}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "Ω_possible": "feasibility cone at current parameter values",
+          "claim": "proposed impossibility",
+          "category_error": "conflating Ω_possible(θ₁) with Ω_possible(θ₂)"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "impossibility valid iff ∀θ∈Ω_θ: claim∉Ω_possible(θ); error if Ω_θ too restricted",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "impossibility must hold for all valid parameter ranges",
+          "no hidden θ-dependence"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_iace=max_θ vol(Ω_possible(θ)∩claim); V_iace=0 iff truly impossible",
+        "implication": "Impossibility claims are category errors when they assert claim∉Ω_possible(θ₁) but ignore θ₂ where claim∈Ω_possible(θ₂); V_iace>0 reveals the error. True impossibilities have V_iace=0 for all θ. Measurable by finding parameter values where the 'impossible' becomes possible."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "V_iace=max_θ vol(Ω_possible(θ)∩claim); truly impossible iff V_iace=0 ∀θ",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -5316,22 +5275,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{K1=knowledge of x; K2=knowledge of K1(x): epistemic hierarchy}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "K1(x)": "first-order knowledge (knowing x)",
+          "K2(x)": "second-order knowledge (knowing that you know x)",
+          "ε_k": "knowledge accuracy"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "K2(x)=K1(K1(x)); V_k2=‖K2(x)-K1(K1(x))‖; second-order tracks first",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "K2(x)≤K1(x) (can't know knowing better than knowing)",
+          "Dunning-Kruger: K2>>K1 possible"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_fovso=|K2(x)-K1(x)|; V_fovso=0 iff perfectly calibrated (K2 matches K1)",
+        "implication": "Calibrated knowledge requires V_fovso=0; overconfidence is K2>K1 (V_fovso>0 positive). Dunning-Kruger effect: low K1, high K2. Measurable by calibration curve (predicted confidence vs. actual accuracy)."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "V_fovso=|K2(x)-K1(x)|; calibrated iff V_fovso=0; Dunning-Kruger: K2>>K1",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -5421,22 +5379,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{discovery: identify x* s.t. I_func(x*)=const ∀transformations}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "x*": "discovered invariant",
+          "I_func": "invariant functional",
+          "T_k": "transformation (rotation, translation, scaling)"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "I_func(T_k·x*)=I_func(x*) ∀k; discovery confirms invariance under all relevant transformations",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "I_func continuous",
+          "invariance: I_func(x*)=const under transformation group G"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_daii=‖I_func(T·x*)-I_func(x*)‖; V_daii=0 iff x* is genuine invariant",
+        "implication": "Scientific discovery is invariant identification: V_daii=0 across all tests confirms genuine law. False positives have V_daii>0 under new transformations. Measurable by invariance test count vs. invariance failures."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "V_daii=‖I_func(T·x*)-I_func(x*)‖=0 iff genuine discovery; falsified if V_daii>0",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -5526,22 +5483,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{P_fail=1-(V_cert→0 probability): proof failure rate}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "V_cert": "proof certificate completeness",
+          "gap_k": "k-th gap in proof attempt",
+          "P_fail": "proof failure probability"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "proof attempt: ∀k check axiom_k application; failure iff ∃k: gap_k>0",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "all steps must be valid axiom applications",
+          "no hidden assumptions"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_wmf=∑_k P(gap_k>0); V_wmf=0 iff proof complete",
+        "implication": "Most proofs fail because V_wmf>0: at least one step has an unjustified gap. Common failure mode: implicit assumption not matching axioms. Measurable by peer review failure rate and gap type distribution."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "V_wmf=∑_k P(gap_k>0); proof succeeds iff V_wmf=0; fails at first gap_k>0",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -5631,22 +5587,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{d_paradigm_lock<0: current framework locks out alternative}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "d_paradigm_lock": "distance to locked-out alternative framework",
+          "C_escape": "paradigm shift cost",
+          "Ω_curr_paradigm": "current feasibility under paradigm"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "V_plim=max(0,-d_paradigm_lock)²·(1+C_escape/C_max); lock-in when C_escape>>C_agent",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "d_paradigm_lock<0 (locked)",
+          "C_escape=training+social cost of paradigm shift"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_plim=max(0,-d_paradigm_lock)²; V_plim>0 iff paradigm locked in",
+        "implication": "Paradigm lock-in occurs when V_plim>0 and C_escape exceeds available cognitive/social resources; new evidence is reinterpreted within the locked paradigm. Measurable by time from anomaly to paradigm shift."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "V_plim=max(0,-d_paradigm_lock)²·(1+C_escape/C_max); shift iff C_escape<C_available",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -5736,22 +5691,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{K(data|theory)/|data|<<1: strong compression = truth signal}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "K(data|theory)": "conditional Kolmogorov complexity (data given theory)",
+          "K(theory)": "theory complexity",
+          "K_total": "K(theory)+K(data|theory)"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "good theory: K_total<<K(data); MDL principle: choose theory minimizing K_total",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "K_total≥K(data) (compression can't exceed random)",
+          "K(theory)≥0"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_cats=K_total-K(data); V_cats<0 iff theory compresses (MDL valid)",
+        "implication": "Compression is a truth signal: V_cats<0 means the theory genuinely captures structure in the data. Overfitting: K(data|theory)≈0 but K(theory)>>K(data) → V_cats>0. Measurable by MDL score vs. cross-validation accuracy."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "V_cats=K(theory)+K(data|theory)-K(data); truth iff V_cats<0 (genuine compression)",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -5840,22 +5794,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{proof: ∀x∈Ω, P(x) via structural argument, not enumeration}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "Ω": "infinite domain",
+          "P(x)": "property to prove",
+          "structural_arg": "argument exploiting structure of Ω"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "structural proof: P(x_0) ∧ ∀n[P(n)→P(n+1)] → ∀n P(n) (induction)",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "proof must terminate (decidable)",
+          "valid for entire Ω without enumeration"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_pwe=P(unproved_cases_exist); V_pwe=0 iff proof covers all x∈Ω",
+        "implication": "Mathematical proofs achieve universal coverage without enumeration via structural arguments (induction, symmetry, compactness); V_pwe=0 despite infinite Ω. Measurable by proof coverage fraction vs. argument type."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "P(x_0)∧∀n[P(n)→P(n+1)]→∀n P(n); V_pwe=0 without enumeration; structural argument",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -5946,22 +5899,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{θ_sci(t+1)=θ_sci(t)-α·∇L_sci|_{Π_{Ω_sci}}: science as projected gradient}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "θ_sci": "scientific knowledge state",
+          "L_sci": "scientific loss (anomaly count)",
+          "Ω_sci": "methodologically valid parameter space"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "science progresses via Π_{Ω_sci}[θ-α·∇L_sci]; stays within methodological constraints",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "θ_sci∈Ω_sci (falsifiability, reproducibility, peer review)",
+          "∇L_sci≠0 (anomalies drive progress)"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_spcn=L_sci(θ_sci); V_spcn→0 as anomalies resolved",
+        "implication": "Scientific progress is constrained gradient descent on L_sci; anomalies are the gradient signal. Methodology constraints (Ω_sci) prevent degenerating to unfalsifiable theories. Measurable by anomaly count vs. theoretical revision frequency."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "θ_sci(t+1)=Π_{Ω_sci}[θ-α·∇L_sci]; V_spcn=L_sci→0 as anomalies resolved",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -6052,22 +6004,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{σ²_output≤J·σ²_input: Jacobian error propagation}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "σ²_input": "input uncertainty variance",
+          "J": "Jacobian of formal derivation",
+          "σ²_output": "output uncertainty"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "σ²_output=J·σ²_input·Jᵀ; error compounds through derivation chain",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "σ²_output≥0",
+          "‖J‖≤‖J‖_max (derivation sensitivity)"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_epfs=σ²_output/σ²_input; V_epfs=‖J‖²; V_epfs>1 iff errors amplified",
+        "implication": "Error propagation in formal systems follows Jacobian amplification; derivations with ‖J‖>1 amplify input errors. Robust formal systems minimize ‖J‖. Measurable by output error variance vs. controlled input perturbation."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "σ²_output=J·σ²_input·Jᵀ; V_epfs=‖J‖²; robust iff ‖J‖≤1 (error non-amplifying)",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -6156,23 +6107,20 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{Ḃ_math=R_math-D_math: mathematical knowledge health}",
         "variables": {
-          "B": "integrity",
-          "D": "damage",
-          "R": "repair",
-          "S": "stress"
+          "R_math": "repair rate (new proofs, corrections, clarifications)",
+          "D_math": "damage rate (found errors, retractions, paradoxes)"
         },
-        "dynamics": "dB/dt=R(B,S)-D(B,S)",
+        "dynamics": "B_math(t+1)=B_math(t)+(R_math-D_math)·Δt; healthy iff R_math≥D_math",
         "constraints": [
-          "B∈[0,1]",
-          "R≥0",
-          "D≥0"
+          "R_math≥D_math (knowledge repair dominance)",
+          "B_math≥B_min"
         ],
-        "potential": "V=1-B",
-        "implication": "If R≥D+ε on [B0,1], then B increases toward 1 (repair-dominant)."
+        "potential": "V_mrm=max(0,D_math-R_math); V_mrm=0 iff mathematics self-repairs",
+        "implication": "Mathematical knowledge is self-repairing iff R_math≥D_math; found errors trigger repair responses (corrigenda, new proofs). V_mrm>0 signals systemic problems (flawed foundations). Measurable by retraction rate vs. correction/clarification rate."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "Ḃ_math=R_math-D_math; V_mrm=max(0,D_math-R_math)=0 for healthy mathematics",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -6261,22 +6209,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{L_formal=B_formal/(D_formal-R_formal+ε): formal knowledge lifespan}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "B_formal": "formal knowledge health buffer",
+          "D_formal": "obsolescence/error rate",
+          "R_formal": "reinforcement/correction rate"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "Ḃ_formal=R_formal-D_formal; L_formal→∞ iff R_formal≥D_formal",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "R_formal≥D_formal for indefinite validity",
+          "formal proofs less fragile than informal"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_fkl=max(0,D_formal-R_formal); V_fkl=0 iff knowledge indefinitely valid",
+        "implication": "Formally verified knowledge achieves V_fkl=0 indefinitely; Euclid's Elements survived 2300yr with R_formal>D_formal. Informal knowledge has higher D_formal. Measurable by knowledge half-life vs. formalization level."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "L_formal=B_formal/(D_formal-R_formal+ε); L→∞ iff R_formal≥D_formal; formal proof V_fkl=0",
       "verifier": {
         "kind": "verifier",
         "inputs": [

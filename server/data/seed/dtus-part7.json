@@ -40,7 +40,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE8] Example instances will be attached as child DTUs when needed."
+        "Human navigation: x_goal=destination, x_current=GPS position. K_cog=spatial reasoning gain. V_cacla=distance² to goal. Normal adult: K_cog=0.3, convergence in 15min. Alzheimer's: K_cog=0.05, V_cacla may not converge. IQ correlation: K_cog∝IQ^0.5. Measured by path efficiency (actual/optimal distance) vs. cognitive assessment score."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -49,20 +49,22 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{u_cog=K_cog·(x_goal-x_current): cognitive control loop}",
         "variables": {
-          "x": "state",
-          "θ": "params"
+          "K_cog": "cognitive gain matrix",
+          "x_goal": "goal state",
+          "x_current": "current state",
+          "e_cog": "cognitive error"
         },
-        "dynamics": "x_{t+1}=F(x_t;θ)",
+        "dynamics": "u_cog(t)=K_cog·e_cog(t); ΔV_cog≤-c_cog·‖e_cog‖²; converges to goal",
         "constraints": [
-          "h(x)=0",
-          "g(x)≤0"
+          "K_cog≤K_max (cognitive bandwidth limit)",
+          "e_cog bounded by perception accuracy"
         ],
-        "potential": "V=||F(x)-x||^2",
-        "implication": "If V non-increasing and bounded below, x approaches invariant set where V=0."
+        "potential": "V_cacla=‖x_goal-x_current‖²; V_cacla→0 as goal achieved",
+        "implication": "Cognition is a control loop: perception computes e_cog, reasoning computes u_cog, action reduces V_cacla. Cognitive performance = convergence rate toward goal. Measurable by goal-achievement time vs. measured cognitive gain K_cog."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "u_cog=K_cog·(x_goal-x_current); ΔV_cog≤-c_cog·K_cog·‖e_cog‖²; V_cacla→0",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -143,7 +145,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE8] Example instances will be attached as child DTUs when needed."
+        "Dual-task paradigm: driving + phone call. α_drive+α_phone=1. Single-task: α_drive=1, V_aaca=0 (driving). Dual: α_drive=0.5, U_drive drops 40%. α_phone=0.5, U_phone drops 30%. V_aaca=total loss=35% safety margin. Measured by reaction time increase and error rate in dual-task cognitive experiments (NHTSA data)."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -152,22 +154,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{∑_k α_k=1, α_k≥0: attention as probability simplex}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "α_k": "attention weight allocated to task k",
+          "I_k": "intelligence available to task k",
+          "I_total": "total cognitive resources"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "I_k=α_k·I_total; optimal: α*=argmax ∑_k U_k(α_k·I_total)",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "∑α_k=1 (fixed total resources)",
+          "α_k≥0 (non-negative allocation)"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_aaca=∑_k U_k_max-∑_k U_k(α_k·I_total); V_aaca=0 at optimal allocation",
+        "implication": "Attention is resource allocation on a simplex; optimal α* maximizes total utility. Sub-optimal allocation (multitasking) yields V_aaca>0. Measurable by task performance degradation under divided attention."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "I_k=α_k·I_total; ∑α_k=1; V_aaca=∑U_k_max-∑U_k(α_k·I_total)→0 at optimal α*",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -249,7 +250,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE8] Example instances will be attached as child DTUs when needed."
+        "Mental arithmetic (28×47): requires holding 4+ intermediate results. B_required=4 chunks. B_wm=7: V_wmlb=0, solvable. Expert (chunked steps): B_required=2. Working memory overload: 3 concurrent tasks, B_required=9>7 → V_wmlb=2, errors. Measured by n-back task performance vs. working memory span in cognitive psychology."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -258,22 +259,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{B_wm=capacity of working memory buffer (7±2 chunks)}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "B_wm": "working memory capacity (chunks)",
+          "τ_retain": "retention duration",
+          "D_wm": "decay rate (without rehearsal)"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "Ḃ_wm=R_rehearse-D_wm·B_wm; latency τ_wm=B_wm/processing_rate",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "B_wm≤7±2 (Miller's law)",
+          "τ_retain≤20s without rehearsal"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_wmlb=max(0,B_required-B_wm); V_wmlb=0 iff working memory sufficient",
+        "implication": "Working memory buffers cognitive latency: larger B_wm reduces processing bottleneck. V_wmlb>0 means task exceeds working memory capacity → errors. Measurable by task accuracy vs. working memory load."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "B_wm≤7±2 chunks; V_wmlb=max(0,B_required-B_wm); τ_wm=B_wm/rate",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -356,7 +356,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE8] Example instances will be attached as child DTUs when needed."
+        "Expert performance: chess master LTM stores 50,000 patterns. D_wm=50%/day without review. R_ltm=retrieval in 200ms. Ḃ_cog=+high (experts: V_ltmrm=0). Novice: LTM=500 patterns, R_ltm small. D_wm>R_ltm → V_ltmrm>0 (forget before use). Measured by knowledge retention test at 1 week vs. LTM pattern count in expertise studies."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -365,23 +365,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{R_ltm=retrieval restores working memory: LTM as cognitive repair}",
         "variables": {
-          "B": "integrity",
-          "D": "damage",
-          "R": "repair",
-          "S": "stress"
+          "R_ltm": "long-term memory retrieval rate",
+          "D_wm": "working memory decay rate",
+          "B_cog": "cognitive knowledge buffer"
         },
-        "dynamics": "dB/dt=R(B,S)-D(B,S)",
+        "dynamics": "Ḃ_cog=R_ltm-D_wm; viable iff R_ltm≥D_wm (knowledge can be retrieved as fast as forgotten)",
         "constraints": [
-          "B∈[0,1]",
-          "R≥0",
-          "D≥0"
+          "R_ltm≥D_wm (repair dominance)",
+          "B_cog≥B_min"
         ],
-        "potential": "V=1-B",
-        "implication": "If R≥D+ε on [B0,1], then B increases toward 1 (repair-dominant)."
+        "potential": "V_ltmrm=max(0,D_wm-R_ltm); V_ltmrm=0 iff LTM supports working memory",
+        "implication": "Long-term memory is a cognitive repair mechanism: when working memory decays, LTM retrieval restores knowledge. V_ltmrm>0 means knowledge loss exceeds retrieval. Measurable by recall accuracy vs. forgetting rate."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "Ḃ_cog=R_ltm-D_wm; V_ltmrm=max(0,D_wm-R_ltm)=0 iff LTM repairs cognitive decay",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -461,7 +459,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE8] Example instances will be attached as child DTUs when needed."
+        "ICU nurse cognitive load: CL_sat=8 simultaneous tasks. At CL=8: V_clsat=0, peak performance. At CL=12 (overload): V_clsat=16, error rate triples. Yerkes-Dodson: inverted-U performance vs. arousal. CLT (cognitive load theory): instructional design limits CL. Measured by error rate vs. task count in simulation-based nurse training studies."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -470,22 +468,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{V_cls=max(0,CL-CL_sat)²: cognitive load saturation}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "CL": "cognitive load (mental effort units)",
+          "CL_sat": "saturation threshold (capacity limit)",
+          "V_cls": "saturation potential"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "performance=P_max·min(CL,CL_sat)/CL_sat; plateaus at CL_sat",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "CL≤CL_sat (avoid overload)",
+          "performance peaks at CL=CL_sat"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_clsat=max(0,CL-CL_sat)²; V_clsat=0 iff at or below capacity",
+        "implication": "Cognitive load saturation occurs when CL>CL_sat; additional load increases errors without improving output. V_clsat>0 triggers cognitive failure modes. Measurable by error rate and response time vs. cognitive load level."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "V_clsat=max(0,CL-CL_sat)²; performance=P_max·min(CL,CL_sat)/CL_sat",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -565,7 +562,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE8] Example instances will be attached as child DTUs when needed."
+        "Sleep deprivation: σ²_0=1 (rested), ν_cog=0.3/hr. σ²_max=4 (critical impairment). t_fail=(4-1)/0.3=10hr awake. After 24hr: σ²_cog=8.2>>4 → V_cnac=4.2 (equivalent to 0.08% BAC). Recovery sleep: σ²_cog→σ²_0 in 8hr. Measured by psychomotor vigilance task (PVT) lapse rate vs. time awake (Van Dongen et al., 2003)."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -574,22 +571,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{σ²_cog(t)=σ²_0+ν_cog·t: cognitive noise growth}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "σ²_cog": "cognitive state variance (decision noise)",
+          "ν_cog": "noise accumulation rate",
+          "σ²_max": "cognitive failure threshold"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "decision_error∝σ_cog(t); failure at σ²_cog=σ²_max: t_fail=(σ²_max-σ²_0)/ν_cog",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "σ²_cog≤σ²_max (coherent cognition)",
+          "ν_cog>0 (noise irreducible without sleep)"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_cnac=max(0,σ²_cog-σ²_max); V_cnac=0 iff below cognitive failure",
+        "implication": "Cognitive noise accumulates with wakefulness; t_fail=(σ²_max-σ²_0)/ν_cog predicts cognitive breakdown. Sleep resets σ²_cog. Measurable by decision error variance vs. hours awake."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "σ²_cog(t)=σ²_0+ν_cog·t; t_fail=(σ²_max-σ²_0)/ν_cog; sleep resets σ²_cog",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -670,7 +666,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE8] Example instances will be attached as child DTUs when needed."
+        "Deep Blue chess: no self-reflection (no model of own reasoning). I_norefl=minimax search to depth 12. Beat Kasparov. V_iwsr=0 for chess (fixed rules). AlphaZero: self-play (reflection) improves V_iwsr<0 in novel positions. Context-dependent: V_iwsr>0 (reflection hurts) in overlearned skills (baseball swing). Measured by performance difference ± self-monitoring condition in motor learning experiments."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -679,20 +675,22 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{I_norefl=max_u min_w ΔV(x,u,w): intelligence without self-model}",
         "variables": {
-          "x": "state",
-          "θ": "params"
+          "I_norefl": "reactive intelligence (no self-model)",
+          "u": "action",
+          "w": "environment",
+          "ΔV": "value function change"
         },
-        "dynamics": "x_{t+1}=F(x_t;θ)",
+        "dynamics": "u*=argmax_u min_w ΔV(x,u,w); optimal without self-modeling overhead",
         "constraints": [
-          "h(x)=0",
-          "g(x)≤0"
+          "u*∈U (feasible actions)",
+          "no internal self-model required"
         ],
-        "potential": "V=||F(x)-x||^2",
-        "implication": "If V non-increasing and bounded below, x approaches invariant set where V=0."
+        "potential": "V_iwsr=I_self_model-I_norefl; V_iwsr=0 iff self-reflection adds no value",
+        "implication": "Intelligence without self-reflection achieves minimax optimality in stationary environments; self-reflection adds value only in non-stationary or meta-learning contexts. V_iwsr measures self-reflection benefit. Measurable by performance with vs. without self-model on standard tasks."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "I_norefl=max_u min_w ΔV(x,u,w); V_iwsr=I_self-I_norefl; reflection beneficial iff V_iwsr<0",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -774,7 +772,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE8] Example instances will be attached as child DTUs when needed."
+        "Proprioception: x_actual=limb position (measured by vision), x_self_model=proprioceptive estimate. V_smast=0.02cm² (normal). Vibration-induced illusion: V_smast→0.5cm² → postural instability. Stroke patient: V_smast=2cm² → falls. Rehabilitation: V_smast→0.05cm². Measured by proprioceptive accuracy test (joint position sense error) vs. balance score."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -783,20 +781,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{x_self_model≈x_actual: self-model accuracy as stability condition}",
         "variables": {
-          "x": "state",
-          "θ": "params"
+          "x_self_model": "agent's model of own state",
+          "x_actual": "actual agent state",
+          "ε_sm": "self-model accuracy"
         },
-        "dynamics": "x_{t+1}=F(x_t;θ)",
+        "dynamics": "ΔV≤-c_sm·(1-‖x_self-x_actual‖)·‖x-x*‖²; stability degrades with model error",
         "constraints": [
-          "h(x)=0",
-          "g(x)≤0"
+          "‖x_self_model-x_actual‖≤ε_sm (accuracy)",
+          "model updates at rate R_sm"
         ],
-        "potential": "V=||F(x)-x||^2",
-        "implication": "If V non-increasing and bounded below, x approaches invariant set where V=0."
+        "potential": "V_smast=‖x_self_model-x_actual‖²; V_smast→0 at accurate self-model",
+        "implication": "Self-modeling improves stability iff V_smast is small; large self-model errors destabilize the control loop. Measurable by comparing task performance with accurate vs. distorted self-models."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "V_smast=‖x_self_model-x_actual‖²; stability∝(1-V_smast); stable iff V_smast→0",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -877,7 +876,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE8] Example instances will be attached as child DTUs when needed."
+        "Recognition-primed decisions (Klein): firefighter τ_proc=2s, I_fast=high (pattern recognition). Analytical τ_proc=30s: I_deep=higher for novel fires. Crossover τ*=5s. Time pressure: choose τ=2s (I_fast). Novel situation: τ=30s (I_deep). Dual-process theory (Kahneman S1/S2). Measured by decision quality vs. time allocation in expert decision-making experiments."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -886,22 +885,22 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{tradeoff: I_fast=κ_fast·1/τ_proc vs I_deep=κ_deep·D_rec·τ_proc}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "τ_proc": "processing time allocated",
+          "I_fast": "fast shallow intelligence",
+          "I_deep": "slow deep intelligence",
+          "D_rec": "reasoning depth"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "I_fast=κ_fast/τ_proc (heuristic), I_deep=κ_deep·D_rec·τ_proc (deliberate)",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "τ_proc≤τ_deadline (time budget)",
+          "D_rec≤D_max (reasoning depth limit)"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_csdt=I_opt-max(I_fast,I_deep); V_csdt=0 at optimal speed-depth allocation",
+        "implication": "Cognitive speed-depth tradeoff: fast heuristics excel at τ_proc→0, deep reasoning at large τ_proc. Optimal switches between strategies at crossover τ*. Measurable by accuracy vs. response time curves."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "I=max(κ_fast/τ, κ_deep·D·τ); crossover at τ*=√(κ_fast/(κ_deep·D)); V_csdt minimized at τ*",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -981,7 +980,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE8] Example instances will be attached as child DTUs when needed."
+        "Aha moment experiment (Jung-Beeman, 2004): participants solving word puzzles. 0.3s before insight: gamma burst in anterior temporal lobe. EILI_cog rises from 0.2 (stuck) to 0.5 (transition) to 0.8 (solved). P_insight=Φ(EILI_cog)=0.5 at gamma burst. Non-insight solutions: EILI_cog rises gradually (no phase transition). Measured by gamma power (40Hz EEG) vs. insight report timing."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -990,22 +989,20 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{P_insight=Φ(EILI_cog): cognitive phase transition probability}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "EILI_cog": "Cognitive EILI (Encoding, Integration, Latency, Illumination)",
+          "P_insight": "probability of insight/phase transition"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "EILI_cog rises through 0.5 at insight moment; transition: slow deliberation → sudden understanding",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "EILI_cog∈[0,1]",
+          "incubation period precedes transition"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_cpt_cog=|EILI_cog-0.5|; V_cpt_cog→0 approaching insight",
+        "implication": "Cognitive phase transitions (insights) occur when EILI_cog crosses 0.5; preceded by incubation (slow EILI rise). Neural correlates: gamma-burst at transition. Measurable by EEG gamma power vs. insight report timing."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "P_insight=Φ(EILI_cog); V_cpt_cog=|EILI_cog-0.5|→0 at insight moment",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -1086,7 +1083,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE8] Example instances will be attached as child DTUs when needed."
+        "Fear response: ∇V_threat=+1 (snake detected). K_emot=100× (amygdala amplification). u_fear=100 (freeze/flee). Survival potential: V_survival increases 80% (evasion success). Anxiety disorder: K_emot=100× for ∇V_threat=0.01 (mild stressor). u_fear=1 (disproportionate). V_eacs2≠0 (maladaptive). Measured by heart rate reactivity vs. objective threat level in stress response studies."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -1095,22 +1092,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{u_emot=K_emot·∇V_survival(x): emotion as gradient signal}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "K_emot": "emotional gain (amplification)",
+          "∇V_survival": "gradient of survival potential",
+          "u_emot": "emotional control signal"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "emotion(t)=K_emot·∇V_survival(x(t)); ΔV_survival≤-c_emot·‖u_emot‖²",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "K_emot≥0 (appropriate amplification)",
+          "u_emot bounded by cognitive override"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_eacs2=V_survival-V*_survival; V_eacs2→0 as emotion guides to safety",
+        "implication": "Emotions are amplified gradient signals of survival potential; fear = ∇V_threat, joy = ∇V_opportunity. Appropriate K_emot enables fast response; dysregulated K_emot (anxiety) amplifies false gradients. Measurable by correlation between emotional intensity and actual survival gradient."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "u_emot=K_emot·∇V_survival; V_eacs2→0 under appropriate emotion; dysregulated: K_emot>>K*",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -1191,7 +1187,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE8] Example instances will be attached as child DTUs when needed."
+        "Job stress: S_environ=job demands (overload, ambiguity, conflicts). S_coping=skills+support+resources. V_saeal=max(0,S_environ-S_coping). Burnout: chronic V_saeal>0 for 6+ months. Cortisol elevation correlates: V_saeal=0.5 → cortisol +40%. Measured by Karasek Job Demand-Control model scores vs. cortisol awakening response."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -1200,22 +1196,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{σ²_stress=S_environ-S_coping: entropy gap as stress signal}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "S_environ": "environmental entropy (disorder, uncertainty)",
+          "S_coping": "coping capacity (ordered response repertoire)",
+          "σ²_stress": "stress level"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "stress=max(0,S_environ-S_coping); allostatic load grows with chronic stress",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "stress=0 iff S_coping≥S_environ",
+          "allostatic load: ∫stress·dt"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_saeal=max(0,S_environ-S_coping); V_saeal=0 iff coping matches environment",
+        "implication": "Stress is an alarm when environmental entropy exceeds coping capacity; V_saeal>0 signals system threat. Chronic V_saeal>0 causes allostatic load damage. Measurable by coping capacity inventory vs. environmental demand assessment."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "stress=max(0,S_environ-S_coping); V_saeal=max(0,S_environ-S_coping); V_saeal=0 iff coped",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -1296,7 +1291,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE8] Example instances will be attached as child DTUs when needed."
+        "Incentive salience (Berridge): V_maeg=reward proximity. Rat in T-maze: ∇U_reward∝1/distance. Running speed∝∇U·α. Dopamine=α modulator: increase dopamine → α×2, speed×2. Depression: α→0 (anhedonia), V_maeg not approached. Measured by instrumental response rate vs. reward magnitude × probability in animal learning experiments."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -1305,23 +1300,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{u_motiv=α·∇U_reward(x): motivation as reward gradient ascent}",
         "variables": {
-          "C": "capacity",
-          "D": "decay",
-          "R": "repair",
-          "T": "throughput"
+          "∇U_reward": "gradient of reward potential",
+          "α": "motivation gain (arousal level)",
+          "u_motiv": "motivational drive signal"
         },
-        "dynamics": "C_{t+1}=C_t+R_t-D_t; T_t≤C_t",
+        "dynamics": "ẋ=u_motiv=α·∇U_reward; V_motiv=U_max-U_reward(x); V_motiv→0 as goal approached",
         "constraints": [
-          "C≥0",
-          "R≥0",
-          "D≥0"
+          "α>0 (active motivation)",
+          "‖∇U_reward‖>threshold for action initiation"
         ],
-        "potential": "V=max(0,C_min-C)",
-        "implication": "If E[R]≥E[D] and shocks bounded, then C stays above C_min with high probability."
+        "potential": "V_maeg=U_max-U_reward(x); V_maeg→0 as reward achieved",
+        "implication": "Motivation is gradient ascent on reward potential; α modulates speed (arousal). Zero gradient (no clear goal) → amotivation. Steep gradient (clear reward) → high motivation. Measurable by approach speed vs. reward gradient magnitude."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "u_motiv=α·∇U_reward; V_maeg=U_max-U_reward→0; speed∝α·‖∇U_reward‖",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -1403,7 +1396,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE8] Example instances will be attached as child DTUs when needed."
+        "Depression trajectory: D_mental=3 stressors/week (work, relationship, financial). R_mental=1.5 (sleep only, no therapy). Ḃ=-1.5/week. B(0)=100, L=67 weeks to severe depression. Add therapy+exercise: R_mental→4>D_mental. Ḃ=+1/week → recovery. Measured by PHQ-9 score trajectory vs. documented stress/coping balance."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -1412,23 +1405,20 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{Ḃ_mental=R_mental-D_mental: mental health as repair dominance}",
         "variables": {
-          "B": "integrity",
-          "D": "damage",
-          "R": "repair",
-          "S": "stress"
+          "R_mental": "psychological repair rate (sleep, therapy, social support)",
+          "D_mental": "psychological damage rate (stressors, trauma, loss)"
         },
-        "dynamics": "dB/dt=R(B,S)-D(B,S)",
+        "dynamics": "B_mental(t+1)=B_mental(t)+(R_mental-D_mental)·Δt; healthy iff R_mental≥D_mental",
         "constraints": [
-          "B∈[0,1]",
-          "R≥0",
-          "D≥0"
+          "R_mental≥D_mental (repair dominance)",
+          "B_mental≥B_min"
         ],
-        "potential": "V=1-B",
-        "implication": "If R≥D+ε on [B0,1], then B increases toward 1 (repair-dominant)."
+        "potential": "V_mhrb=max(0,D_mental-R_mental); V_mhrb=0 iff mental health maintained",
+        "implication": "Mental health requires R_mental≥D_mental; imbalance leads to degradation on timescale L=B_mental/(D_mental-R_mental). Therapy, sleep, social support increase R_mental. Measurable by wellbeing score change vs. stress/recovery balance."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "Ḃ_mental=R_mental-D_mental; L_mental=B/(D-R+ε); healthy iff R_mental≥D_mental",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -1510,7 +1500,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE8] Example instances will be attached as child DTUs when needed."
+        "Combat PTSD: d_trauma=-0.6 (locked in hypervigilance+flashbacks). C_process=EMDR (20 sessions). C_available=patient resources. V_tcli=0.36. EMDR treatment: C_process becomes accessible → d_trauma→+0.2 (unlocked). V_tcli→0. PCL-5 score: 55 (PTSD) → 25 (no PTSD) after 20 sessions. Measured by PCL-5 score vs. sessions completed in EMDR clinical trials."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -1519,22 +1509,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{d_trauma<0: trauma locks out normal functioning}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "d_trauma": "distance from locked-in trauma state",
+          "C_process": "trauma processing cost",
+          "Ω_normal": "normal functioning region"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "V_tcli=max(0,-d_trauma)²·(1+C_process/C_available); locked iff C_process>C_available",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "d_trauma<0 (locked)",
+          "C_process=therapy cost (time, emotional cost)"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_tcli=max(0,-d_trauma)²; V_tcli=0 iff trauma processed",
+        "implication": "Trauma is constraint lock-in: the traumatic state prevents normal functioning, and escape requires C_process. V_tcli>0 is PTSD. Therapeutic processing reduces C_process, enabling escape. Measurable by PTSD symptom severity vs. avoidance behavior frequency."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "V_tcli=max(0,-d_trauma)²; locked iff C_process>C_available; therapy reduces C_process",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -1614,7 +1603,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE8] Example instances will be attached as child DTUs when needed."
+        "Growth mindset (Dweck): α=0.3 (adapt beliefs on failure). V_avr=grade improvement over semester. Fixed mindset: α=0, V_avr stagnant. Optimal: α=0.2 for academic settings (metacognitive updating). Over-adaptation (α=1): performance variance increases. Measured by academic grade trajectory vs. mindset intervention group assignment."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -1623,22 +1612,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{θ_adapt(t+1)=Π_{Ω_adapt}[θ-α·∇L_adapt]: adaptive vs rigid learning}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "α": "adaptation rate",
+          "Ω_adapt": "adaptive feasibility (change budget)",
+          "L_adapt": "adaptation loss"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "rigid: α→0; adaptive: α>0. V_avr=L_adapt(θ_rigid)-L_adapt(θ_adapt(t))",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "α≤α_max (stability constraint)",
+          "θ∈Ω_adapt (change within bounds)"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_avr=L_adapt(θ)-L_adapt(θ*); V_avr=0 at adaptive optimum",
+        "implication": "Adaptation reduces V_avr by updating θ; rigidity (α=0) locks in V_avr. Overly high α causes instability. Optimal α* balances adaptation speed and stability. Measurable by performance on novel vs. familiar tasks vs. adaptation rate."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "θ(t+1)=Π_{Ω}[θ-α·∇L]; V_avr=L(θ)-L(θ*); rigid iff α=0, unstable iff α>α_max",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -1719,7 +1707,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE8] Example instances will be attached as child DTUs when needed."
+        "Resilience research: N=1 (family only): P_survive=0.70. N=3 (family+friends+therapy): P_survive=1-0.3³=0.973. N=5 (+ exercise+meaning): P_survive=1-0.3⁵=0.998. Hurricane Katrina: residents with N≥3 resources: 85% PTSD-free at 1yr vs. 35% for N=1. Measured by PTSD incidence at 6mo vs. pre-disaster coping resource count (resource loss theory)."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -1728,22 +1716,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{P_psych_survive=1-(1-P_coping)^N_resources: N-resource redundancy}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "P_coping": "single coping resource success probability",
+          "N_resources": "number of independent coping resources",
+          "P_psych_survive": "resilience probability"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "P_psych_survive=1-(1-P_coping)^N; N resources provide N-fold redundancy",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "P_psych_survive≥P_resilience_threshold",
+          "resources independent (low correlation)"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_prar=1-P_psych_survive; V_prar→0 as N increases",
+        "implication": "Psychological resilience is resource redundancy: more independent coping resources increase P_psych_survive. Loss of all resources simultaneously causes breakdown. Measurable by resilience score vs. coping resource count."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "P_psych_survive=1-(1-P_coping)^N; V_prar=1-P_survive→0 as N→∞",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -1824,7 +1811,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE8] Example instances will be attached as child DTUs when needed."
+        "Physician burnout: D_psych=80hr workweeks (high demands). R_psych=8hr sleep nominal. ρ_burnout→0.8 (chronic overload). R_psych_eff=8×0.2=1.6hr << D_psych. V_bars>0. Burnout time: 6-18 months. Recovery: mandatory vacation (ρ_burnout→0.2, R_psych_eff=6.4) → V_bars→0. Measured by MBI (Maslach Burnout Inventory) score vs. weekly work hours."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -1833,23 +1820,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{R_psych_eff=R_psych·(1-ρ_burnout): saturated repair capacity}",
         "variables": {
-          "B": "integrity",
-          "D": "damage",
-          "R": "repair",
-          "S": "stress"
+          "R_psych": "nominal psychological repair rate",
+          "ρ_burnout": "burnout saturation fraction",
+          "R_psych_eff": "effective repair rate"
         },
-        "dynamics": "dB/dt=R(B,S)-D(B,S)",
+        "dynamics": "ρ̇_burnout=α·D_psych-β·(1-ρ_burnout); saturates when D_psych>>β",
         "constraints": [
-          "B∈[0,1]",
-          "R≥0",
-          "D≥0"
+          "R_psych_eff≥D_psych for health",
+          "ρ_burnout∈[0,1]"
         ],
-        "potential": "V=1-B",
-        "implication": "If R≥D+ε on [B0,1], then B increases toward 1 (repair-dominant)."
+        "potential": "V_bars=max(0,D_psych-R_psych·(1-ρ_burnout)); V_bars=0 iff repair not saturated",
+        "implication": "Burnout is repair saturation: ρ_burnout→1 as chronic demands overwhelm recovery. R_psych_eff→0 despite nominal capacity. V_bars grows until breakdown. Measurable by recovery time vs. concurrent stressor count."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "R_psych_eff=R_psych·(1-ρ_burnout); V_bars=max(0,D_psych-R_psych·(1-ρ_burnout))",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -1930,7 +1915,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE8] Example instances will be attached as child DTUs when needed."
+        "Big Five personality stability: ν_ID≈0.05/√yr (Roberts & DelVecchio meta-analysis). ε_ID=0.5 (reliable individual). t_crisis=(ε_ID/ν_ID)²=100yr (natural). Mid-life crisis: external shock increases ν_ID→0.2/√yr → t_crisis=(0.5/0.2)²=6.25yr. Mindfulness practice: ν_ID→0.02/√yr, t_crisis=625yr. Measured by test-retest correlation of personality questionnaires vs. interval length."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -1939,22 +1924,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{‖I_human(t)-I_human(0)‖=ν_ID·√t: human identity diffuses as √t}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "I_human": "human identity functional (values, traits, narratives)",
+          "ν_ID": "identity drift rate",
+          "ε_ID": "acceptable drift tolerance"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "dI_human=ξ_life·dt; ‖ΔI_human‖∝√t (life experience diffusion)",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "‖ΔI_human‖≤ε_ID for identity continuity",
+          "active cultivation reduces ν_ID"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_idih=‖I_human(t)-I_human(0)‖²=ν²_ID·t; V_idih→ε²_ID at identity crisis",
+        "implication": "Human identity drifts as √t through life experience; active identity cultivation (narrative, values reflection) reduces ν_ID. Identity crises occur when V_idih>ε²_ID. Measurable by personality stability vs. life event count."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "‖ΔI_human‖=ν_ID·√t; V_idih=ν²_ID·t; crisis at V_idih>ε²_ID; cultivation reduces ν_ID",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -2034,7 +2018,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE8] Example instances will be attached as child DTUs when needed."
+        "Suicide risk: Ω_cognitive∩Ω_social∩Ω_financial∩Ω_physical. Each domain stressed: vol each = 0.6. Single domain: vol(∩)=0.6. Two domains: vol(∩)=0.36. Four simultaneous: vol(∩)=0.13. V_pcm=8×. Joiner's interpersonal theory: thwarted belonging × perceived burdensomeness × capability = ∩Ω→0. Measured by number of simultaneous life stressors vs. hospitalization risk in ACE study data."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -2043,22 +2027,20 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{∩_k Ω_psych_k→∅: psychological feasibility collapse}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "∩_k Ω_psych_k": "intersection of cognitive+emotional+social feasibility",
+          "P_psych_col": "psychological collapse probability"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "P_psych_col∝1/vol(∩_k Ω_psych_k); cascade when intersection vanishes",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "vol(∩Ω_psych)≥vol_min for functioning",
+          "multiple simultaneous stressors → intersection collapse"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_pcm=1/vol(∩_k Ω_psych_k); V_pcm→∞ at psychological collapse",
+        "implication": "Psychological collapse occurs when simultaneous stressors shrink ∩Ω_psych to zero; no single stressor causes collapse, but their intersection does. V_pcm provides risk indicator. Measurable by number of simultaneous life domains under stress."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "P_psych_col∝1/vol(∩_k Ω_psych_k); V_pcm=1/vol(∩Ω)→∞; multi-domain collapse",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -2139,7 +2121,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE8] Example instances will be attached as child DTUs when needed."
+        "Mathematical notation: K(∫f(x)dx) << K('the antiderivative of f'). Compression ratio=5×. Chinese writing: ~4000 characters, higher compression ratio than alphabetic for most meanings. Code compression: zip reduces source code 60-80%. V_lacc=-0.7 for mathematical notation (70% compression). Measured by description length ratio in cross-linguistic meaning studies."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -2148,22 +2130,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{K(meaning|language)<<K(meaning): language compresses control signals}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "K(meaning|language)": "description length of meaning given language",
+          "K(meaning)": "raw description length",
+          "compression_ratio": "K(meaning)/K(meaning|language)"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "language encodes meaning: K(meaning|language)=K(grammar)+K(semantics); effective iff compression_ratio>1",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "K(meaning|language)≥0",
+          "language consistent: grammar+semantics define Ω_lang"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_lacc=K(meaning|language)-K(meaning); V_lacc<0 iff language compresses meaning",
+        "implication": "Language compresses meaning into shorter control signals; V_lacc<0 means language is an efficient encoding. Poor language (V_lacc>0) expands rather than compresses. Measurable by description length ratio for standard meanings across languages."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "V_lacc=K(meaning|language)-K(meaning); language efficient iff V_lacc<0",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -2244,7 +2225,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE8] Example instances will be attached as child DTUs when needed."
+        "English grammar: 'Colorless green ideas sleep furiously' — V_gace2=0 (grammatical). 'Ideas sleep colorless furiously green' — V_gace2=3 violations. Native speaker agreement: 95% rate first grammatical, 15% second. Chomsky's deep structure: V_gace2 computed on underlying form. Measured by grammaticality judgment inter-rater reliability vs. violation count."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -2253,22 +2234,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{Ω_grammar=∩_k{sentence: rule_k satisfied}: grammatical feasibility}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "Ω_grammar": "grammatically valid sentence space",
+          "rule_k": "k-th grammar rule (constraint)",
+          "parse_tree": "constraint satisfaction certificate"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "parse(sentence)=Π_{Ω_grammar}[word_sequence]; valid iff sentence∈Ω_grammar",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "rule_k(sentence)=True ∀k",
+          "context-free: O(n³) parsing (CYK)"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_gace2=∑_k max(0,rule_k_violated); V_gace2=0 iff grammatical",
+        "implication": "Grammar is constraint encoding: V_gace2=0 for grammatical sentences. Language acquisition = learning constraints. Ambiguity: multiple parse trees with V_gace2=0. Measurable by grammaticality judgment agreement vs. violation count."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "V_gace2=∑_k max(0,rule_k violated); grammatical iff V_gace2=0; parse=constraint cert",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -2350,7 +2330,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE8] Example instances will be attached as child DTUs when needed."
+        "Word 'literally': σ²_0=0.1 (literal meaning, 1900). ν_sem=0.05/yr (gradual misuse). σ²_meaning(2024)=0.1+0.05×124=6.3 (now means 'figuratively' to many). V_sdna=6.2 (vast meaning drift). 'Awful': original=awe-inspiring. σ²_meaning now=4.0 (entirely opposite). Measured by word embedding variance across decades in Google Books Ngram corpus."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -2359,22 +2339,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{σ²_meaning(t)=σ²_0+ν_sem·t: semantic noise growth}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "σ²_meaning": "semantic variance (meaning spread)",
+          "ν_sem": "semantic drift rate",
+          "σ²_max": "semantic failure (complete vagueness)"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "meaning(t)=meaning(0)+∫ξ_sem·dt; σ²_meaning grows without definition maintenance",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "σ²_meaning≤σ²_max (semantic coherence)",
+          "ν_sem≥0"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_sdna=max(0,σ²_meaning-σ²_ref); V_sdna=0 iff meaning stable",
+        "implication": "Semantic drift accumulates as words are used in new contexts; t_vague=(σ²_max-σ²_0)/ν_sem. Active definition maintenance (dictionaries, usage norms) reduces ν_sem. Measurable by word meaning variance over historical corpora."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "σ²_meaning(t)=σ²_0+ν_sem·t; V_sdna=max(0,σ²_meaning-σ²_ref); drift rate=ν_sem",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -2454,7 +2433,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE8] Example instances will be attached as child DTUs when needed."
+        "Aviation ATC: τ_harm=3s (collision avoidance window). Ambiguous instruction: τ_decode=10s (pilot clarifies) → V_lle=49. Standard brevity code ('TCAS climb'): τ_lang=0.5s → V_lle=0. CFIT accidents: 40% involve language confusion. ICAO phraseology reduces τ_lang to 0.3s. Measured by air traffic incident rate vs. phraseology compliance."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -2463,22 +2442,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{τ_lang=τ_encode+τ_transmit+τ_decode≤τ_harm_lang: language response latency}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "τ_lang": "total language processing latency",
+          "τ_harm_lang": "timescale of harmful miscommunication",
+          "τ_encode": "speaker encoding time"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "V_lle=max(0,τ_lang-τ_harm_lang); miscommunication risk grows with latency",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "τ_lang<τ_harm_lang for effective communication",
+          "τ_encode≥200ms (speech planning)"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_lle=max(0,τ_lang-τ_harm_lang)²; V_lle=0 iff communication timely",
+        "implication": "Language latency V_lle>0 causes miscommunication in time-critical situations; high-stakes communication requires pre-loaded protocols (military brevity codes) to reduce τ_lang. Measurable by miscommunication rate vs. utterance length and urgency."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "τ_lang=τ_encode+τ_transmit+τ_decode; V_lle=max(0,τ_lang-τ_harm_lang)²",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -2559,7 +2537,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE8] Example instances will be attached as child DTUs when needed."
+        "Clay tablets: D_ext≈0.001%/yr (durable). Sumerian records: 5000yr old intact. Paper: D_ext=0.5%/yr without preservation. B_ext drops 99% in 1000yr. Digital: D_ext=0 with backup but media obsolescence. D_effective=5%/yr without migration. V_waem=0 for clay, >0 for neglected paper/digital archives. Measured by fraction of 500yr-old documents still readable vs. medium type."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -2568,22 +2546,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{B_ext=∫I_written·dt: external memory as accumulated information buffer}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "B_ext": "external memory buffer (written knowledge)",
+          "I_written": "writing rate (bits/unit time)",
+          "D_ext": "degradation rate of written medium"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "Ḃ_ext=I_written-D_ext·B_ext; viable iff I_written≥D_ext·B_ext",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "I_written≥D_ext·B_ext (writing keeps up with decay)",
+          "medium durability: 1/D_ext"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_waem=max(0,D_ext·B_ext-I_written); V_waem=0 iff external memory maintained",
+        "implication": "Writing extends cognitive buffer to B_ext; civilizations with V_waem=0 accumulate knowledge indefinitely. Medium durability (1/D_ext) determines knowledge persistence. Measurable by knowledge retention vs. time for different writing media."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "Ḃ_ext=I_written-D_ext·B_ext; V_waem=max(0,D_ext·B_ext-I_written)=0 for growing archives",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -2663,7 +2640,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE8] Example instances will be attached as child DTUs when needed."
+        "'Prime number': σ²=0 (formally defined, 2500yr stable). 'Limit': σ²_informal=high before Cauchy (1821); after formal ε-δ definition: σ²→0. Contrast 'justice': σ²=4.5 (high natural language variance). V_mls ratio: math term=0.01 vs natural language=4.5. Measured by cross-expert agreement on term meaning: math=99.9%, law=60%, politics=30%."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -2672,22 +2649,20 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{σ²_mathterm(t)≈0: mathematical terms stable under all interpretations}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "σ²_mathterm": "variance of mathematical term meaning",
+          "ν_mathsem": "semantic drift rate in mathematical language"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "σ²_mathterm(t)≈σ²_0≈0 (formal definition anchors meaning); ν_mathsem≈0",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "mathematical terms formally defined (σ²≈0)",
+          "drift prevented by definition reference"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_mls=σ²_mathterm; V_mls→0 for well-defined mathematical language",
+        "implication": "Mathematical language achieves near-zero semantic drift because terms are formally defined; V_mls≈0. Natural language V_mls>>0. Measurable by cross-context meaning variance of mathematical vs. natural language terms."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "V_mls=σ²_mathterm≈0 (formally defined); ν_mathsem≈0 vs ν_natural>0",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -2767,7 +2742,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE8] Example instances will be attached as child DTUs when needed."
+        "Legal document density: S_sat=150 words/paragraph (comprehension research). Contract at 300 words/paragraph: V_sof=(150)²=22,500. Comprehension: 45% vs. 85% at S_sat. Plain language reform (UK GOV.UK): reduce S_symb to 80/paragraph → comprehension 92%. Measured by task completion rate on legal documents vs. readability score (Flesch-Kincaid level)."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -2776,22 +2751,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{V_sof=max(0,S_symb-S_sat)²: symbol overload potential}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "S_symb": "symbol density in communication",
+          "S_sat": "symbol processing saturation",
+          "V_sof": "overload potential"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "comprehension=C_max·min(S_symb,S_sat)/S_sat; degrades for S_symb>S_sat",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "S_symb≤S_sat (below overload)",
+          "each symbol processed in τ_symb time"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_sof=max(0,S_symb-S_sat)²; V_sof=0 iff symbol density within capacity",
+        "implication": "Symbol overload occurs when S_symb>S_sat; comprehension plateaus and errors increase. Optimal communication density = S_sat. Measurable by comprehension accuracy vs. symbol density."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "V_sof=max(0,S_symb-S_sat)²; comprehension=C_max·min(S,S_sat)/S_sat",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -2872,7 +2846,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE8] Example instances will be attached as child DTUs when needed."
+        "German 'Schadenfreude': V_taim(→English)=0.4 (no single-word equivalent). V_taim(→'malicious joy')=0.15 (partial). Machine translation (Google): V_taim≈0.08 for simple text, 0.35 for idioms. UN official documents: human translation V_taim<0.05 (verified by back-translation). Measured by semantic similarity score between original and back-translated text (BLEU score)."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -2881,22 +2855,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{T_trans: Ω_lang1→Ω_lang2; I_func invariant under T_trans}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "T_trans": "translation operator",
+          "I_func": "meaning invariant",
+          "V_trans_err": "translation error (lost meaning)"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "V_trans_err=‖I_func(text)−I_func(T_trans(text))‖; perfect translation: V_trans_err=0",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "I_func preserved under T_trans (semantic invariant)",
+          "T_trans∈bijection (no information loss)"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_taim=V_trans_err=‖I_func(original)-I_func(translated)‖; V_taim=0 iff perfect translation",
+        "implication": "Translation is an invariant mapping preserving I_func; V_taim>0 measures semantic loss. Untranslatable concepts have high V_taim for any T_trans. Measurable by back-translation accuracy and cross-linguistic meaning alignment."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "V_taim=‖I_func(text)-I_func(T_trans(text))‖; perfect iff V_taim=0; untranslatable iff V_taim>V_max",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -2978,7 +2951,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE8] Example instances will be attached as child DTUs when needed."
+        "Proto-Indo-European → modern languages: θ_lang drift over 6000yr. Consonant cluster simplification: reduces L_lang (easier articulation). English: K_initial before N dropped (knee→nee), reducing motor complexity V_lecn. Extinct languages: θ drifted outside learnable Ω_lang. Pidgin→Creole: V_lecn drops rapidly (100yr). Measured by phoneme inventory size vs. speaker community size (Hay & Bauer, 2007)."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -2987,22 +2960,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{θ_lang(t+1)=Π_{Ω_lang}[θ-α·∇L_lang]: language evolves via constraint projection}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "θ_lang": "language parameter state (phonology, grammar, lexicon)",
+          "L_lang": "language fitness loss (communication failures)",
+          "Ω_lang": "humanly articulable language space"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "language evolves: θ_lang(t+1)=Π_{Ω_lang}[θ-α·∇L_lang]; stays humanly producible",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "θ_lang∈Ω_lang (articulable, learnable)",
+          "α>0 (change driven by communication needs)"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_lecn=L_lang(θ_lang); V_lecn→0 as language optimizes for communication",
+        "implication": "Language evolution is constrained gradient descent minimizing L_lang; languages that drift outside Ω_lang are not learnable and die. Measurable by language change rate vs. communication efficiency improvement."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "θ_lang(t+1)=Π_{Ω_lang}[θ-α·∇L_lang]; V_lecn=L_lang→0; constrained by human articulatory space",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -3082,7 +3054,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE8] Example instances will be attached as child DTUs when needed."
+        "Diplomatic silence: P(silence|direct question)=0.01 (diplomats rarely silent). I_silence=log₂(100)=6.6 bits. Meaning: refusal to confirm or deny. Watson-Holmes: 'the dog that didn't bark' = I_silence=high. Poker: player's silence during bet=4 bits (unusual). Measured by behavioral response rate to unexplained silence in negotiation experiments."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -3091,22 +3063,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{I_silence=log₂(1/P(silence|context)): information in absence of signal}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "I_silence": "information content of silence",
+          "P(silence|context)": "probability of silence in context",
+          "H_expected": "expected information from non-silence"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "I_silence=H_expected-I_transmitted; silence is maximal information when P(silence)→0",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "I_silence≥0",
+          "I_silence=H_expected iff speaker always speaks"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_sai=H_expected-I_silence; V_sai=0 iff silence is fully informative",
+        "implication": "Silence conveys I_silence=log₂(1/P(silence|context)) bits; in expected-speech contexts, silence is highly informative. V_sai measures unexploited silence information. Measurable by response rate to silence in communication contexts."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "I_silence=log₂(1/P(silence|context)); V_sai=H_expected-I_silence; max iff P(silence)→0",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -3188,7 +3159,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE8] Example instances will be attached as child DTUs when needed."
+        "Japanese workplace culture: N_norms=50+ (punctuality, hierarchy, consensus, dress). Ω_culture = intersection → narrow behavioral range. vol(Ω_culture)=0.2 (20% of possible behaviors acceptable). US startup culture: N_norms=15, vol=0.6. V_cass: Japan=0.02 (near-coherent norms), US=0.15 (some norm conflicts). Measured by inter-rater agreement on 'is this behavior acceptable here?' surveys: Japan 95%, US 70%."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -3197,22 +3168,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{Ω_culture=∩_k Ω_norm_k: culture as intersection of shared norms}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "Ω_culture": "culturally feasible behavior space",
+          "Ω_norm_k": "k-th norm constraint set",
+          "N_norms": "number of active norms"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "behavior∈Ω_culture iff all norms satisfied; vol(Ω_culture)=vol(∩_k Ω_norm_k)",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "Ω_culture≠∅ (Slater condition: shared feasible behavior exists)",
+          "norms consistent across members"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_cass=max_k max_{b∈Ω_culture} dist(b, Ω_norm_k); V_cass=0 iff all norms compatible",
+        "implication": "Culture is the feasibility intersection of shared norms; vol(Ω_culture) measures cultural latitude. Smaller intersection = more rigid culture. V_cass>0 indicates norm conflict. Measurable by behavioral variance within cultural group vs. between groups."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "Ω_culture=∩_k Ω_norm_k; V_cass=0 iff Slater point exists; cultural latitude=vol(Ω_culture)",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -3292,7 +3262,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE8] Example instances will be attached as child DTUs when needed."
+        "Roman Republic norms: R_repair=census, legal enforcement, military service. D_drift=corruption, expansion stress. V_crm→0 in late Republic (100BCE): D_drift>R_repair. Collapse in 27BCE. Modern US: D_drift=0.05/yr (norm erosion), R_repair=0.04/yr (institutional enforcement). V_crm=0.01→slow erosion. Measured by World Values Survey norm-compliance metrics vs. institutional enforcement indices across decades."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -3301,23 +3271,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{Ṁ_culture=R_repair-D_drift: cultural norm maintenance dynamics}",
         "variables": {
-          "B": "integrity",
-          "D": "damage",
-          "R": "repair",
-          "S": "stress"
+          "M_culture": "cultural norm adherence buffer",
+          "R_repair": "norm reinforcement rate (rituals, enforcement)",
+          "D_drift": "cultural drift rate"
         },
-        "dynamics": "dB/dt=R(B,S)-D(B,S)",
+        "dynamics": "Ṁ_culture=R_repair-D_drift; viable iff R_repair≥D_drift (repair dominance)",
         "constraints": [
-          "B∈[0,1]",
-          "R≥0",
-          "D≥0"
+          "R_repair≥D_drift (culture maintained)",
+          "M_culture≥M_min (minimum coherence)"
         ],
-        "potential": "V=1-B",
-        "implication": "If R≥D+ε on [B0,1], then B increases toward 1 (repair-dominant)."
+        "potential": "V_crm=max(0,D_drift-R_repair); V_crm=0 iff culture self-maintains",
+        "implication": "Cultural repair mechanisms (rituals, institutions, education) maintain Ṁ_culture≥0; V_crm>0 predicts cultural dissolution. Repair rate R_repair must match drift rate D_drift. Measurable by norm compliance rate vs. enforcement intensity over time."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "Ṁ_culture=R_repair-D_drift; V_crm=max(0,D_drift-R_repair)=0 for viable cultures",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -3397,7 +3365,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE8] Example instances will be attached as child DTUs when needed."
+        "Protestant denominations: ν_cult=0.02/yr (gradual doctrinal drift). H_0=0.1 (at Reformation, 1517). H_max=1.0 (unrecognizable split). t_dissolve=(1-0.1)/0.02=45yr per generation of splits. By 2024: 45,000+ denominations (45yr×~1000 splits/yr). Catholic church: lower ν_cult=0.005/yr (centralized authority). Measured by doctrinal variance (proportion of differing beliefs) between congregations founded N years ago."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -3406,22 +3374,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{H_culture(t)=H_0+ν_cult·t: cultural entropy growth without maintenance}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "H_culture": "cultural entropy (norm variance)",
+          "ν_cult": "entropy accumulation rate",
+          "H_max": "cultural incoherence threshold"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "H_culture grows as members interpret norms differently; t_dissolve=(H_max-H_0)/ν_cult",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "H_culture≤H_max (cultural coherence)",
+          "ν_cult≥0"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_cea=max(0,H_culture-H_ref); V_cea=0 iff entropy below reference",
+        "implication": "Cultural entropy accumulates as norms drift in interpretation; t_dissolve predicts cultural dissolution. Codification (law, scripture) reduces ν_cult. Measurable by norm-interpretation variance across members vs. time since last codification."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "H_culture(t)=H_0+ν_cult·t; t_dissolve=(H_max-H_0)/ν_cult; V_cea=max(0,H_culture-H_ref)",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -3501,7 +3468,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE8] Example instances will be attached as child DTUs when needed."
+        "Social media misinformation: τ_harm=4hr (viral spread). τ_perceive=2hr, τ_deliberate=6hr, τ_mobilize=12hr → τ_cult=20hr >> 4hr. V_clr=(16)²=256. Cultural damage: 60% believe false claim before correction. Pre-social-media: τ_harm=1wk, τ_cult=3days → V_clr=0. Fast-response institutions (AP fact-check): τ_cult→2hr. Measured by false belief prevalence vs. correction latency in social media misinformation studies (Vosoughi et al., 2018)."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -3510,22 +3477,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{τ_cult=τ_perceive+τ_deliberate+τ_mobilize≤τ_harm_cult: cultural response latency}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "τ_cult": "cultural response latency",
+          "τ_harm_cult": "timescale of cultural threat",
+          "τ_mobilize": "collective action time"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "V_clr=max(0,τ_cult-τ_harm_cult); cultural harm occurs iff response too slow",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "τ_cult<τ_harm_cult (timely response)",
+          "τ_mobilize≥τ_min (coordination floor)"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_clr=max(0,τ_cult-τ_harm_cult)²; V_clr=0 iff culture responds in time",
+        "implication": "Cultural latency V_clr>0 enables threats to take hold before collective response; fast-spreading memes exploit τ_cult>τ_meme. Institutions that reduce τ_mobilize lower V_clr. Measurable by time from cultural threat emergence to effective collective response."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "τ_cult=τ_perceive+τ_deliberate+τ_mobilize; V_clr=max(0,τ_cult-τ_harm_cult)²",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -3605,7 +3571,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE8] Example instances will be attached as child DTUs when needed."
+        "Arab Spring (2010-11): EILI_cult rose from 0.25 (2005) to 0.52 (2010) driven by unemployment, food prices, political repression. P_transition=Φ(0.52)=0.55. Tunisia tipped first: V_cpt=0.02 (near threshold). Egypt: V_cpt=0.01. Stable monarchies (Jordan): EILI_cult=0.38, V_cpt=0.12. Hysteresis: counter-revolution requires EILI<0.3. Measured by Polity score change vs. economic stress index (food price + unemployment) in Freedom House data."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -3614,22 +3580,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{P_transition=Φ(EILI_cult): cultural phase transition probability}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "EILI_cult": "Cultural EILI (norm tension, resource stress, external pressure)",
+          "P_transition": "probability of cultural phase shift",
+          "θ_cult": "cultural parameter vector"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "EILI_cult crosses 0.5 at transition; θ_cult jumps to new equilibrium basin",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "EILI_cult∈[0,1]",
+          "hysteresis: reversal requires EILI<0.3"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_cpt=|EILI_cult-0.5|; V_cpt→0 approaching cultural transition",
+        "implication": "Cultural phase transitions (revolutions, paradigm shifts) occur when EILI_cult crosses 0.5; hysteresis means transitions are hard to reverse. V_cpt measures proximity to tipping point. Measurable by protest frequency vs. EILI_cult computed from economic/social stress indicators."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "P_transition=Φ(EILI_cult); V_cpt=|EILI_cult-0.5|→0 at revolution; hysteresis Δ=0.2",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -3710,7 +3675,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE8] Example instances will be attached as child DTUs when needed."
+        "Jewish cultural survival through diaspora: K_cult=4 (Torah+Talmud+prayer+community=4 redundant norm systems). Suppression of 2: K_cult drops to 2, V_cras=0 (still redundant). Soviet persecution: reduced to 1 (underground community), K_cult=1 → V_cras=0 barely. Indigenous cultures: K_cult=1 (oral tradition only) → V_cras=0.5 (fragile). Loss of elders: K_cult→0 → cultural death. Measured by norm-adherence rate after loss of N randomly selected transmission channels."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -3719,22 +3684,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{K_cult=N_traditions/N_required: cultural redundancy factor}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "K_cult": "cultural redundancy (multiple traditions encoding same norm)",
+          "N_traditions": "number of norm-reinforcing traditions",
+          "N_required": "minimum traditions for norm survival"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "P_norm_survival=(1-(1-p_tradition)^{K_cult·N_required}); high K_cult → robust norms",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "K_cult≥1 (at least one tradition per norm)",
+          "p_tradition≥p_min"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_cras=max(0,1-K_cult); V_cras=0 iff sufficient redundancy",
+        "implication": "Cultural redundancy K_cult>1 ensures norm survival even if some traditions fail; V_cras>0 means single points of norm failure. Measurable by norm adherence after selective tradition suppression."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "K_cult=N_traditions/N_required; V_cras=max(0,1-K_cult); P_survival=(1-(1-p)^{K·N})",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -3814,7 +3778,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE8] Example instances will be attached as child DTUs when needed."
+        "Amish identity: δ_cult≈0.01/generation (slow drift). V_cip=0.04 after 4 generations (stable). Runspringa self-selection: identity reinforcement. Welsh language: δ_cult=0.05/generation (moderate). V_cip=0.25 after 5 gen → identity drift visible. Welsh Language Act (1993): δ_cult→0.02. Immigrant 3rd generation: δ_cult=0.3/generation → V_cip=0.9 (identity nearly lost). Measured by language fluency + practice retention rate across 3 generations in diaspora studies."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -3823,22 +3787,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{x_cult_id=I_func(Ω_culture): cultural identity as boundary invariant}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "x_cult_id": "cultural identity state vector",
+          "I_func": "identity functional (boundary-preserving features)",
+          "δ_cult": "identity drift per generation"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "ΔV_cip=-c_cip·‖x_cult_id-x_cult_id*‖²; stable iff δ_cult<δ_max",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "δ_cult<δ_max (identity drift bounded)",
+          "I_func continuous across generations"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_cip=‖x_cult_id(t)-x_cult_id(0)‖²; V_cip=0 iff identity preserved",
+        "implication": "Cultural identity is preserved when I_func is maintained across generations; V_cip measures identity drift. High assimilation pressure increases δ_cult. Measurable by language retention, practice frequency, and identity-report similarity across generations."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "V_cip=‖x_cult_id(t)-x_cult_id(0)‖²; stable iff δ_cult<δ_max; I_func preserves boundary",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -3918,7 +3881,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE8] Example instances will be attached as child DTUs when needed."
+        "Telephone game experiment: σ²_0=0.01 (exact message). ν_m=0.5/transmission. After 10 steps: σ²=0.01·e^5=1.48. Message unrecognizable. Oral tradition with ritual: ν_m=0.05/generation (10× reduction). Writing: ν_m→0.001. DNA analogy: ν_m=10⁻⁹/base/generation (proofreading). V_mnp=0 for written traditions, >0 for pure oral. Measured by semantic similarity between original and N-transmission copy in experimental transmission chain studies."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -3927,22 +3890,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{σ²_meme(t)=σ²_0·e^{ν_m·t}: memetic noise grows exponentially without correction}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "σ²_meme": "memetic variance (idea mutation rate)",
+          "ν_m": "memetic noise growth rate",
+          "μ_meme": "mean meme fidelity"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "meme_k(t)=meme_0+∑_k ε_k; σ²_meme doubles each transmission generation",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "σ²_meme≤σ²_max (coherent culture)",
+          "μ_meme≥μ_min (fidelity floor)"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_mnp=max(0,σ²_meme-σ²_ref); V_mnp=0 iff meme fidelity maintained",
+        "implication": "Memetic noise propagates exponentially through cultural transmission; t_incoherent=ln(σ²_max/σ²_0)/ν_m. Error-correction (writing, ritual) reduces ν_m. Measurable by message mutation rate through N transmission steps."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "σ²_meme(t)=σ²_0·e^{ν_m·t}; V_mnp=max(0,σ²_meme-σ²_ref); t_incoherent=ln(σ²_max/σ²_0)/ν_m",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -4022,7 +3984,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE8] Example instances will be attached as child DTUs when needed."
+        "Singapore social engineering (1965-2000): deliberate cultural design via HDB housing mix, bilingual policy, meritocracy norms. α=0.1/yr (controlled pace). L_cult(GDP+social cohesion) fell from 0.8 to 0.15. V_cdp=0.15 (residual tensions). Soviet rapid change: α=0.5/yr (too fast) → cultural resistance V_cdp oscillated >0. Bhutan GNH: α=0.05/yr, V_cdp=0.3 (slower convergence). Measured by social trust index + GDP change vs. policy implementation pace in cross-national governance studies."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -4031,22 +3993,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{Ω_cult_design=∩_k Ω_feasible_k: designed culture must satisfy all feasibility constraints}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "Ω_cult_design": "designable cultural configurations",
+          "Ω_feasible_k": "k-th cultural feasibility constraint",
+          "V_cdp": "design potential"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "θ_cult(t+1)=Π_{Ω_cult_design}[θ-α·∇L_cult]; cultural design as constrained optimization",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "θ_cult∈Ω_human (human-compatible culture)",
+          "α<α_max (change rate bounded by absorptive capacity)"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_cdp=L_cult(θ_cult); V_cdp→0 as design converges to cultural optimum",
+        "implication": "Cultural design is constrained optimization: feasibility intersection Ω_cult_design bounds what can be deliberately shaped. Fast change (α→large) destabilizes; slow change converges. V_cdp measures remaining design gap. Measurable by comparing designed culture outcomes to natural evolution baselines."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "θ_cult(t+1)=Π_{Ω_cult_design}[θ-α·∇L_cult]; V_cdp=L_cult→0 at cultural optimum",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -4126,7 +4087,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE8] Example instances will be attached as child DTUs when needed."
+        "Byzantine Empire: R_repair=0.08/yr (law, church, bureaucracy), D_entropy=0.07/yr. V_cwc=0 for 1000yr. Final century: D_entropy→0.12 (Ottoman pressure, plague), R_repair→0.06 → V_cwc=0.06. t_viable=M_cult/0.06=50yr. Fell 1453. Roman Republic: R_repair dropped below D_entropy ~100BCE → V_cwc>0 → fell within 70yr. Modern states: R_repair measured by education+institution spending. Measured by institutional quality index (World Bank) vs. social entropy proxy (Gini + trust decline rate)."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -4135,22 +4096,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{Ṁ_cult=R_repair-D_entropy≥0: culture viable iff repair dominates entropy}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "M_cult": "cultural coherence buffer",
+          "R_repair": "cultural repair rate (education, ritual, law)",
+          "D_entropy": "cultural entropy rate"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "Ṁ_cult=R_repair-D_entropy; collapse when M_cult→M_min; t_viable=M_cult/(D_entropy-R_repair)",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "R_repair≥D_entropy (repair dominance)",
+          "M_cult≥M_min (minimum coherence threshold)"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_cwc=max(0,D_entropy-R_repair); V_cwc=0 iff culture self-sustaining",
+        "implication": "Culture avoids collapse when V_cwc=0 (repair dominance); institutions must maintain R_repair≥D_entropy as scale and stress increase. V_cwc>0 predicts collapse timeline t_viable. Measurable by institutional maintenance investment vs. entropy accumulation rate."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "Ṁ_cult=R_repair-D_entropy≥0; V_cwc=max(0,D_entropy-R_repair)=0 for viable culture; t_viable=M_cult/V_cwc",
       "verifier": {
         "kind": "verifier",
         "inputs": [

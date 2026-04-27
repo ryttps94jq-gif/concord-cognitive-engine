@@ -37,7 +37,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE1] Example instances will be attached as child DTUs when needed."
+        "A logic gate initialized at φ=0.7 converges to φ=1 in 3 Newton steps (0.7→0.91→0.992→1.000); initialized at φ=0.3 it converges to φ=0 in 4 steps."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -46,20 +46,20 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "Φ=[0,1] (phase state)",
         "variables": {
-          "x": "state",
-          "θ": "params"
+          "φ": "phase (0=inactive,1=active)",
+          "V": "phase potential"
         },
-        "dynamics": "x_{t+1}=F(x_t;θ)",
+        "dynamics": "φ_{t+1}=φ_t(2-φ_t)  [Newton iterate for φ²-φ=0]",
         "constraints": [
-          "h(x)=0",
-          "g(x)≤0"
+          "φ_t∈[0,1]",
+          "V(φ)=φ²-φ≤0 for feasible φ"
         ],
-        "potential": "V=||F(x)-x||^2",
-        "implication": "If V non-increasing and bounded below, x approaches invariant set where V=0."
+        "potential": "V(φ)=φ²-φ; V=0 iff φ∈{0,1}",
+        "implication": "Only binary phases φ∈{0,1} are fixed points; any φ∈(0,1) drains to the nearest root under Newton iteration."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "φ²-φ=0; stable phases φ∈{0,1} via φ_{t+1}=φ_t(2-φ_t)",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -139,7 +139,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE1] Example instances will be attached as child DTUs when needed."
+        "A world-model initialized at r=0.6 descends V_r under α=0.5 gradient steps and converges to r*=1 within 8 iterations; r=0.4 converges to r*=0 within 9."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -148,22 +148,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "R_model={r∈R : ‖r-r*‖≤R_basin}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "r": "reality-model state",
+          "r*": "attracting fixed point∈{0,1}",
+          "c_r": "contraction rate"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "r_{t+1}=r_t-α·∇V_r(r_t); V_r(r)=(r²-r)²",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "V_r(r_t)≥0",
+          "ΔV_r≤-c_r‖r_t-r*‖²"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_r(r)=(r²-r)²≥0; V_r=0 iff r∈{0,1}",
+        "implication": "Any consistent reality-model is a Lyapunov attractor near r*∈{0,1}; oscillation around r=0.5 is unstable and collapses to 0 or 1."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "ΔV_r≤-c_r‖r_t-r*‖²; V_r(r)=(r²-r)²; r*∈{0,1}",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -243,7 +242,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE1] Example instances will be attached as child DTUs when needed."
+        "Zipf law S(k)=1/k satisfies S(2k)=S(k)/2 (α=1). The rank-1 word has S(1)=1=x*, satisfying x*²-x*=0; rank-2 violates it since S(2)=0.5 but 0.5²-0.5=-0.25≠0."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -252,22 +251,23 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{(x,S): x>0, S(x)≥0, S continuous}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "x": "scaled state",
+          "S": "scaling invariant functional",
+          "λ": "scale factor",
+          "α": "Hurst/scaling exponent"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "ẋ=α·x·(S(x)-S_ref); x* stable where S(x*)=S_ref",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "S(λx)=λ^α·S(x)",
+          "S(x)≥0",
+          "S(x*)=S_ref (normalization)"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_S(x)=(S(x)-S_ref)²; V_S=0 at fixed point x*",
+        "implication": "Scale invariants locate the fixed-point manifold; their violation signals phase departure. At α=1, root condition is x*²-x*=0."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "S(λ·x)=λ^α·S(x); at α=1, x*=S(x*) implies x*²-x*=0",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -348,7 +348,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE1] Example instances will be attached as child DTUs when needed."
+        "Population model F(N)=1.5N(1-N/100) has fixed points N*=0 and N*=66.7; |F'(66.7)|=|1-1.5|=0.5<1, so N*=66.7 attracts all N₀∈(0,100); N*=0 repels since |F'(0)|=1.5>1."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -357,20 +357,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "X⊂R^n (compact)",
         "variables": {
-          "x": "state",
-          "θ": "params"
+          "x*": "fixed point",
+          "F": "update map",
+          "L": "Lipschitz constant of F"
         },
-        "dynamics": "x_{t+1}=F(x_t;θ)",
+        "dynamics": "x_{t+1}=F(x_t); ‖x_t-x*‖≤L^t‖x_0-x*‖ for L=‖F'(x*)‖<1",
         "constraints": [
-          "h(x)=0",
-          "g(x)≤0"
+          "‖F'(x*)‖<1 (Banach contraction)",
+          "x*∈Ω_feas"
         ],
-        "potential": "V=||F(x)-x||^2",
-        "implication": "If V non-increasing and bounded below, x approaches invariant set where V=0."
+        "potential": "V_fp(x)=‖F(x)-x‖²≥0; V_fp(x*)=0",
+        "implication": "Banach theorem guarantees a unique x* whenever ‖F'‖<1; V_fp measures residual; x* satisfies the root constraint of its own iteration."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "x*=F(x*); V_fp=‖F(x)-x‖²; convergence rate L=‖F'(x*)‖<1",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -451,7 +452,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE1] Example instances will be attached as child DTUs when needed."
+        "A noisy channel adds H(ξ)=1.0 bit/symbol while injecting H(σ)=0.8 bits; ΔI=-0.2 bits/symbol → 20% true information loss per hop; warp alone (H(ξ)=H(σ)) preserves I."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -460,22 +461,22 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{I≥0, H(ξ)≥0, H(σ)≥0}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "I": "information content",
+          "H": "Shannon entropy operator",
+          "ξ": "loss channel noise",
+          "σ": "gain/injection channel"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "I_{t+1}=I_t-H(ξ_t)+H(σ_t)",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "I_t≥0",
+          "H(σ_t)≤C_channel (channel capacity)"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_I=max(0,-I)=0 enforces non-negativity; net loss potential=H(ξ)-H(σ)",
+        "implication": "Information is warped (restructured) when H(ξ)=H(σ), not destroyed; true loss requires H(ξ)>H(σ), measurable via channel capacity."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "ΔI=H(σ_t)-H(ξ_t); net loss iff H(ξ)>H(σ)",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -557,7 +558,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE1] Example instances will be attached as child DTUs when needed."
+        "A cell with R=12 ATP/s and D=10 ATP/s: Ė=10-12=-2<0, buffer grows. If D rises to 15, Ė=+3>0 and E drains to 0 in T=E₀/3 seconds — the zero root is reached."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -566,23 +567,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{E≥0, D≥0, R≥0}",
         "variables": {
-          "C": "capacity",
-          "D": "decay",
-          "R": "repair",
-          "T": "throughput"
+          "E": "energy reserve",
+          "D": "damage/dissipation rate",
+          "R": "repair/input rate"
         },
-        "dynamics": "C_{t+1}=C_t+R_t-D_t; T_t≤C_t",
+        "dynamics": "Ė=D-R; E_{t+1}=E_t+(R_t-D_t)·Δt",
         "constraints": [
-          "C≥0",
-          "R≥0",
-          "D≥0"
+          "E_t≥0 (survival)",
+          "R_t≥D_t (repair dominance for viability)"
         ],
-        "potential": "V=max(0,C_min-C)",
-        "implication": "If E[R]≥E[D] and shocks bounded, then C stays above C_min with high probability."
+        "potential": "V_E=D-R; V_E<0 iff viable (R>D)",
+        "implication": "E is the root variable: E→0 is the zero root of E²-E=0; viability requires E≠0, achieved only when R≥D."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "Ė=D-R; viable iff R≥D; E*∈{0,E_viable}, traces to E²-E=0",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -662,7 +661,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE1] Example instances will be attached as child DTUs when needed."
+        "A start-up choosing a single market (t=0) loses vol(Ω_pivot)≈40% of pivot options within 2 years of product lock-in; measuring vol(Ω) via available feature-set cardinality confirms V_EC>0."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -671,22 +670,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{Ω⊂R^n compact : Ω(t₀)⊇Ω(t₁) for t₀<t₁}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "Ω": "feasibility set",
+          "D_Ω": "constraint-tightening rate",
+          "R_Ω": "constraint-relaxation rate"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "d(vol(Ω))/dt=R_Ω-D_Ω; vol(Ω) non-increasing if D_Ω≥R_Ω",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "D_Ω(t)≥0 (commitments never self-reverse)",
+          "vol(Ω(t))≥0"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_EC=vol(Ω(0))-vol(Ω(t))≥0; monotone non-decreasing",
+        "implication": "Every commitment permanently shrinks feasibility; V_EC accumulates irreversibly; falsified if vol(Ω) increases spontaneously without external repair R_Ω."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "vol(Ω(t₁))≤vol(Ω(t₀)) for t₀<t₁; V_EC=vol(Ω(0))-vol(Ω(t))≥0",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -766,7 +764,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE1] Example instances will be attached as child DTUs when needed."
+        "Arterial plaque: once calcium deposits form, g_c(diameter,t) tightens by ~0.1mm/year; reversing requires active statin therapy (R_Ω>0). Without it, ∂Ω_c/∂t·n̂<0 is measured directly by angiography."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -775,22 +773,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{(Ω_c,t): ∂Ω_c/∂t·n̂≤0 pointwise}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "Ω_c": "constraint cone",
+          "n̂": "outward unit normal to ∂Ω_c",
+          "Δg_c": "constraint tightening increment"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "g_c(x,t+1)=g_c(x,t)+Δg_c(x,t); Δg_c(x,t)≥0",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "Δg_c≥0 (monotone tightening)",
+          "g_c(x,t)≤0 (inside cone)"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_ic=∑_x Δg_c(x,t)≥0; V_ic=0 iff cone is static",
+        "implication": "Constraint cones are irreversible without active repair R_Ω>0; falsified by observing g_c decrease without external intervention."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "∂Ω_c/∂t·n̂≤0; g_c(x,t+1)=g_c(x,t)+Δg_c(x), Δg_c≥0",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -871,7 +868,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE1] Example instances will be attached as child DTUs when needed."
+        "A city generates 1000 entropy units/day (waste heat, disorder) and exports r_S·ΔS_paid=900. S_d grows by 100/day. After 1 year S_d=36,500 — measurable as uncollected waste, infrastructure backlog, or heat island growth."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -880,22 +877,22 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{S_d≥0, r_S∈(0,1], ΔS_gen≥0}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "S_d": "accumulated entropy debt",
+          "ΔS_gen": "entropy generation rate",
+          "r_S": "repayment fraction",
+          "ΔS_paid": "entropy exported per step"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "S_d(t+1)=S_d(t)+ΔS_gen-r_S·ΔS_paid; stable iff r_S·ΔS_paid≥ΔS_gen",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "S_d≥0",
+          "r_S·ΔS_paid≥ΔS_gen for bounded debt"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_S=S_d; V_S→∞ signals failure",
+        "implication": "Entropy debt is a hidden negative buffer; when S_d→∞ the system reaches the zero root. Steady state: S*_d=ΔS_gen/r_S."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "S_d(t+1)=S_d(t)+ΔS_gen-r_S·ΔS_paid; S*_d=ΔS_gen/r_S",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -975,7 +972,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE1] Example instances will be attached as child DTUs when needed."
+        "Human brain: Ṙ_E≈20W, D_cog≈18W, κ≈1, ε≈0.5W → I_cap∝1.5W net. During fever (D_cog rises to 20W): I_cap∝-0.5W → cognitive impairment. Measured as reaction-time increase ∝1/I_cap."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -984,22 +981,23 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{I_cap≥0, Ṙ_E≥0, D_cog≥0}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "I_cap": "intelligence capacity ceiling",
+          "Ṙ_E": "energy transduction rate",
+          "D_cog": "cognitive demand rate",
+          "κ": "neural efficiency",
+          "ε": "irreducible floor"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "İ_cap=κ·(Ṙ_E-D_cog)-ε; I_cap→max(0, κ(Ṙ_E-D_cog)/ε)",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "I_cap≤κ·Ṙ_E/(D_cog+ε)",
+          "Ṙ_E≥0"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_I=I_max-I_cap≥0; minimized at peak transduction",
+        "implication": "Intelligence ceiling is set by energy transduction rate Ṙ_E, not raw energy stock; doubling Ṙ_E doubles I_cap. Falsified if I_cap grows without increasing Ṙ_E or decreasing D_cog."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "I_cap≤κ·Ṙ_E/(D_cog+ε); bottleneck is transduction rate, not energy stock",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -1079,7 +1077,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE1] Example instances will be attached as child DTUs when needed."
+        "A city council (|U|=12 councillors) governing 120 districts (|X|=120): ρ_c=0.1. If ρ_c*=0.15 is the stability threshold, governance is sub-critical — measurable as increasing unresolved incidents per district."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -1088,22 +1086,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{ρ_c∈(0,1], x∈X⊂R^n}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "ρ_c": "control density = |U|/|X|",
+          "ρ_c*": "stability threshold",
+          "c": "stability coefficient"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "ρ̇_c=ΔU_rate/|X|-ρ_c·Δ|X|_rate/|X|; stable iff ρ_c≥ρ_c*",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "ρ_c∈(0,1]",
+          "ρ_c≥ρ_c* for Lyapunov descent"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_ρ=max(0,ρ_c*-ρ_c); ΔV_ρ≤-c·(ρ_c-ρ_c*)‖x‖² when ρ_c>ρ_c*",
+        "implication": "Stable control requires ρ_c≥ρ_c*; below threshold the system falls into the zero attractor. Falsified if stability persists with ρ_c<ρ_c*."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "ρ_c=|U|/|X|; ΔV≤-c(ρ_c-ρ_c*)‖x‖² iff ρ_c≥ρ_c*",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -1183,7 +1180,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE1] Example instances will be attached as child DTUs when needed."
+        "Liver with R=8 mg/hr regeneration and D=10 mg/hr toxin damage: Ė=+2>0, mass declines at 2 mg/hr. Increasing R to 11 mg/hr reverses sign; measured directly by biopsy mass over 48 h."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -1192,23 +1189,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{E≥0, R≥0, D≥0}",
         "variables": {
-          "B": "integrity",
-          "D": "damage",
-          "R": "repair",
-          "S": "stress"
+          "E": "energy/health reserve",
+          "R": "repair rate",
+          "D": "damage rate"
         },
-        "dynamics": "dB/dt=R(B,S)-D(B,S)",
+        "dynamics": "E_{t+1}=E_t+(R_t-D_t)·Δt; viable iff lim_{T→∞}E(T)>0",
         "constraints": [
-          "B∈[0,1]",
-          "R≥0",
-          "D≥0"
+          "E_t≥0",
+          "R_t≥D_t (repair dominance — necessary for viability)"
         ],
-        "potential": "V=1-B",
-        "implication": "If R≥D+ε on [B0,1], then B increases toward 1 (repair-dominant)."
+        "potential": "V_rd=max(0,D-R); V_rd=0 iff R≥D",
+        "implication": "Repair dominance R≥D is necessary and sufficient for infinite-horizon viability; R<D drives E to the zero root regardless of initial E₀."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "Ė=D-R≤0 iff R≥D; E_viable(T)=E₀+∫₀ᵀ(R-D)dt>0",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -1288,7 +1283,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE1] Example instances will be attached as child DTUs when needed."
+        "Two agents with constraints Ω_A={x:x₁≤5} and Ω_B={x:x₁≥6}: ∩Ω=∅, V_eth=1 — full ethical conflict. Adding mediation Ω_M={x:x₁∈[4,7]} creates ∩(Ω_A∪Ω_M)∩(Ω_B∪Ω_M)≠∅, V_eth<1."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -1297,22 +1292,20 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{Ω_k⊂R^n for k=1..K ethical agents}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "Ω_k": "constraint set of agent k",
+          "V_eth": "ethical tension potential"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "Ω_k(t+1)=Ω_k(t)+Δg_k(x_t); structure updates, norm derived",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "∩_{k=1}^K Ω_k≠∅ (co-feasibility — ethical minimum)",
+          "V_eth=1-vol(∩Ω)/vol(Ω_ref)"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_eth=1-vol(∩_k Ω_k)/vol(Ω_ref); V_eth→1 signals ethical collapse",
+        "implication": "Ethics require structural co-feasibility ∩Ω≠∅; conflicting norms (∩Ω=∅) produce moral failure regardless of intent. Measurable as overlap volume."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "∩_{k=1}^K Ω_k≠∅; V_eth=1-vol(∩Ω_k)/vol(Ω_ref)≥0",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -1392,7 +1385,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE1] Example instances will be attached as child DTUs when needed."
+        "A regulator's independence score V_cap=0.8 (out of 1) with industry lobbying w_capture reducing it by 0.05/year. Without structural enforcement (ε_cap=0), V_cap reaches 0 in 16 years — measured by revolving-door hire rate."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -1401,25 +1394,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{x∈Ω_safe : V_cap(x)≥V_min>0}",
         "variables": {
-          "D": "debt",
-          "B": "buffer",
-          "r": "interest",
-          "G": "spend",
-          "T": "revenue",
-          "R": "repair"
+          "V_cap": "capture-distance potential",
+          "x": "institutional state",
+          "ε_cap": "minimum repulsion rate"
         },
-        "dynamics": "dD/dt=r·D+(G-T); dB/dt=R-Dmg",
+        "dynamics": "ẋ=u_resist-w_capture; must maintain ∇V_cap·ẋ≥ε_cap>0",
         "constraints": [
-          "D≥0",
-          "B≥0",
-          "R≥0"
+          "V_cap(x)≥V_min (barrier)",
+          "‖w_capture‖≤w_max (bounded capture attempt)"
         ],
-        "potential": "V=D+max(0,B_min-B)",
-        "implication": "If (T-G)≥r·D and E[R]≥E[Dmg], then debt stabilizes and buffer stays above threshold."
+        "potential": "V_cap(x)=dist(x, x_captured)²; V_cap→0 means capture imminent",
+        "implication": "Anti-capture is equivalent to maintaining a Lyapunov barrier; when ε_cap→0 the system is on the capture boundary and capture becomes irreversible."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "∇V_cap(x)·ẋ≥ε_cap>0; V_cap=dist(x,x_captured)²≥V_min",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -1499,7 +1488,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE1] Example instances will be attached as child DTUs when needed."
+        "Road network: R_inf=$2B/yr maintenance, D_inf=$1.8B/yr degradation, r_inf=0.02, B_inf=$5B current value. Ḃ_inf=2-1.8-0.02·5=$0.1B/yr — growing. If budget cut to $1.5B: Ḃ_inf=-0.4B/yr; B_inf→0 in 12.5 years."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -1508,23 +1497,22 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{B_inf≥0, R_inf≥0, D_inf≥0, r_inf≥0}",
         "variables": {
-          "C": "capacity",
-          "D": "decay",
-          "R": "repair",
-          "T": "throughput"
+          "B_inf": "infrastructure buffer (reserve capacity)",
+          "R_inf": "investment/maintenance rate",
+          "D_inf": "degradation rate",
+          "r_inf": "idle decay coefficient"
         },
-        "dynamics": "C_{t+1}=C_t+R_t-D_t; T_t≤C_t",
+        "dynamics": "Ḃ_inf=R_inf-D_inf-r_inf·B_inf",
         "constraints": [
-          "C≥0",
-          "R≥0",
-          "D≥0"
+          "B_inf≥B_min (minimum service capacity)",
+          "R_inf≥D_inf+r_inf·B*_inf"
         ],
-        "potential": "V=max(0,C_min-C)",
-        "implication": "If E[R]≥E[D] and shocks bounded, then C stays above C_min with high probability."
+        "potential": "V_inf=max(0,B_min-B_inf); V_inf=0 iff B_inf≥B_min",
+        "implication": "Infrastructure obeys buffer dynamics identical to biological metabolism; viability requires R_inf≥D_inf+r_inf·B*_inf. Falsified if B_inf grows with R_inf<D_inf."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "Ḃ_inf=R_inf-D_inf-r_inf·B_inf; viable iff R_inf≥D_inf+r_inf·B*_inf",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -1709,7 +1697,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE1] Example instances will be attached as child DTUs when needed."
+        "Supply chain with K=3 constraints: budget g₁≤0, capacity g₂≤0, lead-time g₃≤0. Slater point x°=(0.8·budget, 0.9·capacity, 1.1·lead) confirms ∩Ω≠∅. rank(Jg)=3 verified by measuring sensitivity of each constraint independently."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -1718,22 +1706,22 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{x∈R^n : g_k(x)≤0, k=1..K}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "Ω_k": "k-th constraint set",
+          "Jg": "constraint Jacobian ∂g/∂x",
+          "x°": "Slater interior point"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "d(∩Ω)/dt=∩_k(dΩ_k/dt); shrinks as individual Ω_k tighten",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "g_k(x)≤0 for all k",
+          "rank(Jg)=K at ∩Ω (non-degeneracy)",
+          "∃x°: g_k(x°)<0 ∀k (Slater)"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_cg=max_k max(0,g_k(x))²; V_cg=0 iff x∈∩Ω",
+        "implication": "Co-feasibility ∩Ω≠∅ is the central structural question; all constraint geometry analysis begins here. Verified by finding Slater point x°."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "∩_{k=1}^K Ω_k≠∅; Slater: ∃x°∈R^n s.t. g_k(x°)<0 ∀k; rank(Jg)=K",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -1813,7 +1801,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE1] Example instances will be attached as child DTUs when needed."
+        "A concentration variable φ∈[0,1] is physically feasible; φ=1.2 gives φ²-φ=0.24>0 — forbidden (supersaturation). Control must project back to φ=1. In a chemical reactor this is directly measured as precipitate formation when φ crosses 1."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -1822,22 +1810,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{x∈R^n : φ_F(x)=φ²-φ, φ=proj(x)}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "Ω_F": "forbidden region {x:φ_F(x)>0}",
+          "φ": "state projection onto [0,1]",
+          "φ_F": "forbidden potential"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "ẋ=-∇φ_F(x) projected away from Ω_F; avoidance control",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "φ_F(x)≤0 (feasibility)",
+          "φ∈[0,1] (root interval)"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_F(x)=max(0,φ_F(x))=max(0,φ²-φ); V_F=0 iff φ∈[0,1]",
+        "implication": "Forbidden states are exactly where φ²-φ>0, i.e., φ∉[0,1]. The root equation defines all feasibility boundaries; outside the root interval is inherently forbidden."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "Ω_F={x:φ²-φ>0, φ=proj(x)}; feasible iff φ∈[0,1]",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -1916,7 +1903,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE1] Example instances will be attached as child DTUs when needed."
+        "Road speed limit constraint g(v)=v-v_max: κ_c=0 (flat). Biomechanical joint angle constraint g(θ)=(θ-θ_max)²: κ_c=2/(2|θ-θ_max|)=1/|θ-θ_max|→∞ as θ→θ_max — measurable as rapidly increasing injury risk near the limit."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -1925,22 +1912,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{x∈R^n : g(x)≤0, g smooth}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "κ_c": "constraint curvature",
+          "∇g": "constraint gradient",
+          "∇²g": "constraint Hessian"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "dκ_c/dt=Tr(∇²g·ẋẋᵀ)/‖∇g‖-‖∇²g‖_F·(∇g·ẋ)/‖∇g‖²",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "g(x)≤0",
+          "κ_c=‖∇²g(x)‖_F/‖∇g(x)‖ finite for smooth g"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_κ=κ_c²; high V_κ signals non-linear feasibility change near ∂Ω",
+        "implication": "High curvature κ_c means small parameter changes cause large feasibility shifts; phase transitions correspond to ∂κ_c/∂θ→∞. Measurable by second-order perturbation analysis."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "κ_c(x)=‖∇²g(x)‖_F/‖∇g(x)‖; high κ_c → non-linear feasibility change",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -2020,7 +2006,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE1] Example instances will be attached as child DTUs when needed."
+        "Ice-water phase: constraint g(T)=T-T_melt≤0 has ∂vol(Ω)/∂T=∞ at T_melt=273K. Adding pressure parameter θ shifts T_melt; the Clausius-Clapeyron slope dθ*/dP is directly measurable as ∂vol(Ω)/∂P at the transition."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -2029,22 +2015,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{(x,θ): g(x,θ)≤0, θ∈Θ}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "θ": "bifurcation parameter",
+          "θ*": "critical parameter value",
+          "vol(Ω)": "feasibility volume"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "∂vol(Ω)/∂θ|_{θ=θ*}→∞; rank(Jg)→r<K at θ*",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "g(x,θ)≤0",
+          "det(Jg·Jgᵀ)→0 at θ* (rank loss)"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_pt=‖∂vol(Ω)/∂θ‖; V_pt→∞ at phase transition θ*",
+        "implication": "Phase transitions in constraint geometry correspond to rank loss in Jg; the feasibility volume changes discontinuously at θ*. Falsified by showing vol(Ω) varies continuously through θ*."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "∂vol(Ω)/∂θ|_{θ=θ*}→∞; det(Jg·Jgᵀ)→0 at critical θ*",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -2123,7 +2108,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE1] Example instances will be attached as child DTUs when needed."
+        "A robot arm with 3 joints but only 2 independent reach constraints has rank(Jg)=2<3 at the degenerate configuration (arm fully extended). Measured by singular value decomposition: σ₃≈0 at full extension, σ₃>0 everywhere else."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -2132,23 +2117,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{x∈R^n: g_k(x)≤0, rank(Jg)<n at x_d}",
         "variables": {
-          "B": "integrity",
-          "D": "damage",
-          "R": "repair",
-          "S": "stress"
+          "Jg": "constraint Jacobian",
+          "x_d": "degenerate point",
+          "r": "rank of Jg at x_d"
         },
-        "dynamics": "dB/dt=R(B,S)-D(B,S)",
+        "dynamics": "x_{t+1}=x_t-α(JgJgᵀ)⁺Jg·g(x_t); pseudo-inverse for degenerate case",
         "constraints": [
-          "B∈[0,1]",
-          "R≥0",
-          "D≥0"
+          "g_k(x)≤0 for all k",
+          "det(Jg·Jgᵀ)=0 at x_d (rank deficiency)"
         ],
-        "potential": "V=1-B",
-        "implication": "If R≥D+ε on [B0,1], then B increases toward 1 (repair-dominant)."
+        "potential": "V_deg=K-rank(Jg(x)); V_deg>0 signals degeneracy",
+        "implication": "Degeneracy reveals hidden symmetries or redundant constraints; the feasible set has a flat dimension at x_d. Falsified if no directions of zero curvature exist at x_d."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "rank(Jg(x_d))<K; det(Jg·Jgᵀ)|_{x_d}=0; pseudo-inverse update (JgJgᵀ)⁺",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -2230,7 +2213,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE1] Example instances will be attached as child DTUs when needed."
+        "Bridge design: a cable-stayed bridge with redundant cables has ρ_rob≈1.2 (small ΔΩ per cable failure). A single-cable suspension bridge has ρ_rob→∞ at the cable failure point — measured by load-bearing capacity drop per unit cable-tension change."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -2239,22 +2222,20 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{Ω(θ)⊂R^n: θ∈Θ, Ω differentiable in θ}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "ρ_rob": "robustness ratio ‖ΔΩ‖/‖Δθ‖",
+          "δ_rob": "robustness threshold"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "ρ_rob(t)=‖Ω(θ+Δθ)-Ω(θ)‖/‖Δθ‖; measured over perturbation ensemble",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "ρ_rob<ρ* (robust)",
+          "ρ_rob≥ρ* (brittle)"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_rob=max(0,ρ_rob-ρ*); V_rob=0 iff robust",
+        "implication": "Robustness is a Lipschitz condition on Ω(θ); brittle systems have ρ_rob→∞ at isolated θ*. Falsified by measuring ΔΩ empirically over a perturbation distribution."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "ρ_rob=‖ΔΩ‖/‖Δθ‖; robust iff ρ_rob<ρ*; brittle iff ρ_rob→∞",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -2334,7 +2315,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE1] Example instances will be attached as child DTUs when needed."
+        "A bistable chemical reactor has x*_low=0.1M and x*_high=0.8M. Initializing at c=0.45M (boundary) leads to x*_low; c=0.55M leads to x*_high. Boundary location is falsifiable by titration experiments measuring switching concentration."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -2343,25 +2324,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "X⊂R^n partitioned into basins B(x*_k)",
         "variables": {
-          "D": "debt",
-          "B": "buffer",
-          "r": "interest",
-          "G": "spend",
-          "T": "revenue",
-          "R": "repair"
+          "x*_k": "k-th attractor",
+          "B(x*_k)": "basin of attraction",
+          "c_k": "basin contraction rate"
         },
-        "dynamics": "dD/dt=r·D+(G-T); dB/dt=R-Dmg",
+        "dynamics": "x_{t+1}=F(x_t); ‖x_t-x*_k‖≤c_k^t‖x_0-x*_k‖ for x_0∈B(x*_k)",
         "constraints": [
-          "D≥0",
-          "B≥0",
-          "R≥0"
+          "ΔV_k≤-c_k‖x-x*_k‖² within B(x*_k)",
+          "∪_k B(x*_k)=X (partition)"
         ],
-        "potential": "V=D+max(0,B_min-B)",
-        "implication": "If (T-G)≥r·D and E[R]≥E[Dmg], then debt stabilizes and buffer stays above threshold."
+        "potential": "V_k(x)=‖x-x*_k‖²; landscape determines basin taxonomy",
+        "implication": "Basin taxonomy partitions state space; narrow deep basins (large c_k, small vol(B)) vs. broad shallow (small c_k, large vol(B)) have different resilience profiles."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "B(x*_k)={x₀: lim_{t→∞}x_t=x*_k}; ΔV_k≤-c_k‖x-x*_k‖² within B(x*_k)",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -2441,7 +2418,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE1] Example instances will be attached as child DTUs when needed."
+        "Evolving building codes: current code g(structure,2000) warps toward stricter g̃(structure,2025) at d_t=0.04/yr (4% annual tightening). V_dce decreases by 4% per year; measured by compliance-test pass rate convergence over 25 years."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -2450,22 +2427,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{(x,t): g(x,t)≤0, g evolving via manifold warp}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "g": "constraint function",
+          "d_t": "warp rate",
+          "Δg": "constraint update direction"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "g(x,t+1)=(1-d_t)·g(x,t)+d_t·g̃(x); g̃ is target constraint",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "‖d_t‖≤1 (bounded warp rate)",
+          "g(x,t)≤0 maintained during warp"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_dce=‖g(x,t)-g̃(x)‖²; V_dce→0 as constraints converge to target",
+        "implication": "Constraint evolution is manifold warp; stable iff ‖d_t‖<1 per step. Unstable warp (‖d_t‖≥1) causes feasibility oscillation."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "g'(x,t)=g(x,t)+d_t·Δg(x,t); stable iff ‖d_t‖<1 per step",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -2545,7 +2521,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE1] Example instances will be attached as child DTUs when needed."
+        "Species habitat: vol(Ω)=area of viable range. If deforestation reduces vol(Ω) at 3%/yr and recovery is 0.5%/yr, net σ_col=2.5%/yr → V_col doubles every 28 years. Extinction threshold vol(Ω)<Ω_crit reached in ~T years, measurable by GIS range mapping."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -2554,22 +2530,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{Ω(t)⊂R^n: vol(Ω(t)) non-negative}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "V_col": "collapse potential",
+          "σ_col": "collapse rate",
+          "Ω_crit": "critical minimum feasibility"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "V_col(t+1)=V_col(t)+σ_col·Δt; collapse iff V_col unbounded",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "vol(Ω(t))≥0",
+          "V_col bounded iff vol(Ω) stays positive"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_col=1/max(ε,vol(Ω(t))); V_col→∞ as vol(Ω)→0",
+        "implication": "Collapse is identified by V_col ascending without bound; validated by measuring rate of vol(Ω) decrease exceeding any recovery mechanism."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "V_col=1/vol(Ω(t))→∞ as Ω→∅; collapse iff ∂vol(Ω)/∂t<-c·vol(Ω) sustained",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -2650,7 +2625,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE1] Example instances will be attached as child DTUs when needed."
+        "Human fingerprint under aging: I_func=ridge topology. Over 40 years, T=aging maps fingerprint; V_id<0.02 (measurable by fingerprint matching software). Scar tissue (T=burn) gives V_id>0.5 — identity no longer preserved."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -2659,22 +2634,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{(x,T): T∈Diff(Ω), I_func: X→R^m}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "I_func": "identity functional",
+          "T": "transformation",
+          "ε_id": "drift tolerance"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "I_func(t+1)=I_func(T(x_t)); drift ΔI_func=‖I_func(t+1)-I_func(t)‖",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "ΔI_func≤ε_id per step",
+          "T∈Diff(Ω) (smooth, invertible)"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_id=‖I_func(T(x))-I_func(x)‖²; V_id=0 iff T preserves identity",
+        "implication": "Identity persistence is quantified by ε_id; transformations with V_id>ε_id² are identity-breaking. Falsified by finding T with ΔI_func>ε_id but claiming identity preservation."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "‖I_func(T(x))-I_func(x)‖≤ε_id; V_id=‖I_func∘T-I_func‖²",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -2754,7 +2728,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE1] Example instances will be attached as child DTUs when needed."
+        "Company culture: δ_d=0.05/yr, I_d(0)=0.9 (strong identity). After 10 years: I_d(10)≈0.9-(0.05·0.09·10)=0.855; after 50 years: I_d≈0.7. Measured by employee survey alignment with founding values annually."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -2763,22 +2737,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{I_d∈R^m: ‖I_d‖≤I_max, δ_d∈(0,1)}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "I_d": "identity state",
+          "δ_d": "drift coefficient per step",
+          "f": "recursive update function"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "I_d(t+1)=I_d(t)+δ_d·(I_d(t)-I_d(t)²); drift governed by root departure",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "δ_d<1 (slow drift for stability)",
+          "‖I_d(t)-I_d(0)‖≤T·max(δ_d‖∇I_d‖)"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_rid=‖I_d(t)-I_d(0)‖²; V_rid growing indicates drift",
+        "implication": "Recursive drift accumulates as δ_d·sum of departures from the root fixed point; bounded only if δ_d<1. Drift rate is directly measurable as ΔI_d per generation."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "I_d(t+1)=I_d(t)+δ_d·(I_d(t)-I_d(t)²); total drift ≤T·δ_d·max‖I_d-I_d²‖",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -2858,7 +2831,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE1] Example instances will be attached as child DTUs when needed."
+        "Protein folding: θ=conformation angles, H_nav=free energy. Gradient descent on H_nav constrained to Ramachandran-allowed angles (TM_Ω) converges to native fold in ~μs simulation. Measured by RMSD reduction per MD timestep."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -2867,22 +2840,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{θ∈Ω_nav: H_nav(θ)≥0}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "θ": "navigation parameter vector",
+          "H_nav": "information-loss functional",
+          "TM_Ω": "tangent manifold of Ω"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "θ_{t+1}=Π_{TM_Ω}[θ_t-α∇_θH_nav(θ_t)]",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "θ∈Ω_nav (stay in feasible navigation space)",
+          "‖∇_θH_nav‖>0 (non-trivial gradient)"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_ign=H_nav(θ); V_ign→0 as θ→θ* (minimum information loss path)",
+        "implication": "Optimal navigation = gradient descent on H_nav projected onto TM_Ω; convergence guaranteed if H_nav is convex on TM_Ω. Measurable as reduction in navigation error per step."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "θ_{t+1}=Π_{TM_Ω}[θ_t-α∇_θH_nav(θ_t)]; H_nav→0 at optimal route",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -2962,7 +2934,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE1] Example instances will be attached as child DTUs when needed."
+        "Software technical debt: δS_gen=5 story-points/sprint of shortcuts taken, r_S·δS_paid=3 refactored/sprint. S_acc grows by 2/sprint → S_acc=100 after 50 sprints (≈2.5 years), measurable by code complexity metrics (cyclomatic complexity, duplication ratio)."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -2971,25 +2943,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{S_acc≥0, δS_gen≥0, r_S∈(0,1]}",
         "variables": {
-          "D": "debt",
-          "B": "buffer",
-          "r": "interest",
-          "G": "spend",
-          "T": "revenue",
-          "R": "repair"
+          "S_acc": "accumulated entropy debt",
+          "δS_gen": "entropy generation per cycle",
+          "r_S": "per-cycle repayment rate"
         },
-        "dynamics": "dD/dt=r·D+(G-T); dB/dt=R-Dmg",
+        "dynamics": "S_acc(t+1)=S_acc(t)+δS_gen-r_S·δS_paid; steady state S*_acc=δS_gen/r_S",
         "constraints": [
-          "D≥0",
-          "B≥0",
-          "R≥0"
+          "S_acc≥0",
+          "r_S·δS_paid≥δS_gen for bounded S_acc"
         ],
-        "potential": "V=D+max(0,B_min-B)",
-        "implication": "If (T-G)≥r·D and E[R]≥E[Dmg], then debt stabilizes and buffer stays above threshold."
+        "potential": "V_acc=S_acc; V_acc→∞ signals accumulation failure",
+        "implication": "Accumulated debt acts as a negative buffer; when S_acc→∞ the system collapses to the zero root. Steady-state debt S*_acc=δS_gen/r_S is directly measurable."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "S_acc(t+1)=S_acc(t)+δS_gen-r_S·δS_paid; S*_acc=δS_gen/r_S at steady state",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -3069,7 +3037,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE1] Example instances will be attached as child DTUs when needed."
+        "Aircraft at stall angle: linearized aerodynamics give ‖Jf‖=1.4>1 — a 1% AoA perturbation grows by 40% per control cycle. Below stall angle ‖Jf‖=0.6<1 — same perturbation decays by 40% per cycle. Measured directly by wind-tunnel perturbation response tests."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -3078,22 +3046,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{(x,ε): x∈A_ε∪Ω_stable, ε error vector}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "ε": "error vector",
+          "λ_amp": "amplification factor (>1 in A_ε)",
+          "A_ε": "amplification zone"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "ε_{t+1}=Jf(x_t)·ε_t; ‖ε_{t+1}‖≥λ_amp‖ε_t‖ iff ‖Jf(x_t)‖>1",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "‖Jf(x)‖>1 defines A_ε",
+          "‖Jf(x)‖<1 in Ω_stable"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_err=‖ε‖²; V_err(t)≥λ_amp^{2t}‖ε_0‖² in A_ε",
+        "implication": "Amplification zones are characterized by spectral radius ρ(Jf)>1; errors grow exponentially until leaving A_ε. Measured by perturbation growth rate in linearized dynamics."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "‖ε_{t+1}‖≥λ_amp·‖ε_t‖ iff ρ(Jf(x))>1; A_ε={x:‖Jf(x)‖>1}",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -3174,7 +3141,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE1] Example instances will be attached as child DTUs when needed."
+        "Power grid: 3 generators each with B_i=40MW capacity; B_req=100MW peak load; B_red=20MW. If one generator fails B_red=40-100=-60MW<0 — blackout. Redundancy measured directly as spinning reserve margin."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -3183,22 +3150,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{B_i≥0, B_req≥0, B_red=∑B_i-B_req}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "B_red": "redundancy buffer = ∑B_i - B_req",
+          "B_i": "i-th redundant component buffer",
+          "c_red": "stability coefficient"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "Ḃ_red=∑Ṙ_i-∑Ḋ_i-δB_req; healthy iff Ḃ_red≥0",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "B_red≥0 (minimum redundancy)",
+          "ΔV≤-c_red·B_red·‖x-x*‖²"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_red=max(0,-B_red); V_red=0 iff B_red≥0",
+        "implication": "Every unit of surplus buffer B_red provides stability credit c_red·‖x-x*‖² per step; B_red<0 is sub-critical and the system loses stability. Measured directly as spare capacity."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "B_red=∑B_i-B_req; ΔV≤-c_red·B_red·‖x-x*‖²; stable iff B_red>0",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -3279,7 +3245,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE1] Example instances will be attached as child DTUs when needed."
+        "Hospital sepsis response: τ_lat=6hr (time to antibiotic administration), τ_rep=4hr (bacterial doubling time). P_fail=1-exp(-1.5)=78% mortality risk. Reducing τ_lat to 1hr gives P_fail=22% — directly validated by clinical outcome data."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -3288,22 +3254,22 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{τ_lat≥0, τ_rep>0, P_fail∈[0,1]}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "τ_lat": "response latency",
+          "τ_rep": "repair time scale",
+          "h": "hazard rate"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "P_fail(t+1)=1-exp(-τ_lat(t)/τ_rep(t)); P_fail→1 as τ_lat/τ_rep→∞",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "τ_lat≥0",
+          "τ_rep>0",
+          "P_fail<P_fail_max for safe operation"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_lat=τ_lat/τ_rep; V_lat>1 → failure probability >1-1/e≈63%",
+        "implication": "When system latency exceeds repair timescale, failure probability crosses 63%; control must enforce τ_rep<τ_lat. Measured as response-to-repair ratio in operational data."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "P_fail=1-exp(-τ_lat/τ_rep); failure regime iff τ_lat>τ_rep",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -3383,7 +3349,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE1] Example instances will be attached as child DTUs when needed."
+        "Thermostat: K_c=2W/°C, u_max=1500W, linear zone |e|<750°C (never saturates). Industrial furnace: K_c=50W/°C, u_max=1500W, linear zone |e|<30°C. Above 30°C deviation the heater saturates — measured by step-response overshoot exceeding 30°C."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -3392,20 +3358,22 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{e∈R, u∈[-u_max,u_max], K_c>0}",
         "variables": {
-          "x": "state",
-          "θ": "params"
+          "u": "control signal",
+          "e": "tracking error",
+          "K_c": "controller gain",
+          "u_max": "saturation limit"
         },
-        "dynamics": "x_{t+1}=F(x_t;θ)",
+        "dynamics": "u_t=clamp(K_c·e_t,-u_max,u_max); V_sat=max(0,|K_c·e|-u_max)²",
         "constraints": [
-          "h(x)=0",
-          "g(x)≤0"
+          "|u_t|≤u_max",
+          "K_c>0"
         ],
-        "potential": "V=||F(x)-x||^2",
-        "implication": "If V non-increasing and bounded below, x approaches invariant set where V=0."
+        "potential": "V_sat=max(0,K_c·|e|-u_max)²; V_sat=0 in linear regime",
+        "implication": "Saturation creates a nonlinear dead zone for |e|>u_max/K_c; stability proven only for ‖e‖<u_max/K_c. Beyond this the loop loses authority — measurable as persistent tracking error under large disturbances."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "u_t=clamp(K_c·e_t,-u_max,u_max); linear iff |e_t|<u_max/K_c",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -3484,7 +3452,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE1] Example instances will be attached as child DTUs when needed."
+        "Neural network with 10K parameters on 100-sample dataset: θ* requires ~100 parameters; δ_os≈50. Above 150 parameters L_gen begins rising even as L_train→0. Measured by validation-set accuracy vs. parameter count curve."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -3493,22 +3461,22 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{θ∈R^p: ‖θ‖ ∈ [0,∞)}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "θ": "parameter vector",
+          "θ*": "minimal-norm solution",
+          "δ_os": "overspecification margin",
+          "L_gen": "generalization loss"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "θ_{t+1}=θ_t-α(∇L_train+λ·θ_t); regularization prevents ‖θ‖→∞",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "‖θ‖≤‖θ*‖+δ_os (anti-overspecification)",
+          "L_gen(θ)≤L_max"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_os=max(0,‖θ‖-‖θ*‖-δ_os); V_os=0 iff θ is appropriately specified",
+        "implication": "Each parameter beyond θ* increases V_os and generalization error L_gen. Falsified if adding parameters beyond θ* reliably reduces L_gen on held-out data."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "V_os=max(0,‖θ‖-‖θ*‖-δ_os); L_gen↑ for ‖θ‖>‖θ*‖+δ_os",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -3588,7 +3556,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE1] Example instances will be attached as child DTUs when needed."
+        "Drone hovering: minimum thrust u*=mg=9.8N needed to satisfy ΔV≤0 (altitude stability). Any u>9.8N is excessive. In crosswind (external disturbance w), u* rises to u*=mg+κ‖w‖ — measured by power consumption at steady hover vs. wind speed."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -3597,22 +3565,20 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{(x,u): x∈X⊂R^n, u∈Ω_control}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "u*": "minimal-norm stabilizing control",
+          "c_stab": "required descent rate"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "u*=argmin_u ‖u‖ s.t. ΔV(x,u)≤-c_stab‖x‖²",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "ΔV(x,u)≤-c_stab‖x‖²",
+          "u∈Ω_control"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_mvc=‖u‖-‖u*‖; V_mvc=0 at minimum-energy stabilizing control",
+        "implication": "Minimal viable control is the solution to a constrained min-norm problem; it exists iff the feasibility set Ω_control∩{u:ΔV≤-c·‖x‖²} is non-empty. Any control above u* wastes energy."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "u*=argmin‖u‖ s.t. ΔV(x,u)≤-c_stab‖x‖²; exists iff ∩Ω_ctrl≠∅",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -3693,7 +3659,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE1] Example instances will be attached as child DTUs when needed."
+        "Proving the irrationality of √2: θ_m starts at 'assume √2=p/q', L_m measures logical contradiction. After 4 derivation steps, θ_m reaches contradiction (L_m diverges), so the proof is complete by reductio. Each step is constrained to stay within ZFC axioms."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -3702,22 +3668,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{θ_m∈Ω_axioms: L_m(θ_m) formal loss}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "θ_m": "formal state / proof state",
+          "L_m": "proof-gap loss",
+          "Ω_axioms": "axiomatic constraint set"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "θ_m(t+1)=Π_{Ω_axioms}[θ_m(t)-α∇_{θ_m}L_m(θ_m(t))]",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "θ_m∈Ω_axioms (consistent with axioms)",
+          "L_m(θ_m)≥0"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_math=L_m(θ_m); V_math→0 as theorem is proved",
+        "implication": "Mathematical discovery = gradient descent on L_m within Ω_axioms; a new theorem corresponds to finding θ*_m with V_math=0. Proof failure means the gradient path violates axioms."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "θ_m(t+1)=Π_{Ω_axioms}[θ_m(t)-α∇L_m]; proof = V_math→0 on Ω_axioms",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -3799,7 +3764,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE1] Example instances will be attached as child DTUs when needed."
+        "Primality test for n=17: TM states s₀→s₁→...→s_accept after 23 transitions; V_comp decreases from 23 to 0. For n=15: reaches s_reject in 18 transitions. Accept/reject are the two roots of s*²-s*=0 — verified by running the algorithm."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -3808,22 +3773,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{(s,σ): s∈S (states), σ∈Σ (alphabet)}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "s": "machine state",
+          "δ": "transition function",
+          "s*": "halting state∈{accept,reject}"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "s_{t+1}=δ(s_t,σ_t); V_comp=|remaining input|; V_comp→0 iff halts",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "s_t∈S",
+          "δ total function (defined everywhere)"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_comp=steps to halting; V_comp=0 at s*∈{accept,reject}={1,0}",
+        "implication": "Computation is recursively constrained state evolution; the halting outcome is binary s*∈{accept,reject}, satisfying s*²-s*=0. Non-termination = V_comp never reaches 0."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "s_{t+1}=δ(s_t,σ_t); halts at s*∈{0,1} satisfying s*²-s*=0",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -3905,7 +3869,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE1] Example instances will be attached as child DTUs when needed."
+        "Simple pendulum with constraint g(θ)=θ-θ_max≤0 (physical swing limit): Euler-Lagrange gives θ̈=-g/l·sinθ for |θ|<θ_max; at θ=θ_max the constraint activates with λ>0. H_phys=½ml²θ̇²+mgl(1-cosθ) is conserved, measurable by tracking total mechanical energy over 100 swings."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -3914,23 +3878,22 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{(q,q̇): g_phys(q,q̇)≤0, L_phys Lagrangian}",
         "variables": {
-          "C": "capacity",
-          "D": "decay",
-          "R": "repair",
-          "T": "throughput"
+          "q": "generalized coordinates",
+          "L_phys": "Lagrangian",
+          "λ": "Lagrange multiplier for g_phys",
+          "H_phys": "Hamiltonian"
         },
-        "dynamics": "C_{t+1}=C_t+R_t-D_t; T_t≤C_t",
+        "dynamics": "d/dt(∂L/∂q̇)-∂L/∂q=λ·∂g_phys/∂q; constrained Euler-Lagrange",
         "constraints": [
-          "C≥0",
-          "R≥0",
-          "D≥0"
+          "g_phys(q,q̇)≤0",
+          "δ∫L_phys dt=0 (stationarity)"
         ],
-        "potential": "V=max(0,C_min-C)",
-        "implication": "If E[R]≥E[D] and shocks bounded, then C stays above C_min with high probability."
+        "potential": "V_phys=H_phys(q,p)=T+U; conserved when ∂L/∂t=0",
+        "implication": "Physics laws are the Euler-Lagrange equations of constrained variational problems; energy is the conserved root variable linking all physical domains. Falsified by observing dH/dt≠0 in a closed system."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "δ∫L_phys(q,q̇)dt=0 s.t. g_phys(q)≤0; d/dt(∂L/∂q̇)=∂L/∂q+λ·∂g_phys/∂q",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -4013,7 +3976,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE1] Example instances will be attached as child DTUs when needed."
+        "Vertebrate body plan locked in 500Mya: Ω_bio constrains all vertebrates to bilateral symmetry, 4-limb topology. vol(Ω_bio) shrinks measurably from Cambrian (wide morphospace) to Devonian (narrowed to ~12 body plans) — quantified via fossil morphospace analysis."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -4022,23 +3985,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{Ω_bio(t)=∩_{τ≤t}Ω_feas(τ): monotone shrinking}",
         "variables": {
-          "B": "integrity",
-          "D": "damage",
-          "R": "repair",
-          "S": "stress"
+          "Ω_bio": "biological feasibility set",
+          "τ": "evolutionary time step",
+          "Ω_new": "newly available constraints"
         },
-        "dynamics": "dB/dt=R(B,S)-D(B,S)",
+        "dynamics": "Ω_bio(t+1)=Ω_bio(t)∩Ω_new(t); monotone intersection",
         "constraints": [
-          "B∈[0,1]",
-          "R≥0",
-          "D≥0"
+          "Ω_bio(t₀)⊇Ω_bio(t₁) for t₀<t₁ (historical lock-in)",
+          "Ω_new(t)⊆Ω_feas_potential"
         ],
-        "potential": "V=1-B",
-        "implication": "If R≥D+ε on [B0,1], then B increases toward 1 (repair-dominant)."
+        "potential": "V_lock=vol(Ω_abstract)-vol(Ω_bio(t))≥0; grows with evolutionary time",
+        "implication": "Biological constraints are the intersection of all historical feasibilities; V_lock measures locked-out volume. New constraints can be added but old ones are permanent."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "Ω_bio(t)=∩_{τ=0}^t Ω_feas(τ); V_lock=vol(Ω_abstract-Ω_bio(t))≥0 non-decreasing",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -4119,7 +4080,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE1] Example instances will be attached as child DTUs when needed."
+        "Chess: state x=board, u=move, w=opponent's move. Intelligence = max_u min_w ΔV measured by Elo score above random. g_I(x,u)=legal move constraint. A 2000-Elo player achieves V_I≈+0.8 pawns/move above random — directly measurable."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -4128,22 +4089,22 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{(x,u,w): x∈X, u∈U, w∈W adversarial}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "u": "intelligent action",
+          "w": "environmental adversary",
+          "V": "value function",
+          "g_I": "intelligence-domain constraints"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "x_{t+1}=F(x_t,u*_t,w_t); u*=argmax_u min_w ΔV(x,u,w)",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "g_I(x,u)≤0 (intelligence constraints)",
+          "w∈W bounded"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_I=max_u min_w ΔV(x,u,w); V_I>0 iff intelligence is advantageous",
+        "implication": "Intelligence is the minimax solution to constrained adversarial control; bounded intelligence is provable from bounded constraint set g_I. Measured by V_I relative to a random baseline."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "I_exploit=max_u min_w ΔV(x,u,w) s.t. g_I(x,u)≤0; u*=minimax policy",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -4225,7 +4186,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE1] Example instances will be attached as child DTUs when needed."
+        "EEG during wakefulness shows σ returning to σ* (resting state) after auditory perturbation with c_C≈0.8/s. Under propofol anesthesia c_C≈0.05/s — perturbation recovery is 16× slower, measurable as EEG autocorrelation timescale."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -4234,21 +4195,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{σ∈R^m: V_C(σ)≥0}",
         "variables": {
-          "x": "substrate state",
-          "y": "experience proxy",
-          "π": "mapping"
+          "σ": "neural control pattern vector",
+          "σ*": "stable attractor pattern",
+          "c_C": "pattern stability constant"
         },
-        "dynamics": "y = π(x); x_{t+1}=F(x_t,u_t)",
+        "dynamics": "σ_{t+1}=F_C(σ_t); ΔV_C(σ)≤-c_C‖σ-σ*‖²",
         "constraints": [
-          "π preserves invariants (information/structure)",
-          "y well-defined on equivalence classes"
+          "ΔV_C≤-c_C‖σ-σ*‖² (stability)",
+          "c_C>0"
         ],
-        "potential": "V=||π(F(x))-π(x)||",
-        "implication": "If π invariant-preserving and V small over time, experience is substrate-stable."
+        "potential": "V_C(σ)=‖σ-σ*‖²; V_C→0 as pattern stabilizes",
+        "implication": "Consciousness is the stability of a self-referential control pattern; c_C→0 corresponds to unconsciousness (anesthesia, sleep). Measured as the contraction rate of neural state after perturbation."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "ΔV_C≤-c_C‖σ-σ*‖²; consciousness iff c_C>0 (stable self-referential attractor)",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -4329,7 +4290,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE1] Example instances will be attached as child DTUs when needed."
+        "Human episodic memory: λ≈0.05/day for single-exposure events. Memory of a lecture at day 0: M(7)=(0.95)^7·M(0)≈0.7M(0) — 30% faded in one week. With λ=0.3 (strong encoding via emotion): M(7)=(0.7)^7≈0.08 — 92% faded. Directly measurable by recall tests."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -4338,22 +4299,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{M∈R^m: ‖M‖≤M_max, λ∈(0,1]}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "M": "memory state vector",
+          "λ": "learning rate / encoding strength",
+          "x_t": "current experience"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "M(t+1)=(1-λ)·M(t)+λ·x_t; exponential decay toward current experience",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "λ∈(0,1]",
+          "‖M(t)‖≤M_max (capacity bound)"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_M=‖M(t)-x_t‖²; V_M decreases at rate λ toward current encoding",
+        "implication": "Memory fidelity for event at time τ decays as (1-λ)^{t-τ}; high λ→fast learning but rapid forgetting; low λ→slow learning but long retention. Both are measurable as recall accuracy over time."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "M(t+1)=(1-λ)M(t)+λ·x_t; fidelity for event at τ: (1-λ)^{t-τ}",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -4434,7 +4394,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE1] Example instances will be attached as child DTUs when needed."
+        "Neural network training: L_lip≈100 for typical layers, so α_max=2/100=0.02. With α=0.01: ΔL≤-0.005‖∇L‖² per step. With α=0.05>α_max: ΔL oscillates. Learning rate validity is measurable by monitoring loss curve monotonicity."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -4443,22 +4403,22 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{θ∈Ω_θ: L(θ) differentiable}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "θ": "learnable parameters",
+          "L": "learning loss",
+          "Ω_θ": "parameter constraint set",
+          "L_lip": "Lipschitz constant"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "θ_{t+1}=Π_{Ω_θ}[θ_t-α∇_θL(θ_t)]; ΔL≤-α‖∇L‖²+α²L_lip‖∇L‖²/2",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "θ∈Ω_θ (constraint set reconfigured by learning)",
+          "α<2/L_lip (convergence condition)"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_learn=L(θ); V_learn→0 as θ→θ*",
+        "implication": "Learning is gradient descent with constraint projection; convergence guaranteed for α<2/L_lip. Each step reconfigures which constraints are active in Ω_θ."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "θ_{t+1}=Π_{Ω_θ}[θ_t-α∇L(θ_t)]; ΔL≤-α(1-αL_lip/2)‖∇L‖²",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -4539,7 +4499,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE1] Example instances will be attached as child DTUs when needed."
+        "Jazz improvisation: Ω_feas=diatonic scale, ∂Ω_feas=chromatic passing tones. A creative phrase includes 2-3 chromatic notes (x_new∈∂Ω), measurable by note frequency analysis. Purely diatonic play has V_creat=max_dist>0 — no boundary exploration."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -4548,22 +4508,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{x∈R^n: x∈Ω_feas∪∂Ω_feas}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "x_new": "creative output",
+          "∂Ω_feas": "feasibility boundary",
+          "V_creat": "creativity potential"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "x_{t+1}=x_t+ξ_t·n̂_{∂Ω}; ξ_t directed outward from Ω interior",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "x_new∈∂Ω_feas (at boundary, not deep interior)",
+          "V_creat(x)=dist(x,∂Ω_feas)"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_creat(x)=dist(x,∂Ω_feas); V_creat→0 as x approaches boundary",
+        "implication": "Creativity operates at ∂Ω: moves inside Ω are exploitation (refinement), moves through ∂Ω expand feasibility. Measured as novelty score relative to existing solution set."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "x_new∈∂Ω_feas; V_creat=dist(x,∂Ω_feas); creative act moves V_creat→0",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -4644,7 +4603,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE1] Example instances will be attached as child DTUs when needed."
+        "Aircraft engine: g₁=T_max-T_exhaust≤0 (temperature), g₂=N_max-RPM≤0 (overspeed), g₃=vibration_max-vibration≤0. Failure at RPM=105%: g₂=0.05>0, V_fail=0.0025. Measured continuously by FADEC health monitoring — non-zero V_fail triggers alert."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -4653,22 +4612,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{x∈R^n: g_k(x)≤0 for all k}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "g_k": "k-th constraint function",
+          "x_fail": "failure state",
+          "V_fail": "failure potential"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "V_fail(t+1)=∑_k max(0,g_k(x_{t+1}))²; V_fail grows as constraints violated",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "g_k(x)≤0 for all k (all must hold)",
+          "V_fail=0 iff x∈Ω"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_fail(x)=∑_k max(0,g_k(x))²≥0; V_fail=0 iff feasible",
+        "implication": "Failure is exactly constraint violation V_fail>0; no other cause is needed. V_fail is a quantitative, falsifiable failure score measurable by constraint evaluation."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "V_fail(x)=∑_k max(0,g_k(x))²; fail iff V_fail>0 for any k",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -4748,7 +4706,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE1] Example instances will be attached as child DTUs when needed."
+        "Modern CPU erasing 1 bit at T=300K: E_min=k_B·T·ln2≈2.9×10⁻²¹J; actual processors use ~10⁻¹⁵J/bit — 10⁶× above Landauer limit. Measured calorimetrically; each factor-10 reduction in E·I is a falsifiable engineering target."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -4757,23 +4715,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{E≥0, I≥0: E·I≥k_EI}",
         "variables": {
-          "C": "capacity",
-          "D": "decay",
-          "R": "repair",
-          "T": "throughput"
+          "E": "energy cost of computation",
+          "I": "information content processed",
+          "k_EI": "Landauer-type duality constant"
         },
-        "dynamics": "C_{t+1}=C_t+R_t-D_t; T_t≤C_t",
+        "dynamics": "dE/dt+dI/dt≥0; minimize E·I subject to task completion",
         "constraints": [
-          "C≥0",
-          "R≥0",
-          "D≥0"
+          "E·I≥k_EI (duality bound)",
+          "task completed (auxiliary)"
         ],
-        "potential": "V=max(0,C_min-C)",
-        "implication": "If E[R]≥E[D] and shocks bounded, then C stays above C_min with high probability."
+        "potential": "V_EI=k_EI/(E·I)∈(0,1]; V_EI=1 at minimum feasible product",
+        "implication": "Energy and information are dual; computing with E→0 requires I→∞ and vice versa. The bound k_EI=k_B·T·ln2 (Landauer) is measurable by calorimetric experiments on bit erasure."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "E·I≥k_EI=k_B·T·ln2 per bit erased; minimize E·I s.t. task done",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -4853,7 +4809,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE1] Example instances will be attached as child DTUs when needed."
+        "Network router: T=link utilization, δ_s=latency headroom. At T=90%, δ_s=50ms. At T=95%, δ_s=25ms. γ=10ms/% measured empirically. T_max=100%, δ_s_min=10ms → maximum safe throughput T*=100-10/10=99%. Verified by traffic load testing."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -4862,22 +4818,22 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{(T,δ_s): T≥0, δ_s≥δ_s_min}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "T": "throughput",
+          "δ_s": "stability margin",
+          "γ": "tradeoff rate",
+          "T_max": "max throughput"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "Ṫ=α(T_max-T-γ·δ_s); δ̇_s=β(δ_s_req-δ_s)",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "T+γ·δ_s≤T_max (Pareto frontier)",
+          "δ_s≥δ_s_min (minimum stability)"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_ts=T+γ·δ_s-T_max; V_ts≤0 on the Pareto frontier",
+        "implication": "Every throughput unit above T_max-γ·δ_s_min costs stability; systems ignoring V_ts≤0 violate the feasibility constraint and eventually fail."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "T+γ·δ_s=T_max (Pareto); ∂T/∂δ_s=-γ<0; stable iff δ_s≥δ_s_min",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -4957,7 +4913,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE1] Example instances will be attached as child DTUs when needed."
+        "Car engine: E_budget=100kW fuel, c_R·ρ_R=15kW (maintenance energy equivalent). η*=85kW effective power. Removing maintenance (ρ_R=0): η=100kW for a while, then V_er>0 triggers engine failure. Oil consumption tracks ρ_R directly."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -4966,23 +4922,22 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{(η,ρ_R): η≥0, ρ_R≥ρ_R_min, η+c_R·ρ_R≤E_budget}",
         "variables": {
-          "B": "integrity",
-          "D": "damage",
-          "R": "repair",
-          "S": "stress"
+          "η": "operational efficiency (energy output per input)",
+          "ρ_R": "repair capacity",
+          "c_R": "repair cost per unit capacity",
+          "E_budget": "total energy budget"
         },
-        "dynamics": "dB/dt=R(B,S)-D(B,S)",
+        "dynamics": "η̇=α(E_budget-η-c_R·ρ_R); ρ̇_R=β(D_rate-ρ_R)",
         "constraints": [
-          "B∈[0,1]",
-          "R≥0",
-          "D≥0"
+          "η+c_R·ρ_R≤E_budget",
+          "ρ_R≥ρ_R_min (minimum repair to survive)"
         ],
-        "potential": "V=1-B",
-        "implication": "If R≥D+ε on [B0,1], then B increases toward 1 (repair-dominant)."
+        "potential": "V_er=max(0,η+c_R·ρ_R-E_budget); V_er=0 on Pareto frontier",
+        "implication": "Efficiency gains are bounded by repair requirements; optimal η*=E_budget-c_R·ρ_R_min. Falsified if η>E_budget-c_R·ρ_R_min is sustained without reducing ρ_R below ρ_R_min."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "η*=E_budget-c_R·ρ_R_min; Pareto: η+c_R·ρ_R=E_budget",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -5062,7 +5017,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE1] Example instances will be attached as child DTUs when needed."
+        "Octopus: high I (problem-solving), β high, R low (no repair investment) → L≈2 years despite B comparable to longer-lived mollusks. Clam: low I, β≈0, R≥D_base → L≈500 years. Ratio L_clam/L_octopus ≈ β_octopus·I²_octopus/ε, measurable by metabolic rate and lifespan data."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -5071,22 +5026,24 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{L≥0, B≥0, D_I(I)≥D_base, R≥0}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "L": "expected lifespan",
+          "B": "energy buffer",
+          "D_I": "intelligence-induced damage rate D_base+β·I²",
+          "R": "repair rate",
+          "I": "intelligence level"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "dL/dt=-1/B·(D_I(I)-R); L sustainable iff R≥D_I(I)",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "B≥B_min",
+          "D_I(I)=D_base+β·I² (metabolic cost of cognition)",
+          "R≥D_base"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_IL=max(0,D_I(I)-R)/B; V_IL=0 iff repair covers intelligent damage",
+        "implication": "High intelligence increases D_I quadratically; longevity requires R∝I² to compensate. L≈B/(D_I(I)-R+ε) is falsifiable by measuring B, D, R, and I in biological systems."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "L≈B/(D_I(I)-R+ε); D_I(I)=D_base+β·I²; long life requires R≥D_base+β·I²",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -5166,7 +5123,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE1] Example instances will be attached as child DTUs when needed."
+        "Human lumbar spine: c_spine·h_spine(upright_gait) ≈ 80% of chronic back pain prevalence (D_evol). Quadrupeds on the same gait pathway have c_spine≈0 because h_spine=0. Measured by comparing spinal disc failure rates between humans and analogous mammals with different posture history."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -5175,25 +5132,23 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{D_evol≥0: D_evol=∑c_i·h_i(x_hist), h_i path functions}",
         "variables": {
-          "D": "debt",
-          "B": "buffer",
-          "r": "interest",
-          "G": "spend",
-          "T": "revenue",
-          "R": "repair"
+          "D_evol": "evolutionary debt",
+          "c_i": "debt coefficient for constraint i",
+          "h_i": "historical path function",
+          "x_hist": "evolutionary trajectory"
         },
-        "dynamics": "dD/dt=r·D+(G-T); dB/dt=R-Dmg",
+        "dynamics": "Ḋ_evol=∑_i c_i·(∂h_i/∂t)·ẋ; D_evol accumulates along evolutionary path",
         "constraints": [
-          "D≥0",
-          "B≥0",
-          "R≥0"
+          "D_evol≥0",
+          "ΔD_evol≥0 (irreversible)",
+          "D_evol path-dependent"
         ],
-        "potential": "V=D+max(0,B_min-B)",
-        "implication": "If (T-G)≥r·D and E[R]≥E[Dmg], then debt stabilizes and buffer stays above threshold."
+        "potential": "V_evd=D_evol; V_evd non-decreasing along x_hist",
+        "implication": "Evolutionary debt quantifies the energetic overhead of path-dependent constraint lock-in; unlike designed systems, D_evol cannot be zeroed without redesigning the entire evolutionary history."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "D_evol=∑_i c_i·h_i(x_hist); Ḋ_evol≥0 (irreversible path cost)",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -5284,25 +5239,23 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{L_art≥0, D_art=0, B_art≥0, R_art≥0}",
         "variables": {
-          "D": "debt",
-          "B": "buffer",
-          "r": "interest",
-          "G": "spend",
-          "T": "revenue",
-          "R": "repair"
+          "D_art": "artificial evolutionary debt (=0 by design)",
+          "B_art": "designed buffer",
+          "R_art": "engineered repair rate",
+          "L_art": "artificial lifespan"
         },
-        "dynamics": "dD/dt=r·D+(G-T); dB/dt=R-Dmg",
+        "dynamics": "dL_art/dt=-1/B_art·(D_base-R_art); D_art=0 removes overhead",
         "constraints": [
-          "D≥0",
-          "B≥0",
-          "R≥0"
+          "D_art=0 (design requirement)",
+          "R_art≥D_base",
+          "B_art≥B_min"
         ],
-        "potential": "V=D+max(0,B_min-B)",
-        "implication": "If (T-G)≥r·D and E[R]≥E[Dmg], then debt stabilizes and buffer stays above threshold."
+        "potential": "V_art=max(0,D_base-R_art)/B_art; V_art=0 iff R_art≥D_base",
+        "implication": "Without evolutionary debt overhead, L_art>L_bio whenever B_art=B_bio; advantage is the full buffer freed from D_evol. Falsified if L_art<L_bio with equal B and R."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "L_art≈B_art/(D_base-R_art+ε); L_art>L_bio iff D_evol_bio>0 and B_art=B_bio",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -5391,23 +5344,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{F: X→X, T∈G_equivar invertible}",
         "variables": {
-          "B": "integrity",
-          "D": "damage",
-          "R": "repair",
-          "S": "stress"
+          "F": "system function",
+          "T": "substrate transformation",
+          "G_equivar": "equivariance group"
         },
-        "dynamics": "dB/dt=R(B,S)-D(B,S)",
+        "dynamics": "x_{t+1}=F(x_t;θ); equivariance: T(x_{t+1})=F(T(x_t);T(θ))",
         "constraints": [
-          "B∈[0,1]",
-          "R≥0",
-          "D≥0"
+          "T invertible",
+          "G_equivar non-trivial (at least one non-identity T)"
         ],
-        "potential": "V=1-B",
-        "implication": "If R≥D+ε on [B0,1], then B increases toward 1 (repair-dominant)."
+        "potential": "V_sub=‖F(T(x);T(θ))-T(F(x;θ))‖²; V_sub=0 iff equivariant",
+        "implication": "Substrate independence is an equivariance condition V_sub=0; falsified by finding any T∈G_equivar with V_sub>0."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "F(T(x);T(θ))=T(F(x;θ)) for all T∈G_equivar; V_sub=0 iff substrate-independent",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -5497,22 +5448,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{Ω_embed⊆Ω_abstract: Ω_embed chosen at t_embed}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "Ω_embed": "embodiment feasibility set",
+          "Ω_abstract": "abstract feasibility (without physical body)",
+          "V_emb": "embodiment cost"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "∂Ω_embed/∂t from physical wear; ∂Ω_abstract/∂t from cognitive expansion",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "Ω_embed⊆Ω_abstract (embodiment is a restriction)",
+          "Ω_embed chosen irreversibly at t_embed"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_emb=vol(Ω_abstract-Ω_embed)≥0; cost of choosing Ω_embed",
+        "implication": "Embodiment surrenders vol(Ω_abstract-Ω_embed) of abstract feasibility; optimal embodiment maximizes operational utility within Ω_embed, accepting V_emb as the permanence cost."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "Ω_embed⊂Ω_abstract; V_emb=vol(Ω_abstract-Ω_embed)≥0 paid at t_embed",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -5602,22 +5552,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{{Ω_k}_{k=1}^K: ∩_k Ω_k≠∅}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "Ω_k": "k-th parallel feasibility world",
+          "K": "number of worlds",
+          "d_K": "distance to ∩Ω"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "d_{t+1}=d_t-α∇V_K+Π_{∩Ω}; maintain ∩Ω residency",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "∩_k Ω_k≠∅ (co-feasibility required)",
+          "d_K=dist(x,∩Ω_k)≥0"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_K=d_K²; V_K=0 iff x∈∩_k Ω_k",
+        "implication": "K worlds are co-feasible iff their intersection is non-empty; feasibility collapse is ∩Ω→∅. The common core ∩Ω is the stable operating region across all worlds."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "∩_{k=1}^K Ω_k≠∅; V_K=dist(x,∩Ω)²; co-feasibility collapses iff ∩Ω→∅",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -5706,22 +5655,22 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{θ∈Θ: F(x;θ) stable ∧ ∩Ω(θ)≠∅}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "IS": "designable intelligence space",
+          "θ": "design parameters",
+          "∂IS": "IS boundary"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "θ̇=-∇V_IS(θ); V_IS measures distance to IS boundary",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "F(x;θ) Lyapunov-stable",
+          "∩Ω(θ)≠∅ (co-feasible constraints)",
+          "repair R(θ)≥D(θ)"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_IS=max(0,ρ(Jf(x;θ))-1)+max(0,-vol(∩Ω(θ))); V_IS=0 inside IS",
+        "implication": "IS is bounded by stability, co-feasibility, and repair constraints; the design problem is finding θ∈IS with desired performance. IS boundary is measurable by stability analysis."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "IS={θ: ρ(Jf(x;θ))<1 ∧ ∩Ω(θ)≠∅ ∧ R(θ)≥D(θ)}; design problem = θ∈IS",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -5810,22 +5759,22 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{T_sv={x: Ė(x)=0}=equilibrium manifold}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "T_sv": "transduction state variables (equilibrium set)",
+          "E": "energy",
+          "D": "damage at x",
+          "R": "repair at x"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "ẋ|_{T_sv}=F(x) restricted to T_sv; x stays on T_sv iff ∂(D-R)/∂x·ẋ=0",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "R(x)=D(x) on T_sv (equilibrium)",
+          "x∈T_sv"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_tsv=‖D(x)-R(x)‖²; V_tsv=0 on T_sv",
+        "implication": "Transduction state variables are exactly the repair-damage equilibrium manifold; long-run behavior is on T_sv. Systems off T_sv drift toward 0 (if D>R) or accumulate slack (if R>D)."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "T_sv={x: D(x)=R(x)}; V_tsv=‖D(x)-R(x)‖²=0 on T_sv",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -5915,23 +5864,22 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{(E,η): E≥0, η∈[0,1]}",
         "variables": {
-          "C": "capacity",
-          "D": "decay",
-          "R": "repair",
-          "T": "throughput"
+          "E_eff": "effective energy = E·η",
+          "E": "raw energy stock",
+          "η": "energy quality (exergy fraction)"
         },
-        "dynamics": "C_{t+1}=C_t+R_t-D_t; T_t≤C_t",
+        "dynamics": "Ė_eff=Ė·η+E·η̇; E_eff grows iff Ė·η>-E·η̇",
         "constraints": [
-          "C≥0",
-          "R≥0",
-          "D≥0"
+          "η∈[0,1]",
+          "E≥0",
+          "maximize E_eff not E"
         ],
-        "potential": "V=max(0,C_min-C)",
-        "implication": "If E[R]≥E[D] and shocks bounded, then C stays above C_min with high probability."
+        "potential": "V_eq=E_budget-E_eff; V_eq=0 when max E_eff achieved",
+        "implication": "System viability depends on E_eff=E·η; a large but low-quality energy source (η→0) is thermodynamically equivalent to none. Exergy η is measurable via second-law efficiency analysis."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "E_eff=E·η; ΔV≤-c·η·‖x-x*‖²; maximize E_eff not raw E",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -6020,22 +5968,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{u(t): BW_c≤f_s/2, f_s sampling frequency}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "BW_c": "control bandwidth",
+          "f_s": "sampling frequency",
+          "e_alias": "aliasing error"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "u(t)=∑_{|f|≤BW_c} û_f·e^{i2πft}; modes above BW_c are uncontrolled",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "BW_c≤f_s/2 (Nyquist)",
+          "e_alias=(BW_plant-BW_c)²/BW_plant² for plant bandwidth BW_plant"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_bw=max(0,BW_c-f_s/2)²; V_bw=0 iff Nyquist satisfied",
+        "implication": "Control bandwidth is hard-bounded by sampling rate; any claimed control above f_s/2 is aliased noise. Falsified by spectral analysis of the control signal showing energy above f_s/2."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "BW_c≤f_s/2; e_alias∝max(0,BW_plant-f_s/2)²; Nyquist is a hard ceiling",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -6124,23 +6071,22 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{Ṙ_eff=min(R_cap,D_rate), D_excess=D_rate-Ṙ_eff}",
         "variables": {
-          "B": "integrity",
-          "D": "damage",
-          "R": "repair",
-          "S": "stress"
+          "Ṙ_eff": "effective repair rate",
+          "R_cap": "repair capacity ceiling",
+          "D_rate": "damage rate",
+          "D_excess": "unrepaired damage per unit time"
         },
-        "dynamics": "dB/dt=R(B,S)-D(B,S)",
+        "dynamics": "dE/dt=-(D_rate-Ṙ_eff)=-D_excess; E→0 if D_excess>0 sustained",
         "constraints": [
-          "B∈[0,1]",
-          "R≥0",
-          "D≥0"
+          "Ṙ_eff=min(R_cap,D_rate)≥0",
+          "D_excess=max(0,D_rate-R_cap)≥0"
         ],
-        "potential": "V=1-B",
-        "implication": "If R≥D+ε on [B0,1], then B increases toward 1 (repair-dominant)."
+        "potential": "V_btl=D_excess=max(0,D_rate-R_cap); V_btl>0 signals bottleneck",
+        "implication": "Repair bottlenecks create net energy loss D_excess>0; E→0 in time E₀/D_excess. Falsified by measuring Ṙ_eff=D_rate simultaneously with D_rate>R_cap."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "Ṙ_eff=min(R_cap,D_rate); D_excess=max(0,D_rate-R_cap); E→0 in T=E₀/D_excess",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -6231,22 +6177,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{(Ω_true,Ω_model): Ω_model approximates Ω_true}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "Ω_true": "true feasibility set",
+          "Ω_model": "scientific model of Ω",
+          "V_sci": "model error = ‖Ω_true-Ω_model‖"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "V_sci(t+1)=V_sci(t)-α·I_experiment_t; science reduces V_sci by experimentation",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "V_sci≥0",
+          "experiments reduce V_sci by Δ per test"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_sci=‖Ω_true-Ω_model‖²; V_sci→0 as model improves",
+        "implication": "Scientific progress = reduction in V_sci; a theory is falsified exactly when observed data x_obs lies in Ω_model but violates Ω_true (or vice versa)."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "V_sci=‖Ω_true-Ω_model‖²; science = V_sci(t+1)<V_sci(t) via experiment",
       "verifier": {
         "kind": "verifier",
         "inputs": [
