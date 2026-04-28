@@ -1,0 +1,84 @@
+groups:
+  - name: concord-health
+    interval: 30s
+    rules:
+      - alert: ConcordServerDown
+        expr: up{job="concord-backend"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Concord server is down"
+          description: "Prometheus cannot scrape the Concord backend at {{ $labels.instance }}"
+
+      - alert: ConcordHighMemory
+        expr: concord_process_memory_bytes{type="heapUsed"} / concord_process_memory_bytes{type="heapTotal"} > 0.85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Concord heap usage above 85%"
+          description: "Heap used is {{ $value | humanizePercentage }} of total"
+
+      - alert: ConcordMemoryCritical
+        expr: concord_process_memory_bytes{type="heapUsed"} > 1.7e9
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Concord heap above 1.7 GB — OOM risk"
+          description: "Heap used: {{ $value | humanize1024 }}B"
+
+      - alert: ConcordBrainErrors
+        expr: rate(concord_brain_errors_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Concord brain {{ $labels.brain }} error rate elevated"
+          description: "Error rate: {{ $value | humanize }} errors/sec"
+
+      - alert: ConcordBrainAllDown
+        expr: sum(concord_brain_enabled) == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "All Concord brains are offline"
+          description: "No brain is enabled — AI features unavailable"
+
+      - alert: ConcordSlowBrain
+        expr: concord_brain_avg_latency_ms > 30000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Concord brain {{ $labels.brain }} responding slowly"
+          description: "Average latency: {{ $value }}ms (threshold: 30s)"
+
+      - alert: ConcordNoHeartbeat
+        expr: rate(concord_heartbeat_tick_total[5m]) == 0
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Concord heartbeat has stopped"
+          description: "No heartbeat ticks in the last 5 minutes — server may be hung"
+
+      - alert: ConcordSyntheticCheckFailing
+        expr: concord_synthetic_check_pass == 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Synthetic check '{{ $labels.check }}' is failing"
+          description: "Critical path check has been failing for 2+ minutes"
+
+      - alert: ConcordUptime
+        expr: concord_uptime_seconds < 60
+        for: 0m
+        labels:
+          severity: info
+        annotations:
+          summary: "Concord server recently restarted"
+          description: "Uptime is {{ $value }}s — server restarted recently"

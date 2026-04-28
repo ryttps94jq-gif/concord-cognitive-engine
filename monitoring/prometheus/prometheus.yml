@@ -2,6 +2,9 @@ global:
   scrape_interval: 15s
   evaluation_interval: 15s
 
+rule_files:
+  - "alerts.yml"
+
 scrape_configs:
   - job_name: "concord-backend"
     metrics_path: /metrics
@@ -9,3 +12,11 @@ scrape_configs:
       - targets: ["backend:5050"]
         labels:
           service: "concord-api"
+
+  - job_name: "concord-synthetic"
+    metrics_path: /metrics
+    honor_labels: true
+    static_configs:
+      - targets: ["pushgateway:9091"]
+        labels:
+          service: "concord-synthetic-monitor"
