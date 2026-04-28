@@ -1,0 +1,32 @@
+server/eslint.config.js:63:          message: "req.query.userId used as actor identity is an auth bypass risk. Use req.user?.id from the authenticated session.",
+server/durable.js:414:        const userId = req.actor?.userId || req.query.user_id || req.headers["x-user-id"];
+server/durable.js:435:      logEvent(db, "artifact.downloaded", req.query.user_id || null, { artifactId: req.params.id, versionId: version.id }, req.headers["x-request-id"]);
+server/server.js:37717:app.get("/api/shard/route", asyncHandler(async (req, res) => res.json(await runMacro("shard", "route", { userId: req.query.userId, orgId: req.query.orgId }, makeCtx(req)))));
+server/server.js:37720:app.get("/api/governor/check", asyncHandler(async (req, res) => res.json(await runMacro("governor", "check", { userId: req.query.userId, action: req.query.action }, makeCtx(req)))));
+server/server.js:38921:    userId: req.query.userId,
+server/server.js:38964:  const userId = req.user?.id || req.query.userId || "anonymous";
+server/server.js:41380:  const userId = req.query.user_id || req.user?.id || "default";
+server/server.js:42537:  try { res.json(getFeed(STATE, req.user?.id || req.query.userId, { limit: Number(req.query.limit || 30), offset: Number(req.query.offset || 0) })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+server/server.js:42547:    const userId = req.user?.id || req.query.userId || "anon";
+server/server.js:42671:    const currentUserId = req.user?.id || req.query.userId || null;
+server/server.js:42717:    const userId = req.query.userId || req.user?.id || req.actor?.userId || "anon";
+server/server.js:42725:    const userId = req.query.userId || req.user?.id || req.actor?.userId || "anon";
+server/server.js:42732:    const userId = req.query.userId || req.user?.id || req.actor?.userId || "anon";
+server/server.js:42780:    const userId = req.query.userId || req.user?.id || req.actor?.userId || "anon";
+server/server.js:42891:  try { res.json(collabListWorkspaces(STATE, req.query.userId || req.user?.id)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+server/server.js:47570:  const sub = getSubscription(req.query.userId);
+server/server.js:47718:    const userId = req.query.userId || "default";
+server/server.js:47723:    res.status(500).json({ ok: false, error: String(e?.message || e), twin: { userId: req.query.userId || "default", insights: [], patterns: [] } });
+server/server.js:47740:  const userId = req.query.userId || "default";
+server/server.js:49002:  const userId = req.query.userId || "default";
+server/server.js:49010:  const userId = req.query.userId || "default";
+server/server.js:49563:  res.json({ ok: true, ...getAdaptiveLayout(req.query.userId) });
+server/economy/routes.js:316:      const userId = req.query.user_id || req.user?.id;
+server/economy/routes.js:661:      const userId = req.query.user_id || req.user?.id;
+server/economy/routes.js:743:      const userId = req.query.user_id || req.user?.id;
+server/routes/film-studio.js:143:    const creatorId = req.user?.id || req.query.creatorId;
+server/routes/film-studio.js:313:    const creatorId = req.user?.id || req.query.creatorId;
+server/routes/studio.js:193:      const userId = req.query.userId || req.user?.id;
+server/routes/media.js:308:    const userId = viewerId || req.query.userId;
+server/routes/media.js:475:    const userId = req.user?.id || req.query.userId || "anonymous";
+server/routes/world.js:425:    const userId = _userId(req) || req.user?.id || req.query.userId;

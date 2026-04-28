@@ -1,0 +1,12 @@
+server/eslint.config.js:55:          message: "req.body.userId is an auth bypass risk. Use req.user?.id from the authenticated session. If this is a target identifier (not the actor), add // safe: target-identifier",
+server/eslint.config.js:59:          message: "req.body.user_id is an auth bypass risk. Use req.user?.id from the authenticated session. If this is a target identifier (not the actor), add // safe: target-identifier",
+server/guidance.js:403:          actorUserId: req.body.user_id || null,
+server/server.js:38697:    const result = addWorkspaceMember(req.params.id, req.body.userId, req.body.role, { inviterId });
+server/economy/routes.js:115:      const userId = req.body.user_id || req.user?.id;
+server/economy/routes.js:817:      if (!req.body.user_id) {
+server/economy/routes.js:827:        adjustmentUserId: req.body.user_id,
+server/routes/media.js:242:    // Previously we accepted `req.body.authorId` as a fallback, which let
+server/routes/lens-culture.js:98:  // Previously we trusted req.body.userId, which let any caller act as any
+server/routes/film-studio.js:293:      fromUserId: req.user?.id || req.body.fromUserId,
+server/routes/film-studio.js:299:    const toUserId = req.user?.id || req.body.toUserId;
+server/routes/film-studio.js:305:    const toUserId = req.user?.id || req.body.toUserId;
