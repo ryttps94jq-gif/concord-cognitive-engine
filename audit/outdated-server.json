@@ -1,0 +1,135 @@
+{
+  "@eslint/js": {
+    "current": "9.39.2",
+    "wanted": "9.39.4",
+    "latest": "10.0.1",
+    "dependent": "server",
+    "location": "/home/user/concord-cognitive-engine/server/node_modules/@eslint/js"
+  },
+  "@types/node": {
+    "current": "25.5.0",
+    "wanted": "25.6.0",
+    "latest": "25.6.0",
+    "dependent": "server",
+    "location": "/home/user/concord-cognitive-engine/server/node_modules/@types/node"
+  },
+  "bcryptjs": {
+    "current": "2.4.3",
+    "wanted": "2.4.3",
+    "latest": "3.0.3",
+    "dependent": "server",
+    "location": "/home/user/concord-cognitive-engine/server/node_modules/bcryptjs"
+  },
+  "better-sqlite3": {
+    "current": "11.10.0",
+    "wanted": "11.10.0",
+    "latest": "12.9.0",
+    "dependent": "server",
+    "location": "/home/user/concord-cognitive-engine/server/node_modules/better-sqlite3"
+  },
+  "dotenv": {
+    "current": "16.6.1",
+    "wanted": "16.6.1",
+    "latest": "17.4.2",
+    "dependent": "server",
+    "location": "/home/user/concord-cognitive-engine/server/node_modules/dotenv"
+  },
+  "eslint": {
+    "current": "9.39.2",
+    "wanted": "9.39.4",
+    "latest": "10.2.1",
+    "dependent": "server",
+    "location": "/home/user/concord-cognitive-engine/server/node_modules/eslint"
+  },
+  "express": {
+    "current": "4.22.1",
+    "wanted": "4.22.1",
+    "latest": "5.2.1",
+    "dependent": "server",
+    "location": "/home/user/concord-cognitive-engine/server/node_modules/express"
+  },
+  "express-rate-limit": {
+    "current": "7.5.1",
+    "wanted": "7.5.1",
+    "latest": "8.4.1",
+    "dependent": "server",
+    "location": "/home/user/concord-cognitive-engine/server/node_modules/express-rate-limit"
+  },
+  "globals": {
+    "current": "15.15.0",
+    "wanted": "15.15.0",
+    "latest": "17.5.0",
+    "dependent": "server",
+    "location": "/home/user/concord-cognitive-engine/server/node_modules/globals"
+  },
+  "helmet": {
+    "current": "7.2.0",
+    "wanted": "7.2.0",
+    "latest": "8.1.0",
+    "dependent": "server",
+    "location": "/home/user/concord-cognitive-engine/server/node_modules/helmet"
+  },
+  "meilisearch": {
+    "current": "0.37.0",
+    "wanted": "0.37.0",
+    "latest": "0.57.0",
+    "dependent": "server",
+    "location": "/home/user/concord-cognitive-engine/server/node_modules/meilisearch"
+  },
+  "pdfkit": {
+    "current": "0.17.2",
+    "wanted": "0.17.2",
+    "latest": "0.18.0",
+    "dependent": "server",
+    "location": "/home/user/concord-cognitive-engine/server/node_modules/pdfkit"
+  },
+  "pg": {
+    "current": "8.18.0",
+    "wanted": "8.20.0",
+    "latest": "8.20.0",
+    "dependent": "server",
+    "location": "/home/user/concord-cognitive-engine/server/node_modules/pg"
+  },
+  "redis": {
+    "current": "4.7.1",
+    "wanted": "4.7.1",
+    "latest": "5.12.1",
+    "dependent": "server",
+    "location": "/home/user/concord-cognitive-engine/server/node_modules/redis"
+  },
+  "stripe": {
+    "current": "17.7.0",
+    "wanted": "17.7.0",
+    "latest": "22.1.0",
+    "dependent": "server",
+    "location": "/home/user/concord-cognitive-engine/server/node_modules/stripe"
+  },
+  "typescript": {
+    "current": "5.9.3",
+    "wanted": "5.9.3",
+    "latest": "6.0.3",
+    "dependent": "server",
+    "location": "/home/user/concord-cognitive-engine/server/node_modules/typescript"
+  },
+  "uuid": {
+    "current": "9.0.1",
+    "wanted": "9.0.1",
+    "latest": "14.0.0",
+    "dependent": "server",
+    "location": "/home/user/concord-cognitive-engine/server/node_modules/uuid"
+  },
+  "ws": {
+    "current": "8.19.0",
+    "wanted": "8.20.0",
+    "latest": "8.20.0",
+    "dependent": "server",
+    "location": "/home/user/concord-cognitive-engine/server/node_modules/ws"
+  },
+  "zod": {
+    "current": "3.25.76",
+    "wanted": "3.25.76",
+    "latest": "4.3.6",
+    "dependent": "server",
+    "location": "/home/user/concord-cognitive-engine/server/node_modules/zod"
+  }
+}

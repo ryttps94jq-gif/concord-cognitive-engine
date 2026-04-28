@@ -1,0 +1,9 @@
+#!/bin/sh
+# Pre-commit checks — runs on every commit
+# To skip in an emergency: git commit --no-verify
+
+# Frontend: lint-staged (ESLint + Prettier on staged files)
+(cd concord-frontend && npx lint-staged) || exit 1
+
+# Backend: syntax check of the server entry point
+(cd server && node --check server.js) || exit 1

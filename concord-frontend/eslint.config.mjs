@@ -20,6 +20,14 @@ const eslintConfig = [
       '@typescript-eslint/triple-slash-reference': 'off', // Next.js auto-generates these references
       'react-hooks/exhaustive-deps': 'warn',
       'react/no-unescaped-entities': 'off',
+      // Auth bypass prevention — do not pass client-supplied user IDs to server mutations
+      'no-restricted-syntax': [
+        'warn',
+        {
+          selector: "Property[key.name='userId'][value.type='MemberExpression'][value.object.name='body']",
+          message: "Sending body.userId to a mutation may enable server-side auth bypass. Ensure the server uses req.user.id instead.",
+        },
+      ],
     },
   },
   {

@@ -22,6 +22,11 @@ type MetricReporter = (metric: PerfMetric) => void;
 let reporter: MetricReporter = (metric) => {
   if (process.env.NODE_ENV === 'development') {
     console.debug('[Perf]', metric.name, `${metric.value.toFixed(1)}ms`, metric.meta || '');
+    return;
+  }
+  // In production, beacon metrics to the backend (fire-and-forget, no user data)
+  if (typeof navigator !== 'undefined' && navigator.sendBeacon) {
+    navigator.sendBeacon('/api/metrics/vitals', JSON.stringify({ name: metric.name, value: metric.value, kind: metric.kind }));
   }
 };
 

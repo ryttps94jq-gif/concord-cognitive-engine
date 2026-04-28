@@ -149,6 +149,9 @@ function buildOpenAPISpec({ LENS_ACTIONS, ALL_LENS_DOMAINS, serverVersion }) {
     { name: "API Keys", description: "API key management (csk_... keys)" },
     { name: "DTUs", description: "Discrete Thought Unit CRUD" },
     { name: "Chat", description: "Conversational interface" },
+    { name: "Social", description: "Social interactions: posts, follows, likes, votes" },
+    { name: "Governance", description: "Community governance proposals and voting" },
+    { name: "Marketplace", description: "DTU marketplace: publish, browse, and purchase listings" },
     { name: "Billing", description: "API billing and metering" },
     { name: "Docs", description: "API documentation" },
   ];
@@ -168,7 +171,7 @@ function buildOpenAPISpec({ LENS_ACTIONS, ALL_LENS_DOMAINS, serverVersion }) {
       description:
         "Auto-generated API specification for the Concord Cognitive Engine. " +
         `Covers ${domainActions.size} lens domains with ${LENS_ACTIONS.size} total actions, ` +
-        "plus core REST endpoints for DTUs, authentication, chat, billing, and key management.",
+        "plus core REST endpoints for DTUs, authentication, chat, social, governance, marketplace, billing, and key management.",
       contact: { name: "Concord Team" },
       license: { name: "MIT" },
     },
@@ -494,6 +497,266 @@ function addCorePaths(paths) {
       security: [{ BearerAuth: [] }],
       parameters: [{ name: "userId", in: "path", required: true, schema: { type: "string" } }],
       responses: { 200: { description: "Usage summary" } },
+    },
+  };
+
+  // ── Social ───────────────────────────────────────────────────────────
+  paths["/api/social/post"] = {
+    post: {
+      tags: ["Social"],
+      summary: "Create a social post",
+      security: [{ BearerAuth: [] }],
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": {
+            schema: {
+              type: "object",
+              required: ["content"],
+              properties: {
+                content: { type: "string" },
+                dtuId: { type: "string", description: "Optional DTU to attach" },
+                tags: { type: "array", items: { type: "string" } },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        201: { description: "Post created" },
+        400: { description: "Invalid request" },
+        401: { description: "Unauthorized" },
+      },
+    },
+  };
+
+  paths["/api/social/feed"] = {
+    get: {
+      tags: ["Social"],
+      summary: "Get social feed for the authenticated user",
+      security: [{ BearerAuth: [] }],
+      parameters: [
+        { name: "limit", in: "query", schema: { type: "integer", default: 20 } },
+        { name: "cursor", in: "query", schema: { type: "string" } },
+      ],
+      responses: { 200: { description: "Feed items" }, 401: { description: "Unauthorized" } },
+    },
+  };
+
+  paths["/api/social/follow"] = {
+    post: {
+      tags: ["Social"],
+      summary: "Follow a user",
+      security: [{ BearerAuth: [] }],
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": {
+            schema: {
+              type: "object",
+              required: ["targetUserId"],
+              properties: { targetUserId: { type: "string" } },
+            },
+          },
+        },
+      },
+      responses: {
+        200: { description: "Followed" },
+        400: { description: "Already following or invalid target" },
+        401: { description: "Unauthorized" },
+      },
+    },
+  };
+
+  paths["/api/dtus/{id}/like"] = {
+    post: {
+      tags: ["Social"],
+      summary: "Like a DTU",
+      security: [{ BearerAuth: [] }],
+      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+      responses: {
+        200: { description: "Like recorded or alreadyLiked: true" },
+        401: { description: "Unauthorized" },
+        404: { description: "DTU not found" },
+      },
+    },
+  };
+
+  paths["/api/dtus/{id}/vote"] = {
+    post: {
+      tags: ["Social"],
+      summary: "Vote on a DTU",
+      security: [{ BearerAuth: [] }],
+      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": {
+            schema: {
+              type: "object",
+              required: ["direction"],
+              properties: { direction: { type: "string", enum: ["up", "down"] } },
+            },
+          },
+        },
+      },
+      responses: {
+        200: { description: "Vote recorded or alreadyVoted: true" },
+        401: { description: "Unauthorized" },
+        404: { description: "DTU not found" },
+      },
+    },
+  };
+
+  paths["/api/dtus/{id}/fork"] = {
+    post: {
+      tags: ["DTUs"],
+      summary: "Fork a DTU",
+      security: [{ BearerAuth: [] }],
+      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+      requestBody: {
+        content: {
+          "application/json": {
+            schema: {
+              type: "object",
+              properties: { title: { type: "string", description: "Override title for the fork" } },
+            },
+          },
+        },
+      },
+      responses: {
+        201: { description: "Forked DTU", content: { "application/json": { schema: { type: "object", properties: { ok: { type: "boolean" }, dtu: { $ref: "#/components/schemas/DTU" } } } } } },
+        401: { description: "Unauthorized" },
+        404: { description: "DTU not found" },
+      },
+    },
+  };
+
+  // ── Governance ───────────────────────────────────────────────────────
+  paths["/api/governance/proposals"] = {
+    get: {
+      tags: ["Governance"],
+      summary: "List governance proposals",
+      parameters: [
+        { name: "status", in: "query", schema: { type: "string", enum: ["open", "closed", "passed", "rejected"] } },
+        { name: "limit", in: "query", schema: { type: "integer", default: 20 } },
+      ],
+      responses: { 200: { description: "List of proposals" } },
+    },
+    post: {
+      tags: ["Governance"],
+      summary: "Create a governance proposal",
+      security: [{ BearerAuth: [] }],
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": {
+            schema: {
+              type: "object",
+              required: ["title", "description"],
+              properties: {
+                title: { type: "string" },
+                description: { type: "string" },
+                type: { type: "string", enum: ["policy", "feature", "budget", "other"] },
+                votingEndsAt: { type: "string", format: "date-time" },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        201: { description: "Proposal created" },
+        400: { description: "Invalid request" },
+        401: { description: "Unauthorized" },
+      },
+    },
+  };
+
+  paths["/api/governance/proposals/{id}/vote"] = {
+    post: {
+      tags: ["Governance"],
+      summary: "Vote on a governance proposal",
+      security: [{ BearerAuth: [] }],
+      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": {
+            schema: {
+              type: "object",
+              required: ["vote"],
+              properties: { vote: { type: "string", enum: ["yes", "no", "abstain"] } },
+            },
+          },
+        },
+      },
+      responses: {
+        200: { description: "Vote recorded" },
+        401: { description: "Unauthorized" },
+        404: { description: "Proposal not found" },
+        409: { description: "Already voted" },
+      },
+    },
+  };
+
+  // ── Marketplace ──────────────────────────────────────────────────────
+  paths["/api/economy/marketplace"] = {
+    get: {
+      tags: ["Marketplace"],
+      summary: "List marketplace listings",
+      parameters: [
+        { name: "domain", in: "query", schema: { type: "string" } },
+        { name: "sort", in: "query", schema: { type: "string", enum: ["newest", "price_asc", "price_desc", "popular"] } },
+        { name: "limit", in: "query", schema: { type: "integer", default: 20 } },
+        { name: "cursor", in: "query", schema: { type: "string" } },
+      ],
+      responses: { 200: { description: "Marketplace listings" } },
+    },
+  };
+
+  paths["/api/dtus/{id}/publish"] = {
+    post: {
+      tags: ["Marketplace"],
+      summary: "Publish a DTU to the marketplace",
+      security: [{ BearerAuth: [] }],
+      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": {
+            schema: {
+              type: "object",
+              required: ["price"],
+              properties: {
+                price: { type: "number", minimum: 0, description: "Price in platform credits" },
+                license: { type: "string", enum: ["basic", "premium", "exclusive"], default: "basic" },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        200: { description: "Listing created", content: { "application/json": { schema: { type: "object", properties: { ok: { type: "boolean" }, listingId: { type: "string" } } } } } },
+        401: { description: "Unauthorized" },
+        403: { description: "Not the DTU owner" },
+        404: { description: "DTU not found" },
+        409: { description: "Already listed" },
+      },
+    },
+  };
+
+  paths["/api/economy/marketplace/{id}/purchase"] = {
+    post: {
+      tags: ["Marketplace"],
+      summary: "Purchase a marketplace listing",
+      security: [{ BearerAuth: [] }],
+      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", description: "Listing ID" } }],
+      responses: {
+        200: { description: "Purchase successful, royalties distributed" },
+        400: { description: "Insufficient credits or already owned" },
+        401: { description: "Unauthorized" },
+        404: { description: "Listing not found" },
+      },
     },
   };
 

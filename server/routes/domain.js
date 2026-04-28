@@ -1091,4 +1091,40 @@ export default function registerDomainRoutes(app, {
     const out = await runMacro("llm", "embed", req.body, makeCtx(req));
     return res.json(out);
   }));
+
+  // ---- Breakthrough ----
+  app.get("/api/breakthrough/status", asyncHandler(async (req, res) => {
+    const out = await runMacro("breakthrough", "status", {}, makeCtx(req));
+    return res.json(out);
+  }));
+  app.get("/api/breakthrough/clusters", asyncHandler(async (req, res) => {
+    const out = await runMacro("breakthrough", "list", req.query, makeCtx(req));
+    return res.json(out);
+  }));
+  app.post("/api/breakthrough/discover", asyncHandler(async (req, res) => {
+    const out = await runMacro("breakthrough", "discover", req.body, makeCtx(req));
+    return res.json(out);
+  }));
+  app.get("/api/breakthrough/clusters/:clusterId", asyncHandler(async (req, res) => {
+    const out = await runMacro("breakthrough", "get", { clusterId: req.params.clusterId }, makeCtx(req));
+    return res.json(out);
+  }));
+  app.post("/api/breakthrough/clusters/:clusterId/synthesize", asyncHandler(async (req, res) => {
+    const out = await runMacro("breakthrough", "synthesize", { ...req.body, clusterId: req.params.clusterId }, makeCtx(req));
+    return res.json(out);
+  }));
+
+  // ---- Agents (macro-level capability scoring, task routing, swarm status) ----
+  app.get("/api/agents/swarm", asyncHandler(async (req, res) => {
+    const out = await runMacro("agents", "swarmStatus", req.query, makeCtx(req));
+    return res.json(out);
+  }));
+  app.post("/api/agents/evaluate", asyncHandler(async (req, res) => {
+    const out = await runMacro("agents", "evaluateCapability", req.body, makeCtx(req));
+    return res.json(out);
+  }));
+  app.post("/api/agents/route", asyncHandler(async (req, res) => {
+    const out = await runMacro("agents", "routeTask", req.body, makeCtx(req));
+    return res.json(out);
+  }));
 }

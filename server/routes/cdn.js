@@ -47,9 +47,9 @@ export default function createCDNRouter({ cdnManager, urlSigner, STATE }) {
   // ── Helper: check authenticated ───────────────────────────────────
 
   function requireAuth(req) {
-    const userId = req.user?.id || req.query.userId || req.body?.userId;
+    const userId = req.user?.id;
     if (!userId) {
-      throw new ValidationError("Authentication required — provide userId");
+      throw new AuthorizationError("Authentication required");
     }
     return userId;
   }

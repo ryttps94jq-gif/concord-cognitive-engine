@@ -400,7 +400,7 @@ export function registerGuidanceEndpoints(app, db) {
         // Mark original event as undone
         emitEvent(db, {
           type: "UNDO_APPLIED",
-          actorUserId: req.body.user_id || null,
+          actorUserId: req.user?.id || null,
           scope: "global",
           entityType: payload._entityType,
           entityId: payload._entityId,

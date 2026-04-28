@@ -305,7 +305,7 @@ export default function createMediaRouter({ STATE }) {
     }
 
     const mediaDTU = gated.mediaDTU;
-    const userId = viewerId || req.query.userId;
+    const userId = viewerId;
 
     // Build streaming URLs
     const streamingUrls = {

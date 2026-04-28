@@ -290,20 +290,18 @@ export default function createFilmStudioRouter({ db, requireAuth }) {
   router.post("/gift", (req, res) => {
     const result = giftFilm(db, {
       ...req.body,
-      fromUserId: req.user?.id || req.body.fromUserId,
+      fromUserId: req.user?.id,
     });
     res.status(result.ok ? 201 : 400).json(result);
   });
 
   router.post("/gift/:giftId/accept", (req, res) => {
-    const toUserId = req.user?.id || req.body.toUserId;
-    const result = acceptGift(db, req.params.giftId, toUserId);
+    const result = acceptGift(db, req.params.giftId, req.user?.id);
     res.status(result.ok ? 200 : 400).json(result);
   });
 
   router.post("/gift/:giftId/decline", (req, res) => {
-    const toUserId = req.user?.id || req.body.toUserId;
-    const result = declineGift(db, req.params.giftId, toUserId);
+    const result = declineGift(db, req.params.giftId, req.user?.id);
     res.status(result.ok ? 200 : 400).json(result);
   });
 

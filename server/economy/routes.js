@@ -11,7 +11,7 @@ import {
   requestWithdrawal, approveWithdrawal, rejectWithdrawal,
   processWithdrawal, cancelWithdrawal, getUserWithdrawals, getAllWithdrawals,
 } from "./withdrawals.js";
-import { adminOnly } from "./guards.js";
+import { adminOnly, authRequired } from "./guards.js";
 import { economyAudit, auditCtx } from "./audit.js";
 import {
   createCheckoutSession, handleWebhook, createConnectOnboarding,
@@ -42,6 +42,7 @@ import { distributeFee, getFeeSplitBalances, getFeeDistributions } from "./fee-s
 import { runTreasuryReconciliation, getReconciliationHistory } from "./treasury-reconciliation.js";
 import { getSystemBalanceSummary } from "./balances.js";
 import { getDescendants } from "./royalty-cascade.js";
+import { initReservesSchema, allocateFromFee, getReserveHealth } from "./reserves.js";
 
 /**
  * Register all economy + Stripe routes on the Express app.
@@ -52,6 +53,9 @@ import { getDescendants } from "./royalty-cascade.js";
  */
 export function registerEconomyRoutes(app, db, opts = {}) {
   const log = opts.structuredLog || ((level, event, data) => console[level === "error" ? "error" : "log"](`[economy] ${event}`, data));
+
+  // Initialise chargeback reserve schema (idempotent)
+  initReservesSchema(db);
 
   // ═══════════════════════════════════════════════════════════════════════════
   // ECONOMY ENDPOINTS
@@ -112,7 +116,7 @@ export function registerEconomyRoutes(app, db, opts = {}) {
 
   app.post("/api/economy/buy", adminOnly, (req, res) => {
     try {
-      const userId = req.body.user_id || req.user?.id;
+      const userId = req.body.user_id || req.user?.id; // safe: adminOnly route — user_id is the target account to credit, not the actor
       const amount = Math.round(parseFloat(req.body.amount) * 100) / 100;
 
       if (!userId) return res.status(400).json({ ok: false, error: "missing_user_id" });
@@ -217,9 +221,9 @@ export function registerEconomyRoutes(app, db, opts = {}) {
 
   // ── Marketplace Purchase (buyer → seller, with fee) ────────────────────────
 
-  app.post("/api/economy/marketplace-purchase", (req, res) => {
+  app.post("/api/economy/marketplace-purchase", authRequired, (req, res) => {
     try {
-      const buyerId = req.body.buyer_id || req.user?.id;
+      const buyerId = req.user?.id;
       const sellerId = req.body.seller_id;
       const amount = Math.round(parseFloat(req.body.amount) * 100) / 100;
       const listingId = req.body.listing_id;
@@ -252,6 +256,20 @@ export function registerEconomyRoutes(app, db, opts = {}) {
         ...ctx,
       });
 
+      // Allocate a portion of the platform fee to reserves
+      if (result.fee > 0) {
+        try {
+          allocateFromFee(db, {
+            feeAmount:  result.fee,
+            sourceTxId: result.batchId,
+            requestId:  ctx.requestId,
+            ip:         ctx.ip,
+          });
+        } catch (allocErr) {
+          log("error", "reserve_allocation_failed", { error: allocErr.message });
+        }
+      }
+
       res.json(result);
     } catch (err) {
 
@@ -266,9 +284,9 @@ export function registerEconomyRoutes(app, db, opts = {}) {
   // WITHDRAWALS
   // ═══════════════════════════════════════════════════════════════════════════
 
-  app.post("/api/economy/withdraw", (req, res) => {
+  app.post("/api/economy/withdraw", authRequired, (req, res) => {
     try {
-      const userId = req.body.user_id || req.user?.id;
+      const userId = req.user?.id;
       const amount = Math.round(parseFloat(req.body.amount) * 100) / 100;
 
       if (!userId) return res.status(400).json({ ok: false, error: "missing_user_id" });
@@ -311,10 +329,9 @@ export function registerEconomyRoutes(app, db, opts = {}) {
     }
   });
 
-  app.get("/api/economy/withdrawals", (req, res) => {
+  app.get("/api/economy/withdrawals", authRequired, (req, res) => {
     try {
-      const userId = req.query.user_id || req.user?.id;
-      if (!userId) return res.status(400).json({ ok: false, error: "missing_user_id" });
+      const userId = req.user.id;
 
       const limit = Math.min(parseInt(req.query.limit, 10) || 25, 100);
       const offset = parseInt(req.query.offset, 10) || 0;
@@ -330,9 +347,9 @@ export function registerEconomyRoutes(app, db, opts = {}) {
     }
   });
 
-  app.post("/api/economy/withdrawals/:id/cancel", (req, res) => {
+  app.post("/api/economy/withdrawals/:id/cancel", authRequired, (req, res) => {
     try {
-      const userId = req.body.user_id || req.user?.id;
+      const userId = req.user?.id;
       if (!userId) return res.status(400).json({ ok: false, error: "missing_user_id" });
 
       const result = cancelWithdrawal(db, { withdrawalId: req.params.id, userId });
@@ -351,7 +368,7 @@ export function registerEconomyRoutes(app, db, opts = {}) {
 
   app.post("/api/economy/admin/withdrawals/:id/approve", adminOnly, (req, res) => {
     try {
-      const reviewerId = req.body.reviewer_id || req.user?.id || "system";
+      const reviewerId = req.user?.id || "system";
       const ctx = auditCtx(req);
       const result = approveWithdrawal(db, { withdrawalId: req.params.id, reviewerId });
       if (!result.ok) return res.status(400).json(result);
@@ -375,7 +392,7 @@ export function registerEconomyRoutes(app, db, opts = {}) {
 
   app.post("/api/economy/admin/withdrawals/:id/reject", adminOnly, (req, res) => {
     try {
-      const reviewerId = req.body.reviewer_id || req.user?.id || "system";
+      const reviewerId = req.user?.id || "system";
       const ctx = auditCtx(req);
       const result = rejectWithdrawal(db, { withdrawalId: req.params.id, reviewerId });
       if (!result.ok) return res.status(400).json(result);
@@ -569,13 +586,13 @@ export function registerEconomyRoutes(app, db, opts = {}) {
 
   // ── Buy tokens via Stripe Checkout ─────────────────────────────────────────
 
-  app.post("/api/economy/buy/checkout", async (req, res) => {
+  app.post("/api/economy/buy/checkout", authRequired, async (req, res) => {
     try {
       if (!STRIPE_ENABLED) {
         return res.status(503).json({ ok: false, error: "stripe_not_configured" });
       }
 
-      const userId = req.body.user_id || req.user?.id;
+      const userId = req.user?.id;
       const tokens = parseInt(req.body.tokens, 10);
 
       if (!userId) return res.status(400).json({ ok: false, error: "missing_user_id" });
@@ -629,13 +646,13 @@ export function registerEconomyRoutes(app, db, opts = {}) {
 
   // ── Stripe Connect ─────────────────────────────────────────────────────────
 
-  app.post("/api/stripe/connect/onboard", async (req, res) => {
+  app.post("/api/stripe/connect/onboard", authRequired, async (req, res) => {
     try {
       if (!STRIPE_ENABLED) {
         return res.status(503).json({ ok: false, error: "stripe_not_configured" });
       }
 
-      const userId = req.body.user_id || req.user?.id;
+      const userId = req.user?.id;
       if (!userId) return res.status(400).json({ ok: false, error: "missing_user_id" });
 
       const ctx = auditCtx(req);
@@ -656,10 +673,9 @@ export function registerEconomyRoutes(app, db, opts = {}) {
     }
   });
 
-  app.get("/api/stripe/connect/status", (req, res) => {
+  app.get("/api/stripe/connect/status", authRequired, (req, res) => {
     try {
-      const userId = req.query.user_id || req.user?.id;
-      if (!userId) return res.status(400).json({ ok: false, error: "missing_user_id" });
+      const userId = req.user.id;
 
       const result = getConnectStatus(db, userId);
       res.json({ ok: true, userId, ...result });
@@ -738,10 +754,9 @@ export function registerEconomyRoutes(app, db, opts = {}) {
 
   // ── User purchases (buyer or seller) ─────────────────────────────────────
 
-  app.get("/api/economy/purchases", (req, res) => {
+  app.get("/api/economy/purchases", authRequired, (req, res) => {
     try {
-      const userId = req.query.user_id || req.user?.id;
-      if (!userId) return res.status(400).json({ ok: false, error: "missing_user_id" });
+      const userId = req.user.id;
 
       const role = req.query.role === "seller" ? "seller" : "buyer";
       const status = req.query.status || undefined;
@@ -1497,9 +1512,9 @@ export function registerEconomyRoutes(app, db, opts = {}) {
     }
   });
 
-  app.post("/api/economy/marketplace/purchase", (req, res) => {
+  app.post("/api/economy/marketplace/purchase", authRequired, (req, res) => {
     try {
-      const buyerId = req.body.buyer_id || req.user?.id;
+      const buyerId = req.user?.id;
       const listingId = req.body.listing_id;
 
       if (!buyerId) return res.status(400).json({ ok: false, error: "missing_buyer_id" });
@@ -1519,6 +1534,21 @@ export function registerEconomyRoutes(app, db, opts = {}) {
       });
 
       if (!result.ok) return res.status(400).json(result);
+
+      // Allocate a portion of the platform fee to reserves
+      if (result.fee > 0) {
+        try {
+          allocateFromFee(db, {
+            feeAmount:  result.fee,
+            sourceTxId: result.batchId,
+            requestId:  ctx.requestId,
+            ip:         ctx.ip,
+          });
+        } catch (allocErr) {
+          log("error", "reserve_allocation_failed", { error: allocErr.message });
+        }
+      }
+
       res.json(result);
     } catch (err) {
 
@@ -1566,10 +1596,9 @@ export function registerEconomyRoutes(app, db, opts = {}) {
     }
   });
 
-  app.post("/api/economy/marketplace/listings/:listingId/delist", (req, res) => {
+  app.post("/api/economy/marketplace/listings/:listingId/delist", authRequired, (req, res) => {
     try {
-      const sellerId = req.body.seller_id || req.user?.id;
-      if (!sellerId) return res.status(400).json({ ok: false, error: "missing_seller_id" });
+      const sellerId = req.user.id;
 
       const result = delistListing(db, { listingId: req.params.listingId, sellerId });
       if (!result.ok) return res.status(400).json(result);
@@ -1583,11 +1612,10 @@ export function registerEconomyRoutes(app, db, opts = {}) {
     }
   });
 
-  app.patch("/api/economy/marketplace/listings/:listingId/price", (req, res) => {
+  app.patch("/api/economy/marketplace/listings/:listingId/price", authRequired, (req, res) => {
     try {
-      const sellerId = req.body.seller_id || req.user?.id;
+      const sellerId = req.user.id;
       const newPrice = Math.round(parseFloat(req.body.price) * 100) / 100;
-      if (!sellerId) return res.status(400).json({ ok: false, error: "missing_seller_id" });
 
       const result = updateListingPrice(db, {
         listingId: req.params.listingId,
@@ -1609,12 +1637,10 @@ export function registerEconomyRoutes(app, db, opts = {}) {
   // KNOWLEDGE PACKS (bundled DTU collections)
   // ═══════════════════════════════════════════════════════════════════════════
 
-  app.post("/api/marketplace/pack", (req, res) => {
+  app.post("/api/marketplace/pack", authRequired, (req, res) => {
     try {
-      const sellerId = req.body.seller_id || req.user?.id;
+      const sellerId = req.user.id;
       const { name, description, dtu_ids, price } = req.body;
-
-      if (!sellerId) return res.status(400).json({ ok: false, error: "missing_seller_id" });
       if (!name || !name.trim()) return res.status(400).json({ ok: false, error: "missing_pack_name" });
       if (!Array.isArray(dtu_ids) || dtu_ids.length === 0) return res.status(400).json({ ok: false, error: "missing_dtu_ids" });
       if (!price || price <= 0) return res.status(400).json({ ok: false, error: "invalid_price" });
@@ -1758,6 +1784,196 @@ export function registerEconomyRoutes(app, db, opts = {}) {
 
       res.status(500).json({ ok: false, error: "fee_split_history_failed" });
 
+    }
+  });
+
+  // ── Invoice ────────────────────────────────────────────────────────────────
+  // Generate a printable invoice record for a specific purchase or a set of
+  // recent transactions. Stores nothing — builds the invoice from the
+  // existing ledger data and returns it for the frontend to render/download.
+
+  app.post("/api/economy/invoice", (req, res) => {
+    try {
+      const userId = req.user?.id;
+      if (!userId) return res.status(401).json({ ok: false, error: "unauthorized" });
+
+      const { purchaseId, transactionIds, periodStart, periodEnd } = req.body || {};
+
+      let items = [];
+
+      if (purchaseId) {
+        // Single purchase invoice
+        const purchase = getPurchase(db, purchaseId);
+        if (!purchase) {
+          return res.status(404).json({ ok: false, error: "purchase_not_found" });
+        }
+        if (purchase.userId !== userId) {
+          return res.status(403).json({ ok: false, error: "forbidden" });
+        }
+        items = [{
+          id: purchase.id,
+          description: purchase.metadata?.description || purchase.type || "Purchase",
+          amount: purchase.amount,
+          currency: "CC",
+          date: purchase.createdAt,
+          status: purchase.status,
+        }];
+      } else {
+        // Multi-transaction or period invoice
+        const limit = 200;
+        const txResult = getTransactions(db, userId, { limit, offset: 0 });
+        let txns = txResult.transactions || [];
+
+        if (transactionIds && Array.isArray(transactionIds)) {
+          const idSet = new Set(transactionIds);
+          txns = txns.filter((t) => idSet.has(t.id));
+        } else if (periodStart || periodEnd) {
+          const start = periodStart ? new Date(periodStart).getTime() : 0;
+          const end = periodEnd ? new Date(periodEnd).getTime() : Date.now();
+          txns = txns.filter((t) => {
+            const ts = new Date(t.createdAt || t.created_at || 0).getTime();
+            return ts >= start && ts <= end;
+          });
+        } else {
+          // Default: last 30 days
+          const cutoff = Date.now() - 30 * 86400 * 1000;
+          txns = txns.filter((t) => new Date(t.createdAt || t.created_at || 0).getTime() >= cutoff);
+        }
+
+        items = txns.map((t) => ({
+          id: t.id,
+          description: t.metadata?.description || t.type || "Transaction",
+          amount: t.amount,
+          currency: "CC",
+          date: t.createdAt || t.created_at,
+          type: t.type,
+        }));
+      }
+
+      const total = items.reduce((s, item) => s + (item.amount || 0), 0);
+      const invoiceId = `INV-${Date.now().toString(36).toUpperCase()}-${userId.slice(0, 6).toUpperCase()}`;
+
+      res.json({
+        ok: true,
+        invoice: {
+          invoiceId,
+          userId,
+          issuedAt: new Date().toISOString(),
+          currency: "CC",
+          items,
+          total,
+          itemCount: items.length,
+        },
+      });
+    } catch (err) {
+      log("error", "economy_invoice_failed", { error: err.message });
+      res.status(500).json({ ok: false, error: "invoice_generation_failed" });
+    }
+  });
+
+  // ── Tax Summary ────────────────────────────────────────────────────────────
+  // Aggregate the calling user's transactions by type for a given fiscal
+  // period (defaults to the current calendar year). Returns income, spending,
+  // and a breakdown by transaction type — enough for a user to self-report.
+
+  app.post("/api/economy/tax-summary", (req, res) => {
+    try {
+      const userId = req.user?.id;
+      if (!userId) return res.status(401).json({ ok: false, error: "unauthorized" });
+
+      const { year, periodStart, periodEnd } = req.body || {};
+
+      let start, end;
+      if (periodStart && periodEnd) {
+        start = new Date(periodStart).getTime();
+        end = new Date(periodEnd).getTime();
+      } else {
+        const y = parseInt(year, 10) || new Date().getFullYear();
+        start = new Date(`${y}-01-01T00:00:00Z`).getTime();
+        end = new Date(`${y}-12-31T23:59:59Z`).getTime();
+      }
+
+      const txResult = getTransactions(db, userId, { limit: 10000, offset: 0 });
+      const txns = (txResult.transactions || []).filter((t) => {
+        const ts = new Date(t.createdAt || t.created_at || 0).getTime();
+        return ts >= start && ts <= end;
+      });
+
+      const byType = {};
+      let totalIncome = 0;
+      let totalSpending = 0;
+
+      for (const t of txns) {
+        const type = t.type || "other";
+        if (!byType[type]) byType[type] = { count: 0, total: 0 };
+        byType[type].count++;
+        byType[type].total += t.amount || 0;
+
+        // Income types: royalty payouts, withdrawals received, earnings
+        const isIncome = ["royalty", "earning", "reward", "peer_teach_credit"].includes(type);
+        if (isIncome) {
+          totalIncome += Math.abs(t.amount || 0);
+        } else {
+          totalSpending += Math.abs(t.amount || 0);
+        }
+      }
+
+      const periodLabel = periodStart && periodEnd
+        ? `${periodStart} to ${periodEnd}`
+        : `${new Date(start).getFullYear()}`;
+
+      res.json({
+        ok: true,
+        taxSummary: {
+          userId,
+          period: periodLabel,
+          periodStartIso: new Date(start).toISOString(),
+          periodEndIso: new Date(end).toISOString(),
+          currency: "CC",
+          totalIncome,
+          totalSpending,
+          netPosition: totalIncome - totalSpending,
+          transactionCount: txns.length,
+          byType,
+        },
+      });
+    } catch (err) {
+      log("error", "economy_tax_summary_failed", { error: err.message });
+      res.status(500).json({ ok: false, error: "tax_summary_failed" });
+    }
+  });
+
+  // ── Reserve Health (admin) ─────────────────────────────────────────────────
+
+  app.get("/api/admin/reserves/health", adminOnly, (req, res) => {
+    try {
+      const health = getReserveHealth(db);
+      res.json({ ok: true, ...health });
+    } catch (err) {
+      log("error", "reserves_health_fetch_failed", { error: err.message });
+      res.status(500).json({ ok: false, error: "reserves_health_fetch_failed" });
+    }
+  });
+
+  // ── Chargeback Protection Status (user) ───────────────────────────────────
+
+  app.get("/api/wallet/protection-status", authRequired, (req, res) => {
+    try {
+      const health = getReserveHealth(db);
+      res.json({
+        ok: true,
+        chargebackProtection: {
+          enabled: true,
+          description:
+            "Your purchases are protected by the Concord platform reserve. " +
+            "In the event of a chargeback dispute, the platform reserve covers " +
+            "the cost — your creators keep their distributions.",
+          reserveStatus: health.status,
+        },
+      });
+    } catch (err) {
+      log("error", "protection_status_fetch_failed", { error: err.message });
+      res.status(500).json({ ok: false, error: "protection_status_fetch_failed" });
     }
   });
 }

@@ -1,0 +1,249 @@
+=== BODY userId variants ===
+server/server.js:30158:    userId: req.body?.userId,
+server/server.js:38701:    const result = addWorkspaceMember(req.params.id, req.body.userId, req.body.role, { inviterId });
+server/server.js:42512:  try { res.json(upsertProfile(STATE, req.body?.userId || req.user?.id || req.actor?.userId || "anon", req.body || {})); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+server/server.js:42798:    const userId = req.body?.userId || req.user?.id || req.actor?.userId || "anon";
+server/server.js:42806:    const userId = req.body?.userId || req.user?.id || req.actor?.userId || "anon";
+server/server.js:42814:    const userId = req.body?.userId || req.user?.id || req.actor?.userId || "anon";
+server/server.js:42870:    const userId = req.body?.userId || req.user?.id;
+server/server.js:42914:  try { res.json(collabAddWorkspaceMember(STATE, req.params.id, req.body?.userId, req.body?.role, req.user?.id)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+server/server.js:42927:    const result = collabAddComment(STATE, req.body?.dtuId, req.body?.userId || req.user?.id, req.body?.text, req.body?.parentCommentId);
+server/server.js:42938:  try { res.json(collabEditComment(STATE, req.params.id, req.body?.userId || req.user?.id, req.body?.text)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+server/server.js:42947:    const result = proposeRevision(STATE, req.body?.dtuId, req.body?.userId || req.user?.id, req.body?.changes, req.body?.reason);
+server/server.js:42958:  try { res.json(voteOnRevision(STATE, req.params.id, req.body?.userId || req.user?.id, req.body?.vote)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+server/server.js:42966:  try { res.json(startEditSession(STATE, req.params.dtuId, req.body?.userId || req.user?.id)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+server/server.js:42970:  try { res.json(recordEdit(STATE, req.params.dtuId, req.body?.userId || req.user?.id, req.body?.field, req.body?.oldValue, req.body?.newValue)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+server/server.js:42991:  try { res.json(assignRole(STATE, req.body?.orgId, req.body?.userId, req.body?.role, req.user?.id)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+server/server.js:42995:  try { res.json(revokeRole(STATE, req.body?.orgId, req.body?.userId, req.user?.id)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+server/server.js:43011:  try { res.json(checkPermission(STATE, req.body?.orgId, req.body?.userId, req.body?.permission)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+server/server.js:43135:  try { res.json(startOnboardingV2(STATE, req.body?.userId || req.user?.id)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+server/server.js:43143:  try { res.json(completeOnboardingStepV2(STATE, req.body?.userId || req.user?.id, req.body?.stepId, req.body?.metadata)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+server/server.js:43147:  try { res.json(skipOnboardingV2(STATE, req.body?.userId || req.user?.id)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+server/routes/cdn.js:50:    const userId = req.user?.id || req.query.userId || req.body?.userId;
+server/routes/frontier-part1.js:37:    return req.user?.userId ?? req.actor?.userId ?? req.body?.userId ?? null;
+server/routes/frontier-part2.js:136:    return req.user?.userId ?? req.actor?.userId ?? req.body?.userId ?? null;
+server/routes/api-keys.js:39:    const userId = req.user?.id || req.body?.userId;
+server/routes/social-engagement.js:72:    return req.user?.id || req.body?.userId || req.query?.userId || "anonymous";
+server/routes/operations.js:222:      const userId = req.user?.id || req.body?.userId || "anon";
+server/routes/studio.js:145:    return req.user?.id || req.body?.userId || req.query?.userId || "anonymous";
+server/routes/emergent-features.js:130:    return req.user?.userId ?? req.actor?.userId ?? req.body?.userId ?? null;
+server/routes/lens-culture.js:98:  // Previously we trusted req.body.userId, which let any caller act as any
+server/routes/agents.js:116:    return req.user?.id || req.body?.userId || req.query?.userId || "anonymous";
+server/routes/frontier-part4.js:34:    return req.user?.userId ?? req.actor?.userId ?? req.body?.userId ?? null;
+server/routes/world.js:194:    return req.user?.userId ?? req.actor?.userId ?? req.body?.userId ?? null;
+server/routes/frontier-part3.js:37:    return req.user?.userId ?? req.actor?.userId ?? req.body?.userId ?? null;
+server/routes/social-groups.js:114:    return req.user?.id || req.body?.userId || req.query?.userId || "anonymous";
+server/routes/artifacts.js:95:    return req.user?.id || req.body?.userId || req.query?.userId || "anonymous";
+
+=== BODY user_id/ownerId/creatorId/authorId/fromUserId/senderId/actorId ===
+server/guidance.js:403:          actorUserId: req.body.user_id || null,
+server/economy/routes.js:115:      const userId = req.body.user_id || req.user?.id;
+server/economy/routes.js:271:      const userId = req.body.user_id || req.user?.id;
+server/economy/routes.js:335:      const userId = req.body.user_id || req.user?.id;
+server/economy/routes.js:578:      const userId = req.body.user_id || req.user?.id;
+server/economy/routes.js:638:      const userId = req.body.user_id || req.user?.id;
+server/economy/routes.js:817:      if (!req.body.user_id) {
+server/economy/routes.js:827:        adjustmentUserId: req.body.user_id,
+server/routes/film-studio.js:293:      fromUserId: req.user?.id || req.body.fromUserId,
+server/routes/film-studio.js:299:    const toUserId = req.user?.id || req.body.toUserId;
+server/routes/film-studio.js:305:    const toUserId = req.user?.id || req.body.toUserId;
+server/routes/media.js:242:    // Previously we accepted `req.body.authorId` as a fallback, which let
+
+=== QUERY userId variants ===
+server/server.js:37721:app.get("/api/shard/route", asyncHandler(async (req, res) => res.json(await runMacro("shard", "route", { userId: req.query.userId, orgId: req.query.orgId }, makeCtx(req)))));
+server/server.js:37724:app.get("/api/governor/check", asyncHandler(async (req, res) => res.json(await runMacro("governor", "check", { userId: req.query.userId, action: req.query.action }, makeCtx(req)))));
+server/server.js:38925:    userId: req.query.userId,
+server/server.js:38968:  const userId = req.user?.id || req.query.userId || "anonymous";
+server/server.js:42548:  try { res.json(getFeed(STATE, req.query.userId || req.user?.id, { limit: Number(req.query.limit || 30), offset: Number(req.query.offset || 0) })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+server/server.js:42558:    const userId = req.query.userId || req.user?.id || req.actor?.userId || "anon";
+server/server.js:42682:    const currentUserId = req.query.userId || req.user?.id || req.actor?.userId || null;
+server/server.js:42728:    const userId = req.query.userId || req.user?.id || req.actor?.userId || "anon";
+server/server.js:42736:    const userId = req.query.userId || req.user?.id || req.actor?.userId || "anon";
+server/server.js:42743:    const userId = req.query.userId || req.user?.id || req.actor?.userId || "anon";
+server/server.js:42791:    const userId = req.query.userId || req.user?.id || req.actor?.userId || "anon";
+server/server.js:42826:    const userId = req.query.userId || req.user?.id;
+server/server.js:42847:    const userId = req.query.userId || req.user?.id;
+server/server.js:42910:  try { res.json(collabListWorkspaces(STATE, req.query.userId || req.user?.id)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+server/server.js:47612:  const sub = getSubscription(req.query.userId);
+server/server.js:47760:    const userId = req.query.userId || "default";
+server/server.js:47765:    res.status(500).json({ ok: false, error: String(e?.message || e), twin: { userId: req.query.userId || "default", insights: [], patterns: [] } });
+server/server.js:47782:  const userId = req.query.userId || "default";
+server/server.js:49044:  const userId = req.query.userId || "default";
+server/server.js:49052:  const userId = req.query.userId || "default";
+server/server.js:49605:  res.json({ ok: true, ...getAdaptiveLayout(req.query.userId) });
+server/routes/social-engagement.js:72:    return req.user?.id || req.body?.userId || req.query?.userId || "anonymous";
+server/routes/shield.js:46:      const userId = req.query.userId || req.user?.id || "anonymous";
+server/routes/world.js:425:    const userId = _userId(req) || req.user?.id || req.query.userId;
+server/routes/api-keys.js:61:    const userId = req.user?.id || req.query?.userId;
+server/routes/artifacts.js:95:    return req.user?.id || req.body?.userId || req.query?.userId || "anonymous";
+server/routes/studio.js:145:    return req.user?.id || req.body?.userId || req.query?.userId || "anonymous";
+server/routes/studio.js:193:      const userId = req.query.userId || req.user?.id;
+server/routes/media.js:308:    const userId = viewerId || req.query.userId;
+server/routes/media.js:475:    const userId = req.user?.id || req.query.userId || "anonymous";
+server/routes/agents.js:116:    return req.user?.id || req.body?.userId || req.query?.userId || "anonymous";
+server/routes/social-groups.js:114:    return req.user?.id || req.body?.userId || req.query?.userId || "anonymous";
+server/routes/cdn.js:50:    const userId = req.user?.id || req.query.userId || req.body?.userId;
+
+=== QUERY user_id/ownerId ===
+server/durable.js:414:        const userId = req.actor?.userId || req.query.user_id || req.headers["x-user-id"];
+server/durable.js:435:      logEvent(db, "artifact.downloaded", req.query.user_id || null, { artifactId: req.params.id, versionId: version.id }, req.headers["x-request-id"]);
+server/economy/routes.js:316:      const userId = req.query.user_id || req.user?.id;
+server/economy/routes.js:661:      const userId = req.query.user_id || req.user?.id;
+server/economy/routes.js:743:      const userId = req.query.user_id || req.user?.id;
+server/server.js:41391:  const userId = req.query.user_id || req.user?.id || "default";
+server/server.js:43065:  try { res.json(listWebhooks(STATE, req.query.ownerId || req.user?.id)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+server/routes/film-studio.js:143:    const creatorId = req.user?.id || req.query.creatorId;
+server/routes/film-studio.js:313:    const creatorId = req.user?.id || req.query.creatorId;
+
+=== PARAMS userId ===
+server/economy/routes.js:1254:      const userId = req.params.userId;
+server/server.js:29064:app.get("/api/marketplace/royalties/:userId", asyncHandler(async (req, res) => res.json(await runMacro("marketplace", "royalties", { userId: req.params.userId }, makeCtx(req)))));
+server/server.js:30117:  res.json(await runMacro("emergent", "context.userProfile", { userId: req.params.userId }, makeCtx(req)));
+server/server.js:42524:  try { res.json(getProfile(STATE, req.params.userId)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+server/server.js:42540:  try { res.json(getFollowers(STATE, req.params.userId)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+server/server.js:42544:  try { res.json(getFollowing(STATE, req.params.userId)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+server/server.js:42621:  try { res.json(discoverUsers(STATE, req.params.userId)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+server/server.js:42669:  try { res.json(socialGetUserPosts(STATE, req.params.userId, { limit: Number(req.query.limit || 30), offset: Number(req.query.offset || 0) })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+server/server.js:42918:  try { res.json(collabRemoveWorkspaceMember(STATE, req.params.id, req.params.userId)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+server/server.js:42999:  try { res.json(getUserRole(STATE, req.params.orgId, req.params.userId)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+server/server.js:43007:  try { res.json(getUserPermissions(STATE, req.params.orgId, req.params.userId)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+server/server.js:43036:  try { res.json(getPersonalAnalytics(STATE, req.params.userId)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+server/server.js:43139:  try { res.json(getOnboardingProgressV2(STATE, req.params.userId)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+server/server.js:43151:  try { res.json(getOnboardingHints(STATE, req.params.userId)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+server/server.js:59334:    if (followSet.has(req.params.userId)) followers.push(uid);
+server/server.js:59341:  const following = art.follows.has(req.params.userId) ? Array.from(art.follows.get(req.params.userId)) : [];
+server/server.js:59347:  const following = art.follows.has(req.params.userId) ? art.follows.get(req.params.userId) : new Set();
+server/server.js:59350:    if (following.has(release.ownerId) || release.ownerId === req.params.userId) {
+server/routes/creative-marketplace.js:273:    const result = getUserLicenses(db, req.params.userId);
+server/routes/creative-marketplace.js:298:      userId: req.params.userId,
+server/routes/creative-marketplace.js:314:      userId: req.params.userId,
+server/routes/social-engagement.js:175:      ).all(req.params.userId, limit);
+server/routes/helpers-extended.js:289:    const userId = req.params.userId;
+server/routes/helpers-extended.js:295:    res.json({ ok: true, userId: req.params.userId, message: "GDPR deletion request queued" });
+server/routes/helpers-extended.js:441:      const role = globalThis._getUserRole?.("default", req.params.userId);
+server/routes/helpers-extended.js:442:      res.json({ ok: true, userId: req.params.userId, roles: role ? [role] : ["guest"] });
+server/routes/helpers-extended.js:443:    } catch { res.json({ ok: true, userId: req.params.userId, roles: ["guest"], warning: 'role_lookup_failed' }); }
+server/routes/world.js:369:    const job = getUserJob(req.params.userId);
+server/routes/world.js:432:    const profile = getMasteryProfile(req.params.userId);
+server/routes/world.js:449:    const achievements = getAchievements(req.params.userId);
+server/routes/world.js:462:    const stats = getExplorerStats(req.params.userId);
+server/routes/world.js:831:    const avatar = simAvatars.get(req.params.userId);
+server/routes/world.js:1075:    const userId = req.params.userId;
+server/routes/world.js:1084:    const userId = req.params.userId;
+server/routes/world.js:1118:    const userId = req.params.userId;
+server/routes/world.js:1150:    const userId = req.params.userId;
+server/routes/world.js:1248:    const profile = simProfiles.get(req.params.userId) || {
+server/routes/world.js:1249:      userId: req.params.userId,
+server/routes/world.js:1267:    let profile = simProfiles.get(req.params.userId);
+server/routes/world.js:1269:      profile = { userId: req.params.userId, domains: {}, totalCitations: 0, totalRoyalties: 0, badges: [] };
+server/routes/world.js:1270:      simProfiles.set(req.params.userId, profile);
+server/routes/world.js:1289:    const notifs = simNotifications.get(req.params.userId) || [];
+server/routes/world.js:1294:    const userId = req.params.userId;
+server/routes/world.js:1305:    const list = simNotifications.get(req.params.userId);
+server/routes/world.js:1316:    const digest = simDailyDigests.get(req.params.userId) || {
+server/routes/world.js:1360:    const friends = simFriends.get(req.params.userId) || [];
+server/routes/world.js:1365:    const userId = req.params.userId;
+server/routes/world.js:1373:    const list = simFriends.get(req.params.userId);
+server/routes/world.js:1374:    if (list) simFriends.set(req.params.userId, list.filter(f => f.userId !== req.params.friendId));
+server/routes/world.js:1525:    const stats = simAnalytics.get(req.params.userId) || {
+server/routes/world.js:1719:    const history = voiceHistory.get(req.params.userId) || [];
+server/routes/world.js:1860:    const unlocked = playerAchievements.get(req.params.userId) || [];
+server/routes/world.js:1865:    const userId = req.params.userId;
+server/routes/world.js:1893:    const ids = installedPlugins.get(req.params.userId) || [];
+server/routes/world.js:1921:    const profile = notifProfiles.get(req.params.userId) || {
+server/routes/world.js:1934:    notifProfiles.set(req.params.userId, { ...req.body, updatedAt: new Date().toISOString() });
+server/routes/world.js:1935:    res.json({ ok: true, profile: notifProfiles.get(req.params.userId) });
+server/routes/moderation.js:149:    const targetUserId = req.params.userId;
+server/routes/api-billing.js:63:    const result = listAPIKeys(db, req.params.userId);
+server/routes/api-billing.js:99:    const result = getUsageSummary(db, req.params.userId);
+server/routes/api-billing.js:105:    const result = getUsageLog(db, req.params.userId, {
+server/routes/api-billing.js:115:    const result = getDailyUsage(db, req.params.userId, { days: days ? Number(days) : 30 });
+server/routes/api-billing.js:121:    const result = getEndpointUsage(db, req.params.userId, { limit: limit ? Number(limit) : 20 });
+server/routes/api-billing.js:127:    const remaining = getFreeRemaining(db, req.params.userId, req.params.category);
+server/routes/api-billing.js:134:    const usage = getMonthlyUsage(db, req.params.userId, month);
+server/routes/api-billing.js:145:    const result = getAlerts(db, req.params.userId);
+server/routes/api-billing.js:164:    const result = getFeeDistributions(db, req.params.userId, { limit: limit ? Number(limit) : 50 });
+server/routes/storage.js:135:    const result = getUserDownloads(db, req.params.userId, {
+server/routes/storage.js:148:    const downloaded = hasUserDownloaded(db, req.params.artifactId, req.params.userId);
+server/routes/federation.js:149:    const result = declareUserLocation(db, { userId: req.params.userId, ...req.body });
+server/routes/federation.js:154:    const result = getUserLocation(db, req.params.userId);
+server/routes/federation.js:275:      userId: req.params.userId,
+server/routes/federation.js:291:      userId: req.params.userId,
+server/routes/federation.js:320:    const result = getFederationPreferences(db, req.params.userId);
+server/routes/federation.js:326:      userId: req.params.userId,
+server/routes/federation.js:371:    const result = getMarketplaceFilters(db, req.params.userId);
+server/routes/federation.js:377:      userId: req.params.userId,
+server/routes/federation.js:386:    const result = getWealthPreferences(db, req.params.userId);
+server/routes/federation.js:392:      userId: req.params.userId,
+server/routes/legal-liability.js:101:    const acknowledged = hasAcknowledgedDisclaimer(db, req.params.userId, req.params.lensId);
+server/routes/legal-liability.js:116:    const agreements = getUserAgreements(db, req.params.userId);
+server/routes/legal-liability.js:121:    const agreed = hasAgreed(db, req.params.userId, req.params.type);
+server/routes/legal-liability.js:169:    const strikes = getUserStrikes(db, req.params.userId);
+server/routes/legal-liability.js:170:    const count = getStrikeCount(db, req.params.userId);
+server/routes/connective-tissue.js:104:      const result = getMeritCredit(db, req.params.userId);
+server/routes/connective-tissue.js:113:      const result = checkLoanEligibility(db, req.params.userId);
+
+=== DESTRUCTURING from body/query ===
+server/server.js:40436:  const { limit = 100, offset = 0, category, action, userId, startDate, endDate } = req.query;
+server/server.js:42601:    const { userId, action, granted } = req.body || {};
+server/server.js:43820:    const { userId, enabled } = req.body;
+server/server.js:47193:  const { optionId, amount, userId } = req.body;
+server/server.js:47937:  const { question, userId } = req.body;
+server/server.js:59292:  const { assetId, userId, duration } = req.body;
+server/server.js:60029:  const { userId } = req.body;
+server/server.js:60040:  const { userId } = req.body;
+server/server.js:60051:  const { userId, action, data } = req.body;
+server/server.js:60062:  const { userId, message } = req.body;
+server/server.js:60070:  const { userId } = req.query;
+server/server.js:60118:  const { userId } = req.query;
+server/server.js:60274:  const { userId, genre } = req.body;
+server/server.js:60312:  const { userId, topic, level } = req.body;
+server/server.js:60350:  const { userId, projectId, question } = req.body;
+server/routes/frontier-part2.js:160:    const { userId, title, description } = req.body;
+server/routes/frontier-part2.js:170:    const { userId } = req.params;
+server/routes/frontier-part2.js:239:    const { userId, title, description, category, price, tier } = req.body;
+server/routes/frontier-part2.js:268:    const { userId, listingId } = req.body;
+server/routes/frontier-part2.js:286:    const { userId } = req.params;
+server/routes/frontier-part2.js:292:    const { userId, listingId, rating, comment } = req.body;
+server/routes/frontier-part2.js:332:    const { userId, pathId } = req.body;
+server/routes/frontier-part2.js:351:    const { userId, pathId, moduleIndex, score } = req.body;
+server/routes/frontier-part2.js:388:    const { userId } = req.params;
+server/routes/lens-culture.js:156:    const { userId, artifactId, limit, offset } = req.query;
+server/routes/frontier-part3.js:68:    const { userId, code, action } = req.body;
+server/routes/frontier-part3.js:181:    const { userId, name, sourceType, sourceId, sensorIds } = req.body;
+server/routes/frontier-part3.js:204:    const { userId } = req.params;
+server/routes/frontier-part3.js:279:    const { userId, audioData, language } = req.body;
+server/routes/frontier-part3.js:302:    const { userId, text } = req.body;
+server/routes/frontier-part3.js:342:    const { userId } = req.params;
+server/routes/frontier-part3.js:378:    const { userId, sessionId, timestamp, label, notes } = req.body;
+server/routes/frontier-part3.js:398:    const { userId } = req.params;
+server/routes/api-billing.js:51:    const { userId, name, isTest } = req.body || {};
+server/routes/api-billing.js:57:    const { userId } = req.body || {};
+server/routes/api-billing.js:92:    const { keyHash, userId, endpoint, method, metadata, balance } = req.body || {};
+server/routes/api-billing.js:150:    const { userId } = req.body || {};
+server/routes/api-billing.js:156:    const { userId, balance, dailySpend } = req.body || {};
+server/routes/creative-marketplace.js:171:    const { userId, artifactType, genre, sortBy, limit } = req.query;
+server/routes/frontier-part1.js:106:    const { userId, format, parameters, machineProfile } = req.body;
+server/routes/frontier-part1.js:131:    const { userId } = req.params;
+server/routes/frontier-part1.js:156:    const { userId, name, type, protocol } = req.body;
+server/routes/frontier-part1.js:182:    const { userId } = req.params;
+server/routes/frontier-part1.js:245:    const { userId } = req.params;
+server/routes/frontier-part1.js:258:    const { userId, dtuId, chain, contentHash } = req.body;
+server/routes/frontier-part1.js:288:    const { userId } = req.params;
+server/routes/frontier-part1.js:414:    const { userId, command, args } = req.body;
+server/routes/frontier-part1.js:444:    const { userId } = req.params;
+server/routes/legal-liability.js:94:    const { userId, lensId } = req.body || {};
+server/routes/legal-liability.js:107:    const { userId, agreementType, ipAddress } = req.body || {};
+server/routes/legal-liability.js:160:    const { userId, dmcaNoticeId } = req.body || {};
+server/routes/helpers-extended.js:381:    const { userId, roleId, orgId } = req.body;
+server/routes/helpers-extended.js:389:    const { userId, roleId, orgId } = req.body;
+server/routes/helpers-extended.js:397:    const { userId, permission, orgId } = req.body;
+server/routes/frontier-part4.js:67:    const { userId, name, type, config } = req.body;
+server/routes/frontier-part4.js:94:    const { userId } = req.params;
+server/routes/channels.js:319:    const { userId: discordUserId, username, webhookUrl } = req.body || {};
+server/routes/channels.js:435:    const { userId, message, channel } = req.body || {};
+server/routes/channels.js:452:    const { userId, event, data } = req.body || {};
+server/routes/canonical.js:262:    const { userId, action } = req.body || {};
+server/routes/canonical.js:302:    const { userId } = req.body || {};
+server/routes/auth.js:582:    const { limit = 100, offset = 0, category, action, userId, startDate, endDate } = req.query;
+server/routes/mobile-checkout.js:24:  const { source, userId, amount, token } = req.query;

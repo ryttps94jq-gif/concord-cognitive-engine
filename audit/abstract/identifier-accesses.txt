@@ -1,0 +1,114 @@
+server/durable.js:414:        const userId = req.actor?.userId || req.query.user_id || req.headers["x-user-id"];
+server/durable.js:435:      logEvent(db, "artifact.downloaded", req.query.user_id || null, { artifactId: req.params.id, versionId: version.id }, req.headers["x-request-id"]);
+server/eslint.config.js:55:          message: "req.body.userId is an auth bypass risk. Use req.user?.id from the authenticated session. If this is a target identifier (not the actor), add // safe: target-identifier",
+server/eslint.config.js:59:          message: "req.body.user_id is an auth bypass risk. Use req.user?.id from the authenticated session. If this is a target identifier (not the actor), add // safe: target-identifier",
+server/eslint.config.js:63:          message: "req.query.userId used as actor identity is an auth bypass risk. Use req.user?.id from the authenticated session.",
+server/guidance.js:403:          actorUserId: req.body.user_id || null,
+server/guidance.js:500:        actorUserId: req.body.owner_user_id || existing.owner_user_id,
+server/server.js:25992:  try { res.json(await runMacro("city", "listStreams", { cityId: req.query.cityId }, makeCtx(req))); }
+server/server.js:26045:  if (req.body.entityId) {
+server/server.js:26046:    try { hookVulnerability(req.body.entityId, vulnerability, delivery); } catch (_e) { logger.debug('server', 'silent', { error: _e?.message }); }
+server/server.js:30163:  const result = buildDTUConversationContext(STATE, req.params.id, { sessionId: req.query.sessionId });
+server/server.js:30209:    dtuId: req.body.dtuId,
+server/server.js:35206:    const execution = await executePipeline(pipelineId, variables || {}, userId, req.body.sessionId || "default", {
+server/server.js:37717:app.get("/api/shard/route", asyncHandler(async (req, res) => res.json(await runMacro("shard", "route", { userId: req.query.userId, orgId: req.query.orgId }, makeCtx(req)))));
+server/server.js:37720:app.get("/api/governor/check", asyncHandler(async (req, res) => res.json(await runMacro("governor", "check", { userId: req.query.userId, action: req.query.action }, makeCtx(req)))));
+server/server.js:38683:    const result = addDTUToWorkspace(req.params.id, req.body.dtuId);
+server/server.js:38697:    const result = addWorkspaceMember(req.params.id, req.body.userId, req.body.role, { inviterId });
+server/server.js:38713:    const result = addComment(req.params.id, userId, req.body.content, req.body.parentId);
+server/server.js:38921:    userId: req.query.userId,
+server/server.js:38964:  const userId = req.user?.id || req.query.userId || "anonymous";
+server/server.js:38974:    const result = completeOnboardingStep(userId, req.body.stepId);
+server/server.js:39059:    dtuId: req.query.dtuId,
+server/server.js:40402:    const result = createReminder(req.body.dtuId, req.body.reminderAt, req.body.message);
+server/server.js:41138:  const sessionId = req.query.sessionId || req.cookies?.concord_anon;
+server/server.js:41380:  const userId = req.query.user_id || req.user?.id || "default";
+server/server.js:41496:  const refId = req.body?.refId ? String(req.body.refId).slice(0, 128) : undefined;
+server/server.js:42246:  const sessionId = req.query.sessionId || req._atsSessionId || "default";
+server/server.js:42264:  const sessionId = req.query.sessionId || req._atsSessionId || "default";
+server/server.js:42282:  const sessionId = req.query.sessionId || req._atsSessionId || "default";
+server/server.js:42492:  try { res.json(getCouncilActions(STATE, { dtuId: req.query.dtuId, actionType: req.query.actionType, limit: Number(req.query.limit || 50) })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+server/server.js:42537:  try { res.json(getFeed(STATE, req.user?.id || req.query.userId, { limit: Number(req.query.limit || 30), offset: Number(req.query.offset || 0) })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+server/server.js:42547:    const userId = req.user?.id || req.query.userId || "anon";
+server/server.js:42671:    const currentUserId = req.user?.id || req.query.userId || null;
+server/server.js:42717:    const userId = req.query.userId || req.user?.id || req.actor?.userId || "anon";
+server/server.js:42725:    const userId = req.query.userId || req.user?.id || req.actor?.userId || "anon";
+server/server.js:42732:    const userId = req.query.userId || req.user?.id || req.actor?.userId || "anon";
+server/server.js:42780:    const userId = req.query.userId || req.user?.id || req.actor?.userId || "anon";
+server/server.js:42891:  try { res.json(collabListWorkspaces(STATE, req.query.userId || req.user?.id)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+server/server.js:44647:  import("./emergent/forgetting-engine.js").then(m => res.json(m.protectDTU(req.body.dtuId))).catch(e => res.json({ ok: false, error: e.message }));
+server/server.js:44650:  import("./emergent/forgetting-engine.js").then(m => res.json(m.unprotectDTU(req.body.dtuId))).catch(e => res.json({ ok: false, error: e.message }));
+server/server.js:47269:  const dtuId = req.query.dtuId;
+server/server.js:47570:  const sub = getSubscription(req.query.userId);
+server/server.js:47718:    const userId = req.query.userId || "default";
+server/server.js:47723:    res.status(500).json({ ok: false, error: String(e?.message || e), twin: { userId: req.query.userId || "default", insights: [], patterns: [] } });
+server/server.js:47740:  const userId = req.query.userId || "default";
+server/server.js:49002:  const userId = req.query.userId || "default";
+server/server.js:49010:  const userId = req.query.userId || "default";
+server/server.js:49563:  res.json({ ok: true, ...getAdaptiveLayout(req.query.userId) });
+server/server.js:50096:  const result = await validateOrganismDTU(dtu, req.body.submitterId || "user");
+server/economy/routes.js:115:      const userId = req.body.user_id || req.user?.id;
+server/economy/routes.js:223:      const sellerId = req.body.seller_id;
+server/economy/routes.js:225:      const listingId = req.body.listing_id;
+server/economy/routes.js:316:      const userId = req.query.user_id || req.user?.id;
+server/economy/routes.js:354:      const reviewerId = req.body.reviewer_id || req.user?.id || "system";
+server/economy/routes.js:378:      const reviewerId = req.body.reviewer_id || req.user?.id || "system";
+server/economy/routes.js:661:      const userId = req.query.user_id || req.user?.id;
+server/economy/routes.js:743:      const userId = req.query.user_id || req.user?.id;
+server/economy/routes.js:817:      if (!req.body.user_id) {
+server/economy/routes.js:827:        adjustmentUserId: req.body.user_id,
+server/economy/routes.js:1503:      const listingId = req.body.listing_id;
+server/economy/routes.js:1538:        sellerId: req.query.seller_id,
+server/economy/routes.js:1571:      const sellerId = req.body.seller_id || req.user?.id;
+server/economy/routes.js:1588:      const sellerId = req.body.seller_id || req.user?.id;
+server/economy/routes.js:1614:      const sellerId = req.body.seller_id || req.user?.id;
+server/economy/creator-economy-routes.js:354:        dtuId: req.body.dtuId,
+server/economy/creator-economy-routes.js:474:      const result = mod.submitForGlobal(db, { dtuId: req.body.dtuId, submitterId: userId });
+server/economy/creator-economy-routes.js:523:        dtuId: req.body.dtuId,
+server/routes/lens-culture.js:79:    const viewerId = req.query.viewerId;
+server/routes/lens-culture.js:98:  // Previously we trusted req.body.userId, which let any caller act as any
+server/routes/world.js:425:    const userId = _userId(req) || req.user?.id || req.query.userId;
+server/routes/world.js:1089:    const itemId = req.body.itemId || req.body.id || `item-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
+server/routes/world.js:1211:    if (req.query.worldId) quests = quests.filter(q => q.worldId === req.query.worldId);
+server/routes/world.js:1367:    const friend = { userId: req.body.friendId, displayName: req.body.displayName || req.body.friendId, addedAt: new Date().toISOString(), onlineStatus: 'offline' };
+server/routes/world.js:1639:        cityId: String(req.body.cityId || "concordia-central"),
+server/routes/world.js:1647:        districtId: typeof req.body.districtId === "string" ? req.body.districtId.slice(0, 64) : null,
+server/routes/world.js:1753:      dtuId: req.body.dtuId,
+server/routes/world.js:1819:      dtuId: req.body.dtuId,
+server/routes/learning.js:90:    req.query.studentId ||
+server/routes/learning.js:91:    (req.body && req.body.studentId) ||
+server/routes/learning.js:140:        (req.body && req.body.studentId) ||
+server/routes/learning.js:141:        req.query.studentId ||
+server/routes/artifacts.js:122:      const dtuId = req.query.dtuId;
+server/routes/creative-marketplace.js:162:      requestId: req.body.requestId,
+server/routes/creative-marketplace.js:205:      raterId: req.body.raterId,
+server/routes/chat.js:83:        sse("meta", { ok:true, mode: req._concordMode, sessionId: req.body.sessionId || null });
+server/routes/chat.js:107:            sessionId: req.body.sessionId || null,
+server/routes/chat.js:282:      const sessionId = String(req.query.sessionId || "default");
+server/routes/foundation-intel.js:135:      const applicationId = req.query.applicationId;
+server/routes/foundation-intel.js:146:      const researcherId = req.query.researcherId;
+server/routes/foundation-intel.js:159:      const researcherId = req.query.researcherId;
+server/routes/foundation-intel.js:171:      const researcherId = req.query.researcherId;
+server/routes/film-studio.js:143:    const creatorId = req.user?.id || req.query.creatorId;
+server/routes/film-studio.js:270:      filmDtuId: req.body.filmDtuId,
+server/routes/film-studio.js:293:      fromUserId: req.user?.id || req.body.fromUserId,
+server/routes/film-studio.js:299:    const toUserId = req.user?.id || req.body.toUserId;
+server/routes/film-studio.js:305:    const toUserId = req.user?.id || req.body.toUserId;
+server/routes/film-studio.js:313:    const creatorId = req.user?.id || req.query.creatorId;
+server/routes/emergent-features.js:169:    const result = surfaceInsight(req.body.insightId, req.body.context);
+server/routes/system.js:324:    const sessionId = req.query.sessionId || "";
+server/routes/system.js:396:      const sessionId = normalizeText(req.query.sessionId || "default");
+server/routes/foundation.js:75:      const nodeId = req.query.nodeId;
+server/routes/code-engine.js:87:      repositoryId: req.query.repositoryId || req.query.repoId || undefined,
+server/routes/code-engine.js:192:      lensId: req.query.lensId || undefined,
+server/routes/federation.js:114:    res.json(listRegions(db, { nationalId: req.query.nationalId || null }));
+server/routes/federation.js:131:      regionalId: req.query.regionalId || null,
+server/routes/federation.js:132:      nationalId: req.query.nationalId || null,
+server/routes/federation.js:214:      entityId: req.query.entityId || null,
+server/routes/studio.js:193:      const userId = req.query.userId || req.user?.id;
+server/routes/media.js:242:    // Previously we accepted `req.body.authorId` as a fallback, which let
+server/routes/media.js:308:    const userId = viewerId || req.query.userId;
+server/routes/media.js:475:    const userId = req.user?.id || req.query.userId || "anonymous";
+server/routes/media.js:602:    const viewerId = req.user?.id || req.query.viewerId;
+server/routes/emergent.js:149:    const out = await runMacro("emergent", "lattice.read", { dtuId: req.params.id, readerId: req.query.readerId }, makeCtx(req));
+server/routes/emergent.js:230:    const out = await runMacro("emergent", "edge.paths", { fromId: req.query.fromId, toId: req.query.toId, maxDepth: req.query.maxDepth ? parseInt(req.query.maxDepth, 10) : undefined }, makeCtx(req));

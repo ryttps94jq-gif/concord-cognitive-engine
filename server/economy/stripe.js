@@ -9,6 +9,7 @@ import { recordTransactionBatch, generateTxId } from "./ledger.js";
 import { economyAudit } from "./audit.js";
 import { getBalance } from "./balances.js";
 import { mintCoins, burnCoins } from "./coin-service.js";
+import { handleChargeback } from "./chargeback-handler.js";
 
 // ── Config ──────────────────────────────────────────────────────────────────
 
@@ -346,6 +347,19 @@ export async function handleWebhook(db, { rawBody, signature, requestId, ip }) {
           requestId, ip,
         });
       }
+      break;
+    }
+
+    case "charge.dispute.created": {
+      const dispute = event.data.object;
+      const amountCents = dispute.amount; // Stripe amounts are already in cents
+      await handleChargeback(db, {
+        chargebackAmountCents: amountCents,
+        stripeDisputeId: dispute.id,
+        paymentIntentId: dispute.payment_intent,
+        requestId,
+        ip,
+      });
       break;
     }
     }

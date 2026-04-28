@@ -1,0 +1,59 @@
+{
+  "auditDate": "2026-04-28",
+  "status": "PASS",
+  "summary": "Substrate memory fully implemented with SQLite persistence, rolling window compression, MEGA/HYPER consolidation, and strong user isolation.",
+  "storage": {
+    "server_side": {
+      "engine": "SQLite (better-sqlite3)",
+      "tables": ["sessions (user_id FK)", "dtus (conversation_memory kind)", "initiatives", "user_style_profile"],
+      "file": "server/migrations/001_core_tables.js:43-53"
+    },
+    "client_side": {
+      "engine": "IndexedDB (Dexie.js)",
+      "scope": "Browser-local; sessions and messages survive refresh",
+      "file": "concord-frontend/store/sessions.ts:18-40",
+      "note": "Server never sees session lists, titles, or organization — only individual messages sent for LLM inference"
+    }
+  },
+  "conversation_memory": {
+    "file": "server/lib/conversation-memory.js:1-616",
+    "rolling_window": {
+      "threshold_messages": 50,
+      "compression_batch": 20,
+      "compression_file": "server/lib/conversation-memory.js:76-269"
+    },
+    "dtu_fields_created": [
+      "machine.kind: conversation_memory",
+      "machine.topics",
+      "machine.insights",
+      "machine.decisions",
+      "machine.claims",
+      "machine.preferences",
+      "machine.tone"
+    ],
+    "consolidation": {
+      "mega": "5+ DTUs on same topic → MEGA DTU",
+      "hyper": "3+ MEGAs → HYPER DTU",
+      "file": "server/lib/conversation-memory.js:384-564"
+    }
+  },
+  "cross_session_persistence": {
+    "verified": true,
+    "mechanism": "Conversation DTUs stored in STATE.dtus (SQLite-backed); retrieved by semantic search in next session via chat-context-pipeline.js:272-278"
+  },
+  "style_inheritance": {
+    "verified": true,
+    "mechanism": "On first message of new session, inherits style vector from most recent chat_mega DTU",
+    "file": "server/server.js:17862-17875"
+  },
+  "isolation": {
+    "verified": true,
+    "mechanisms": [
+      "sessions table FK on user_id (migration 001:52)",
+      "DTUs tagged with machine.userId (conversation-memory.js:313)",
+      "Emergent consent filter: filterByEmergentConsent() in chat-context-pipeline.js:276",
+      "IndexedDB is browser-local (no cross-user leakage)"
+    ]
+  },
+  "gaps": []
+}

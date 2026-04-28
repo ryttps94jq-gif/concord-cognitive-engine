@@ -39,7 +39,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE5] Example instances will be attached as child DTUs when needed."
+        "Earth: T∈[−70°C,+70°C], P∈[0.3,3 atm], radiation<10 Sv/yr. vol(Ω_Earth)=moderate (supports 8M species). Mars: T∈[−140°C,+30°C], P=0.006atm, no magnetic shield. vol(Ω_Mars)<<vol(Ω_Earth). Ratio: ~10⁻⁶ viable species. Measured by species diversity vs. planetary parameter overlap area."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -48,22 +48,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{Ω_planet=∩_k{x: g_planet_k(x)≤0}: planetary feasibility envelope}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "Ω_planet": "planetary feasibility cone",
+          "g_planet_k": "k-th planetary constraint (pressure, temperature, radiation)"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "Ω_planet(t+1)=Ω_planet(t)∩Ω_atm(t); atmospheric evolution contracts/expands cone",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "T∈[T_min,T_max]",
+          "P∈[P_min,P_max]",
+          "radiation≤R_max"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_pce=vol(Ω_abstract)-vol(Ω_planet); V_pce≥0 = planetary constraint overhead",
+        "implication": "A planet's habitability is determined by vol(Ω_planet); larger volume means more viable life forms. Each physical parameter constraint reduces vol(Ω_planet). Measurable by cross-species thermal and pressure tolerance ranges."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "Ω_planet=∩_k{x: g_planet_k≤0}; V_pce=vol(Ω_abstract)-vol(Ω_planet)≥0",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -144,7 +143,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE5] Example instances will be attached as child DTUs when needed."
+        "Earth: A=0.3, S=1361 W/m². T_eq=255K (-18°C). Greenhouse effect adds +33K → T_actual=288K. Ė_imbalance=+0.7W/m² (current warming). V_pebt=(288-291)²=9 (approaching new equilibrium at 291K). Measured by CERES satellite: top-of-atmosphere energy imbalance within 0.3W/m²."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -153,23 +152,22 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{Ė_planet=Φ_in-Φ_out: planetary energy balance}",
         "variables": {
-          "C": "capacity",
-          "D": "decay",
-          "R": "repair",
-          "T": "throughput"
+          "Φ_in": "stellar flux absorbed (1-A)·S/4",
+          "Φ_out": "blackbody emission σT⁴",
+          "A": "albedo",
+          "T_eq": "equilibrium temperature"
         },
-        "dynamics": "C_{t+1}=C_t+R_t-D_t; T_t≤C_t",
+        "dynamics": "Ṫ=Ė_planet/(C_planet); T_eq at Ė_planet=0: T_eq=((1-A)·S/(4σ))^{1/4}",
         "constraints": [
-          "C≥0",
-          "R≥0",
-          "D≥0"
+          "Ė_planet=0 at equilibrium",
+          "T_eq∈[T_life_min,T_life_max]"
         ],
-        "potential": "V=max(0,C_min-C)",
-        "implication": "If E[R]≥E[D] and shocks bounded, then C stays above C_min with high probability."
+        "potential": "V_pebt=|T-T_eq|²·C_planet; V_pebt→0 at thermal equilibrium",
+        "implication": "Planetary energy budget determines T_eq; life requires T_eq∈T_life range. V_pebt>0 drives climate toward equilibrium. Measurable by satellite energy imbalance measurements vs. climate model predictions."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "T_eq=((1-A)·S/(4σ))^{1/4}; V_pebt=|T-T_eq|²; energy balance: Φ_in=Φ_out",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -249,7 +247,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE5] Example instances will be attached as child DTUs when needed."
+        "Earth after Chicxulub impact: D_planet=mass extinction (V_prc spike). R_planet=geological+biological repair. Recovery time: 10Myr for biodiversity. Ḃ_planet<0 for 10Myr then Ḃ>0. Current D_planet=6th extinction rate (1000× background). R_planet<D_planet → V_prc>0. Measured by species recovery rate vs. extinction rate from IUCN Red List."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -258,23 +256,20 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{Ḃ_planet=R_planet-D_planet: planetary health dynamics}",
         "variables": {
-          "B": "integrity",
-          "D": "damage",
-          "R": "repair",
-          "S": "stress"
+          "R_planet": "planetary repair rate (geological, biological)",
+          "D_planet": "planetary damage rate (impact, volcanism, human)"
         },
-        "dynamics": "dB/dt=R(B,S)-D(B,S)",
+        "dynamics": "B_planet(t+1)=B_planet(t)+(R_planet-D_planet)·Δt; viable iff R_planet≥D_planet",
         "constraints": [
-          "B∈[0,1]",
-          "R≥0",
-          "D≥0"
+          "R_planet≥D_planet for indefinite habitability",
+          "B_planet≥B_min"
         ],
-        "potential": "V=1-B",
-        "implication": "If R≥D+ε on [B0,1], then B increases toward 1 (repair-dominant)."
+        "potential": "V_prc=max(0,D_planet-R_planet); V_prc=0 iff planet repair-dominant",
+        "implication": "Planetary repair capacity R_planet must exceed damage D_planet; dominated planets recover, overwhelmed planets degrade. Measurable by geological record of recovery timescales after mass extinctions."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "Ḃ_planet=R_planet-D_planet; L_planet=B/(D-R+ε); viable iff R_planet≥D_planet",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -354,7 +349,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE5] Example instances will be attached as child DTUs when needed."
+        "Earth entropy budget: Ṡ_solar=solar radiation absorbed = 240W/m² ÷ 255K = 0.94 W/(m²K). Ṡ_export=outgoing IR at 255K. Balance: V_ped≈0 at equilibrium. Anthropogenic CO₂: raises Ṡ_prod by 0.7W/m² (energy imbalance) → V_ped growing. Measured by CERES net radiation imbalance (0.71±0.1 W/m²)."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -363,25 +358,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{S_debt_planet=∫_0^t (Ṡ_prod-Ṡ_export)dt: net entropy debt}",
         "variables": {
-          "D": "debt",
-          "B": "buffer",
-          "r": "interest",
-          "G": "spend",
-          "T": "revenue",
-          "R": "repair"
+          "Ṡ_prod": "entropy production rate on planet",
+          "Ṡ_export": "entropy exported to space (radiation)",
+          "S_debt_planet": "accumulated planetary entropy"
         },
-        "dynamics": "dD/dt=r·D+(G-T); dB/dt=R-Dmg",
+        "dynamics": "Ṡ_net=Ṡ_prod-Ṡ_export; sustainable iff Ṡ_prod≤Ṡ_export (export-dominant)",
         "constraints": [
-          "D≥0",
-          "B≥0",
-          "R≥0"
+          "Ṡ_export≥Ṡ_prod (Second Law compliance)",
+          "Ṡ_export=4σT³·ΔT·A_eff"
         ],
-        "potential": "V=D+max(0,B_min-B)",
-        "implication": "If (T-G)≥r·D and E[R]≥E[Dmg], then debt stabilizes and buffer stays above threshold."
+        "potential": "V_ped=max(0,Ṡ_prod-Ṡ_export)·t; V_ped=0 iff entropy exported",
+        "implication": "Planets accumulate entropy debt when Ṡ_prod>Ṡ_export; Earth exports entropy via infrared radiation. V_ped>0 means irreversible planetary heating. Measurable by planetary radiation budget balance."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "Ṡ_net=Ṡ_prod-Ṡ_export; V_ped=max(0,Ṡ_net)·t; sustainable iff Ṡ_export≥Ṡ_prod",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -461,7 +452,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE5] Example instances will be attached as child DTUs when needed."
+        "CO₂ climate latency: τ_signal=20yr (ocean heat uptake lag), τ_harm=50yr (ice sheet destabilization). V_ple=max(0,20-50)=0 (still reversible). But τ_ocean for full equilibration=1000yr > τ_harm=50yr → V_ple=950yr for full reversal. Measured by TCR vs. ECS ratio in IPCC climate models (TCR/ECS=0.5-0.65)."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -470,22 +461,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{τ_planet=τ_signal+τ_response≤τ_harm_planet: planetary response latency}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "τ_planet": "planetary feedback response time",
+          "τ_harm_planet": "irreversibility timescale",
+          "τ_signal": "signal propagation time (decades)"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "V_harm(t+τ_planet)≤V_harm(t)·e^{-λ_fb}; V_lag=max(0,τ_planet-τ_harm)",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "τ_planet<τ_harm for reversibility",
+          "τ_signal≥τ_ocean_mix=1000yr"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_ple=max(0,τ_planet-τ_harm_planet); V_ple=0 iff feedback fast enough",
+        "implication": "Planetary latency V_ple>0 creates irreversible commitment: CO₂ emitted today causes warming over decades-centuries. Measurable by comparing emission pulse timing to temperature response curves."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "τ_planet=τ_ocean+τ_atm; V_ple=max(0,τ_planet-τ_harm); irreversible iff τ_planet>τ_harm",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -565,7 +555,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE5] Example instances will be attached as child DTUs when needed."
+        "Earth's obliquity: θ=23.4° (stable Milankovitch cycle). w(23.4°)=0.8 (large basin). w(54°)=0.05 (Mars-like: no moon, obliquity varies 0°-60°). V_psw(Mars)=0.75. Moon stabilizes Earth's obliquity to ±1.3°. Measured by climate variance over Milankovitch cycles (paleoclimate ice cores)."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -574,22 +564,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{Ω_sw_planet={θ_planet: vol(B(x*,θ))>w_min}: planetary stability window}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "θ_planet": "planetary parameter vector (obliquity, eccentricity, CO₂)",
+          "w_min": "minimum basin width for stable climate",
+          "B(x*)": "attractor basin"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "w(θ_planet)=vol of attractor basin; Ω_sw_planet={θ: w(θ)>w_min}",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "w(θ)>w_min (stability window)",
+          "ΔV≤-c_plt‖x-x*‖² in basin"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_psw=max(0,w_min-w(θ)); V_psw=0 iff θ∈Ω_sw_planet",
+        "implication": "Planetary stability windows define the parameter range for sustained habitability; outside Ω_sw_planet, perturbations drive runaway transitions. Measurable by climate sensitivity to orbital parameter variations."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "Ω_sw_planet={θ: w(θ)>w_min}; V_psw=max(0,w_min-w(θ)); stable iff θ∈Ω_sw",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -669,7 +658,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE5] Example instances will be attached as child DTUs when needed."
+        "Snowball Earth (720 Mya): EILI decreased below 0.5 (ice-albedo feedback). CO₂ at 1000ppm couldn't prevent V_ppt→0. Recovery required CO₂>10,000ppm (volcanic). Hysteresis: entry at CO₂=300ppm, exit at 10,000ppm. Current trajectory: EILI_planet falling 0.01/decade. Measured by radiative forcing vs. global mean temperature in paleoclimate record."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -678,22 +667,20 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{P_transition=Φ(EILI_planet): planetary habitability transition}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "EILI_planet": "planetary EILI (Energy, Ice, Liquid, Irradiation)",
+          "P_transition": "transition probability to new climate state"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "d(EILI_planet)/dt=f(CO₂,albedo,volcanic); transition at EILI=0.5 crossing",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "EILI_planet∈[0,1]",
+          "transition may be hysteretic (snowball Earth)"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_ppt=|EILI_planet-0.5|; V_ppt→0 near tipping point",
+        "implication": "Planetary phase transitions (snowball, runaway greenhouse) occur at EILI=0.5 crossing; hysteresis means reversibility may require EILI<0.1 or >0.9. Measurable by climate sensitivity analysis and ice core records."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "P_transition=Φ(EILI_planet); V_ppt=|EILI_planet-0.5|→0 at tipping; hysteresis possible",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -774,7 +761,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE5] Example instances will be attached as child DTUs when needed."
+        "Venus runaway greenhouse: d_lock=-5 (deep lock). C_escape=remove 90atm CO₂ (10²¹ kg). C_max_planet=total solar input over geological time. V_pcli=25, C_escape>>C_max. Irreversible. Earth at 2°C: d_lock=-0.2, C_escape still feasible (net-zero). At 4°C permafrost: d_lock=-1.5, V_pcli rising. Measured by tipping-cascade probability in IPCC AR6 risk analysis."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -783,22 +770,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{d_lock_planet<0: planetary lock-in (irreversible state)}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "d_lock_planet": "distance to irreversible state",
+          "C_escape_planet": "cost to escape lock-in",
+          "V_lock_planet": "lock-in potential"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "V_lock_planet=max(0,-d_lock_planet)²·(1+C_escape/C_max_planet); stable lock iff C_escape→∞",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "d_lock_planet<0 (locked)",
+          "no natural escape mechanism"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_pcli=max(0,-d_lock_planet)²; V_pcli>0 iff locked in",
+        "implication": "Planetary lock-in occurs when feedback mechanisms prevent return to previous state; C_escape→∞ makes reversal physically impossible. Measurable by climate sensitivity experiments and feedback gain analysis."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "V_pcli=max(0,-d_lock_planet)²; locked iff C_escape_planet>available forcing budget",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -879,7 +865,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE5] Example instances will be attached as child DTUs when needed."
+        "Earth+Mars scenario: vol(Ω_Earth)=1.0, vol(Ω_Mars_terraformed)=0.4, overlap=0.1. vol(Ω_multi)=1.3. P_extinction per century drops from 10⁻⁴ to 10⁻⁸ (4 orders via diversification). Cost: ~10T$ per decade. V_mpce=0.7 (unrealized). Measured by Drake-equation-style civilization longevity models."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -888,22 +874,20 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{Ω_multi=∪_k Ω_planet_k: multi-planetary feasibility union}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "Ω_planet_k": "k-th planet feasibility cone",
+          "Ω_multi": "multi-planetary total feasibility"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "vol(Ω_multi)=∑_k vol(Ω_planet_k)-vol_overlap; multi-planetary advantage if overlaps small",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "travel cost C_transit≤C_max between planets",
+          "vol(Ω_multi)>vol(Ω_single)"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_mpce=vol(Ω_multi_theoretical)-vol(Ω_multi_achieved); V_mpce=0 at full multi-planet integration",
+        "implication": "Multi-planetary civilizations expand vol(Ω_multi) by summing diverse planetary constraints; survival probability scales with N_planets. Measured by expected lifespan of civilization vs. planetary diversification."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "Ω_multi=∪_k Ω_planet_k; V_mpce=vol(theoretical)-vol(achieved); P_extinction∝1/N_planets",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -984,7 +968,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE5] Example instances will be attached as child DTUs when needed."
+        "Mars terraforming: Ω_current (0.006atm, −60°C, no O₂) vs Ω_target (1atm, 15°C, 21%O₂). V_terra=(1-0.006)²+(75)²+(21)²=5,626 units. Completion 1%: current ISRU tech. V_tace=5,626·0.99²≈5,516. Full terraforming timeline estimate: 1000yr at 1GW power budget. Measured by pressure gain per year in Mars climate model."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -993,22 +977,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{T_terra: Ω_planet_k→Ω_planet_k'; T_terra expands vol(Ω)}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "Ω_planet_k'": "post-terraforming feasibility",
+          "V_terra": "terraforming cost",
+          "T_terra": "terraforming transformation operator"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "V_terra=‖Ω_target-Ω_current‖²; feasible iff V_terra<V_terra_max",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "T_terra∈Diff(Ω_target) (smooth transformation)",
+          "V_terra<V_terra_max"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_tace=V_terra·(1-completion)²; V_tace=0 at terraforming complete",
+        "implication": "Terraforming is constraint engineering: expanding vol(Ω_planet) toward vol(Ω_target). V_terra measures the distance between current and target parameter spaces. Measurable by parameter-gap between current and Earth-like conditions."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "V_terra=‖Ω_target-Ω_current‖²; V_tace=V_terra·(1-completion)²→0",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -1099,22 +1082,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{ẋ_clim=A_clim·x_clim+B_clim·u_force: climate feedback network}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "A_clim": "climate feedback matrix (ice-albedo, water vapor, lapse rate)",
+          "u_force": "external forcing (CO₂, solar)",
+          "x_clim": "climate state vector"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "ẋ_clim=A_clim·x_clim+B_clim·u_force; stable iff max(Re(λ_i(A_clim)))<0",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "Re(λ_i(A_clim))<0 (stable feedback network)",
+          "forcing u_force bounded by natural variation"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_cfn=x_clim^T·P·x_clim; V_cfn→0 at climate equilibrium (Lyapunov P)",
+        "implication": "Climate stability requires all feedback eigenvalues in LHP; positive feedbacks (λ_i>0) cause runaway. Net feedback λ_net=λ_Planck+λ_ice+λ_vapor+λ_lapse. Measurable by forcing-response experiments in GCMs."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "ẋ_clim=A_clim·x_clim+B_clim·u_force; stable iff Re(λ_i(A_clim))<0; V_cfn=x^T·P·x→0",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -1203,22 +1185,20 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{ρ_ctrl_clim=|U_clim|/vol(Ω_clim): climate control density}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "|U_clim|": "available climate control levers (aerosol, carbon, albedo)",
+          "ρ_ctrl_clim": "control density per climate degree of freedom"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "ΔV_clim≤-c_clim·ρ_ctrl_clim·‖x_clim-x*‖²; density must match climate complexity",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "ρ_ctrl_clim≥ρ_min_clim (sufficient control)",
+          "each lever independently actuated"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_ccd=max(0,ρ_min_clim-ρ_ctrl_clim); V_ccd=0 iff control density sufficient",
+        "implication": "Climate control requires sufficient density of independent levers; one lever (CO₂ reduction alone) may be insufficient for multiple simultaneous climate threats. Measurable by number of independent intervention pathways vs. climate DOF."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "ρ_ctrl_clim=|U_clim|/DOF_climate≥ρ_min; V_ccd=max(0,ρ_min-ρ_ctrl_clim)",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -1307,22 +1287,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{τ_clim=τ_emit+τ_warm+τ_ice≥τ_harm_clim: climate latency}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "τ_clim": "total climate response latency",
+          "τ_harm_clim": "irreversibility timescale",
+          "τ_ice": "ice sheet response time"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "committed warming = u_force(t)·∫_0^{τ_clim} h(τ)dτ; latency creates commitment",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "τ_clim>τ_harm_clim causes irreversibility",
+          "τ_ice=1000-10,000yr (ice sheet inertia)"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_clc=max(0,τ_clim-τ_harm_clim); V_clc=0 iff response fast enough",
+        "implication": "Climate latency catastrophes occur when τ_clim>τ_harm; committed warming/ice-loss cannot be undone. Today's emissions commit future harm decades ahead. Measurable by comparing emission pulse timing to response kernel h(τ)."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "committed_harm=∫_0^τ_clim u_force·h(τ)dτ; V_clc=max(0,τ_clim-τ_harm_clim)",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -1411,23 +1390,20 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{Ḃ_clim=R_clim-D_clim: climate health dynamics}",
         "variables": {
-          "B": "integrity",
-          "D": "damage",
-          "R": "repair",
-          "S": "stress"
+          "R_clim": "climate repair rate (weathering, carbon sinks, ocean buffering)",
+          "D_clim": "climate damage rate (emissions, deforestation)"
         },
-        "dynamics": "dB/dt=R(B,S)-D(B,S)",
+        "dynamics": "B_clim(t+1)=B_clim(t)+(R_clim-D_clim)·Δt; stable iff R_clim≥D_clim",
         "constraints": [
-          "B∈[0,1]",
-          "R≥0",
-          "D≥0"
+          "R_clim≥D_clim for stable climate",
+          "B_clim≥B_clim_min"
         ],
-        "potential": "V=1-B",
-        "implication": "If R≥D+ε on [B0,1], then B increases toward 1 (repair-dominant)."
+        "potential": "V_crm=max(0,D_clim-R_clim); V_crm=0 iff climate repair-dominant",
+        "implication": "Climate repair requires R_clim≥D_clim; Earth's natural repair (silicate weathering, ocean CO₂ absorption) is ~1 GtC/yr while emissions are 10 GtC/yr. V_crm=9 GtC/yr. Measurable by net ecosystem carbon balance."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "Ḃ_clim=R_clim-D_clim; V_crm=max(0,D_clim-R_clim); repair-dominant iff R_clim≥D_clim",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -1516,22 +1492,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{σ²_clim(t)=σ²_0+ν_clim·t: climate noise growth}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "σ²_clim": "climate state variance (weather noise)",
+          "ν_clim": "noise amplification rate (positive feedbacks)",
+          "σ²_max": "chaos onset threshold"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "x_clim(t+1)=A_clim·x_clim+ξ_t; variance grows iff spectral radius>1",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "σ²_clim≤σ²_max (before tipping)",
+          "ν_clim∝|λ_max(A_clim)|"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_cna=max(0,σ²_clim-σ²_max); V_cna>0 iff noise exceeds stability threshold",
+        "implication": "Climate noise amplification occurs when feedback gain increases σ²; positive feedbacks increase ν_clim. Measurable by variance of climate observables (temperature, precipitation) vs. mean state trend."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "σ²_clim(t)=σ²_0·e^{2ν_clim·t}; V_cna=max(0,σ²_clim-σ²_max); tipping iff σ²→σ²_max",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -1620,22 +1595,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{∂Ω_clim={θ: V_clim(θ)=0}: climate phase boundary}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "∂Ω_clim": "climate phase boundary (tipping manifold)",
+          "θ": "climate forcing parameters",
+          "V_clim": "climate Lyapunov function"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "crossing ∂Ω_clim: V_clim→bifurcation; ΔV_clim changes sign at boundary",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "θ∈Ω_stable iff ΔV_clim<0",
+          "θ∉Ω_stable triggers phase transition"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_cpb=dist(θ,∂Ω_clim)²; V_cpb→0 approaching tipping",
+        "implication": "Climate phase boundaries are the manifold where stability changes sign; crossing ∂Ω_clim triggers irreversible state change. Early warning: V_cpb decreasing rapidly. Measurable by critical slowing down (autocorrelation increase) near boundary."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "∂Ω_clim={θ: ΔV_clim=0}; V_cpb=dist(θ,∂Ω_clim)²→0 at tipping; critical slowing down signal",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -1724,22 +1698,20 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{∩_k Ω_clim_k→∅: climate feasibility intersection collapse}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "∩_k Ω_clim_k": "intersection of all viable climate windows",
+          "P_clim_col": "climate collapse probability"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "P_clim_col∝1/vol(∩_k Ω_clim_k); P→1 as ∩Ω_clim→∅",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "vol(∩Ω_clim)≥vol_min for habitability",
+          "multiple tipping elements interacting"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_ccg=1/vol(∩_k Ω_clim_k); V_ccg→∞ as climate collapses",
+        "implication": "Climate collapse is geometrically inevitable when multiple tipping elements simultaneously reduce ∩Ω_clim to zero; V_ccg provides cascade risk metric. Measurable by tracking overlap of all species thermal tolerance ranges."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "P_clim_col∝1/vol(∩_k Ω_clim_k); V_ccg=1/vol(∩Ω)→∞ at collapse",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -1829,22 +1801,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{tradeoff: I_prod=κ_p·Φ_solar vs V_stab=c_s·‖x-x*‖²}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "I_prod": "biospheric productivity (NPP)",
+          "Φ_solar": "solar flux utilized",
+          "V_stab": "climate stability potential"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "I_prod=κ_p·Φ_solar·(1-V_stab/V_max); high productivity destabilizes via heat",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "I_prod+V_stab≤total_budget (tradeoff constraint)",
+          "V_stab≥V_stab_min for habitability"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_csp=I_prod_max-I_prod-V_stab; optimal at V_csp=0 (Pareto frontier)",
+        "implication": "Climate stability vs. productivity is a Pareto tradeoff; maximizing NPP via temperature increase risks destabilization. Optimal point balances both. Measurable by net ecosystem productivity vs. climate variability across biomes."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "I_prod=κ_p·Φ_solar·(1-V_stab/V_max); V_csp=I_prod_max-I_prod-V_stab; tradeoff frontier",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -2042,22 +2013,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{u*_clim=argmax_u min_w ΔV(x_clim,u,w): climate minimax control}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "u_clim": "climate intervention (emissions policy, geoengineering)",
+          "w_clim": "natural climate variability (adversary)",
+          "V_clim": "climate welfare function"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "x_clim(t+1)=F_clim(x_clim,u_clim,w_clim); minimax for 100yr+ horizon",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "u_clim∈U_feasible (physical and economic limits)",
+          "w_clim∈W_natural (natural variability bounds)"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_cltcp=min_w ΔV_clim(x,u*,w); V_cltcp→0 at optimal policy",
+        "implication": "Climate is a century-scale minimax control problem; optimal policy u* maximizes welfare against worst-case variability. Measurable by comparing policy performance under Monte Carlo climate variability scenarios."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "u*_clim=argmax_u min_w ΔV(x_clim,u,w); V_cltcp=min_w ΔV_clim(x,u*,w)→0",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -2147,22 +2117,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{Ė_eco=∑_i(Φ_in_i-Φ_out_i): ecosystem metabolic balance}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "Φ_in_i": "energy input to species i",
+          "Φ_out_i": "energy output from species i",
+          "Ė_eco": "net ecosystem energy flux"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "Ė_eco=∑_i(Φ_in_i-Φ_out_i); stable iff Ė_eco=0 at climax",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "∑Φ_in=∑Φ_out (energy conservation in mature ecosystem)",
+          "NPP≥R_eco (autotroph dominance)"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_eamn=|Ė_eco|; V_eamn→0 at ecosystem metabolic equilibrium",
+        "implication": "Mature ecosystems achieve Ė_eco≈0 (balanced metabolism); disturbed ecosystems have Ė_eco≠0 indicating succession or collapse. Measurable by net ecosystem productivity (NEP=NPP-R_hetero)."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "Ė_eco=NPP-R_eco; V_eamn=|NPP-R_eco|→0 at climax; disturbed iff Ė_eco≠0",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -2251,22 +2220,20 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{Ω_eco=∩_k Ω_species_k: ecological feasibility polytope}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "Ω_eco": "ecosystem feasibility (intersection of species niches)",
+          "Ω_species_k": "k-th species niche"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "Ω_eco(t+1)=Ω_eco(t)∩Ω_climate(t); shrinks with climate change",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "∩_k Ω_species_k≠∅ (community co-viability)",
+          "Slater: ∃env° viable for all species"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_ecg=1/vol(Ω_eco); V_ecg→∞ as community collapses",
+        "implication": "Ecological feasibility requires ∩_k Ω_species_k≠∅; community collapse occurs when intersection vanishes. V_ecg measures fragility. Measurable by thermal tolerance curve overlap for co-occurring species."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "Ω_eco=∩_k Ω_species_k≠∅; V_ecg=1/vol(∩Ω); community viable iff vol(∩)>0",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -2355,22 +2322,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{P_eco_survive=1-(1-P_sp)^N: N-species redundancy}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "P_sp": "individual species failure probability",
+          "N": "species count (redundancy)",
+          "P_eco_survive": "ecosystem survival probability"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "P_eco_survive(t)=1-(1-P_sp(t))^N; N species provide N-fold redundancy",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "P_eco_survive≥P_min (ecosystem reliability target)",
+          "N≥N_min=ceil(log(1-P_min)/log(P_sp))"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_bar=1-P_eco_survive; V_bar→0 as N→∞",
+        "implication": "Biodiversity provides redundancy: each species lost reduces P_eco_survive. Insurance effect: if species are functionally independent. Measurable by ecosystem function stability vs. species richness experiments."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "P_eco_survive=1-(1-P_sp)^N; V_bar=1-P_eco_survive→0 as N↑",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -2459,23 +2425,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{R_eco_eff=R_eco·(1-ρ_eco_sat): repair saturation in ecosystem}",
         "variables": {
-          "B": "integrity",
-          "D": "damage",
-          "R": "repair",
-          "S": "stress"
+          "R_eco": "ecosystem repair rate (natural recovery)",
+          "ρ_eco_sat": "repair saturation fraction",
+          "R_eco_eff": "effective repair rate under overload"
         },
-        "dynamics": "dB/dt=R(B,S)-D(B,S)",
+        "dynamics": "ρ̇_eco_sat=α·D_eco-β·(1-ρ_eco_sat); saturates when D_eco>>β",
         "constraints": [
-          "B∈[0,1]",
-          "R≥0",
-          "D≥0"
+          "R_eco_eff=R_eco·(1-ρ_eco_sat)≥D_eco",
+          "ρ_eco_sat∈[0,1]"
         ],
-        "potential": "V=1-B",
-        "implication": "If R≥D+ε on [B0,1], then B increases toward 1 (repair-dominant)."
+        "potential": "V_ers=max(0,D_eco-R_eco·(1-ρ_eco_sat)); V_ers=0 iff repair keeping up",
+        "implication": "Ecosystem repair saturation occurs when damage overwhelms recovery; ρ_eco_sat→1 means R_eco_eff→0 despite high nominal capacity. Measurable by recovery speed vs. concurrent disturbance rate."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "R_eco_eff=R_eco·(1-ρ_eco_sat); V_ers=max(0,D_eco-R_eco·(1-ρ_eco_sat)); sat at ρ→1",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -2564,22 +2528,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{τ_eco=τ_stress+τ_pop_decline+τ_extinction≥τ_harm_eco}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "τ_eco": "ecological response latency",
+          "τ_harm_eco": "irreversibility (extinction) timescale",
+          "τ_pop_decline": "population collapse time"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "V_eco_harm grows at rate λ_eco for t<τ_eco if unchecked; V_lag=max(0,τ_eco-τ_harm)",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "τ_eco<τ_harm_eco for reversibility",
+          "extinction irreversible iff τ_pop→0"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_elr_eco=max(0,τ_eco-τ_harm_eco); V_elr_eco=0 iff intervention timely",
+        "implication": "Ecological latency risks create extinction debt: species committed to extinction before response arrives. τ_eco>τ_harm means some extinctions are already locked in. Measurable by population viability analysis timelines."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "τ_eco=τ_detect+τ_respond+τ_restore; V_elr_eco=max(0,τ_eco-τ_harm_eco); debt iff τ_eco>τ_harm",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -2670,22 +2633,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{g_inv(x_inv)>0: invasive species violates native ecosystem constraints}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "x_inv": "invasive species state",
+          "g_inv": "ecological constraint violation",
+          "V_inv": "invasion potential"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "V_inv=∑_k max(0,g_inv_k(x_inv))²; invasion disrupts native Ω_eco",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "g_inv_k(x_inv)≤0 for native compatibility",
+          "v_spread≤v_removal (containment condition)"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_iscv=∑_k max(0,g_inv_k)²; V_iscv=0 iff invasive within native tolerance",
+        "implication": "Invasive species violate ecological constraints g_inv_k>0; V_iscv>0 disrupts ∩Ω_eco. Containment requires v_spread<v_removal. Measurable by violation magnitude of each ecological constraint per invasive species."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "V_iscv=∑_k max(0,g_inv_k(x_inv))²; containment iff v_spread<v_removal",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -2774,22 +2736,20 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{P_eco_phase=Φ(EILI_eco): ecosystem phase transition probability}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "EILI_eco": "Ecological EILI (Energy, Nutrient, Diversity, Stability)",
+          "P_eco_phase": "probability of regime shift"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "EILI_eco drops through 0.5 at tipping; hysteresis possible (alternative stable states)",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "EILI_eco∈[0,1]",
+          "bistability: regime shift hysteretic"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_ept_eco=|EILI_eco-0.5|; V_ept_eco→0 approaching regime shift",
+        "implication": "Ecological phase transitions occur at EILI_eco=0.5 crossing; alternative stable states (like eutrophic lakes) exhibit hysteresis. Early warning: rising variance and autocorrelation. Measurable by EILI_eco trend analysis."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "P_eco_phase=Φ(EILI_eco); V_ept_eco=|EILI_eco-0.5|→0 at tipping; hysteresis in bistable systems",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -2878,22 +2838,20 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{Ω_design=argmax_{Ω} vol(∩_k Ω_species_k) s.t. g_design≤0}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "Ω_design": "optimal ecosystem design",
+          "g_design": "design constraints (area, species pool, budget)"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "θ_design(t+1)=Π_{g_design≤0}[θ+α·∇vol(∩Ω)]; gradient ascent on intersection volume",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "g_design_k≤0 ∀k (design budget, physical constraints)",
+          "∩_k Ω_species_k≠∅"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_edp=vol_max-vol(∩_k Ω_species_k); V_edp=0 at optimal design",
+        "implication": "Ecosystem design maximizes vol(∩Ω_species) subject to constraints; good design creates large shared feasibility core. Measurable by species coexistence index vs. habitat design parameters."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "Ω_design=argmax vol(∩_k Ω_sp); V_edp=vol_max-vol(∩Ω)→0 at optimum",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -2981,22 +2939,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{Ω_arteco=T_design·Ω_natural; T_design engineered for target}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "T_design": "ecosystem engineering operator",
+          "Ω_arteco": "artificial ecosystem feasibility",
+          "Ω_natural": "baseline feasibility"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "Ω_arteco(t+1)=T_design(θ(t))·Ω_arteco(t); designed evolution",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "Ω_arteco⊆Ω_physical (thermodynamic limits)",
+          "R_arteco≥D_arteco (self-sustaining)"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_ae=vol(Ω_target)-vol(Ω_arteco∩Ω_target); V_ae=0 iff artificial ecosystem matches target",
+        "implication": "Artificial ecosystems are engineered Ω-systems; T_design expands feasibility beyond natural limits. Measured by species richness and productivity vs. design parameters."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "Ω_arteco=T_design·Ω_natural; V_ae=vol(Ω_target-Ω_arteco∩Ω_target)→0",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -3085,22 +3042,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{T_bio_eng: Ω_planet→Ω_biosphere; Ω_biosphere⊇Ω_life}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "T_bio_eng": "biosphere engineering operator",
+          "Ω_biosphere": "engineered biosphere feasibility",
+          "V_bio": "biosphere engineering cost"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "V_bio=‖Ω_biosphere_target-Ω_biosphere_current‖; T_bio_eng reduces V_bio",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "Ω_biosphere⊇Ω_life (must contain life requirements)",
+          "V_bio<V_bio_max (feasible engineering)"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_pbe=V_bio·(1-completion)²; V_pbe=0 at biosphere target achieved",
+        "implication": "Planetary biosphere engineering transforms Ω_planet into Ω_biosphere; feasible iff V_bio<V_max. Each engineering step reduces V_pbe. Measurable by planetary parameter distance from Earth-analog."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "V_bio=‖Ω_biosphere_target-Ω_current‖; V_pbe=V_bio·(1-completion)²→0",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -3191,23 +3147,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{Φ_infra=∑_i Φ_i-κ_loss·dist_i: network energy flow}",
         "variables": {
-          "C": "capacity",
-          "D": "decay",
-          "R": "repair",
-          "T": "throughput"
+          "Φ_i": "energy flow on link i",
+          "κ_loss": "transmission loss coefficient",
+          "dist_i": "link length"
         },
-        "dynamics": "C_{t+1}=C_t+R_t-D_t; T_t≤C_t",
+        "dynamics": "Φ_infra(t+1)=Φ_infra(t)+ΔΦ_supply-ΔΦ_demand-κ_loss·∑dist_i·Φ_i",
         "constraints": [
-          "C≥0",
-          "R≥0",
-          "D≥0"
+          "Φ_infra≥Φ_demand (supply sufficiency)",
+          "Φ_i≤Φ_i_max (capacity limits)"
         ],
-        "potential": "V=max(0,C_min-C)",
-        "implication": "If E[R]≥E[D] and shocks bounded, then C stays above C_min with high probability."
+        "potential": "V_iecs=max(0,Φ_demand-Φ_infra); V_iecs=0 iff supply meets demand",
+        "implication": "Infrastructure as energy circulatory system requires Φ_infra≥Φ_demand everywhere; V_iecs>0 means supply shortfall. Losses scale with κ_loss×distance. Measurable by energy delivery efficiency vs. network topology."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "Φ_infra=∑_i Φ_i-κ_loss·∑dist_i·Φ_i; V_iecs=max(0,Φ_demand-Φ_infra)=0",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -3296,23 +3250,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{Ḃ_infra=R_infra-D_infra≥0: infrastructure repair dominance}",
         "variables": {
-          "B": "integrity",
-          "D": "damage",
-          "R": "repair",
-          "S": "stress"
+          "R_infra": "infrastructure repair/maintenance rate",
+          "D_infra": "infrastructure degradation rate",
+          "B_infra": "infrastructure health buffer"
         },
-        "dynamics": "dB/dt=R(B,S)-D(B,S)",
+        "dynamics": "B_infra(t+1)=B_infra(t)+(R_infra-D_infra)·Δt; viable iff R_infra≥D_infra",
         "constraints": [
-          "B∈[0,1]",
-          "R≥0",
-          "D≥0"
+          "R_infra≥D_infra",
+          "B_infra≥B_infra_min"
         ],
-        "potential": "V=1-B",
-        "implication": "If R≥D+ε on [B0,1], then B increases toward 1 (repair-dominant)."
+        "potential": "V_ird=max(0,D_infra-R_infra); V_ird=0 iff infrastructure repair-dominant",
+        "implication": "Infrastructure repair dominance requires R_infra≥D_infra; neglected infrastructure degrades on schedule L=B_infra/(D_infra-R_infra). Measurable by infrastructure condition score vs. maintenance investment rate."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "Ḃ_infra=R_infra-D_infra; L_infra=B_infra/(D_infra-R_infra+ε); viable iff R_infra≥D_infra",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -3401,23 +3353,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{S_infra(t)=S_infra(0)+σ_infra·t: infrastructure entropy growth}",
         "variables": {
-          "C": "capacity",
-          "D": "decay",
-          "R": "repair",
-          "T": "throughput"
+          "S_infra": "infrastructure entropy (disorder, inconsistency)",
+          "σ_infra": "entropy accumulation rate",
+          "S_max": "failure threshold"
         },
-        "dynamics": "C_{t+1}=C_t+R_t-D_t; T_t≤C_t",
+        "dynamics": "ΔS_infra=σ_infra·Δt without active management; failure at S_infra=S_max",
         "constraints": [
-          "C≥0",
-          "R≥0",
-          "D≥0"
+          "S_infra≤S_max",
+          "σ_infra≥0 (entropy non-decreasing without repair)"
         ],
-        "potential": "V=max(0,C_min-C)",
-        "implication": "If E[R]≥E[D] and shocks bounded, then C stays above C_min with high probability."
+        "potential": "V_iea=max(0,S_infra-S_ref); V_iea=0 iff infrastructure fresh",
+        "implication": "Infrastructure entropy accumulates at σ_infra without renewal; t_fail=(S_max-S_0)/σ_infra. Major renewals reset S_infra. Measurable by fault rate vs. asset age across infrastructure types."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "S_infra(t)=S_infra(0)+σ_infra·t; t_fail=(S_max-S_0)/σ_infra; renewal: ΔS_infra<0",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -3506,23 +3456,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{τ_infra=τ_plan+τ_approve+τ_build≤τ_need: infrastructure delivery latency}",
         "variables": {
-          "C": "capacity",
-          "D": "decay",
-          "R": "repair",
-          "T": "throughput"
+          "τ_infra": "total infrastructure delivery time",
+          "τ_need": "urgency timescale (before problem becomes critical)",
+          "τ_plan": "planning phase duration"
         },
-        "dynamics": "C_{t+1}=C_t+R_t-D_t; T_t≤C_t",
+        "dynamics": "V_ile=max(0,τ_infra-τ_need); gap grows quadratically with excess latency",
         "constraints": [
-          "C≥0",
-          "R≥0",
-          "D≥0"
+          "τ_infra<τ_need for proactive delivery",
+          "τ_plan≥τ_plan_min"
         ],
-        "potential": "V=max(0,C_min-C)",
-        "implication": "If E[R]≥E[D] and shocks bounded, then C stays above C_min with high probability."
+        "potential": "V_ile=max(0,τ_infra-τ_need)²; V_ile=0 iff timely delivery",
+        "implication": "Infrastructure latency V_ile>0 means capacity gaps emerge before solutions; proactive planning requires τ_infra<τ_need. Measurable by infrastructure commissioning date vs. demand-surge date."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "τ_infra=τ_plan+τ_approve+τ_build; V_ile=max(0,τ_infra-τ_need)²",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -3611,23 +3559,20 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{Ω_mod_infra=∪_k Ω_module_k: modular infrastructure feasibility}",
         "variables": {
-          "C": "capacity",
-          "D": "decay",
-          "R": "repair",
-          "T": "throughput"
+          "Ω_module_k": "k-th infrastructure module feasibility",
+          "Ω_mod_infra": "total modular capability"
         },
-        "dynamics": "C_{t+1}=C_t+R_t-D_t; T_t≤C_t",
+        "dynamics": "vol(Ω_mod_infra)=∑vol(Ω_k)-vol_overlap; swap cost C_swap per module exchange",
         "constraints": [
-          "C≥0",
-          "R≥0",
-          "D≥0"
+          "vol(Ω_mod_infra)≥vol(Ω_demand)",
+          "C_swap≤C_max per upgrade cycle"
         ],
-        "potential": "V=max(0,C_min-C)",
-        "implication": "If E[R]≥E[D] and shocks bounded, then C stays above C_min with high probability."
+        "potential": "V_mid=vol(Ω_demand)-vol(Ω_mod_infra∩Ω_demand); V_mid=0 iff demand covered",
+        "implication": "Modular infrastructure achieves broader capability than monolithic design; V_mid=0 requires loading correct modules. Measured by capability coverage vs. number of standard modules."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "Ω_mod_infra=∪_k Ω_module_k; V_mid=vol(Ω_demand-Ω_mod_infra∩Ω_demand)→0",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -3716,23 +3661,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{I_infra_dist=∑_i I_i-β_corr·∑_{i<j}corr(I_i,I_j): distributed infrastructure}",
         "variables": {
-          "C": "capacity",
-          "D": "decay",
-          "R": "repair",
-          "T": "throughput"
+          "I_i": "node i infrastructure capacity",
+          "corr(I_i,I_j)": "infrastructure correlation (shared failure modes)",
+          "β_corr": "correlation penalty"
         },
-        "dynamics": "C_{t+1}=C_t+R_t-D_t; T_t≤C_t",
+        "dynamics": "I_infra_dist=∑I_i-β_corr·∑_{i<j}corr(I_i,I_j); resilience=1/P_sys_fail",
         "constraints": [
-          "C≥0",
-          "R≥0",
-          "D≥0"
+          "I_infra_dist≥I_demand (capacity requirement)",
+          "corr minimized for resilience"
         ],
-        "potential": "V=max(0,C_min-C)",
-        "implication": "If E[R]≥E[D] and shocks bounded, then C stays above C_min with high probability."
+        "potential": "V_din=β_corr·∑_{i<j}corr(I_i,I_j); V_din=0 iff fully decorrelated",
+        "implication": "Distributed infrastructure maximizes resilience by minimizing correlated failures; identical nodes share failure modes (corr→1) and collapse together. Measurable by outage correlation across nodes during stress events."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "I_infra_dist=∑I_i-β_corr·∑_{i<j}corr; resilient iff corr minimized; V_din=β_corr·∑corr",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -3821,23 +3764,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{θ_infra→∂Ω_infra: over-optimization removes safety margin}",
         "variables": {
-          "C": "capacity",
-          "D": "decay",
-          "R": "repair",
-          "T": "throughput"
+          "θ_infra": "infrastructure design parameters",
+          "∂Ω_infra": "infrastructure feasibility boundary",
+          "δ_margin": "safety margin"
         },
-        "dynamics": "C_{t+1}=C_t+R_t-D_t; T_t≤C_t",
+        "dynamics": "δ_margin(t)=dist(θ_infra,∂Ω_infra); over-optimization drives δ_margin→0",
         "constraints": [
-          "C≥0",
-          "R≥0",
-          "D≥0"
+          "δ_margin≥δ_min (minimum safety margin)",
+          "θ_infra∈Ω_infra_safe"
         ],
-        "potential": "V=max(0,C_min-C)",
-        "implication": "If E[R]≥E[D] and shocks bounded, then C stays above C_min with high probability."
+        "potential": "V_ioo=max(0,δ_min-δ_margin)²; V_ioo>0 iff over-optimized",
+        "implication": "Infrastructure over-optimization reduces safety margins to zero; any perturbation then triggers failure. Robust design maintains δ_margin≥δ_min. Measurable by design load-to-capacity ratio and factor-of-safety reduction over time."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "δ_margin=dist(θ_infra,∂Ω_infra)≥δ_min; V_ioo=max(0,δ_min-δ_margin)²",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -3926,23 +3867,20 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{∩_k Ω_infra_k→∅: multi-system infrastructure collapse}",
         "variables": {
-          "C": "capacity",
-          "D": "decay",
-          "R": "repair",
-          "T": "throughput"
+          "∩_k Ω_infra_k": "intersection of all infrastructure system feasibilities",
+          "P_infra_col": "infrastructure collapse probability"
         },
-        "dynamics": "C_{t+1}=C_t+R_t-D_t; T_t≤C_t",
+        "dynamics": "P_infra_col∝1/vol(∩_k Ω_infra_k); cascade collapse when ∩Ω→∅",
         "constraints": [
-          "C≥0",
-          "R≥0",
-          "D≥0"
+          "vol(∩Ω_infra)≥vol_min",
+          "interdependency: failure in one reduces others' Ω"
         ],
-        "potential": "V=max(0,C_min-C)",
-        "implication": "If E[R]≥E[D] and shocks bounded, then C stays above C_min with high probability."
+        "potential": "V_ipf=1/vol(∩_k Ω_infra_k); V_ipf→∞ at cascade collapse",
+        "implication": "Infrastructure phase failure cascades when interdependent systems' intersection collapses; ∩Ω→∅ is inevitable under correlated stress. V_ipf provides early cascade risk indicator."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "P_infra_col∝1/vol(∩_k Ω_infra_k); V_ipf=1/vol(∩Ω)→∞ at cascade",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -4031,23 +3969,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{‖I_infra(t)-I_infra(0)‖≤ε_infra: infrastructure identity continuity}",
         "variables": {
-          "C": "capacity",
-          "D": "decay",
-          "R": "repair",
-          "T": "throughput"
+          "I_infra": "infrastructure identity functional (service levels, standards)",
+          "ε_infra": "drift tolerance",
+          "ν_infra": "identity drift rate"
         },
-        "dynamics": "C_{t+1}=C_t+R_t-D_t; T_t≤C_t",
+        "dynamics": "‖I_infra(t)-I_infra(0)‖=ν_infra·t; identity preserved iff ≤ε_infra",
         "constraints": [
-          "C≥0",
-          "R≥0",
-          "D≥0"
+          "‖ΔI_infra‖≤ε_infra·t (bounded drift)",
+          "standards continuous in time"
         ],
-        "potential": "V=max(0,C_min-C)",
-        "implication": "If E[R]≥E[D] and shocks bounded, then C stays above C_min with high probability."
+        "potential": "V_iip=max(0,‖ΔI_infra‖-ε_infra)²; V_iip=0 iff identity preserved",
+        "implication": "Infrastructure identity preservation ensures service continuity despite component replacement; ν_infra·t>ε_infra means the infrastructure no longer serves its original function. Measurable by service level agreement compliance over infrastructure age."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "‖I_infra(t)-I_infra(0)‖≤ε_infra·t; V_iip=max(0,‖ΔI_infra‖-ε_infra)²",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -4136,23 +4072,22 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{B_infra/(D_infra-R_infra+ε)→∞: infinite infrastructure lifespan}",
         "variables": {
-          "C": "capacity",
-          "D": "decay",
-          "R": "repair",
-          "T": "throughput"
+          "B_infra": "infrastructure health buffer",
+          "D_infra": "degradation rate",
+          "R_infra": "repair rate",
+          "L_infra": "infrastructure lifespan"
         },
-        "dynamics": "C_{t+1}=C_t+R_t-D_t; T_t≤C_t",
+        "dynamics": "L_infra=B_infra/(D_infra-R_infra+ε); L→∞ iff R_infra≥D_infra",
         "constraints": [
-          "C≥0",
-          "R≥0",
-          "D≥0"
+          "R_infra≥D_infra (non-collapse condition)",
+          "continuous monitoring and repair"
         ],
-        "potential": "V=max(0,C_min-C)",
-        "implication": "If E[R]≥E[D] and shocks bounded, then C stays above C_min with high probability."
+        "potential": "V_iwc=max(0,D_infra-R_infra); V_iwc=0 iff infrastructure non-collapsing",
+        "implication": "Infrastructure without collapse requires R_infra≥D_infra at all times; intermittent repair failures cause finite lifespan. V_iwc=0 is the design invariant. Measurable by percentage of time R_infra≥D_infra in condition monitoring data."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "L_infra=B_infra/(D_infra-R_infra+ε)→∞ iff R_infra≥D_infra; V_iwc=max(0,D_infra-R_infra)=0",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -4243,23 +4178,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{Ω_sys=f(Φ_energy): energy-constrained feasibility}",
         "variables": {
-          "C": "capacity",
-          "D": "decay",
-          "R": "repair",
-          "T": "throughput"
+          "Φ_energy": "available energy flux",
+          "Ω_sys": "system feasibility (function of energy)",
+          "κ_drive": "energy-to-feasibility expansion coefficient"
         },
-        "dynamics": "C_{t+1}=C_t+R_t-D_t; T_t≤C_t",
+        "dynamics": "vol(Ω_sys)=κ_drive·Φ_energy; Ω_sys expands linearly with energy access",
         "constraints": [
-          "C≥0",
-          "R≥0",
-          "D≥0"
+          "Φ_energy≥Φ_min (minimum for viability)",
+          "vol(Ω_sys)≥vol_required"
         ],
-        "potential": "V=max(0,C_min-C)",
-        "implication": "If E[R]≥E[D] and shocks bounded, then C stays above C_min with high probability."
+        "potential": "V_escd=max(0,Φ_min-Φ_energy); V_escd=0 iff energy sufficient to drive constraints",
+        "implication": "Energy systems drive constraint expansion: higher Φ_energy enlarges Ω_sys. Civilizations access higher feasibility cones by increasing energy capture. Measurable by number of accessible technologies vs. per-capita energy consumption."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "vol(Ω_sys)=κ_drive·Φ_energy; V_escd=max(0,Φ_min-Φ_energy)=0 for viable system",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -4349,23 +4282,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{I_eff=η_exergy·Φ_energy: exergy-weighted intelligence}",
         "variables": {
-          "C": "capacity",
-          "D": "decay",
-          "R": "repair",
-          "T": "throughput"
+          "η_exergy": "exergy efficiency (quality fraction, 0-1)",
+          "Φ_energy": "total energy flux",
+          "I_eff": "effective intelligence from energy"
         },
-        "dynamics": "C_{t+1}=C_t+R_t-D_t; T_t≤C_t",
+        "dynamics": "I_eff=η_exergy·Φ_energy; high-quality energy (low entropy) more effective per watt",
         "constraints": [
-          "C≥0",
-          "R≥0",
-          "D≥0"
+          "η_exergy≤η_Carnot (Carnot limit on quality)",
+          "Φ_energy≥Φ_min"
         ],
-        "potential": "V=max(0,C_min-C)",
-        "implication": "If E[R]≥E[D] and shocks bounded, then C stays above C_min with high probability."
+        "potential": "V_eqvq=I_max-(η_exergy·Φ_energy); V_eqvq=0 at maximum exergy efficiency",
+        "implication": "Energy quality (η_exergy) multiplies quantity (Φ_energy); low-grade heat at same wattage delivers less useful work than high-exergy sources. Measurable by output per joule vs. energy source temperature."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "I_eff=η_exergy·Φ_energy; V_eqvq=I_max-η_exergy·Φ_energy; quality×quantity bound",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -4454,23 +4385,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{R_energy=C_repair·D_energy: energy system repair cost model}",
         "variables": {
-          "B": "integrity",
-          "D": "damage",
-          "R": "repair",
-          "S": "stress"
+          "C_repair": "repair cost coefficient ($/damage unit)",
+          "D_energy": "energy system damage rate",
+          "R_energy": "repair expenditure rate"
         },
-        "dynamics": "dB/dt=R(B,S)-D(B,S)",
+        "dynamics": "Ḃ_energy=Φ_revenue-C_repair·D_energy; viable iff Φ_revenue≥C_repair·D_energy",
         "constraints": [
-          "B∈[0,1]",
-          "R≥0",
-          "D≥0"
+          "R_energy=C_repair·D_energy≤Φ_revenue (affordable repair)",
+          "D_energy≥D_min (irreducible wear)"
         ],
-        "potential": "V=1-B",
-        "implication": "If R≥D+ε on [B0,1], then B increases toward 1 (repair-dominant)."
+        "potential": "V_erc=max(0,C_repair·D_energy-Φ_revenue); V_erc=0 iff repair affordable",
+        "implication": "Energy repair costs must be covered by energy revenue; V_erc>0 means the system is consuming more in repair than it generates. Measurable by O&M cost as fraction of energy revenue."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "V_erc=max(0,C_repair·D_energy-Φ_revenue); viable iff C_repair·D≤Φ_revenue",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -4560,23 +4489,22 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{Ω_storage=∩{B≥0}∩{B≤B_max}∩{charge_rate≤P_max}: storage feasibility}",
         "variables": {
-          "C": "capacity",
-          "D": "decay",
-          "R": "repair",
-          "T": "throughput"
+          "B": "stored energy buffer",
+          "B_max": "storage capacity limit",
+          "P_max": "charge/discharge power limit"
         },
-        "dynamics": "C_{t+1}=C_t+R_t-D_t; T_t≤C_t",
+        "dynamics": "Ḃ=P_charge-P_discharge-r_self·B; B∈[0,B_max]",
         "constraints": [
-          "C≥0",
-          "R≥0",
-          "D≥0"
+          "B∈[0,B_max]",
+          "P_charge,P_discharge≤P_max",
+          "r_self·B≤P_charge (self-discharge)"
         ],
-        "potential": "V=max(0,C_min-C)",
-        "implication": "If E[R]≥E[D] and shocks bounded, then C stays above C_min with high probability."
+        "potential": "V_escg=max(0,-B)+max(0,B-B_max); V_escg=0 iff within storage constraints",
+        "implication": "Energy storage feasibility is bounded by {B_max, P_max, r_self}; operation outside these causes failure. V_escg>0 means storage constraint violated. Measurable by storage state-of-charge vs. rated capacity."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "Ḃ=P_charge-P_discharge-r_self·B; V_escg=max(0,-B)+max(0,B-B_max)=0 in feasible region",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -4665,23 +4593,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{τ_dist=τ_gen+τ_transmit+τ_convert≤τ_demand: distribution latency}",
         "variables": {
-          "C": "capacity",
-          "D": "decay",
-          "R": "repair",
-          "T": "throughput"
+          "τ_dist": "total energy distribution latency",
+          "τ_demand": "demand surge response window",
+          "τ_transmit": "grid transmission delay"
         },
-        "dynamics": "C_{t+1}=C_t+R_t-D_t; T_t≤C_t",
+        "dynamics": "V_edl=max(0,τ_dist-τ_demand); frequency deviation: Δf∝(P_demand-P_supply)·τ_dist",
         "constraints": [
-          "C≥0",
-          "R≥0",
-          "D≥0"
+          "τ_dist≤τ_demand (grid stability)",
+          "Δf≤0.5Hz (NERC standard)"
         ],
-        "potential": "V=max(0,C_min-C)",
-        "implication": "If E[R]≥E[D] and shocks bounded, then C stays above C_min with high probability."
+        "potential": "V_edl=max(0,τ_dist-τ_demand)²; V_edl=0 iff generation responds faster than demand ramps",
+        "implication": "Energy distribution latency causes frequency deviations; V_edl>0 when generation cannot respond within τ_demand. Fast-ramping storage reduces τ_dist. Measurable by ACE (Area Control Error) vs. response time of generation fleet."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "Δf∝(P_demand-P_supply)·τ_dist; V_edl=max(0,τ_dist-τ_demand)²",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -4771,23 +4697,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{I_ren≤κ_ren·Φ_renewable/(D_ren+ε): renewable intelligence ceiling}",
         "variables": {
-          "C": "capacity",
-          "D": "decay",
-          "R": "repair",
-          "T": "throughput"
+          "Φ_renewable": "available renewable flux (solar, wind)",
+          "κ_ren": "conversion efficiency",
+          "D_ren": "system demand rate"
         },
-        "dynamics": "C_{t+1}=C_t+R_t-D_t; T_t≤C_t",
+        "dynamics": "I_ren(t)=κ_ren·Φ_ren(t)/D_ren; fluctuates with Φ_ren(t) (intermittent)",
         "constraints": [
-          "C≥0",
-          "R≥0",
-          "D≥0"
+          "I_ren≤κ_ren·Φ_ren_max/D_ren (peak ceiling)",
+          "BW_track≥BW_Φ (tracking bandwidth)"
         ],
-        "potential": "V=max(0,C_min-C)",
-        "implication": "If E[R]≥E[D] and shocks bounded, then C stays above C_min with high probability."
+        "potential": "V_recl=I_max-κ_ren·Φ_ren/D_ren; V_recl→0 at peak renewable flux",
+        "implication": "Renewable energy has intermittency constraint: I_ren fluctuates with Φ_ren; storage bridges V_recl>0 periods. Measurable by capacity factor vs. installed capacity utilization across renewable types."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "I_ren=κ_ren·Φ_ren/D_ren; intermittent iff BW(Φ_ren)>BW_storage; V_recl=I_max-I_ren",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -4877,23 +4801,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{Ω_sw_nuc={θ_nuc: reactivity k_eff∈[1-δ,1+δ]}: nuclear stability window}",
         "variables": {
-          "C": "capacity",
-          "D": "decay",
-          "R": "repair",
-          "T": "throughput"
+          "k_eff": "effective neutron multiplication factor",
+          "δ": "stability margin around criticality",
+          "θ_nuc": "reactor operating parameters"
         },
-        "dynamics": "C_{t+1}=C_t+R_t-D_t; T_t≤C_t",
+        "dynamics": "Ṗ_reactor=P·(k_eff-1)/Λ; stable iff k_eff<1 (subcritical) or k_eff=1 (critical)",
         "constraints": [
-          "C≥0",
-          "R≥0",
-          "D≥0"
+          "k_eff≤1+β (delayed neutron fraction) for controllability",
+          "δ≥δ_min"
         ],
-        "potential": "V=max(0,C_min-C)",
-        "implication": "If E[R]≥E[D] and shocks bounded, then C stays above C_min with high probability."
+        "potential": "V_nsw=max(0,k_eff-1-β); V_nsw=0 iff within stability window",
+        "implication": "Nuclear stability window requires k_eff≤1+β; exceeding prompt criticality (k_eff>1+β) causes uncontrollable power excursion. V_nsw>0 is the danger zone. Measurable by reactor period vs. reactivity insertion tests."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "V_nsw=max(0,k_eff-1-β); stable iff k_eff≤1+β; power: Ṗ=P·(k_eff-1)/Λ",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -4983,22 +4905,22 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{Ω_fusion={x: T≥T_ignition, n·τ≥Lawson: fusion feasibility}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "T_ignition": "plasma ignition temperature (~150M K)",
+          "n·τ": "Lawson criterion (density×confinement time)",
+          "Ω_fusion": "fusion feasibility cone"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "P_fusion=n²·σv·E_fusion/4; viable iff Q=P_out/P_in>1",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "T≥150M K",
+          "n·τ≥10²⁰ m⁻³s (Lawson criterion)",
+          "Q>1 (net energy gain)"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_fcc=max(0,Lawson_required-n·τ_achieved); V_fcc=0 iff fusion ignited",
+        "implication": "Fusion compresses Ω_energy by achieving conditions in the extreme corner of Ω_physics; V_fcc measures distance from Lawson criterion. Measurable by triple product n·T·τ vs. Lawson threshold."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "V_fcc=max(0,(nτ)_required-(nτ)_achieved); Q>1 iff V_fcc=0; triple product: nTτ",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -5088,23 +5010,20 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{∩_k Ω_energy_k→∅: energy cascade collapse}",
         "variables": {
-          "C": "capacity",
-          "D": "decay",
-          "R": "repair",
-          "T": "throughput"
+          "∩_k Ω_energy_k": "intersection of energy system feasibilities",
+          "P_cascade": "cascade collapse probability"
         },
-        "dynamics": "C_{t+1}=C_t+R_t-D_t; T_t≤C_t",
+        "dynamics": "P_cascade∝1/vol(∩_k Ω_energy_k); failure in one energy system reduces others' Ω",
         "constraints": [
-          "C≥0",
-          "R≥0",
-          "D≥0"
+          "vol(∩Ω_energy)≥vol_min",
+          "interdependency: fuels need electricity, electricity needs fuel"
         ],
-        "potential": "V=max(0,C_min-C)",
-        "implication": "If E[R]≥E[D] and shocks bounded, then C stays above C_min with high probability."
+        "potential": "V_escc=1/vol(∩_k Ω_energy_k); V_escc→∞ at cascade",
+        "implication": "Energy cascade collapse occurs when interdependent systems (power-fuel-SCADA) simultaneously lose feasibility intersection; V_escc provides risk metric. Measurable by N-k contingency analysis results."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "P_cascade∝1/vol(∩_k Ω_energy_k); V_escc=1/vol(∩Ω)→∞ at cascade",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -5300,22 +5219,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{u_mega=K_mega·u_local: megastructure amplifies control authority}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "K_mega": "megastructure control gain amplification",
+          "u_local": "local actuator signal",
+          "u_mega": "megastructure-amplified output"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "ΔV≤-c_mega·K_mega·‖x-x*‖²; K_mega>>1 enables planetary-scale control",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "K_mega≤K_mega_max (structural limits)",
+          "energy≥K_mega·E_local"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_msca=1/K_mega; V_msca→0 as amplification increases",
+        "implication": "Megastructures amplify local control to planetary scale; K_mega is limited by structural integrity and energy budget. Measurable by ratio of output effect to input actuator capability."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "u_mega=K_mega·u_local; ΔV≤-c_mega·K_mega·‖x-x*‖²; V_msca=1/K_mega→0",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -5404,23 +5322,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{Ḃ_mega=R_mega-D_mega≥0: megastructure repair dominance}",
         "variables": {
-          "B": "integrity",
-          "D": "damage",
-          "R": "repair",
-          "S": "stress"
+          "R_mega": "megastructure repair rate",
+          "D_mega": "megastructure damage/degradation rate",
+          "B_mega": "megastructure health buffer"
         },
-        "dynamics": "dB/dt=R(B,S)-D(B,S)",
+        "dynamics": "B_mega(t+1)=B_mega(t)+(R_mega-D_mega)·Δt; viable iff R_mega≥D_mega",
         "constraints": [
-          "B∈[0,1]",
-          "R≥0",
-          "D≥0"
+          "R_mega≥D_mega (repair dominance)",
+          "repair accessible from within structure"
         ],
-        "potential": "V=1-B",
-        "implication": "If R≥D+ε on [B0,1], then B increases toward 1 (repair-dominant)."
+        "potential": "V_mrd=max(0,D_mega-R_mega); V_mrd=0 iff megastructure repair-dominant",
+        "implication": "Megastructure repair dominance requires R_mega≥D_mega; for space megastructures, radiation and micrometeorite damage set D_mega. R_mega requires on-site repair bots. Measurable by failure rate vs. maintenance robot deployment density."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "Ḃ_mega=R_mega-D_mega; L_mega=B_mega/(D_mega-R_mega+ε); viable iff R_mega≥D_mega",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -5509,22 +5425,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{τ_mega=τ_signal+τ_response+τ_propagate≤τ_harm_mega}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "τ_mega": "megastructure response latency",
+          "τ_harm_mega": "failure propagation timescale",
+          "τ_propagate": "structural failure wave speed"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "V_mlh=max(0,τ_mega-τ_harm_mega); failure propagates at v_struct if τ_mega>τ_harm",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "τ_mega<τ_harm_mega for controllability",
+          "signal speed≤c (light speed limit)"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_mlh=max(0,τ_mega-τ_harm_mega)²; V_mlh=0 iff response faster than failure",
+        "implication": "Megastructure latency hazards arise when light-speed or structural limits make τ_mega>τ_harm; a Dyson sphere segment failure could propagate faster than control signals reach it. Measurable by structural wave speed vs. control signal propagation time."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "τ_mega=τ_signal+τ_response; V_mlh=max(0,τ_mega-τ_harm_mega)²; hazard iff τ_mega>τ_harm",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -5612,22 +5527,20 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{I_mega_dist=∑_i I_i-β·∑_{i<j}corr(I_i,I_j): distributed mega-intelligence}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "I_i": "module i megastructure contribution",
+          "corr(I_i,I_j)": "structural/functional correlation between modules"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "I_mega_dist maximized by decorrelated modules with diverse functions",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "I_mega_dist≥I_required (total capacity)",
+          "latency between modules≤τ_max"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_dm=β·∑_{i<j}corr(I_i,I_j); V_dm=0 iff fully decorrelated megastructure",
+        "implication": "Distributed megastructures exceed monolithic designs when module correlations are low; identical modules share failure modes. Measurable by task performance vs. module specialization diversity."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "I_mega_dist=∑I_i-β·∑_{i<j}corr(I_i,I_j); resilient iff corr minimized; V_dm=β·∑corr",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -5716,23 +5629,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{ΔV_orbit≤-c_orb·‖x_orbit-x*_orbit‖²: orbital Lyapunov stability}",
         "variables": {
-          "C": "capacity",
-          "D": "decay",
-          "R": "repair",
-          "T": "throughput"
+          "x_orbit": "orbital element state (a,e,i,Ω,ω,M)",
+          "x*_orbit": "nominal stable orbit",
+          "c_orb": "orbital stability constant"
         },
-        "dynamics": "C_{t+1}=C_t+R_t-D_t; T_t≤C_t",
+        "dynamics": "ẋ_orbit=F_Kepler+δF_perturb; ΔV_orbit≤-c_orb·‖x_orbit-x*‖² iff stable",
         "constraints": [
-          "C≥0",
-          "R≥0",
-          "D≥0"
+          "perturbations δF bounded (J₂, solar pressure, drag)",
+          "orbital lifetime≥L_min"
         ],
-        "potential": "V=max(0,C_min-C)",
-        "implication": "If E[R]≥E[D] and shocks bounded, then C stays above C_min with high probability."
+        "potential": "V_ois=‖x_orbit-x*_orbit‖²; V_ois→0 via station-keeping",
+        "implication": "Orbital infrastructure stability requires continuous station-keeping to maintain V_ois≈0 against perturbations; without thrusters, perturbations drive V_ois→∞ (orbital decay or escape). Measurable by delta-V budget vs. station-keeping lifetime."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "V_ois=‖x_orbit-x*‖²; ΔV_orbit≤-c_orb·V_ois with station-keeping; decay iff no thrust",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -5821,22 +5732,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{Ω_shield={x: flux_harm(x)≤flux_max}: shielded feasibility}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "flux_harm": "harmful flux (radiation, micrometeorites, CME)",
+          "flux_max": "maximum tolerable flux",
+          "Ω_shield": "shielded feasibility region"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "flux_harm(x)=flux_0·e^{-μ·d_shield}; shield depth d_shield reduces flux exponentially",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "flux_harm≤flux_max (shielded)",
+          "shield mass≤M_shield_max"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_pss=max(0,flux_harm-flux_max); V_pss=0 iff shielded adequately",
+        "implication": "Planetary shielding creates Ω_shield where life is viable; thicker shield reduces V_pss exponentially. Mars lacks magnetic shield (flux_harm=high), so V_pss>0 for unprotected surface life. Measurable by radiation dose vs. shielding depth."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "flux_harm=flux_0·e^{-μ·d_shield}; V_pss=max(0,flux_harm-flux_max)=0 iff shielded",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -5925,23 +5835,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{Φ_harvest=η_cap·L_star·(A_capture/4πR²): stellar energy capture}",
         "variables": {
-          "C": "capacity",
-          "D": "decay",
-          "R": "repair",
-          "T": "throughput"
+          "η_cap": "capture efficiency",
+          "L_star": "stellar luminosity",
+          "A_capture": "collector area at distance R"
         },
-        "dynamics": "C_{t+1}=C_t+R_t-D_t; T_t≤C_t",
+        "dynamics": "Φ_harvest=η_cap·L_star·(A_capture/4πR²); scales as A_capture/R²",
         "constraints": [
-          "C≥0",
-          "R≥0",
-          "D≥0"
+          "A_capture≤A_Dyson (maximum collector)",
+          "structural integrity of collector at R"
         ],
-        "potential": "V=max(0,C_min-C)",
-        "implication": "If E[R]≥E[D] and shocks bounded, then C stays above C_min with high probability."
+        "potential": "V_seh=L_star-Φ_harvest/η_cap; V_seh→0 at complete stellar capture (Dyson sphere)",
+        "implication": "Stellar energy harvesting scales as collector area; V_seh measures uncaptured stellar luminosity. Full Dyson sphere achieves V_seh=0. Measurable by collector area fraction vs. power output."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "Φ_harvest=η_cap·L_star·(A_capture/4πR²); V_seh=1-A_capture/(4πR²); Dyson iff V_seh=0",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -6030,22 +5938,22 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{g_art=ω²·r: centripetal artificial gravity}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "ω": "rotation rate (rad/s)",
+          "r": "radius of rotation (m)",
+          "g_art": "artificial gravity (m/s²)"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "g_art=ω²·r; required: g_art≥g_min (biological minimum, ~0.38g)",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "g_art=ω²·r≥g_min",
+          "ω≤ω_max (Coriolis tolerance: ≤3rpm)",
+          "r≥r_min (structural)"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_ags=max(0,g_min-ω²·r); V_ags=0 iff gravity sufficient",
+        "implication": "Artificial gravity requires ω²·r≥g_min; Coriolis limits ω≤3rpm, so r_min=g_min/ω_max²=90m for 0.38g. V_ags>0 means biological harm from low gravity. Measurable by bone density loss rate vs. g_art level."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "g_art=ω²·r≥g_min; V_ags=max(0,g_min-ω²·r)=0 iff adequate; r_min=g_min/ω_max²",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -6135,22 +6043,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{V_lhpp=V_lhpp(0)·e^{-α·t}: exponential cost reduction with time}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "V_lhpp": "remaining project potential (distance from goal)",
+          "α": "progress rate constant",
+          "t": "project time"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "V_lhpp(t)=V_lhpp(0)·e^{-α·t}; completion at t_done=-ln(ε)/α",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "α>0 (positive progress)",
+          "institutional continuity maintained throughout t_done"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_lhpp(t)=V_goal_distance·e^{-αt}; V_lhpp→0 exponentially",
+        "implication": "Long-horizon projects require institutional continuity to maintain α>0; disruptions set α→0 stalling V_lhpp. Institutional repair is critical for multi-century projects. Measurable by project velocity (V_lhpp reduction rate) vs. institutional continuity metrics."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "V_lhpp(t)=V_0·e^{-αt}; t_done=-ln(ε)/α; requires α>0 continuously",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -6239,22 +6146,22 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{V_eth_eng=∑_k max(0,g_eth_k(u_eng))²: engineering ethics violation}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "u_eng": "planetary engineering action",
+          "g_eth_k": "k-th ethical constraint on engineering",
+          "Ω_eth_eng": "ethically permissible engineering"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "u_eng(t+1)=Π_{Ω_eth_eng}[u_eng(t)+α·∇U_eng]; project onto ethical constraints",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "g_eth_k(u_eng)≤0 ∀k (ethics satisfied)",
+          "informed consent of affected beings",
+          "reversibility iff V_eth>threshold"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_pee=∑_k max(0,g_eth_k(u_eng))²; V_pee=0 iff engineering ethically constrained",
+        "implication": "Planetary engineering ethics requires V_pee=0; irreversible actions with g_eth_k>0 are impermissible. Reversibility is an ethical meta-constraint for uncertain actions. Measurable by stakeholder consent fraction and reversibility index."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "V_pee=∑_k max(0,g_eth_k(u_eng))²=0; u_eng=Π_{Ω_eth_eng}[optimal engineering]",
       "verifier": {
         "kind": "verifier",
         "inputs": [

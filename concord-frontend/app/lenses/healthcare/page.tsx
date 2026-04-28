@@ -66,14 +66,29 @@ import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
+import { LensFeedPanel } from '@/components/feeds/LensFeedPanel';
 import { SubLensQuickNav } from '@/components/lens/SubLensQuickNav';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
 /* ------------------------------------------------------------------ */
 
-type ModeTab = 'Patients' | 'Encounters' | 'Protocols' | 'Pharmacy' | 'Lab' | 'Therapy' | 'Symptoms';
-type ArtifactType = 'Patient' | 'Encounter' | 'CareProtocol' | 'Prescription' | 'LabResult' | 'Treatment' | 'Symptom';
+type ModeTab =
+  | 'Patients'
+  | 'Encounters'
+  | 'Protocols'
+  | 'Pharmacy'
+  | 'Lab'
+  | 'Therapy'
+  | 'Symptoms';
+type ArtifactType =
+  | 'Patient'
+  | 'Encounter'
+  | 'CareProtocol'
+  | 'Prescription'
+  | 'LabResult'
+  | 'Treatment'
+  | 'Symptom';
 type Status = 'scheduled' | 'active' | 'completed' | 'cancelled' | 'archived';
 type DetailSubTab = 'Overview' | 'Vitals' | 'Medications' | 'Labs' | 'History' | 'Appointments';
 type PatientViewMode = 'cards' | 'timeline';
@@ -173,35 +188,87 @@ const PRIORITY_COLORS: Record<string, string> = {
 };
 
 const COMMON_COMPLAINTS = [
-  'Chest pain', 'Shortness of breath', 'Headache', 'Abdominal pain',
-  'Fever', 'Cough', 'Back pain', 'Dizziness', 'Fatigue', 'Nausea',
-  'Joint pain', 'Rash', 'Sore throat', 'Anxiety', 'Insomnia',
+  'Chest pain',
+  'Shortness of breath',
+  'Headache',
+  'Abdominal pain',
+  'Fever',
+  'Cough',
+  'Back pain',
+  'Dizziness',
+  'Fatigue',
+  'Nausea',
+  'Joint pain',
+  'Rash',
+  'Sore throat',
+  'Anxiety',
+  'Insomnia',
 ];
 
 const COMMON_FINDINGS = [
-  'Lungs clear to auscultation', 'Heart regular rate and rhythm',
-  'Abdomen soft, non-tender', 'No peripheral edema', 'Alert and oriented x3',
-  'Pupils equal, round, reactive', 'Normal gait and station',
-  'Mucous membranes moist', 'No lymphadenopathy', 'Skin warm and dry',
+  'Lungs clear to auscultation',
+  'Heart regular rate and rhythm',
+  'Abdomen soft, non-tender',
+  'No peripheral edema',
+  'Alert and oriented x3',
+  'Pupils equal, round, reactive',
+  'Normal gait and station',
+  'Mucous membranes moist',
+  'No lymphadenopathy',
+  'Skin warm and dry',
 ];
 
 const COMMON_DIAGNOSES = [
-  'Hypertension (I10)', 'Type 2 Diabetes (E11.9)', 'Hyperlipidemia (E78.5)',
-  'Major Depressive Disorder (F33.0)', 'GERD (K21.0)', 'Asthma (J45.20)',
-  'Osteoarthritis (M17.11)', 'Hypothyroidism (E03.9)', 'Anxiety Disorder (F41.1)',
-  'COPD (J44.1)', 'Atrial Fibrillation (I48.91)', 'Heart Failure (I50.9)',
+  'Hypertension (I10)',
+  'Type 2 Diabetes (E11.9)',
+  'Hyperlipidemia (E78.5)',
+  'Major Depressive Disorder (F33.0)',
+  'GERD (K21.0)',
+  'Asthma (J45.20)',
+  'Osteoarthritis (M17.11)',
+  'Hypothyroidism (E03.9)',
+  'Anxiety Disorder (F41.1)',
+  'COPD (J44.1)',
+  'Atrial Fibrillation (I48.91)',
+  'Heart Failure (I50.9)',
 ];
 
 const LAB_PANELS: Record<string, { name: string; tests: string[] }> = {
-  CBC: { name: 'Complete Blood Count', tests: ['WBC', 'RBC', 'Hemoglobin', 'Hematocrit', 'Platelets', 'MCV', 'MCH'] },
-  CMP: { name: 'Comprehensive Metabolic Panel', tests: ['Glucose', 'BUN', 'Creatinine', 'Sodium', 'Potassium', 'Chloride', 'CO2', 'Calcium', 'Albumin', 'Bilirubin', 'ALP', 'AST', 'ALT'] },
-  Lipid: { name: 'Lipid Panel', tests: ['Total Cholesterol', 'LDL', 'HDL', 'Triglycerides', 'VLDL'] },
+  CBC: {
+    name: 'Complete Blood Count',
+    tests: ['WBC', 'RBC', 'Hemoglobin', 'Hematocrit', 'Platelets', 'MCV', 'MCH'],
+  },
+  CMP: {
+    name: 'Comprehensive Metabolic Panel',
+    tests: [
+      'Glucose',
+      'BUN',
+      'Creatinine',
+      'Sodium',
+      'Potassium',
+      'Chloride',
+      'CO2',
+      'Calcium',
+      'Albumin',
+      'Bilirubin',
+      'ALP',
+      'AST',
+      'ALT',
+    ],
+  },
+  Lipid: {
+    name: 'Lipid Panel',
+    tests: ['Total Cholesterol', 'LDL', 'HDL', 'Triglycerides', 'VLDL'],
+  },
   Thyroid: { name: 'Thyroid Panel', tests: ['TSH', 'Free T4', 'Free T3', 'T3 Uptake'] },
   HbA1c: { name: 'Hemoglobin A1c', tests: ['HbA1c'] },
   Coag: { name: 'Coagulation', tests: ['PT', 'INR', 'aPTT'] },
 };
 
-const VITAL_RANGES: Record<string, { low: number; high: number; critLow: number; critHigh: number; unit: string }> = {
+const VITAL_RANGES: Record<
+  string,
+  { low: number; high: number; critLow: number; critHigh: number; unit: string }
+> = {
   heartRate: { low: 60, high: 100, critLow: 40, critHigh: 150, unit: 'bpm' },
   bpSystolic: { low: 90, high: 120, critLow: 70, critHigh: 180, unit: 'mmHg' },
   bpDiastolic: { low: 60, high: 80, critLow: 40, critHigh: 120, unit: 'mmHg' },
@@ -211,13 +278,28 @@ const VITAL_RANGES: Record<string, { low: number; high: number; critLow: number;
 };
 
 const SYMPTOM_CATEGORIES = [
-  'Neurological', 'Respiratory', 'Cardiovascular', 'Gastrointestinal',
-  'Musculoskeletal', 'Dermatological', 'Psychological', 'General', 'Other',
+  'Neurological',
+  'Respiratory',
+  'Cardiovascular',
+  'Gastrointestinal',
+  'Musculoskeletal',
+  'Dermatological',
+  'Psychological',
+  'General',
+  'Other',
 ];
 
 const APPOINTMENT_TYPES = [
-  'Follow-up', 'Annual Physical', 'Specialist Referral', 'Lab Work',
-  'Imaging', 'Procedure', 'Telehealth', 'Urgent Care', 'Pre-op', 'Post-op',
+  'Follow-up',
+  'Annual Physical',
+  'Specialist Referral',
+  'Lab Work',
+  'Imaging',
+  'Procedure',
+  'Telehealth',
+  'Urgent Care',
+  'Pre-op',
+  'Post-op',
 ];
 
 const seedItems: { title: string; data: HealthcareArtifact }[] = [];
@@ -258,7 +340,17 @@ function getVitalArcColor(key: string, value: number): string {
 }
 
 /** SVG mini-gauge for vital signs (~60px) */
-function VitalGauge({ value, vitalKey, label, unit }: { value: number; vitalKey: string; label: string; unit: string }) {
+function VitalGauge({
+  value,
+  vitalKey,
+  label,
+  unit,
+}: {
+  value: number;
+  vitalKey: string;
+  label: string;
+  unit: string;
+}) {
   const range = VITAL_RANGES[vitalKey];
   if (!range) return null;
   const fullMin = range.critLow - (range.high - range.low) * 0.2;
@@ -277,12 +369,19 @@ function VitalGauge({ value, vitalKey, label, unit }: { value: number; vitalKey:
   const filledLength = arcLength * pct;
   return (
     <div className="flex flex-col items-center">
-      <div className="relative" style={critical ? { animation: 'pulse-critical 2s ease-in-out infinite' } : undefined}>
+      <div
+        className="relative"
+        style={critical ? { animation: 'pulse-critical 2s ease-in-out infinite' } : undefined}
+      >
         <svg width="60" height="60" viewBox="0 0 60 60">
           {/* Background arc */}
           <circle
-            cx={cx} cy={cy} r={r}
-            fill="none" stroke="#374151" strokeWidth="5"
+            cx={cx}
+            cy={cy}
+            r={r}
+            fill="none"
+            stroke="#374151"
+            strokeWidth="5"
             strokeDasharray={`${arcLength} ${circumference}`}
             strokeDashoffset={0}
             strokeLinecap="round"
@@ -290,8 +389,12 @@ function VitalGauge({ value, vitalKey, label, unit }: { value: number; vitalKey:
           />
           {/* Filled arc */}
           <circle
-            cx={cx} cy={cy} r={r}
-            fill="none" stroke={color} strokeWidth="5"
+            cx={cx}
+            cy={cy}
+            r={r}
+            fill="none"
+            stroke={color}
+            strokeWidth="5"
             strokeDasharray={`${filledLength} ${circumference}`}
             strokeDashoffset={0}
             strokeLinecap="round"
@@ -299,10 +402,27 @@ function VitalGauge({ value, vitalKey, label, unit }: { value: number; vitalKey:
             style={{ transition: 'stroke-dasharray 0.5s ease' }}
           />
           {/* Center value */}
-          <text x={cx} y={cy - 2} textAnchor="middle" dominantBaseline="middle"
-            fill={color} fontSize="13" fontWeight="bold">{value}</text>
-          <text x={cx} y={cy + 10} textAnchor="middle" dominantBaseline="middle"
-            fill="#9ca3af" fontSize="7">{unit}</text>
+          <text
+            x={cx}
+            y={cy - 2}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            fill={color}
+            fontSize="13"
+            fontWeight="bold"
+          >
+            {value}
+          </text>
+          <text
+            x={cx}
+            y={cy + 10}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            fill="#9ca3af"
+            fontSize="7"
+          >
+            {unit}
+          </text>
         </svg>
       </div>
       <span className="text-[10px] text-gray-400 mt-0.5">{label}</span>
@@ -314,27 +434,67 @@ function VitalGauge({ value, vitalKey, label, unit }: { value: number; vitalKey:
 function StatusBadge({ status }: { status: Status }) {
   const baseColor = STATUS_COLORS[status] || 'gray-400';
   const config: Record<Status, { bg: string; text: string; border: string; label: string }> = {
-    active: { bg: `bg-${baseColor}/15`, text: `text-${baseColor}`, border: `border-${baseColor}/30`, label: 'Active' },
-    scheduled: { bg: `bg-${baseColor}/15`, text: `text-${baseColor}`, border: `border-${baseColor}/30`, label: 'Scheduled' },
-    completed: { bg: `bg-${baseColor}/15`, text: `text-${baseColor}`, border: `border-${baseColor}/30`, label: 'Completed' },
-    cancelled: { bg: `bg-${baseColor}/15`, text: `text-${baseColor}`, border: `border-${baseColor}/30`, label: 'Cancelled' },
-    archived: { bg: `bg-${baseColor}/15`, text: `text-${baseColor}`, border: `border-${baseColor}/30`, label: 'Archived' },
+    active: {
+      bg: `bg-${baseColor}/15`,
+      text: `text-${baseColor}`,
+      border: `border-${baseColor}/30`,
+      label: 'Active',
+    },
+    scheduled: {
+      bg: `bg-${baseColor}/15`,
+      text: `text-${baseColor}`,
+      border: `border-${baseColor}/30`,
+      label: 'Scheduled',
+    },
+    completed: {
+      bg: `bg-${baseColor}/15`,
+      text: `text-${baseColor}`,
+      border: `border-${baseColor}/30`,
+      label: 'Completed',
+    },
+    cancelled: {
+      bg: `bg-${baseColor}/15`,
+      text: `text-${baseColor}`,
+      border: `border-${baseColor}/30`,
+      label: 'Cancelled',
+    },
+    archived: {
+      bg: `bg-${baseColor}/15`,
+      text: `text-${baseColor}`,
+      border: `border-${baseColor}/30`,
+      label: 'Archived',
+    },
   };
   const c = config[status] || config.archived;
   return (
-    <span className={cn('inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border', c.bg, c.text, c.border)}>
-      {status === 'active' && <span className={`w-1.5 h-1.5 rounded-full bg-${baseColor} animate-pulse`} />}
+    <span
+      className={cn(
+        'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border',
+        c.bg,
+        c.text,
+        c.border
+      )}
+    >
+      {status === 'active' && (
+        <span className={`w-1.5 h-1.5 rounded-full bg-${baseColor} animate-pulse`} />
+      )}
       {c.label}
     </span>
   );
 }
 
-function calculateBMI(weightLbs: number, heightIn: number): { value: number; category: string; color: string } {
+function calculateBMI(
+  weightLbs: number,
+  heightIn: number
+): { value: number; category: string; color: string } {
   if (!weightLbs || !heightIn) return { value: 0, category: 'N/A', color: 'text-gray-400' };
   const bmi = (weightLbs / (heightIn * heightIn)) * 703;
-  if (bmi < 18.5) return { value: Math.round(bmi * 10) / 10, category: 'Underweight', color: 'text-yellow-400' };
-  if (bmi < 25) return { value: Math.round(bmi * 10) / 10, category: 'Normal', color: 'text-green-400' };
-  if (bmi < 30) return { value: Math.round(bmi * 10) / 10, category: 'Overweight', color: 'text-yellow-400' };
+  if (bmi < 18.5)
+    return { value: Math.round(bmi * 10) / 10, category: 'Underweight', color: 'text-yellow-400' };
+  if (bmi < 25)
+    return { value: Math.round(bmi * 10) / 10, category: 'Normal', color: 'text-green-400' };
+  if (bmi < 30)
+    return { value: Math.round(bmi * 10) / 10, category: 'Overweight', color: 'text-yellow-400' };
   return { value: Math.round(bmi * 10) / 10, category: 'Obese', color: 'text-red-400' };
 }
 
@@ -395,7 +555,9 @@ export default function HealthcareLensPage() {
 
   /* ---------- generate care plan state ---------- */
   const [generateLoading, setGenerateLoading] = useState(false);
-  const [generateResult, setGenerateResult] = useState<{ content: string; title: string } | null>(null);
+  const [generateResult, setGenerateResult] = useState<{ content: string; title: string } | null>(
+    null
+  );
   const [generateError, setGenerateError] = useState<string | null>(null);
 
   /* ---------- patient detail drawer ---------- */
@@ -483,75 +645,127 @@ export default function HealthcareLensPage() {
   const [formPriority, setFormPriority] = useState<'low' | 'medium' | 'high' | 'urgent'>('medium');
   const [formNotes, setFormNotes] = useState('');
 
-  const { items, isLoading, isError, error, refetch, create, update, remove } = useLensData<HealthcareArtifact>('healthcare', 'artifact', {
-    seed: seedItems.map(s => ({ title: s.title, data: s.data as unknown as Record<string, unknown>, meta: { status: s.data.status, tags: [s.data.artifactType] } })),
-  });
+  const { items, isLoading, isError, error, refetch, create, update, remove } =
+    useLensData<HealthcareArtifact>('healthcare', 'artifact', {
+      seed: seedItems.map((s) => ({
+        title: s.title,
+        data: s.data as unknown as Record<string, unknown>,
+        meta: { status: s.data.status, tags: [s.data.artifactType] },
+      })),
+    });
 
   const runAction = useRunArtifact('healthcare');
 
   /* ---------- derived data ---------- */
 
-  const currentTabType = MODE_TABS.find(t => t.id === activeTab)?.defaultType ?? 'Patient';
+  const currentTabType = MODE_TABS.find((t) => t.id === activeTab)?.defaultType ?? 'Patient';
 
   const filtered = useMemo(() => {
     let list = items;
-    list = list.filter(i => (i.data as unknown as HealthcareArtifact).artifactType === currentTabType);
-    if (filterStatus !== 'all') list = list.filter(i => (i.data as unknown as HealthcareArtifact).status === filterStatus);
-    if (filterType !== 'all') list = list.filter(i => (i.data as unknown as HealthcareArtifact).artifactType === filterType);
+    list = list.filter(
+      (i) => (i.data as unknown as HealthcareArtifact).artifactType === currentTabType
+    );
+    if (filterStatus !== 'all')
+      list = list.filter((i) => (i.data as unknown as HealthcareArtifact).status === filterStatus);
+    if (filterType !== 'all')
+      list = list.filter(
+        (i) => (i.data as unknown as HealthcareArtifact).artifactType === filterType
+      );
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
-      list = list.filter(i => i.title.toLowerCase().includes(q) || (i.data as unknown as HealthcareArtifact).description?.toLowerCase().includes(q));
+      list = list.filter(
+        (i) =>
+          i.title.toLowerCase().includes(q) ||
+          (i.data as unknown as HealthcareArtifact).description?.toLowerCase().includes(q)
+      );
     }
     return list;
   }, [items, currentTabType, filterStatus, filterType, searchQuery]);
 
-  const stats = useMemo(() => ({
-    total: items.length,
-    active: items.filter(i => (i.data as unknown as HealthcareArtifact).status === 'active').length,
-    scheduled: items.filter(i => (i.data as unknown as HealthcareArtifact).status === 'scheduled').length,
-    completed: items.filter(i => (i.data as unknown as HealthcareArtifact).status === 'completed').length,
-    urgent: items.filter(i => (i.data as unknown as HealthcareArtifact).priority === 'urgent' || (i.data as unknown as HealthcareArtifact).priority === 'high').length,
-    patients: items.filter(i => (i.data as unknown as HealthcareArtifact).artifactType === 'Patient').length,
-    encounters: items.filter(i => (i.data as unknown as HealthcareArtifact).artifactType === 'Encounter').length,
-    prescriptions: items.filter(i => (i.data as unknown as HealthcareArtifact).artifactType === 'Prescription').length,
-    labs: items.filter(i => (i.data as unknown as HealthcareArtifact).artifactType === 'LabResult').length,
-    pendingLabs: items.filter(i => (i.data as unknown as HealthcareArtifact).artifactType === 'LabResult' && (i.data as unknown as HealthcareArtifact).status === 'scheduled').length,
-    criticalLabs: items.filter(i => (i.data as unknown as HealthcareArtifact).artifactType === 'LabResult' && (i.data as unknown as HealthcareArtifact).isCritical).length,
-    todayEncounters: items.filter(i => {
-      const d = i.data as unknown as HealthcareArtifact;
-      return d.artifactType === 'Encounter' && d.date === new Date().toISOString().split('T')[0];
-    }).length,
-    overdueFollowups: items.filter(i => {
-      const d = i.data as unknown as HealthcareArtifact;
-      if (d.artifactType !== 'Encounter' || d.status !== 'scheduled') return false;
-      return d.date ? new Date(d.date) < new Date() : false;
-    }).length,
-  }), [items]);
+  const stats = useMemo(
+    () => ({
+      total: items.length,
+      active: items.filter((i) => (i.data as unknown as HealthcareArtifact).status === 'active')
+        .length,
+      scheduled: items.filter(
+        (i) => (i.data as unknown as HealthcareArtifact).status === 'scheduled'
+      ).length,
+      completed: items.filter(
+        (i) => (i.data as unknown as HealthcareArtifact).status === 'completed'
+      ).length,
+      urgent: items.filter(
+        (i) =>
+          (i.data as unknown as HealthcareArtifact).priority === 'urgent' ||
+          (i.data as unknown as HealthcareArtifact).priority === 'high'
+      ).length,
+      patients: items.filter(
+        (i) => (i.data as unknown as HealthcareArtifact).artifactType === 'Patient'
+      ).length,
+      encounters: items.filter(
+        (i) => (i.data as unknown as HealthcareArtifact).artifactType === 'Encounter'
+      ).length,
+      prescriptions: items.filter(
+        (i) => (i.data as unknown as HealthcareArtifact).artifactType === 'Prescription'
+      ).length,
+      labs: items.filter(
+        (i) => (i.data as unknown as HealthcareArtifact).artifactType === 'LabResult'
+      ).length,
+      pendingLabs: items.filter(
+        (i) =>
+          (i.data as unknown as HealthcareArtifact).artifactType === 'LabResult' &&
+          (i.data as unknown as HealthcareArtifact).status === 'scheduled'
+      ).length,
+      criticalLabs: items.filter(
+        (i) =>
+          (i.data as unknown as HealthcareArtifact).artifactType === 'LabResult' &&
+          (i.data as unknown as HealthcareArtifact).isCritical
+      ).length,
+      todayEncounters: items.filter((i) => {
+        const d = i.data as unknown as HealthcareArtifact;
+        return d.artifactType === 'Encounter' && d.date === new Date().toISOString().split('T')[0];
+      }).length,
+      overdueFollowups: items.filter((i) => {
+        const d = i.data as unknown as HealthcareArtifact;
+        if (d.artifactType !== 'Encounter' || d.status !== 'scheduled') return false;
+        return d.date ? new Date(d.date) < new Date() : false;
+      }).length,
+    }),
+    [items]
+  );
 
   /* ---------- linked records for a patient ---------- */
-  const getPatientLinked = useCallback((patientId: string) => {
-    return items.filter(i => {
-      const d = i.data as unknown as HealthcareArtifact;
-      return d.patientId === patientId && d.artifactType !== 'Patient';
-    }).sort((a, b) => {
-      const da = (a.data as unknown as HealthcareArtifact).date || '';
-      const db = (b.data as unknown as HealthcareArtifact).date || '';
-      return db.localeCompare(da);
-    });
-  }, [items]);
+  const getPatientLinked = useCallback(
+    (patientId: string) => {
+      return items
+        .filter((i) => {
+          const d = i.data as unknown as HealthcareArtifact;
+          return d.patientId === patientId && d.artifactType !== 'Patient';
+        })
+        .sort((a, b) => {
+          const da = (a.data as unknown as HealthcareArtifact).date || '';
+          const db = (b.data as unknown as HealthcareArtifact).date || '';
+          return db.localeCompare(da);
+        });
+    },
+    [items]
+  );
 
   /* ---------- medication helpers ---------- */
   const filteredMeds = useMemo(() => {
     let meds = filtered;
-    if (medFilter === 'prn') meds = meds.filter(i => (i.data as unknown as HealthcareArtifact).isPRN);
-    if (medFilter === 'scheduled') meds = meds.filter(i => !(i.data as unknown as HealthcareArtifact).isPRN);
+    if (medFilter === 'prn')
+      meds = meds.filter((i) => (i.data as unknown as HealthcareArtifact).isPRN);
+    if (medFilter === 'scheduled')
+      meds = meds.filter((i) => !(i.data as unknown as HealthcareArtifact).isPRN);
     return meds;
   }, [filtered, medFilter]);
 
   /* ---------- lab helpers ---------- */
   const filteredLabs = useMemo(() => {
     if (labPanelFilter === 'all') return filtered;
-    return filtered.filter(i => (i.data as unknown as HealthcareArtifact).testPanel === labPanelFilter);
+    return filtered.filter(
+      (i) => (i.data as unknown as HealthcareArtifact).testPanel === labPanelFilter
+    );
   }, [filtered, labPanelFilter]);
 
   /* ---------- editor helpers ---------- */
@@ -566,18 +780,44 @@ export default function HealthcareLensPage() {
     setFormDate('');
     setFormPriority('medium');
     setFormNotes('');
-    setSoapSubjective(''); setSoapObjective(''); setSoapAssessment(''); setSoapPlan('');
-    setSoapComplaint(''); setSoapVisitStart(''); setSoapVisitEnd('');
-    setVitalsHR(''); setVitalsBPSys(''); setVitalsBPDia(''); setVitalsTemp('');
-    setVitalsRR(''); setVitalsO2(''); setVitalsWeight(''); setVitalsHeight('');
-    setFormDosage(''); setFormFrequency(''); setFormRoute('');
-    setFormStartDate(''); setFormEndDate(''); setFormIsPRN(false);
-    setFormRefills(''); setFormDaysSupply(''); setFormInteractions('');
-    setFormSymptomName(''); setFormSeverity(5); setFormSymptomDate(new Date().toISOString().split('T')[0]);
-    setFormSymptomNotes(''); setFormSymptomCategory('General');
-    setFormTestPanel(''); setFormResultValue(''); setFormReferenceRange('');
-    setFormUnit(''); setFormIsCritical(false);
-    setFormApptDate(''); setFormApptTime(''); setFormApptType('Follow-up'); setFormApptLocation('');
+    setSoapSubjective('');
+    setSoapObjective('');
+    setSoapAssessment('');
+    setSoapPlan('');
+    setSoapComplaint('');
+    setSoapVisitStart('');
+    setSoapVisitEnd('');
+    setVitalsHR('');
+    setVitalsBPSys('');
+    setVitalsBPDia('');
+    setVitalsTemp('');
+    setVitalsRR('');
+    setVitalsO2('');
+    setVitalsWeight('');
+    setVitalsHeight('');
+    setFormDosage('');
+    setFormFrequency('');
+    setFormRoute('');
+    setFormStartDate('');
+    setFormEndDate('');
+    setFormIsPRN(false);
+    setFormRefills('');
+    setFormDaysSupply('');
+    setFormInteractions('');
+    setFormSymptomName('');
+    setFormSeverity(5);
+    setFormSymptomDate(new Date().toISOString().split('T')[0]);
+    setFormSymptomNotes('');
+    setFormSymptomCategory('General');
+    setFormTestPanel('');
+    setFormResultValue('');
+    setFormReferenceRange('');
+    setFormUnit('');
+    setFormIsCritical(false);
+    setFormApptDate('');
+    setFormApptTime('');
+    setFormApptType('Follow-up');
+    setFormApptLocation('');
     setShowEditor(true);
   };
 
@@ -651,9 +891,13 @@ export default function HealthcareLensPage() {
         priority: formPriority,
         notes: formNotes,
         ...(formType === 'Encounter' && {
-          soapSubjective, soapObjective, soapAssessment, soapPlan,
+          soapSubjective,
+          soapObjective,
+          soapAssessment,
+          soapPlan,
           chiefComplaint: soapComplaint,
-          visitStart: soapVisitStart, visitEnd: soapVisitEnd,
+          visitStart: soapVisitStart,
+          visitEnd: soapVisitEnd,
         }),
         ...(formType === 'Patient' && {
           heartRate: vitalsHR ? Number(vitalsHR) : undefined,
@@ -678,7 +922,12 @@ export default function HealthcareLensPage() {
           isPRN: formIsPRN,
           refillsRemaining: formRefills ? Number(formRefills) : undefined,
           daysSupply: formDaysSupply ? Number(formDaysSupply) : undefined,
-          interactions: formInteractions ? formInteractions.split(',').map(s => s.trim()).filter(Boolean) : undefined,
+          interactions: formInteractions
+            ? formInteractions
+                .split(',')
+                .map((s) => s.trim())
+                .filter(Boolean)
+            : undefined,
         }),
         ...(formType === 'LabResult' && {
           testPanel: formTestPanel || undefined,
@@ -714,18 +963,28 @@ export default function HealthcareLensPage() {
     if (!targetId) return;
     try {
       const result = await runAction.mutateAsync({ id: targetId, action });
-      if (result.ok === false) { setActionResult({ message: `Action failed: ${(result as Record<string, unknown>).error || 'Unknown error'}` }); } else { setActionResult(result.result as Record<string, unknown>); }
+      if (result.ok === false) {
+        setActionResult({
+          message: `Action failed: ${(result as Record<string, unknown>).error || 'Unknown error'}`,
+        });
+      } else {
+        setActionResult(result.result as Record<string, unknown>);
+      }
     } catch (err) {
       console.error('Action failed:', err);
     }
   };
 
   const handleGenerateCarePlan = useCallback(async () => {
-    const symptomItems = items.filter(i => (i.data as unknown as HealthcareArtifact).artifactType === 'Symptom');
-    const symptoms = symptomItems.map(i => {
-      const d = i.data as unknown as HealthcareArtifact;
-      return `${d.symptomName || i.title} (severity: ${d.severity ?? 'unknown'}, category: ${d.symptomCategory || 'General'})`;
-    }).join('; ');
+    const symptomItems = items.filter(
+      (i) => (i.data as unknown as HealthcareArtifact).artifactType === 'Symptom'
+    );
+    const symptoms = symptomItems
+      .map((i) => {
+        const d = i.data as unknown as HealthcareArtifact;
+        return `${d.symptomName || i.title} (severity: ${d.severity ?? 'unknown'}, category: ${d.symptomCategory || 'General'})`;
+      })
+      .join('; ');
     if (!symptoms) return;
     setGenerateLoading(true);
     setGenerateError(null);
@@ -737,11 +996,12 @@ export default function HealthcareLensPage() {
         input: { symptoms, type: 'care-plan' },
       });
       const data = res.data;
-      const content = typeof data?.result === 'string'
-        ? data.result
-        : typeof data?.result?.content === 'string'
-          ? data.result.content
-          : JSON.stringify(data?.result ?? data, null, 2);
+      const content =
+        typeof data?.result === 'string'
+          ? data.result
+          : typeof data?.result?.content === 'string'
+            ? data.result.content
+            : JSON.stringify(data?.result ?? data, null, 2);
       setGenerateResult({
         content,
         title: data?.result?.title || 'Generated Care Plan',
@@ -787,8 +1047,18 @@ export default function HealthcareLensPage() {
   /* ================================================================== */
   /*  VITAL SIGN CARD (reusable)                                        */
   /* ================================================================== */
-  const VitalCard = ({ label, value, vitalKey, icon: Icon, unit }: {
-    label: string; value?: number; vitalKey: string; icon: React.ElementType; unit?: string;
+  const VitalCard = ({
+    label,
+    value,
+    vitalKey,
+    icon: Icon,
+    unit,
+  }: {
+    label: string;
+    value?: number;
+    vitalKey: string;
+    icon: React.ElementType;
+    unit?: string;
   }) => {
     const range = VITAL_RANGES[vitalKey];
     const displayUnit = unit || range?.unit || '';
@@ -798,7 +1068,7 @@ export default function HealthcareLensPage() {
         className={cn(
           'rounded-lg border p-3 flex items-center gap-3',
           value ? getVitalBg(vitalKey, value) : 'bg-gray-500/10 border-lattice-border',
-          critical && 'pulse-critical-glow',
+          critical && 'pulse-critical-glow'
         )}
       >
         {/* SVG Gauge */}
@@ -812,15 +1082,27 @@ export default function HealthcareLensPage() {
         {/* Label + range */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-0.5">
-            <Icon className={cn('w-3.5 h-3.5', value ? getVitalColor(vitalKey, value) : 'text-gray-500')} />
+            <Icon
+              className={cn(
+                'w-3.5 h-3.5',
+                value ? getVitalColor(vitalKey, value) : 'text-gray-500'
+              )}
+            />
             <span className={cn(ds.textMuted, 'text-xs')}>{label}</span>
           </div>
-          <p className={cn('text-lg font-bold', value ? getVitalColor(vitalKey, value) : 'text-gray-500')}>
+          <p
+            className={cn(
+              'text-lg font-bold',
+              value ? getVitalColor(vitalKey, value) : 'text-gray-500'
+            )}
+          >
             {value ?? '--'}
             <span className="text-xs font-normal ml-1">{displayUnit}</span>
           </p>
           {range && (
-            <p className="text-[10px] text-gray-500">{range.low}-{range.high} {displayUnit}</p>
+            <p className="text-[10px] text-gray-500">
+              {range.low}-{range.high} {displayUnit}
+            </p>
           )}
         </div>
       </div>
@@ -833,14 +1115,27 @@ export default function HealthcareLensPage() {
   const TimelineItem = ({ item }: { item: LensItem<HealthcareArtifact> }) => {
     const d = item.data as unknown as HealthcareArtifact;
     const typeIcons: Record<string, React.ElementType> = {
-      Encounter: Stethoscope, Prescription: Pill, LabResult: FlaskConical,
-      Treatment: Brain, CareProtocol: ClipboardList, Patient: Users,
+      Encounter: Stethoscope,
+      Prescription: Pill,
+      LabResult: FlaskConical,
+      Treatment: Brain,
+      CareProtocol: ClipboardList,
+      Patient: Users,
     };
     const TypeIcon = typeIcons[d.artifactType] || FileText;
     return (
       <div className="flex gap-4 relative pl-6 pb-6 group">
         <div className="absolute left-0 top-0 bottom-0 w-px bg-lattice-border group-last:hidden" />
-        <div className={cn('absolute left-[-5px] top-1 w-[11px] h-[11px] rounded-full border-2 border-lattice-border', d.status === 'active' ? 'bg-green-400' : d.status === 'completed' ? 'bg-neon-cyan' : 'bg-gray-600')} />
+        <div
+          className={cn(
+            'absolute left-[-5px] top-1 w-[11px] h-[11px] rounded-full border-2 border-lattice-border',
+            d.status === 'active'
+              ? 'bg-green-400'
+              : d.status === 'completed'
+                ? 'bg-neon-cyan'
+                : 'bg-gray-600'
+          )}
+        />
         <div className={cn(ds.panelHover, 'flex-1')} onClick={() => openEditEditor(item)}>
           <div className="flex items-center justify-between mb-1">
             <div className="flex items-center gap-2">
@@ -851,7 +1146,12 @@ export default function HealthcareLensPage() {
           </div>
           <p className={cn(ds.textMuted, 'line-clamp-2 mb-2')}>{d.description}</p>
           <div className="flex items-center gap-4 text-xs text-gray-500">
-            {d.date && <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{d.date}</span>}
+            {d.date && (
+              <span className="flex items-center gap-1">
+                <Clock className="w-3 h-3" />
+                {d.date}
+              </span>
+            )}
             {d.provider && <span>{d.provider}</span>}
             <span className={ds.badge('gray-400')}>{d.artifactType}</span>
           </div>
@@ -902,12 +1202,22 @@ export default function HealthcareLensPage() {
           <div className="flex items-center gap-2 text-xs">
             <RefreshCw className="w-3 h-3 text-gray-500" />
             <span className="text-gray-400">
-              Refills: <span className="text-gray-200 font-medium">{d.refillsRemaining ?? '--'}</span>
+              Refills:{' '}
+              <span className="text-gray-200 font-medium">{d.refillsRemaining ?? '--'}</span>
             </span>
           </div>
           {/* Days remaining */}
           {daysLeft >= 0 && (
-            <div className={cn('flex items-center gap-1 text-xs', daysLeft <= 7 ? 'text-red-400' : daysLeft <= 14 ? 'text-yellow-400' : 'text-gray-400')}>
+            <div
+              className={cn(
+                'flex items-center gap-1 text-xs',
+                daysLeft <= 7
+                  ? 'text-red-400'
+                  : daysLeft <= 14
+                    ? 'text-yellow-400'
+                    : 'text-gray-400'
+              )}
+            >
               <Timer className="w-3 h-3" />
               {daysLeft} days remaining
             </div>
@@ -917,11 +1227,26 @@ export default function HealthcareLensPage() {
             <span className="text-gray-500">Adherence:</span>
             <div className="flex-1 bg-gray-800 rounded-full h-1.5 max-w-[80px]">
               <div
-                className={cn('h-full rounded-full', adherence >= 80 ? 'bg-green-400' : adherence >= 50 ? 'bg-yellow-400' : 'bg-red-400')}
+                className={cn(
+                  'h-full rounded-full',
+                  adherence >= 80
+                    ? 'bg-green-400'
+                    : adherence >= 50
+                      ? 'bg-yellow-400'
+                      : 'bg-red-400'
+                )}
                 style={{ width: `${Math.min(adherence, 100)}%` }}
               />
             </div>
-            <span className={cn(adherence >= 80 ? 'text-green-400' : adherence >= 50 ? 'text-yellow-400' : 'text-red-400')}>
+            <span
+              className={cn(
+                adherence >= 80
+                  ? 'text-green-400'
+                  : adherence >= 50
+                    ? 'text-yellow-400'
+                    : 'text-red-400'
+              )}
+            >
               {adherence}%
             </span>
           </div>
@@ -933,7 +1258,9 @@ export default function HealthcareLensPage() {
               <AlertTriangle className="w-3 h-3" /> Drug Interactions Detected
             </div>
             {d.interactions.map((inter, idx) => (
-              <p key={idx} className="text-xs text-red-300 ml-4">- {inter}</p>
+              <p key={idx} className="text-xs text-red-300 ml-4">
+                - {inter}
+              </p>
             ))}
           </div>
         )}
@@ -949,7 +1276,10 @@ export default function HealthcareLensPage() {
     const outOfRange = isOutOfRange(d.resultValue || '', d.referenceRange || '');
     const trend = getTrend(d.resultValue, d.previousValue);
     return (
-      <div className={cn(ds.panelHover, d.isCritical && 'border-red-500/50 pulse-critical-glow')} onClick={() => openEditEditor(item)}>
+      <div
+        className={cn(ds.panelHover, d.isCritical && 'border-red-500/50 pulse-critical-glow')}
+        onClick={() => openEditEditor(item)}
+      >
         <div className="flex items-start justify-between mb-2">
           <div className="flex-1">
             <div className="flex items-center gap-2">
@@ -968,19 +1298,35 @@ export default function HealthcareLensPage() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
           <div>
             <span className="text-gray-500 block">Result</span>
-            <span className={cn('font-bold text-sm', outOfRange ? 'text-red-400' : 'text-green-400', outOfRange && 'pulse-critical-glow rounded px-1')}>
+            <span
+              className={cn(
+                'font-bold text-sm',
+                outOfRange ? 'text-red-400' : 'text-green-400',
+                outOfRange && 'pulse-critical-glow rounded px-1'
+              )}
+            >
               {d.resultValue || '--'} {d.unit || ''}
             </span>
           </div>
           <div>
             <span className="text-gray-500 block">Reference Range</span>
-            <span className="text-gray-200">{d.referenceRange || '--'} {d.unit || ''}</span>
+            <span className="text-gray-200">
+              {d.referenceRange || '--'} {d.unit || ''}
+            </span>
           </div>
           <div>
             <span className="text-gray-500 block">Trend</span>
             <span className="flex items-center gap-1">
-              {trend === 'up' && <ArrowUpRight className={cn('w-4 h-4', outOfRange ? 'text-red-400' : 'text-yellow-400')} />}
-              {trend === 'down' && <ArrowDownRight className={cn('w-4 h-4', outOfRange ? 'text-red-400' : 'text-yellow-400')} />}
+              {trend === 'up' && (
+                <ArrowUpRight
+                  className={cn('w-4 h-4', outOfRange ? 'text-red-400' : 'text-yellow-400')}
+                />
+              )}
+              {trend === 'down' && (
+                <ArrowDownRight
+                  className={cn('w-4 h-4', outOfRange ? 'text-red-400' : 'text-yellow-400')}
+                />
+              )}
               {trend === 'stable' && <Minus className="w-4 h-4 text-green-400" />}
               {trend === 'none' && <span className="text-gray-500">--</span>}
               {d.previousValue && <span className="text-gray-400">(prev: {d.previousValue})</span>}
@@ -1003,7 +1349,8 @@ export default function HealthcareLensPage() {
     const goals = d.goals || [];
     const milestones = d.milestones || [];
     const interventions = d.interventions || [];
-    const overallProgress = goals.length > 0 ? Math.round(goals.reduce((s, g) => s + g.percent, 0) / goals.length) : 0;
+    const overallProgress =
+      goals.length > 0 ? Math.round(goals.reduce((s, g) => s + g.percent, 0) / goals.length) : 0;
     return (
       <div className={cn(ds.panelHover, 'space-y-3')} onClick={() => openEditEditor(item)}>
         <div className="flex items-start justify-between">
@@ -1017,13 +1364,28 @@ export default function HealthcareLensPage() {
         <div>
           <div className="flex items-center justify-between text-xs mb-1">
             <span className="text-gray-400">Overall Progress</span>
-            <span className={cn(overallProgress >= 75 ? 'text-green-400' : overallProgress >= 40 ? 'text-yellow-400' : 'text-gray-400')}>
+            <span
+              className={cn(
+                overallProgress >= 75
+                  ? 'text-green-400'
+                  : overallProgress >= 40
+                    ? 'text-yellow-400'
+                    : 'text-gray-400'
+              )}
+            >
               {overallProgress}%
             </span>
           </div>
           <div className="bg-gray-800 rounded-full h-2">
             <div
-              className={cn('h-full rounded-full transition-all', overallProgress >= 75 ? 'bg-green-400' : overallProgress >= 40 ? 'bg-yellow-400' : 'bg-neon-blue')}
+              className={cn(
+                'h-full rounded-full transition-all',
+                overallProgress >= 75
+                  ? 'bg-green-400'
+                  : overallProgress >= 40
+                    ? 'bg-yellow-400'
+                    : 'bg-neon-blue'
+              )}
               style={{ width: `${overallProgress}%` }}
             />
           </div>
@@ -1031,29 +1393,41 @@ export default function HealthcareLensPage() {
         {/* Goals summary */}
         {goals.length > 0 && (
           <div className="space-y-1">
-            <span className="text-xs text-gray-500 font-medium uppercase tracking-wide">Goals ({goals.length})</span>
+            <span className="text-xs text-gray-500 font-medium uppercase tracking-wide">
+              Goals ({goals.length})
+            </span>
             {goals.slice(0, 3).map((g, idx) => (
               <div key={idx} className="flex items-center justify-between text-xs">
                 <div className="flex items-center gap-2 flex-1">
-                  <Target className={cn('w-3 h-3', g.percent >= 100 ? 'text-green-400' : 'text-gray-500')} />
+                  <Target
+                    className={cn('w-3 h-3', g.percent >= 100 ? 'text-green-400' : 'text-gray-500')}
+                  />
                   <span className="text-gray-300 truncate">{g.name}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="bg-gray-800 rounded-full h-1 w-16">
-                    <div className={cn('h-full rounded-full', g.percent >= 100 ? 'bg-green-400' : 'bg-neon-blue')} style={{ width: `${Math.min(g.percent, 100)}%` }} />
+                    <div
+                      className={cn(
+                        'h-full rounded-full',
+                        g.percent >= 100 ? 'bg-green-400' : 'bg-neon-blue'
+                      )}
+                      style={{ width: `${Math.min(g.percent, 100)}%` }}
+                    />
                   </div>
                   <span className="text-gray-400 w-8 text-right">{g.percent}%</span>
                 </div>
               </div>
             ))}
-            {goals.length > 3 && <p className="text-xs text-gray-500">+{goals.length - 3} more goals</p>}
+            {goals.length > 3 && (
+              <p className="text-xs text-gray-500">+{goals.length - 3} more goals</p>
+            )}
           </div>
         )}
         {/* Milestones summary */}
         {milestones.length > 0 && (
           <div className="flex items-center gap-2 text-xs text-gray-400">
             <ListChecks className="w-3 h-3" />
-            {milestones.filter(m => m.completed).length}/{milestones.length} milestones complete
+            {milestones.filter((m) => m.completed).length}/{milestones.length} milestones complete
           </div>
         )}
         {/* Interventions */}
@@ -1075,7 +1449,10 @@ export default function HealthcareLensPage() {
   };
 
   return (
-    <div data-lens-theme="healthcare" className="p-6 space-y-6 bg-gradient-to-b from-blue-950/20 to-transparent">
+    <div
+      data-lens-theme="healthcare"
+      className="p-6 space-y-6 bg-gradient-to-b from-blue-950/20 to-transparent"
+    >
       {/* Critical pulse animation */}
       <style>{`
         @keyframes pulse-critical {
@@ -1095,11 +1472,20 @@ export default function HealthcareLensPage() {
         <AlertTriangle className="w-5 h-5 text-blue-400 mt-0.5 shrink-0" />
         <div className="flex-1">
           <p className="text-sm text-blue-200">
-            Not medical advice. This tool assists with record organization only. It is not a certified EHR and should not be used for clinical decision-making. Always consult a qualified healthcare provider. Consult applicable regulations (HIPAA, etc.) for your jurisdiction.
+            Not medical advice. This tool assists with record organization only. It is not a
+            certified EHR and should not be used for clinical decision-making. Always consult a
+            qualified healthcare provider. Consult applicable regulations (HIPAA, etc.) for your
+            jurisdiction.
           </p>
           <div className="flex items-center gap-3 mt-1">
-            <span className="flex items-center gap-1 text-xs text-blue-400/70"><ShieldCheck className="w-3 h-3" />HIPAA Aware</span>
-            <span className="flex items-center gap-1 text-xs text-blue-400/70"><BadgeCheck className="w-3 h-3" />Audit Trail</span>
+            <span className="flex items-center gap-1 text-xs text-blue-400/70">
+              <ShieldCheck className="w-3 h-3" />
+              HIPAA Aware
+            </span>
+            <span className="flex items-center gap-1 text-xs text-blue-400/70">
+              <BadgeCheck className="w-3 h-3" />
+              Audit Trail
+            </span>
           </div>
         </div>
       </div>
@@ -1121,8 +1507,17 @@ export default function HealthcareLensPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => { setDrawerOpen(!drawerOpen); }} className={ds.btnGhost}>
-            {drawerOpen ? <PanelRightClose className="w-4 h-4" /> : <PanelRightOpen className="w-4 h-4" />}
+          <button
+            onClick={() => {
+              setDrawerOpen(!drawerOpen);
+            }}
+            className={ds.btnGhost}
+          >
+            {drawerOpen ? (
+              <PanelRightClose className="w-4 h-4" />
+            ) : (
+              <PanelRightOpen className="w-4 h-4" />
+            )}
           </button>
           <button onClick={openNewEditor} className={ds.btnPrimary}>
             <Plus className="w-4 h-4" /> New Record
@@ -1130,14 +1525,34 @@ export default function HealthcareLensPage() {
         </div>
       </header>
 
-
       {/* Quick Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { label: 'Patients', value: items.filter(i => (i.data as unknown as HealthcareArtifact).type === 'patient').length || items.length, icon: Users },
-          { label: 'Appointments', value: items.filter(i => (i.data as unknown as HealthcareArtifact).type === 'appointment').length, icon: Calendar },
-          { label: 'Vitals Tracked', value: items.filter(i => (i.data as unknown as HealthcareArtifact).type === 'vitals').length, icon: Activity },
-          { label: 'Active', value: items.filter(i => i.meta?.status === 'active').length, icon: Heart },
+          {
+            label: 'Patients',
+            value:
+              items.filter((i) => (i.data as unknown as HealthcareArtifact).type === 'patient')
+                .length || items.length,
+            icon: Users,
+          },
+          {
+            label: 'Appointments',
+            value: items.filter(
+              (i) => (i.data as unknown as HealthcareArtifact).type === 'appointment'
+            ).length,
+            icon: Calendar,
+          },
+          {
+            label: 'Vitals Tracked',
+            value: items.filter((i) => (i.data as unknown as HealthcareArtifact).type === 'vitals')
+              .length,
+            icon: Activity,
+          },
+          {
+            label: 'Active',
+            value: items.filter((i) => i.meta?.status === 'active').length,
+            icon: Heart,
+          },
         ].map((stat) => (
           <div key={stat.label} className={ds.panel + ' flex items-center gap-3 p-3'}>
             <stat.icon className="w-5 h-5 text-blue-400 shrink-0" />
@@ -1151,14 +1566,30 @@ export default function HealthcareLensPage() {
 
       {/* AI Actions */}
       <UniversalActions domain="healthcare" artifactId={items[0]?.id} compact />
-      <RealtimeDataPanel domain="healthcare" data={realtimeData} isLive={isLive} lastUpdated={lastUpdated} insights={insights} compact />
+      <RealtimeDataPanel
+        domain="healthcare"
+        data={realtimeData}
+        isLive={isLive}
+        lastUpdated={lastUpdated}
+        insights={insights}
+        compact
+      />
       <DTUExportButton domain="healthcare" data={{}} compact />
       <VisionAnalyzeButton
         domain="healthcare"
         prompt="Analyze this medical image. Describe visible findings, suggest relevant clinical tags, and note anything that may warrant further review. IMPORTANT: This is AI-assisted and must be verified by a licensed healthcare professional."
         onResult={(res) => {
-          setFormDescription(prev => prev ? `${prev}\n\n[Vision Analysis - NOT a clinical diagnosis]\n${res.analysis}` : `[Vision Analysis - NOT a clinical diagnosis]\n${res.analysis}`);
-          if (res.suggestedTags?.length) setFormNotes(prev => prev ? `${prev}\nSuggested tags: ${res.suggestedTags!.join(', ')}` : `Suggested tags: ${res.suggestedTags!.join(', ')}`);
+          setFormDescription((prev) =>
+            prev
+              ? `${prev}\n\n[Vision Analysis - NOT a clinical diagnosis]\n${res.analysis}`
+              : `[Vision Analysis - NOT a clinical diagnosis]\n${res.analysis}`
+          );
+          if (res.suggestedTags?.length)
+            setFormNotes((prev) =>
+              prev
+                ? `${prev}\nSuggested tags: ${res.suggestedTags!.join(', ')}`
+                : `Suggested tags: ${res.suggestedTags!.join(', ')}`
+            );
         }}
         className="inline-flex"
       />
@@ -1166,11 +1597,19 @@ export default function HealthcareLensPage() {
       {/* Mode Tabs                                                    */}
       {/* ============================================================ */}
       <nav className="flex items-center gap-1 border-b border-blue-900/20 pb-3 flex-wrap">
-        {MODE_TABS.map(tab => (
+        {MODE_TABS.map((tab) => (
           <button
             key={tab.id}
-            onClick={() => { setActiveTab(tab.id); setFilterStatus('all'); setFilterType('all'); }}
-            className={cn(ds.btnGhost, 'whitespace-nowrap rounded-lg', activeTab === tab.id && 'bg-blue-500/15 text-blue-400 border-blue-400/20')}
+            onClick={() => {
+              setActiveTab(tab.id);
+              setFilterStatus('all');
+              setFilterType('all');
+            }}
+            className={cn(
+              ds.btnGhost,
+              'whitespace-nowrap rounded-lg',
+              activeTab === tab.id && 'bg-blue-500/15 text-blue-400 border-blue-400/20'
+            )}
           >
             <tab.icon className="w-4 h-4" />
             {tab.id}
@@ -1210,7 +1649,11 @@ export default function HealthcareLensPage() {
           onClick={() => setDashboardExpanded(!dashboardExpanded)}
           className={cn(ds.btnGhost, 'text-xs w-full justify-center')}
         >
-          {dashboardExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+          {dashboardExpanded ? (
+            <ChevronUp className="w-3 h-3" />
+          ) : (
+            <ChevronDown className="w-3 h-3" />
+          )}
           {dashboardExpanded ? 'Collapse Dashboard' : 'Expand Dashboard'}
         </button>
 
@@ -1297,7 +1740,9 @@ export default function HealthcareLensPage() {
         <button onClick={() => handleAction('soapAutoFill')} className={ds.btnSecondary}>
           <Clipboard className="w-4 h-4" /> SOAP Auto-Fill
         </button>
-        {runAction.isPending && <span className="text-xs text-neon-blue animate-pulse">Running...</span>}
+        {runAction.isPending && (
+          <span className="text-xs text-neon-blue animate-pulse">Running...</span>
+        )}
       </div>
 
       {actionResult && (
@@ -1306,21 +1751,33 @@ export default function HealthcareLensPage() {
             <h3 className={ds.heading3}>Action Result</h3>
             <div className="flex items-center gap-2">
               <button
-                onClick={() => handleDownloadResult(
-                  typeof actionResult === 'object' ? JSON.stringify(actionResult, null, 2) : String(actionResult),
-                  'healthcare-result.txt'
-                )}
+                onClick={() =>
+                  handleDownloadResult(
+                    typeof actionResult === 'object'
+                      ? JSON.stringify(actionResult, null, 2)
+                      : String(actionResult),
+                    'healthcare-result.txt'
+                  )
+                }
                 className={cn(ds.btnGhost, 'text-xs')}
               >
                 <Download className="w-3.5 h-3.5 mr-1" /> Download
               </button>
-              <button onClick={() => setActionResult(null)} className={ds.btnGhost}><X className="w-4 h-4" /></button>
+              <button onClick={() => setActionResult(null)} className={ds.btnGhost}>
+                <X className="w-4 h-4" />
+              </button>
             </div>
           </div>
           {typeof actionResult === 'object' && 'content' in actionResult && actionResult.content ? (
             <div className="prose prose-invert prose-sm max-w-none">
-              {actionResult.title ? <h4 className="text-sm font-semibold text-neon-cyan mb-2">{String(actionResult.title)}</h4> : null}
-              <div className="text-sm text-gray-300 whitespace-pre-wrap leading-relaxed">{String(actionResult.content)}</div>
+              {actionResult.title ? (
+                <h4 className="text-sm font-semibold text-neon-cyan mb-2">
+                  {String(actionResult.title)}
+                </h4>
+              ) : null}
+              <div className="text-sm text-gray-300 whitespace-pre-wrap leading-relaxed">
+                {String(actionResult.content)}
+              </div>
             </div>
           ) : (
             <div className="space-y-3">
@@ -1329,25 +1786,48 @@ export default function HealthcareLensPage() {
                 <div className="space-y-2">
                   <div className="grid grid-cols-3 gap-2">
                     <div className="p-2 bg-lattice-surface rounded text-center">
-                      <p className="text-sm font-bold text-neon-cyan">{String(actionResult.totalChecked)}</p>
+                      <p className="text-sm font-bold text-neon-cyan">
+                        {String(actionResult.totalChecked)}
+                      </p>
                       <p className="text-[10px] text-gray-500">Prescriptions</p>
                     </div>
                     <div className="p-2 bg-lattice-surface rounded text-center">
-                      <p className={`text-sm font-bold ${Number(actionResult.interactionsFound) > 0 ? 'text-red-400' : 'text-green-400'}`}>{String(actionResult.interactionsFound)}</p>
+                      <p
+                        className={`text-sm font-bold ${Number(actionResult.interactionsFound) > 0 ? 'text-red-400' : 'text-green-400'}`}
+                      >
+                        {String(actionResult.interactionsFound)}
+                      </p>
                       <p className="text-[10px] text-gray-500">Interactions</p>
                     </div>
                     <div className="p-2 bg-lattice-surface rounded text-center">
-                      <p className={`text-sm font-bold ${actionResult.hasCritical ? 'text-red-400' : 'text-green-400'}`}>{actionResult.hasCritical ? 'Critical' : 'Safe'}</p>
+                      <p
+                        className={`text-sm font-bold ${actionResult.hasCritical ? 'text-red-400' : 'text-green-400'}`}
+                      >
+                        {actionResult.hasCritical ? 'Critical' : 'Safe'}
+                      </p>
                       <p className="text-[10px] text-gray-500">Risk Level</p>
                     </div>
                   </div>
-                  {Array.isArray(actionResult.interactions) && (actionResult.interactions as {drugs:string[];severity:string;description:string}[]).map((ix, i) => (
-                    <div key={i} className="p-2 bg-lattice-surface rounded">
-                      <p className="text-xs font-semibold text-white">{ix.drugs.join(' + ')}</p>
-                      <p className={`text-[10px] font-semibold ${ix.severity === 'critical' ? 'text-red-400' : ix.severity === 'major' ? 'text-orange-400' : 'text-amber-400'}`}>{ix.severity.toUpperCase()}</p>
-                      {ix.description && <p className="text-[10px] text-gray-400 mt-0.5">{ix.description}</p>}
-                    </div>
-                  ))}
+                  {Array.isArray(actionResult.interactions) &&
+                    (
+                      actionResult.interactions as {
+                        drugs: string[];
+                        severity: string;
+                        description: string;
+                      }[]
+                    ).map((ix, i) => (
+                      <div key={i} className="p-2 bg-lattice-surface rounded">
+                        <p className="text-xs font-semibold text-white">{ix.drugs.join(' + ')}</p>
+                        <p
+                          className={`text-[10px] font-semibold ${ix.severity === 'critical' ? 'text-red-400' : ix.severity === 'major' ? 'text-orange-400' : 'text-amber-400'}`}
+                        >
+                          {ix.severity.toUpperCase()}
+                        </p>
+                        {ix.description && (
+                          <p className="text-[10px] text-gray-400 mt-0.5">{ix.description}</p>
+                        )}
+                      </div>
+                    ))}
                 </div>
               )}
               {/* protocolMatch */}
@@ -1355,53 +1835,87 @@ export default function HealthcareLensPage() {
                 <div className="space-y-2">
                   <div className="grid grid-cols-3 gap-2">
                     <div className="p-2 bg-lattice-surface rounded text-center">
-                      <p className="text-sm font-bold text-neon-cyan">{String(actionResult.conditionsEvaluated)}</p>
+                      <p className="text-sm font-bold text-neon-cyan">
+                        {String(actionResult.conditionsEvaluated)}
+                      </p>
                       <p className="text-[10px] text-gray-500">Conditions</p>
                     </div>
                     <div className="p-2 bg-lattice-surface rounded text-center">
-                      <p className="text-sm font-bold text-green-400">{Array.isArray(actionResult.matched) ? (actionResult.matched as unknown[]).length : 0}</p>
+                      <p className="text-sm font-bold text-green-400">
+                        {Array.isArray(actionResult.matched)
+                          ? (actionResult.matched as unknown[]).length
+                          : 0}
+                      </p>
                       <p className="text-[10px] text-gray-500">Full Matches</p>
                     </div>
                     <div className="p-2 bg-lattice-surface rounded text-center">
-                      <p className="text-sm font-bold text-amber-400">{Array.isArray(actionResult.partial) ? (actionResult.partial as unknown[]).length : 0}</p>
+                      <p className="text-sm font-bold text-amber-400">
+                        {Array.isArray(actionResult.partial)
+                          ? (actionResult.partial as unknown[]).length
+                          : 0}
+                      </p>
                       <p className="text-[10px] text-gray-500">Partial</p>
                     </div>
                   </div>
-                  {Array.isArray(actionResult.matched) && (actionResult.matched as {name:string}[]).map((m, i) => (
-                    <div key={i} className="flex items-center gap-2 p-2 bg-lattice-surface rounded">
-                      <span className="w-2 h-2 rounded-full bg-green-400 flex-shrink-0" />
-                      <p className="text-xs text-white">{m.name}</p>
-                    </div>
-                  ))}
+                  {Array.isArray(actionResult.matched) &&
+                    (actionResult.matched as { name: string }[]).map((m, i) => (
+                      <div
+                        key={i}
+                        className="flex items-center gap-2 p-2 bg-lattice-surface rounded"
+                      >
+                        <span className="w-2 h-2 rounded-full bg-green-400 flex-shrink-0" />
+                        <p className="text-xs text-white">{m.name}</p>
+                      </div>
+                    ))}
                 </div>
               )}
               {/* generateSummary */}
-              {actionResult.periodDays !== undefined && actionResult.encounterSummary !== undefined && (
-                <div className="space-y-2">
-                  <p className="text-xs text-gray-400">{String(actionResult.patientName)} &bull; Last {String(actionResult.periodDays)} days</p>
-                  <div className="grid grid-cols-3 gap-2">
-                    <div className="p-2 bg-lattice-surface rounded text-center">
-                      <p className="text-sm font-bold text-neon-cyan">{String((actionResult.encounterSummary as {total:number}).total)}</p>
-                      <p className="text-[10px] text-gray-500">Encounters</p>
+              {actionResult.periodDays !== undefined &&
+                actionResult.encounterSummary !== undefined && (
+                  <div className="space-y-2">
+                    <p className="text-xs text-gray-400">
+                      {String(actionResult.patientName)} &bull; Last{' '}
+                      {String(actionResult.periodDays)} days
+                    </p>
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="p-2 bg-lattice-surface rounded text-center">
+                        <p className="text-sm font-bold text-neon-cyan">
+                          {String((actionResult.encounterSummary as { total: number }).total)}
+                        </p>
+                        <p className="text-[10px] text-gray-500">Encounters</p>
+                      </div>
+                      <div className="p-2 bg-lattice-surface rounded text-center">
+                        <p className="text-sm font-bold text-neon-cyan">
+                          {String((actionResult.labSummary as { totalTests: number }).totalTests)}
+                        </p>
+                        <p className="text-[10px] text-gray-500">Lab Tests</p>
+                      </div>
+                      <div className="p-2 bg-lattice-surface rounded text-center">
+                        <p
+                          className={`text-sm font-bold ${Number((actionResult.labSummary as { abnormalCount: number }).abnormalCount) > 0 ? 'text-amber-400' : 'text-green-400'}`}
+                        >
+                          {String(
+                            (actionResult.labSummary as { abnormalCount: number }).abnormalCount
+                          )}
+                        </p>
+                        <p className="text-[10px] text-gray-500">Abnormal Labs</p>
+                      </div>
                     </div>
-                    <div className="p-2 bg-lattice-surface rounded text-center">
-                      <p className="text-sm font-bold text-neon-cyan">{String((actionResult.labSummary as {totalTests:number}).totalTests)}</p>
-                      <p className="text-[10px] text-gray-500">Lab Tests</p>
-                    </div>
-                    <div className="p-2 bg-lattice-surface rounded text-center">
-                      <p className={`text-sm font-bold ${Number((actionResult.labSummary as {abnormalCount:number}).abnormalCount) > 0 ? 'text-amber-400' : 'text-green-400'}`}>{String((actionResult.labSummary as {abnormalCount:number}).abnormalCount)}</p>
-                      <p className="text-[10px] text-gray-500">Abnormal Labs</p>
-                    </div>
+                    {Array.isArray(actionResult.activeConditions) &&
+                      (actionResult.activeConditions as string[]).length > 0 && (
+                        <div className="flex flex-wrap gap-1">
+                          {(actionResult.activeConditions as string[]).map((c, i) => (
+                            <span
+                              key={i}
+                              className="px-1.5 py-0.5 bg-neon-blue/10 text-neon-blue text-[10px] rounded"
+                            >
+                              {c}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                   </div>
-                  {Array.isArray(actionResult.activeConditions) && (actionResult.activeConditions as string[]).length > 0 && (
-                    <div className="flex flex-wrap gap-1">
-                      {(actionResult.activeConditions as string[]).map((c, i) => (
-                        <span key={i} className="px-1.5 py-0.5 bg-neon-blue/10 text-neon-blue text-[10px] rounded">{c}</span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
+                )}
             </div>
           )}
         </div>
@@ -1423,13 +1937,23 @@ export default function HealthcareLensPage() {
                 <div className="flex items-center border border-lattice-border rounded-lg overflow-hidden">
                   <button
                     onClick={() => setPatientViewMode('cards')}
-                    className={cn('px-2 py-1', patientViewMode === 'cards' ? 'bg-neon-blue/20 text-neon-blue' : 'text-gray-400 hover:text-white')}
+                    className={cn(
+                      'px-2 py-1',
+                      patientViewMode === 'cards'
+                        ? 'bg-neon-blue/20 text-neon-blue'
+                        : 'text-gray-400 hover:text-white'
+                    )}
                   >
                     <LayoutGrid className="w-4 h-4" />
                   </button>
                   <button
                     onClick={() => setPatientViewMode('timeline')}
-                    className={cn('px-2 py-1', patientViewMode === 'timeline' ? 'bg-neon-blue/20 text-neon-blue' : 'text-gray-400 hover:text-white')}
+                    className={cn(
+                      'px-2 py-1',
+                      patientViewMode === 'timeline'
+                        ? 'bg-neon-blue/20 text-neon-blue'
+                        : 'text-gray-400 hover:text-white'
+                    )}
                   >
                     <List className="w-4 h-4" />
                   </button>
@@ -1442,18 +1966,30 @@ export default function HealthcareLensPage() {
                 <input
                   type="text"
                   value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
+                  onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Search records..."
                   className={cn(ds.input, 'pl-9 w-56')}
                 />
               </div>
-              <select value={filterStatus} onChange={e => setFilterStatus(e.target.value as Status | 'all')} className={cn(ds.select, 'w-40')}>
+              <select
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value as Status | 'all')}
+                className={cn(ds.select, 'w-40')}
+              >
                 <option value="all">All statuses</option>
-                {ALL_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                {ALL_STATUSES.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
               </select>
               {/* Medication filter for Pharmacy tab */}
               {activeTab === 'Pharmacy' && (
-                <select value={medFilter} onChange={e => setMedFilter(e.target.value as 'all' | 'scheduled' | 'prn')} className={cn(ds.select, 'w-36')}>
+                <select
+                  value={medFilter}
+                  onChange={(e) => setMedFilter(e.target.value as 'all' | 'scheduled' | 'prn')}
+                  className={cn(ds.select, 'w-36')}
+                >
                   <option value="all">All Meds</option>
                   <option value="scheduled">Scheduled</option>
                   <option value="prn">PRN Only</option>
@@ -1461,9 +1997,17 @@ export default function HealthcareLensPage() {
               )}
               {/* Lab panel filter for Lab tab */}
               {activeTab === 'Lab' && (
-                <select value={labPanelFilter} onChange={e => setLabPanelFilter(e.target.value)} className={cn(ds.select, 'w-40')}>
+                <select
+                  value={labPanelFilter}
+                  onChange={(e) => setLabPanelFilter(e.target.value)}
+                  className={cn(ds.select, 'w-40')}
+                >
                   <option value="all">All Panels</option>
-                  {Object.keys(LAB_PANELS).map(k => <option key={k} value={k}>{k}</option>)}
+                  {Object.keys(LAB_PANELS).map((k) => (
+                    <option key={k} value={k}>
+                      {k}
+                    </option>
+                  ))}
                 </select>
               )}
             </div>
@@ -1471,7 +2015,12 @@ export default function HealthcareLensPage() {
 
           {isLoading ? (
             <p className={cn(ds.textMuted, 'text-center py-12')}>Loading records...</p>
-          ) : (activeTab === 'Pharmacy' ? filteredMeds : activeTab === 'Lab' ? filteredLabs : filtered).length === 0 ? (
+          ) : (activeTab === 'Pharmacy'
+              ? filteredMeds
+              : activeTab === 'Lab'
+                ? filteredLabs
+                : filtered
+            ).length === 0 ? (
             <div className="text-center py-12">
               <Stethoscope className="w-10 h-10 text-gray-600 mx-auto mb-3" />
               <p className={ds.textMuted}>No records found. Create one to get started.</p>
@@ -1482,7 +2031,13 @@ export default function HealthcareLensPage() {
               {activeTab === 'Patients' && patientViewMode === 'timeline' && (
                 <div className="space-y-0">
                   {filtered.map((item, index) => (
-                    <motion.div key={item.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }} className="mb-4">
+                    <motion.div
+                      key={item.id}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: index * 0.05 }}
+                      className="mb-4"
+                    >
                       <div
                         className={cn(ds.panelHover, 'mb-2')}
                         onClick={() => openDetailDrawer(item)}
@@ -1492,25 +2047,34 @@ export default function HealthcareLensPage() {
                             <Users className="w-5 h-5 text-neon-blue" />
                             <div>
                               <h3 className={cn(ds.heading3, 'text-base')}>{item.title}</h3>
-                              <p className={cn(ds.textMuted, 'line-clamp-1')}>{(item.data as unknown as HealthcareArtifact).description}</p>
+                              <p className={cn(ds.textMuted, 'line-clamp-1')}>
+                                {(item.data as unknown as HealthcareArtifact).description}
+                              </p>
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
-                            <StatusBadge status={(item.data as unknown as HealthcareArtifact).status} />
+                            <StatusBadge
+                              status={(item.data as unknown as HealthcareArtifact).status}
+                            />
                             <ChevronRight className="w-4 h-4 text-gray-500" />
                           </div>
                         </div>
                       </div>
                       {/* Timeline of linked records */}
                       <div className="ml-8 border-l border-lattice-border pl-4">
-                        {getPatientLinked(item.id).slice(0, 5).map(linked => (
-                          <TimelineItem key={linked.id} item={linked} />
-                        ))}
+                        {getPatientLinked(item.id)
+                          .slice(0, 5)
+                          .map((linked) => (
+                            <TimelineItem key={linked.id} item={linked} />
+                          ))}
                         {getPatientLinked(item.id).length === 0 && (
                           <p className={cn(ds.textMuted, 'text-xs py-2')}>No linked records</p>
                         )}
                         {getPatientLinked(item.id).length > 5 && (
-                          <p className="text-xs text-neon-blue cursor-pointer hover:underline" onClick={() => openDetailDrawer(item)}>
+                          <p
+                            className="text-xs text-neon-blue cursor-pointer hover:underline"
+                            onClick={() => openDetailDrawer(item)}
+                          >
                             View all {getPatientLinked(item.id).length} records...
                           </p>
                         )}
@@ -1522,13 +2086,19 @@ export default function HealthcareLensPage() {
 
               {activeTab === 'Patients' && patientViewMode === 'cards' && (
                 <div className={ds.grid3}>
-                  {filtered.map(item => {
+                  {filtered.map((item) => {
                     const d = item.data as unknown as HealthcareArtifact;
                     const linkedCount = getPatientLinked(item.id).length;
                     return (
-                      <div key={item.id} className={ds.panelHover} onClick={() => openDetailDrawer(item)}>
+                      <div
+                        key={item.id}
+                        className={ds.panelHover}
+                        onClick={() => openDetailDrawer(item)}
+                      >
                         <div className="flex items-start justify-between mb-2">
-                          <h3 className={cn(ds.heading3, 'text-base truncate flex-1')}>{item.title}</h3>
+                          <h3 className={cn(ds.heading3, 'text-base truncate flex-1')}>
+                            {item.title}
+                          </h3>
                           <StatusBadge status={d.status} />
                         </div>
                         <p className={cn(ds.textMuted, 'line-clamp-2 mb-3')}>{d.description}</p>
@@ -1536,16 +2106,31 @@ export default function HealthcareLensPage() {
                         {(d.heartRate || d.bpSystolic) && (
                           <div className="flex items-center gap-2 mb-2">
                             {d.heartRate && (
-                              <VitalGauge value={d.heartRate} vitalKey="heartRate" label="HR" unit="bpm" />
+                              <VitalGauge
+                                value={d.heartRate}
+                                vitalKey="heartRate"
+                                label="HR"
+                                unit="bpm"
+                              />
                             )}
                             {d.bpSystolic && (
-                              <VitalGauge value={d.bpSystolic} vitalKey="bpSystolic" label="SBP" unit="mmHg" />
+                              <VitalGauge
+                                value={d.bpSystolic}
+                                vitalKey="bpSystolic"
+                                label="SBP"
+                                unit="mmHg"
+                              />
                             )}
                             {d.o2Sat && (
                               <VitalGauge value={d.o2Sat} vitalKey="o2Sat" label="SpO2" unit="%" />
                             )}
                             {d.temperature && (
-                              <VitalGauge value={d.temperature} vitalKey="temperature" label="Temp" unit="F" />
+                              <VitalGauge
+                                value={d.temperature}
+                                vitalKey="temperature"
+                                label="Temp"
+                                unit="F"
+                              />
                             )}
                           </div>
                         )}
@@ -1578,13 +2163,20 @@ export default function HealthcareLensPage() {
               {/* ---- Encounters Tab (with SOAP hint) ---- */}
               {activeTab === 'Encounters' && (
                 <div className={ds.grid3}>
-                  {filtered.map(item => {
+                  {filtered.map((item) => {
                     const d = item.data as unknown as HealthcareArtifact;
-                    const hasSoap = d.soapSubjective || d.soapObjective || d.soapAssessment || d.soapPlan;
+                    const hasSoap =
+                      d.soapSubjective || d.soapObjective || d.soapAssessment || d.soapPlan;
                     return (
-                      <div key={item.id} className={ds.panelHover} onClick={() => openEditEditor(item)}>
+                      <div
+                        key={item.id}
+                        className={ds.panelHover}
+                        onClick={() => openEditEditor(item)}
+                      >
                         <div className="flex items-start justify-between mb-2">
-                          <h3 className={cn(ds.heading3, 'text-base truncate flex-1')}>{item.title}</h3>
+                          <h3 className={cn(ds.heading3, 'text-base truncate flex-1')}>
+                            {item.title}
+                          </h3>
                           <StatusBadge status={d.status} />
                         </div>
                         <p className={cn(ds.textMuted, 'line-clamp-2 mb-2')}>{d.description}</p>
@@ -1597,7 +2189,7 @@ export default function HealthcareLensPage() {
                             <span className="text-xs text-neon-cyan">SOAP Note</span>
                           </div>
                         )}
-                        {(d.visitStart && d.visitEnd) && (
+                        {d.visitStart && d.visitEnd && (
                           <div className="flex items-center gap-1 text-xs text-gray-500 mb-2">
                             <Timer className="w-3 h-3" />
                             Duration: {calculateVisitDuration(d.visitStart, d.visitEnd)}
@@ -1627,12 +2219,18 @@ export default function HealthcareLensPage() {
               {/* ---- Protocols Tab ---- */}
               {activeTab === 'Protocols' && (
                 <div className={ds.grid3}>
-                  {filtered.map(item => {
+                  {filtered.map((item) => {
                     const d = item.data as unknown as HealthcareArtifact;
                     return (
-                      <div key={item.id} className={ds.panelHover} onClick={() => openEditEditor(item)}>
+                      <div
+                        key={item.id}
+                        className={ds.panelHover}
+                        onClick={() => openEditEditor(item)}
+                      >
                         <div className="flex items-start justify-between mb-2">
-                          <h3 className={cn(ds.heading3, 'text-base truncate flex-1')}>{item.title}</h3>
+                          <h3 className={cn(ds.heading3, 'text-base truncate flex-1')}>
+                            {item.title}
+                          </h3>
                           <StatusBadge status={d.status} />
                         </div>
                         <p className={cn(ds.textMuted, 'line-clamp-2 mb-3')}>{d.description}</p>
@@ -1660,7 +2258,7 @@ export default function HealthcareLensPage() {
               {/* ---- Pharmacy Tab (Medication Schedule View) ---- */}
               {activeTab === 'Pharmacy' && (
                 <div className="space-y-3">
-                  {filteredMeds.map(item => (
+                  {filteredMeds.map((item) => (
                     <MedicationRow key={item.id} item={item} />
                   ))}
                 </div>
@@ -1672,20 +2270,27 @@ export default function HealthcareLensPage() {
                   {/* Lab panel quick stats */}
                   <div className="flex items-center gap-2 flex-wrap mb-2">
                     {Object.entries(LAB_PANELS).map(([key, _panel]) => {
-                      const count = filtered.filter(i => (i.data as unknown as HealthcareArtifact).testPanel === key).length;
+                      const count = filtered.filter(
+                        (i) => (i.data as unknown as HealthcareArtifact).testPanel === key
+                      ).length;
                       if (count === 0) return null;
                       return (
                         <button
                           key={key}
                           onClick={() => setLabPanelFilter(labPanelFilter === key ? 'all' : key)}
-                          className={cn(ds.btnSmall, labPanelFilter === key ? 'bg-neon-cyan/20 text-neon-cyan border border-neon-cyan/50' : 'bg-lattice-elevated text-gray-400 border border-lattice-border')}
+                          className={cn(
+                            ds.btnSmall,
+                            labPanelFilter === key
+                              ? 'bg-neon-cyan/20 text-neon-cyan border border-neon-cyan/50'
+                              : 'bg-lattice-elevated text-gray-400 border border-lattice-border'
+                          )}
                         >
                           {key} ({count})
                         </button>
                       );
                     })}
                   </div>
-                  {filteredLabs.map(item => (
+                  {filteredLabs.map((item) => (
                     <LabResultRow key={item.id} item={item} />
                   ))}
                 </div>
@@ -1694,7 +2299,7 @@ export default function HealthcareLensPage() {
               {/* ---- Therapy Tab (Care Plan Builder) ---- */}
               {activeTab === 'Therapy' && (
                 <div className="space-y-3">
-                  {filtered.map(item => (
+                  {filtered.map((item) => (
                     <CarePlanCard key={item.id} item={item} />
                   ))}
                 </div>
@@ -1704,76 +2309,126 @@ export default function HealthcareLensPage() {
               {activeTab === 'Symptoms' && (
                 <div className="space-y-4">
                   {/* Severity trend chart */}
-                  {filtered.length >= 2 && (() => {
-                    const sorted = [...filtered].sort((a, b) => {
-                      const da = (a.data as unknown as HealthcareArtifact).symptomDate || a.createdAt;
-                      const db = (b.data as unknown as HealthcareArtifact).symptomDate || b.createdAt;
-                      return da.localeCompare(db);
-                    });
-                    return (
-                      <div className={cn(ds.panel, 'space-y-3')}>
-                        <h3 className={ds.heading3}>Symptom Severity Trend</h3>
-                        <div className="flex items-end gap-1 h-24">
-                          {sorted.map((item, _i) => {
-                            const d = item.data as unknown as HealthcareArtifact;
-                            const sev = d.severity ?? 5;
-                            const pct = (sev / 10) * 100;
-                            const barColor = sev >= 8 ? 'bg-red-400' : sev >= 5 ? 'bg-yellow-400' : 'bg-green-400';
-                            return (
-                              <div key={item.id} className="flex-1 flex flex-col items-center justify-end" title={`${item.title}: ${sev}/10 on ${d.symptomDate || 'N/A'}`}>
-                                <span className="text-[9px] text-gray-400 mb-0.5">{sev}</span>
-                                <div className={cn('w-full rounded-t', barColor)} style={{ height: `${Math.max(8, pct)}%` }} />
-                                <span className="text-[8px] text-gray-500 mt-0.5 truncate w-full text-center">{(d.symptomDate || '').slice(5)}</span>
-                              </div>
-                            );
-                          })}
+                  {filtered.length >= 2 &&
+                    (() => {
+                      const sorted = [...filtered].sort((a, b) => {
+                        const da =
+                          (a.data as unknown as HealthcareArtifact).symptomDate || a.createdAt;
+                        const db =
+                          (b.data as unknown as HealthcareArtifact).symptomDate || b.createdAt;
+                        return da.localeCompare(db);
+                      });
+                      return (
+                        <div className={cn(ds.panel, 'space-y-3')}>
+                          <h3 className={ds.heading3}>Symptom Severity Trend</h3>
+                          <div className="flex items-end gap-1 h-24">
+                            {sorted.map((item, _i) => {
+                              const d = item.data as unknown as HealthcareArtifact;
+                              const sev = d.severity ?? 5;
+                              const pct = (sev / 10) * 100;
+                              const barColor =
+                                sev >= 8
+                                  ? 'bg-red-400'
+                                  : sev >= 5
+                                    ? 'bg-yellow-400'
+                                    : 'bg-green-400';
+                              return (
+                                <div
+                                  key={item.id}
+                                  className="flex-1 flex flex-col items-center justify-end"
+                                  title={`${item.title}: ${sev}/10 on ${d.symptomDate || 'N/A'}`}
+                                >
+                                  <span className="text-[9px] text-gray-400 mb-0.5">{sev}</span>
+                                  <div
+                                    className={cn('w-full rounded-t', barColor)}
+                                    style={{ height: `${Math.max(8, pct)}%` }}
+                                  />
+                                  <span className="text-[8px] text-gray-500 mt-0.5 truncate w-full text-center">
+                                    {(d.symptomDate || '').slice(5)}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                          <div className="flex items-center gap-4 text-xs">
+                            <span className="flex items-center gap-1">
+                              <span className="w-2 h-2 rounded-full bg-green-400" /> Mild (1-4)
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <span className="w-2 h-2 rounded-full bg-yellow-400" /> Moderate (5-7)
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <span className="w-2 h-2 rounded-full bg-red-400" /> Severe (8-10)
+                            </span>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-4 text-xs">
-                          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-400" /> Mild (1-4)</span>
-                          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-yellow-400" /> Moderate (5-7)</span>
-                          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-400" /> Severe (8-10)</span>
-                        </div>
-                      </div>
-                    );
-                  })()}
+                      );
+                    })()}
                   {/* Category summary */}
                   {filtered.length > 0 && (
                     <div className="flex gap-2 flex-wrap">
-                      {SYMPTOM_CATEGORIES.map(cat => {
-                        const count = filtered.filter(i => (i.data as unknown as HealthcareArtifact).symptomCategory === cat).length;
+                      {SYMPTOM_CATEGORIES.map((cat) => {
+                        const count = filtered.filter(
+                          (i) => (i.data as unknown as HealthcareArtifact).symptomCategory === cat
+                        ).length;
                         if (count === 0) return null;
-                        return <span key={cat} className={ds.badge('neon-cyan')}>{cat} ({count})</span>;
+                        return (
+                          <span key={cat} className={ds.badge('neon-cyan')}>
+                            {cat} ({count})
+                          </span>
+                        );
                       })}
                     </div>
                   )}
                   {/* Symptom cards */}
                   <div className={ds.grid3}>
-                    {filtered.map(item => {
+                    {filtered.map((item) => {
                       const d = item.data as unknown as HealthcareArtifact;
                       const sev = d.severity ?? 0;
-                      const sevColor = sev >= 8 ? 'text-red-400' : sev >= 5 ? 'text-yellow-400' : 'text-green-400';
-                      const sevBg = sev >= 8 ? 'bg-red-500/10 border-red-500/30' : sev >= 5 ? 'bg-yellow-500/10 border-yellow-500/30' : 'bg-green-500/10 border-green-500/30';
+                      const sevColor =
+                        sev >= 8 ? 'text-red-400' : sev >= 5 ? 'text-yellow-400' : 'text-green-400';
+                      const sevBg =
+                        sev >= 8
+                          ? 'bg-red-500/10 border-red-500/30'
+                          : sev >= 5
+                            ? 'bg-yellow-500/10 border-yellow-500/30'
+                            : 'bg-green-500/10 border-green-500/30';
                       return (
-                        <div key={item.id} className={cn(ds.panelHover, 'space-y-2')} onClick={() => openEditEditor(item)}>
+                        <div
+                          key={item.id}
+                          className={cn(ds.panelHover, 'space-y-2')}
+                          onClick={() => openEditEditor(item)}
+                        >
                           <div className="flex items-start justify-between">
                             <h3 className={cn(ds.heading3, 'text-base')}>{item.title}</h3>
                             <StatusBadge status={d.status} />
                           </div>
-                          {d.symptomName && <p className="text-sm text-gray-300">{d.symptomName}</p>}
+                          {d.symptomName && (
+                            <p className="text-sm text-gray-300">{d.symptomName}</p>
+                          )}
                           <p className={cn(ds.textMuted, 'line-clamp-2')}>{d.description}</p>
                           <div className="flex items-center gap-3">
                             <div className={cn('rounded-lg border px-3 py-1.5', sevBg)}>
                               <span className={cn('text-lg font-bold', sevColor)}>{sev}/10</span>
                               <span className="text-xs text-gray-400 ml-1">severity</span>
                             </div>
-                            {d.symptomCategory && <span className={ds.badge('neon-blue')}>{d.symptomCategory}</span>}
+                            {d.symptomCategory && (
+                              <span className={ds.badge('neon-blue')}>{d.symptomCategory}</span>
+                            )}
                           </div>
                           <div className="flex items-center gap-3 text-xs text-gray-500">
-                            {d.symptomDate && <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{d.symptomDate}</span>}
+                            {d.symptomDate && (
+                              <span className="flex items-center gap-1">
+                                <Clock className="w-3 h-3" />
+                                {d.symptomDate}
+                              </span>
+                            )}
                             {d.provider && <span>{d.provider}</span>}
                           </div>
                           {d.symptomNotes && (
-                            <p className="text-xs text-gray-500 italic line-clamp-2">{d.symptomNotes}</p>
+                            <p className="text-xs text-gray-500 italic line-clamp-2">
+                              {d.symptomNotes}
+                            </p>
                           )}
                         </div>
                       );
@@ -1808,14 +2463,21 @@ export default function HealthcareLensPage() {
                     {generateResult && (
                       <div className="space-y-3">
                         <div className="p-4 rounded-lg bg-lattice-deep border border-lattice-border">
-                          <h4 className="text-sm font-semibold text-neon-cyan mb-2">{generateResult.title}</h4>
+                          <h4 className="text-sm font-semibold text-neon-cyan mb-2">
+                            {generateResult.title}
+                          </h4>
                           <div className="text-sm text-gray-300 whitespace-pre-wrap leading-relaxed max-h-64 overflow-auto">
                             {generateResult.content}
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
                           <button
-                            onClick={() => handleDownloadResult(generateResult.content, `${generateResult.title.replace(/\s+/g, '-').toLowerCase()}.txt`)}
+                            onClick={() =>
+                              handleDownloadResult(
+                                generateResult.content,
+                                `${generateResult.title.replace(/\s+/g, '-').toLowerCase()}.txt`
+                              )
+                            }
                             className="flex items-center gap-1.5 px-3 py-1.5 bg-neon-cyan/10 text-neon-cyan rounded-lg text-xs hover:bg-neon-cyan/20"
                           >
                             <Download className="w-3.5 h-3.5" /> Download
@@ -1844,25 +2506,44 @@ export default function HealthcareLensPage() {
             <div className={ds.panel}>
               <div className="flex items-center justify-between mb-3">
                 <h2 className={ds.heading2}>Patient Detail</h2>
-                <button onClick={() => setDrawerOpen(false)} className={ds.btnGhost}><X className="w-4 h-4" /></button>
+                <button onClick={() => setDrawerOpen(false)} className={ds.btnGhost}>
+                  <X className="w-4 h-4" />
+                </button>
               </div>
               <div className="mb-4">
                 <h3 className={cn(ds.heading3, 'text-lg')}>{drawerItem.title}</h3>
-                <p className={ds.textMuted}>{(drawerItem.data as unknown as HealthcareArtifact).description}</p>
+                <p className={ds.textMuted}>
+                  {(drawerItem.data as unknown as HealthcareArtifact).description}
+                </p>
                 <div className="flex items-center gap-2 mt-2">
                   <StatusBadge status={(drawerItem.data as unknown as HealthcareArtifact).status} />
                   {(drawerItem.data as unknown as HealthcareArtifact).provider && (
-                    <span className={cn(ds.textMuted, 'text-xs')}>{(drawerItem.data as unknown as HealthcareArtifact).provider}</span>
+                    <span className={cn(ds.textMuted, 'text-xs')}>
+                      {(drawerItem.data as unknown as HealthcareArtifact).provider}
+                    </span>
                   )}
                 </div>
               </div>
               {/* Sub-tabs */}
               <div className="flex items-center gap-1 border-b border-lattice-border pb-2 mb-3 flex-wrap">
-                {(['Overview', 'Vitals', 'Medications', 'Labs', 'History', 'Appointments'] as DetailSubTab[]).map(tab => (
+                {(
+                  [
+                    'Overview',
+                    'Vitals',
+                    'Medications',
+                    'Labs',
+                    'History',
+                    'Appointments',
+                  ] as DetailSubTab[]
+                ).map((tab) => (
                   <button
                     key={tab}
                     onClick={() => setDetailSubTab(tab)}
-                    className={cn(ds.btnGhost, 'text-xs whitespace-nowrap', detailSubTab === tab && 'bg-neon-blue/20 text-neon-blue')}
+                    className={cn(
+                      ds.btnGhost,
+                      'text-xs whitespace-nowrap',
+                      detailSubTab === tab && 'bg-neon-blue/20 text-neon-blue'
+                    )}
                   >
                     {tab}
                   </button>
@@ -1870,242 +2551,357 @@ export default function HealthcareLensPage() {
               </div>
 
               {/* ---------- Overview Sub-tab ---------- */}
-              {detailSubTab === 'Overview' && (() => {
-                const dd = drawerItem.data as unknown as HealthcareArtifact;
-                const linked = getPatientLinked(drawerItem.id);
-                return (
-                  <div className="space-y-3">
-                    <div className="grid grid-cols-2 gap-2 text-xs">
-                      <div className={cn(ds.panel, 'p-2')}>
-                        <span className="text-gray-500 block">Records</span>
-                        <span className="text-lg font-bold text-white">{linked.length}</span>
+              {detailSubTab === 'Overview' &&
+                (() => {
+                  const dd = drawerItem.data as unknown as HealthcareArtifact;
+                  const linked = getPatientLinked(drawerItem.id);
+                  return (
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        <div className={cn(ds.panel, 'p-2')}>
+                          <span className="text-gray-500 block">Records</span>
+                          <span className="text-lg font-bold text-white">{linked.length}</span>
+                        </div>
+                        <div className={cn(ds.panel, 'p-2')}>
+                          <span className="text-gray-500 block">Priority</span>
+                          <span
+                            className={cn(
+                              'text-lg font-bold',
+                              PRIORITY_COLORS[dd.priority || 'medium']
+                            )}
+                          >
+                            {dd.priority || 'medium'}
+                          </span>
+                        </div>
                       </div>
-                      <div className={cn(ds.panel, 'p-2')}>
-                        <span className="text-gray-500 block">Priority</span>
-                        <span className={cn('text-lg font-bold', PRIORITY_COLORS[dd.priority || 'medium'])}>
-                          {dd.priority || 'medium'}
+                      {dd.notes && (
+                        <div>
+                          <span className="text-xs text-gray-500 font-medium">Notes</span>
+                          <p className="text-sm text-gray-300 mt-1">{dd.notes}</p>
+                        </div>
+                      )}
+                      <div>
+                        <span className="text-xs text-gray-500 font-medium">Recent Activity</span>
+                        <div className="mt-1 space-y-1">
+                          {linked.slice(0, 5).map((l) => {
+                            const ld = l.data as unknown as HealthcareArtifact;
+                            return (
+                              <div
+                                key={l.id}
+                                className="flex items-center justify-between text-xs p-2 rounded bg-lattice-surface hover:bg-lattice-elevated cursor-pointer"
+                                onClick={() => openEditEditor(l)}
+                              >
+                                <span className="text-gray-300 truncate flex-1">{l.title}</span>
+                                <StatusBadge status={ld.status} />
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => openEditEditor(drawerItem)}
+                        className={cn(ds.btnSecondary, 'w-full text-sm')}
+                      >
+                        <FileText className="w-4 h-4" /> Edit Patient Record
+                      </button>
+                    </div>
+                  );
+                })()}
+
+              {/* ---------- Vitals Sub-tab ---------- */}
+              {detailSubTab === 'Vitals' &&
+                (() => {
+                  const dd = drawerItem.data as unknown as HealthcareArtifact;
+                  const bmi = calculateBMI(dd.weight || 0, dd.height || 0);
+                  return (
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-2 gap-2">
+                        <VitalCard
+                          label="Heart Rate"
+                          value={dd.heartRate}
+                          vitalKey="heartRate"
+                          icon={Activity}
+                        />
+                        <VitalCard label="O2 Sat" value={dd.o2Sat} vitalKey="o2Sat" icon={Wind} />
+                        <VitalCard
+                          label="BP (Sys)"
+                          value={dd.bpSystolic}
+                          vitalKey="bpSystolic"
+                          icon={Droplets}
+                        />
+                        <VitalCard
+                          label="BP (Dia)"
+                          value={dd.bpDiastolic}
+                          vitalKey="bpDiastolic"
+                          icon={Droplets}
+                        />
+                        <VitalCard
+                          label="Temp"
+                          value={dd.temperature}
+                          vitalKey="temperature"
+                          icon={Thermometer}
+                        />
+                        <VitalCard
+                          label="Resp Rate"
+                          value={dd.respiratoryRate}
+                          vitalKey="respiratoryRate"
+                          icon={Wind}
+                        />
+                      </div>
+                      {/* Weight and BMI */}
+                      <div className={cn(ds.panel, 'p-3')}>
+                        <div className="flex items-center gap-2 mb-2">
+                          <Weight className="w-4 h-4 text-gray-400" />
+                          <span className={ds.textMuted}>Weight & BMI</span>
+                        </div>
+                        <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                          <div>
+                            <span className="text-gray-500 block">Weight</span>
+                            <span className="text-sm font-bold text-white">
+                              {dd.weight ?? '--'} lbs
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-gray-500 block">Height</span>
+                            <span className="text-sm font-bold text-white">
+                              {dd.height ?? '--'} in
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-gray-500 block">BMI</span>
+                            <span className={cn('text-sm font-bold', bmi.color)}>
+                              {bmi.value || '--'}
+                            </span>
+                            {bmi.category !== 'N/A' && (
+                              <span className={cn('block text-xs', bmi.color)}>{bmi.category}</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      {/* Vital ranges legend */}
+                      <div className="flex items-center gap-3 text-xs">
+                        <span className="flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3 text-green-400" /> Normal
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <AlertCircle className="w-3 h-3 text-yellow-400" /> Borderline
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <AlertTriangle className="w-3 h-3 text-red-400" /> Critical
                         </span>
                       </div>
                     </div>
-                    {dd.notes && (
-                      <div>
-                        <span className="text-xs text-gray-500 font-medium">Notes</span>
-                        <p className="text-sm text-gray-300 mt-1">{dd.notes}</p>
-                      </div>
-                    )}
-                    <div>
-                      <span className="text-xs text-gray-500 font-medium">Recent Activity</span>
-                      <div className="mt-1 space-y-1">
-                        {linked.slice(0, 5).map(l => {
-                          const ld = l.data as unknown as HealthcareArtifact;
-                          return (
-                            <div key={l.id} className="flex items-center justify-between text-xs p-2 rounded bg-lattice-surface hover:bg-lattice-elevated cursor-pointer" onClick={() => openEditEditor(l)}>
-                              <span className="text-gray-300 truncate flex-1">{l.title}</span>
-                              <StatusBadge status={ld.status} />
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                    <button onClick={() => openEditEditor(drawerItem)} className={cn(ds.btnSecondary, 'w-full text-sm')}>
-                      <FileText className="w-4 h-4" /> Edit Patient Record
-                    </button>
-                  </div>
-                );
-              })()}
-
-              {/* ---------- Vitals Sub-tab ---------- */}
-              {detailSubTab === 'Vitals' && (() => {
-                const dd = drawerItem.data as unknown as HealthcareArtifact;
-                const bmi = calculateBMI(dd.weight || 0, dd.height || 0);
-                return (
-                  <div className="space-y-3">
-                    <div className="grid grid-cols-2 gap-2">
-                      <VitalCard label="Heart Rate" value={dd.heartRate} vitalKey="heartRate" icon={Activity} />
-                      <VitalCard label="O2 Sat" value={dd.o2Sat} vitalKey="o2Sat" icon={Wind} />
-                      <VitalCard label="BP (Sys)" value={dd.bpSystolic} vitalKey="bpSystolic" icon={Droplets} />
-                      <VitalCard label="BP (Dia)" value={dd.bpDiastolic} vitalKey="bpDiastolic" icon={Droplets} />
-                      <VitalCard label="Temp" value={dd.temperature} vitalKey="temperature" icon={Thermometer} />
-                      <VitalCard label="Resp Rate" value={dd.respiratoryRate} vitalKey="respiratoryRate" icon={Wind} />
-                    </div>
-                    {/* Weight and BMI */}
-                    <div className={cn(ds.panel, 'p-3')}>
-                      <div className="flex items-center gap-2 mb-2">
-                        <Weight className="w-4 h-4 text-gray-400" />
-                        <span className={ds.textMuted}>Weight & BMI</span>
-                      </div>
-                      <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                        <div>
-                          <span className="text-gray-500 block">Weight</span>
-                          <span className="text-sm font-bold text-white">{dd.weight ?? '--'} lbs</span>
-                        </div>
-                        <div>
-                          <span className="text-gray-500 block">Height</span>
-                          <span className="text-sm font-bold text-white">{dd.height ?? '--'} in</span>
-                        </div>
-                        <div>
-                          <span className="text-gray-500 block">BMI</span>
-                          <span className={cn('text-sm font-bold', bmi.color)}>{bmi.value || '--'}</span>
-                          {bmi.category !== 'N/A' && (
-                            <span className={cn('block text-xs', bmi.color)}>{bmi.category}</span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    {/* Vital ranges legend */}
-                    <div className="flex items-center gap-3 text-xs">
-                      <span className="flex items-center gap-1"><CheckCircle2 className="w-3 h-3 text-green-400" /> Normal</span>
-                      <span className="flex items-center gap-1"><AlertCircle className="w-3 h-3 text-yellow-400" /> Borderline</span>
-                      <span className="flex items-center gap-1"><AlertTriangle className="w-3 h-3 text-red-400" /> Critical</span>
-                    </div>
-                  </div>
-                );
-              })()}
+                  );
+                })()}
 
               {/* ---------- Medications Sub-tab ---------- */}
-              {detailSubTab === 'Medications' && (() => {
-                const linkedMeds = getPatientLinked(drawerItem.id).filter(i => (i.data as unknown as HealthcareArtifact).artifactType === 'Prescription');
-                return (
-                  <div className="space-y-2">
-                    {linkedMeds.length === 0 ? (
-                      <p className={cn(ds.textMuted, 'text-center py-4')}>No medications linked</p>
-                    ) : linkedMeds.map(med => {
-                      const md = med.data as unknown as HealthcareArtifact;
-                      const daysLeft = calculateDaysRemaining(md.endDate);
-                      return (
-                        <div key={med.id} className="p-2 rounded bg-lattice-surface hover:bg-lattice-elevated cursor-pointer text-xs" onClick={() => openEditEditor(med)}>
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-gray-200 font-medium">{med.title}</span>
-                            {md.isPRN && <span className={ds.badge('neon-blue')}>PRN</span>}
-                          </div>
-                          <div className="flex items-center gap-2 text-gray-500">
-                            {md.dosage && <span>{md.dosage}</span>}
-                            {md.frequency && <span>- {md.frequency}</span>}
-                          </div>
-                          {daysLeft >= 0 && daysLeft <= 7 && (
-                            <p className="text-red-400 mt-1">Refill in {daysLeft} days</p>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                );
-              })()}
-
-              {/* ---------- Labs Sub-tab ---------- */}
-              {detailSubTab === 'Labs' && (() => {
-                const linkedLabs = getPatientLinked(drawerItem.id).filter(i => (i.data as unknown as HealthcareArtifact).artifactType === 'LabResult');
-                return (
-                  <div className="space-y-2">
-                    {linkedLabs.length === 0 ? (
-                      <p className={cn(ds.textMuted, 'text-center py-4')}>No lab results linked</p>
-                    ) : linkedLabs.map(lab => {
-                      const ld = lab.data as unknown as HealthcareArtifact;
-                      const outOfRange = isOutOfRange(ld.resultValue || '', ld.referenceRange || '');
-                      return (
-                        <div key={lab.id} className={cn('p-2 rounded cursor-pointer text-xs', ld.isCritical ? 'bg-red-500/10 border border-red-500/30 pulse-critical-glow' : 'bg-lattice-surface hover:bg-lattice-elevated')} onClick={() => openEditEditor(lab)}>
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-gray-200 font-medium">{lab.title}</span>
-                            {ld.isCritical && <span className={cn(ds.badge('red-400'), 'text-[10px] animate-pulse')}>CRITICAL</span>}
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <span className={cn(outOfRange ? 'text-red-400 font-bold' : 'text-green-400', outOfRange && 'pulse-critical-glow rounded px-1')}>
-                              {ld.resultValue || '--'} {ld.unit || ''}
-                            </span>
-                            <span className="text-gray-500">Ref: {ld.referenceRange || '--'}</span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                );
-              })()}
-
-              {/* ---------- History Sub-tab ---------- */}
-              {detailSubTab === 'History' && (() => {
-                const linked = getPatientLinked(drawerItem.id);
-                return (
-                  <div className="space-y-0">
-                    {linked.length === 0 ? (
-                      <p className={cn(ds.textMuted, 'text-center py-4')}>No history records</p>
-                    ) : linked.map(item => (
-                      <TimelineItem key={item.id} item={item} />
-                    ))}
-                  </div>
-                );
-              })()}
-
-              {/* ---------- Appointments Sub-tab ---------- */}
-              {detailSubTab === 'Appointments' && (() => {
-                const dd = drawerItem.data as unknown as HealthcareArtifact;
-                const linkedEncounters = getPatientLinked(drawerItem.id)
-                  .filter(i => {
-                    const d = i.data as unknown as HealthcareArtifact;
-                    return d.artifactType === 'Encounter' && d.status === 'scheduled';
-                  })
-                  .sort((a, b) => {
-                    const da = (a.data as unknown as HealthcareArtifact).date || '';
-                    const db = (b.data as unknown as HealthcareArtifact).date || '';
-                    return da.localeCompare(db);
-                  });
-                return (
-                  <div className="space-y-3">
-                    {/* Patient's own appointment info */}
-                    {(dd.appointmentDate || dd.appointmentType) && (
-                      <div className={cn(ds.panel, 'p-3 space-y-2')}>
-                        <div className="flex items-center gap-2">
-                          <CalendarCheck className="w-4 h-4 text-neon-blue" />
-                          <span className="text-sm font-medium text-white">Next Appointment</span>
-                        </div>
-                        <div className="grid grid-cols-2 gap-2 text-xs">
-                          <div>
-                            <span className="text-gray-500 block">Date</span>
-                            <span className="text-gray-200 font-medium">{dd.appointmentDate || '--'}</span>
-                          </div>
-                          <div>
-                            <span className="text-gray-500 block">Time</span>
-                            <span className="text-gray-200 font-medium">{dd.appointmentTime || '--'}</span>
-                          </div>
-                          <div>
-                            <span className="text-gray-500 block">Type</span>
-                            <span className="text-gray-200 font-medium">{dd.appointmentType || '--'}</span>
-                          </div>
-                          <div>
-                            <span className="text-gray-500 block">Location</span>
-                            <span className="text-gray-200 font-medium">{dd.appointmentLocation || '--'}</span>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                    {/* Scheduled encounters */}
-                    <div>
-                      <span className="text-xs text-gray-500 font-medium">Scheduled Visits</span>
-                      <div className="mt-1 space-y-1">
-                        {linkedEncounters.length === 0 ? (
-                          <p className={cn(ds.textMuted, 'text-center py-4')}>No upcoming appointments</p>
-                        ) : linkedEncounters.map(enc => {
-                          const ed = enc.data as unknown as HealthcareArtifact;
+              {detailSubTab === 'Medications' &&
+                (() => {
+                  const linkedMeds = getPatientLinked(drawerItem.id).filter(
+                    (i) => (i.data as unknown as HealthcareArtifact).artifactType === 'Prescription'
+                  );
+                  return (
+                    <div className="space-y-2">
+                      {linkedMeds.length === 0 ? (
+                        <p className={cn(ds.textMuted, 'text-center py-4')}>
+                          No medications linked
+                        </p>
+                      ) : (
+                        linkedMeds.map((med) => {
+                          const md = med.data as unknown as HealthcareArtifact;
+                          const daysLeft = calculateDaysRemaining(md.endDate);
                           return (
-                            <div key={enc.id} className="flex items-center justify-between p-2 rounded bg-lattice-surface hover:bg-lattice-elevated cursor-pointer text-xs" onClick={() => openEditEditor(enc)}>
-                              <div className="flex items-center gap-2">
-                                <Calendar className="w-3 h-3 text-neon-blue" />
-                                <span className="text-gray-200 font-medium">{enc.title}</span>
+                            <div
+                              key={med.id}
+                              className="p-2 rounded bg-lattice-surface hover:bg-lattice-elevated cursor-pointer text-xs"
+                              onClick={() => openEditEditor(med)}
+                            >
+                              <div className="flex items-center justify-between mb-1">
+                                <span className="text-gray-200 font-medium">{med.title}</span>
+                                {md.isPRN && <span className={ds.badge('neon-blue')}>PRN</span>}
                               </div>
                               <div className="flex items-center gap-2 text-gray-500">
-                                {ed.date && <span>{ed.date}</span>}
-                                {ed.provider && <span>{ed.provider}</span>}
+                                {md.dosage && <span>{md.dosage}</span>}
+                                {md.frequency && <span>- {md.frequency}</span>}
+                              </div>
+                              {daysLeft >= 0 && daysLeft <= 7 && (
+                                <p className="text-red-400 mt-1">Refill in {daysLeft} days</p>
+                              )}
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  );
+                })()}
+
+              {/* ---------- Labs Sub-tab ---------- */}
+              {detailSubTab === 'Labs' &&
+                (() => {
+                  const linkedLabs = getPatientLinked(drawerItem.id).filter(
+                    (i) => (i.data as unknown as HealthcareArtifact).artifactType === 'LabResult'
+                  );
+                  return (
+                    <div className="space-y-2">
+                      {linkedLabs.length === 0 ? (
+                        <p className={cn(ds.textMuted, 'text-center py-4')}>
+                          No lab results linked
+                        </p>
+                      ) : (
+                        linkedLabs.map((lab) => {
+                          const ld = lab.data as unknown as HealthcareArtifact;
+                          const outOfRange = isOutOfRange(
+                            ld.resultValue || '',
+                            ld.referenceRange || ''
+                          );
+                          return (
+                            <div
+                              key={lab.id}
+                              className={cn(
+                                'p-2 rounded cursor-pointer text-xs',
+                                ld.isCritical
+                                  ? 'bg-red-500/10 border border-red-500/30 pulse-critical-glow'
+                                  : 'bg-lattice-surface hover:bg-lattice-elevated'
+                              )}
+                              onClick={() => openEditEditor(lab)}
+                            >
+                              <div className="flex items-center justify-between mb-1">
+                                <span className="text-gray-200 font-medium">{lab.title}</span>
+                                {ld.isCritical && (
+                                  <span
+                                    className={cn(ds.badge('red-400'), 'text-[10px] animate-pulse')}
+                                  >
+                                    CRITICAL
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center justify-between">
+                                <span
+                                  className={cn(
+                                    outOfRange ? 'text-red-400 font-bold' : 'text-green-400',
+                                    outOfRange && 'pulse-critical-glow rounded px-1'
+                                  )}
+                                >
+                                  {ld.resultValue || '--'} {ld.unit || ''}
+                                </span>
+                                <span className="text-gray-500">
+                                  Ref: {ld.referenceRange || '--'}
+                                </span>
                               </div>
                             </div>
                           );
-                        })}
-                      </div>
+                        })
+                      )}
                     </div>
-                    <button onClick={() => openEditEditor(drawerItem)} className={cn(ds.btnSecondary, 'w-full text-sm')}>
-                      <Calendar className="w-4 h-4" /> Edit Appointment Info
-                    </button>
-                  </div>
-                );
-              })()}
+                  );
+                })()}
+
+              {/* ---------- History Sub-tab ---------- */}
+              {detailSubTab === 'History' &&
+                (() => {
+                  const linked = getPatientLinked(drawerItem.id);
+                  return (
+                    <div className="space-y-0">
+                      {linked.length === 0 ? (
+                        <p className={cn(ds.textMuted, 'text-center py-4')}>No history records</p>
+                      ) : (
+                        linked.map((item) => <TimelineItem key={item.id} item={item} />)
+                      )}
+                    </div>
+                  );
+                })()}
+
+              {/* ---------- Appointments Sub-tab ---------- */}
+              {detailSubTab === 'Appointments' &&
+                (() => {
+                  const dd = drawerItem.data as unknown as HealthcareArtifact;
+                  const linkedEncounters = getPatientLinked(drawerItem.id)
+                    .filter((i) => {
+                      const d = i.data as unknown as HealthcareArtifact;
+                      return d.artifactType === 'Encounter' && d.status === 'scheduled';
+                    })
+                    .sort((a, b) => {
+                      const da = (a.data as unknown as HealthcareArtifact).date || '';
+                      const db = (b.data as unknown as HealthcareArtifact).date || '';
+                      return da.localeCompare(db);
+                    });
+                  return (
+                    <div className="space-y-3">
+                      {/* Patient's own appointment info */}
+                      {(dd.appointmentDate || dd.appointmentType) && (
+                        <div className={cn(ds.panel, 'p-3 space-y-2')}>
+                          <div className="flex items-center gap-2">
+                            <CalendarCheck className="w-4 h-4 text-neon-blue" />
+                            <span className="text-sm font-medium text-white">Next Appointment</span>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2 text-xs">
+                            <div>
+                              <span className="text-gray-500 block">Date</span>
+                              <span className="text-gray-200 font-medium">
+                                {dd.appointmentDate || '--'}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-gray-500 block">Time</span>
+                              <span className="text-gray-200 font-medium">
+                                {dd.appointmentTime || '--'}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-gray-500 block">Type</span>
+                              <span className="text-gray-200 font-medium">
+                                {dd.appointmentType || '--'}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-gray-500 block">Location</span>
+                              <span className="text-gray-200 font-medium">
+                                {dd.appointmentLocation || '--'}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                      {/* Scheduled encounters */}
+                      <div>
+                        <span className="text-xs text-gray-500 font-medium">Scheduled Visits</span>
+                        <div className="mt-1 space-y-1">
+                          {linkedEncounters.length === 0 ? (
+                            <p className={cn(ds.textMuted, 'text-center py-4')}>
+                              No upcoming appointments
+                            </p>
+                          ) : (
+                            linkedEncounters.map((enc) => {
+                              const ed = enc.data as unknown as HealthcareArtifact;
+                              return (
+                                <div
+                                  key={enc.id}
+                                  className="flex items-center justify-between p-2 rounded bg-lattice-surface hover:bg-lattice-elevated cursor-pointer text-xs"
+                                  onClick={() => openEditEditor(enc)}
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <Calendar className="w-3 h-3 text-neon-blue" />
+                                    <span className="text-gray-200 font-medium">{enc.title}</span>
+                                  </div>
+                                  <div className="flex items-center gap-2 text-gray-500">
+                                    {ed.date && <span>{ed.date}</span>}
+                                    {ed.provider && <span>{ed.provider}</span>}
+                                  </div>
+                                </div>
+                              );
+                            })
+                          )}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => openEditEditor(drawerItem)}
+                        className={cn(ds.btnSecondary, 'w-full text-sm')}
+                      >
+                        <Calendar className="w-4 h-4" /> Edit Appointment Info
+                      </button>
+                    </div>
+                  );
+                })()}
             </div>
           </aside>
         )}
@@ -2121,18 +2917,29 @@ export default function HealthcareLensPage() {
             <div className={cn(ds.modalPanel, 'max-w-3xl')}>
               <div className="flex items-center justify-between p-4 border-b border-lattice-border">
                 <h2 className={ds.heading2}>{editingItem ? 'Edit Record' : 'New Record'}</h2>
-                <button onClick={() => setShowEditor(false)} className={ds.btnGhost}><X className="w-5 h-5" /></button>
+                <button onClick={() => setShowEditor(false)} className={ds.btnGhost}>
+                  <X className="w-5 h-5" />
+                </button>
               </div>
               <div className="p-4 space-y-4 max-h-[75vh] overflow-y-auto">
                 {/* ---------- Base fields ---------- */}
                 <div>
                   <label className={ds.label}>Title</label>
-                  <input value={formTitle} onChange={e => setFormTitle(e.target.value)} className={ds.input} placeholder="Record title" />
+                  <input
+                    value={formTitle}
+                    onChange={(e) => setFormTitle(e.target.value)}
+                    className={ds.input}
+                    placeholder="Record title"
+                  />
                 </div>
                 <div className={ds.grid2}>
                   <div>
                     <label className={ds.label}>Type</label>
-                    <select value={formType} onChange={e => setFormType(e.target.value as ArtifactType)} className={ds.select}>
+                    <select
+                      value={formType}
+                      onChange={(e) => setFormType(e.target.value as ArtifactType)}
+                      className={ds.select}
+                    >
                       <option value="Patient">Patient</option>
                       <option value="Encounter">Encounter</option>
                       <option value="CareProtocol">Care Protocol</option>
@@ -2144,24 +2951,48 @@ export default function HealthcareLensPage() {
                   </div>
                   <div>
                     <label className={ds.label}>Status</label>
-                    <select value={formStatus} onChange={e => setFormStatus(e.target.value as Status)} className={ds.select}>
-                      {ALL_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                    <select
+                      value={formStatus}
+                      onChange={(e) => setFormStatus(e.target.value as Status)}
+                      className={ds.select}
+                    >
+                      {ALL_STATUSES.map((s) => (
+                        <option key={s} value={s}>
+                          {s}
+                        </option>
+                      ))}
                     </select>
                   </div>
                 </div>
                 <div className={ds.grid2}>
                   <div>
                     <label className={ds.label}>Provider</label>
-                    <input value={formProvider} onChange={e => setFormProvider(e.target.value)} className={ds.input} placeholder="Attending provider" />
+                    <input
+                      value={formProvider}
+                      onChange={(e) => setFormProvider(e.target.value)}
+                      className={ds.input}
+                      placeholder="Attending provider"
+                    />
                   </div>
                   <div>
                     <label className={ds.label}>Date</label>
-                    <input type="date" value={formDate} onChange={e => setFormDate(e.target.value)} className={ds.input} />
+                    <input
+                      type="date"
+                      value={formDate}
+                      onChange={(e) => setFormDate(e.target.value)}
+                      className={ds.input}
+                    />
                   </div>
                 </div>
                 <div>
                   <label className={ds.label}>Priority</label>
-                  <select value={formPriority} onChange={e => setFormPriority(e.target.value as 'low' | 'medium' | 'high' | 'urgent')} className={ds.select}>
+                  <select
+                    value={formPriority}
+                    onChange={(e) =>
+                      setFormPriority(e.target.value as 'low' | 'medium' | 'high' | 'urgent')
+                    }
+                    className={ds.select}
+                  >
                     <option value="low">Low</option>
                     <option value="medium">Medium</option>
                     <option value="high">High</option>
@@ -2170,7 +3001,13 @@ export default function HealthcareLensPage() {
                 </div>
                 <div>
                   <label className={ds.label}>Description</label>
-                  <textarea value={formDescription} onChange={e => setFormDescription(e.target.value)} className={ds.textarea} rows={3} placeholder="Clinical description..." />
+                  <textarea
+                    value={formDescription}
+                    onChange={(e) => setFormDescription(e.target.value)}
+                    className={ds.textarea}
+                    rows={3}
+                    placeholder="Clinical description..."
+                  />
                 </div>
 
                 {/* ============================================= */}
@@ -2188,13 +3025,16 @@ export default function HealthcareLensPage() {
                       <div className="flex gap-2">
                         <input
                           value={soapComplaint}
-                          onChange={e => setSoapComplaint(e.target.value)}
+                          onChange={(e) => setSoapComplaint(e.target.value)}
                           className={cn(ds.input, 'flex-1')}
                           placeholder="Patient presents with..."
                         />
                         <button
                           onClick={() => setShowComplaintPicker(!showComplaintPicker)}
-                          className={cn(ds.btnSmall, 'bg-lattice-elevated text-gray-400 border border-lattice-border')}
+                          className={cn(
+                            ds.btnSmall,
+                            'bg-lattice-elevated text-gray-400 border border-lattice-border'
+                          )}
                         >
                           Quick
                         </button>
@@ -2202,9 +3042,15 @@ export default function HealthcareLensPage() {
                       {showComplaintPicker && (
                         <div className="mt-1 p-2 bg-lattice-elevated border border-lattice-border rounded-lg max-h-32 overflow-y-auto">
                           <div className="flex flex-wrap gap-1">
-                            {COMMON_COMPLAINTS.map(c => (
-                              <button key={c} onClick={() => { setSoapComplaint(c); setShowComplaintPicker(false); }}
-                                className="text-xs px-2 py-1 rounded bg-lattice-surface text-gray-300 hover:bg-neon-blue/20 hover:text-neon-blue">
+                            {COMMON_COMPLAINTS.map((c) => (
+                              <button
+                                key={c}
+                                onClick={() => {
+                                  setSoapComplaint(c);
+                                  setShowComplaintPicker(false);
+                                }}
+                                className="text-xs px-2 py-1 rounded bg-lattice-surface text-gray-300 hover:bg-neon-blue/20 hover:text-neon-blue"
+                              >
                                 {c}
                               </button>
                             ))}
@@ -2216,11 +3062,21 @@ export default function HealthcareLensPage() {
                     <div className={ds.grid2}>
                       <div>
                         <label className={ds.label}>Visit Start</label>
-                        <input type="datetime-local" value={soapVisitStart} onChange={e => setSoapVisitStart(e.target.value)} className={ds.input} />
+                        <input
+                          type="datetime-local"
+                          value={soapVisitStart}
+                          onChange={(e) => setSoapVisitStart(e.target.value)}
+                          className={ds.input}
+                        />
                       </div>
                       <div>
                         <label className={ds.label}>Visit End</label>
-                        <input type="datetime-local" value={soapVisitEnd} onChange={e => setSoapVisitEnd(e.target.value)} className={ds.input} />
+                        <input
+                          type="datetime-local"
+                          value={soapVisitEnd}
+                          onChange={(e) => setSoapVisitEnd(e.target.value)}
+                          className={ds.input}
+                        />
                       </div>
                     </div>
                     {soapVisitStart && soapVisitEnd && (
@@ -2232,32 +3088,55 @@ export default function HealthcareLensPage() {
                     {/* S - Subjective */}
                     <div>
                       <label className={ds.label}>
-                        <span className="inline-block w-5 h-5 bg-blue-500/20 text-blue-400 rounded text-center text-xs leading-5 mr-2 font-bold">S</span>
+                        <span className="inline-block w-5 h-5 bg-blue-500/20 text-blue-400 rounded text-center text-xs leading-5 mr-2 font-bold">
+                          S
+                        </span>
                         Subjective
                       </label>
-                      <textarea value={soapSubjective} onChange={e => setSoapSubjective(e.target.value)} className={ds.textarea} rows={3}
-                        placeholder="Patient's reported symptoms, history of present illness..." />
+                      <textarea
+                        value={soapSubjective}
+                        onChange={(e) => setSoapSubjective(e.target.value)}
+                        className={ds.textarea}
+                        rows={3}
+                        placeholder="Patient's reported symptoms, history of present illness..."
+                      />
                     </div>
                     {/* O - Objective */}
                     <div className="relative">
                       <label className={ds.label}>
-                        <span className="inline-block w-5 h-5 bg-green-500/20 text-green-400 rounded text-center text-xs leading-5 mr-2 font-bold">O</span>
+                        <span className="inline-block w-5 h-5 bg-green-500/20 text-green-400 rounded text-center text-xs leading-5 mr-2 font-bold">
+                          O
+                        </span>
                         Objective
                       </label>
-                      <textarea value={soapObjective} onChange={e => setSoapObjective(e.target.value)} className={ds.textarea} rows={3}
-                        placeholder="Physical examination findings, vital signs, test results..." />
+                      <textarea
+                        value={soapObjective}
+                        onChange={(e) => setSoapObjective(e.target.value)}
+                        className={ds.textarea}
+                        rows={3}
+                        placeholder="Physical examination findings, vital signs, test results..."
+                      />
                       <button
                         onClick={() => setShowFindingPicker(!showFindingPicker)}
-                        className={cn(ds.btnSmall, 'absolute top-0 right-0 bg-lattice-elevated text-gray-400 border border-lattice-border text-xs')}
+                        className={cn(
+                          ds.btnSmall,
+                          'absolute top-0 right-0 bg-lattice-elevated text-gray-400 border border-lattice-border text-xs'
+                        )}
                       >
                         Insert Finding
                       </button>
                       {showFindingPicker && (
                         <div className="mt-1 p-2 bg-lattice-elevated border border-lattice-border rounded-lg max-h-32 overflow-y-auto">
                           <div className="flex flex-wrap gap-1">
-                            {COMMON_FINDINGS.map(f => (
-                              <button key={f} onClick={() => { setSoapObjective(prev => prev ? prev + '. ' + f : f); setShowFindingPicker(false); }}
-                                className="text-xs px-2 py-1 rounded bg-lattice-surface text-gray-300 hover:bg-green-500/20 hover:text-green-400">
+                            {COMMON_FINDINGS.map((f) => (
+                              <button
+                                key={f}
+                                onClick={() => {
+                                  setSoapObjective((prev) => (prev ? prev + '. ' + f : f));
+                                  setShowFindingPicker(false);
+                                }}
+                                className="text-xs px-2 py-1 rounded bg-lattice-surface text-gray-300 hover:bg-green-500/20 hover:text-green-400"
+                              >
                                 {f}
                               </button>
                             ))}
@@ -2268,23 +3147,39 @@ export default function HealthcareLensPage() {
                     {/* A - Assessment */}
                     <div className="relative">
                       <label className={ds.label}>
-                        <span className="inline-block w-5 h-5 bg-yellow-500/20 text-yellow-400 rounded text-center text-xs leading-5 mr-2 font-bold">A</span>
+                        <span className="inline-block w-5 h-5 bg-yellow-500/20 text-yellow-400 rounded text-center text-xs leading-5 mr-2 font-bold">
+                          A
+                        </span>
                         Assessment
                       </label>
-                      <textarea value={soapAssessment} onChange={e => setSoapAssessment(e.target.value)} className={ds.textarea} rows={3}
-                        placeholder="Diagnoses, clinical impression..." />
+                      <textarea
+                        value={soapAssessment}
+                        onChange={(e) => setSoapAssessment(e.target.value)}
+                        className={ds.textarea}
+                        rows={3}
+                        placeholder="Diagnoses, clinical impression..."
+                      />
                       <button
                         onClick={() => setShowDxPicker(!showDxPicker)}
-                        className={cn(ds.btnSmall, 'absolute top-0 right-0 bg-lattice-elevated text-gray-400 border border-lattice-border text-xs')}
+                        className={cn(
+                          ds.btnSmall,
+                          'absolute top-0 right-0 bg-lattice-elevated text-gray-400 border border-lattice-border text-xs'
+                        )}
                       >
                         Add Dx
                       </button>
                       {showDxPicker && (
                         <div className="mt-1 p-2 bg-lattice-elevated border border-lattice-border rounded-lg max-h-40 overflow-y-auto">
                           <div className="flex flex-wrap gap-1">
-                            {COMMON_DIAGNOSES.map(dx => (
-                              <button key={dx} onClick={() => { setSoapAssessment(prev => prev ? prev + '\n' + dx : dx); setShowDxPicker(false); }}
-                                className="text-xs px-2 py-1 rounded bg-lattice-surface text-gray-300 hover:bg-yellow-500/20 hover:text-yellow-400">
+                            {COMMON_DIAGNOSES.map((dx) => (
+                              <button
+                                key={dx}
+                                onClick={() => {
+                                  setSoapAssessment((prev) => (prev ? prev + '\n' + dx : dx));
+                                  setShowDxPicker(false);
+                                }}
+                                className="text-xs px-2 py-1 rounded bg-lattice-surface text-gray-300 hover:bg-yellow-500/20 hover:text-yellow-400"
+                              >
                                 {dx}
                               </button>
                             ))}
@@ -2295,11 +3190,18 @@ export default function HealthcareLensPage() {
                     {/* P - Plan */}
                     <div>
                       <label className={ds.label}>
-                        <span className="inline-block w-5 h-5 bg-purple-500/20 text-purple-400 rounded text-center text-xs leading-5 mr-2 font-bold">P</span>
+                        <span className="inline-block w-5 h-5 bg-purple-500/20 text-purple-400 rounded text-center text-xs leading-5 mr-2 font-bold">
+                          P
+                        </span>
                         Plan
                       </label>
-                      <textarea value={soapPlan} onChange={e => setSoapPlan(e.target.value)} className={ds.textarea} rows={3}
-                        placeholder="Treatment plan, medications, follow-up, referrals..." />
+                      <textarea
+                        value={soapPlan}
+                        onChange={(e) => setSoapPlan(e.target.value)}
+                        className={ds.textarea}
+                        rows={3}
+                        placeholder="Treatment plan, medications, follow-up, referrals..."
+                      />
                     </div>
                   </div>
                 )}
@@ -2316,35 +3218,84 @@ export default function HealthcareLensPage() {
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                       <div>
                         <label className={ds.label}>Heart Rate (bpm)</label>
-                        <input type="number" value={vitalsHR} onChange={e => setVitalsHR(e.target.value)} className={ds.input} placeholder="72" />
+                        <input
+                          type="number"
+                          value={vitalsHR}
+                          onChange={(e) => setVitalsHR(e.target.value)}
+                          className={ds.input}
+                          placeholder="72"
+                        />
                       </div>
                       <div>
                         <label className={ds.label}>BP Systolic</label>
-                        <input type="number" value={vitalsBPSys} onChange={e => setVitalsBPSys(e.target.value)} className={ds.input} placeholder="120" />
+                        <input
+                          type="number"
+                          value={vitalsBPSys}
+                          onChange={(e) => setVitalsBPSys(e.target.value)}
+                          className={ds.input}
+                          placeholder="120"
+                        />
                       </div>
                       <div>
                         <label className={ds.label}>BP Diastolic</label>
-                        <input type="number" value={vitalsBPDia} onChange={e => setVitalsBPDia(e.target.value)} className={ds.input} placeholder="80" />
+                        <input
+                          type="number"
+                          value={vitalsBPDia}
+                          onChange={(e) => setVitalsBPDia(e.target.value)}
+                          className={ds.input}
+                          placeholder="80"
+                        />
                       </div>
                       <div>
                         <label className={ds.label}>Temperature (F)</label>
-                        <input type="number" step="0.1" value={vitalsTemp} onChange={e => setVitalsTemp(e.target.value)} className={ds.input} placeholder="98.6" />
+                        <input
+                          type="number"
+                          step="0.1"
+                          value={vitalsTemp}
+                          onChange={(e) => setVitalsTemp(e.target.value)}
+                          className={ds.input}
+                          placeholder="98.6"
+                        />
                       </div>
                       <div>
                         <label className={ds.label}>Resp Rate (/min)</label>
-                        <input type="number" value={vitalsRR} onChange={e => setVitalsRR(e.target.value)} className={ds.input} placeholder="16" />
+                        <input
+                          type="number"
+                          value={vitalsRR}
+                          onChange={(e) => setVitalsRR(e.target.value)}
+                          className={ds.input}
+                          placeholder="16"
+                        />
                       </div>
                       <div>
                         <label className={ds.label}>O2 Sat (%)</label>
-                        <input type="number" value={vitalsO2} onChange={e => setVitalsO2(e.target.value)} className={ds.input} placeholder="98" />
+                        <input
+                          type="number"
+                          value={vitalsO2}
+                          onChange={(e) => setVitalsO2(e.target.value)}
+                          className={ds.input}
+                          placeholder="98"
+                        />
                       </div>
                       <div>
                         <label className={ds.label}>Weight (lbs)</label>
-                        <input type="number" value={vitalsWeight} onChange={e => setVitalsWeight(e.target.value)} className={ds.input} placeholder="170" />
+                        <input
+                          type="number"
+                          value={vitalsWeight}
+                          onChange={(e) => setVitalsWeight(e.target.value)}
+                          className={ds.input}
+                          placeholder="170"
+                        />
                       </div>
                       <div>
                         <label className={ds.label}>Height (in)</label>
-                        <input type="number" value={vitalsHeight} onChange={e => setVitalsHeight(e.target.value)} className={ds.input} placeholder="68" />
+                        <input
+                          type="number"
+                          value={vitalsHeight}
+                          onChange={(e) => setVitalsHeight(e.target.value)}
+                          className={ds.input}
+                          placeholder="68"
+                        />
                       </div>
                     </div>
                     {/* Live BMI calculation */}
@@ -2365,27 +3316,57 @@ export default function HealthcareLensPage() {
                     {/* Live vital range indicators */}
                     <div className="flex flex-wrap gap-2">
                       {vitalsHR && (
-                        <span className={cn('text-xs px-2 py-1 rounded', getVitalBg('heartRate', Number(vitalsHR)), getVitalColor('heartRate', Number(vitalsHR)))}>
+                        <span
+                          className={cn(
+                            'text-xs px-2 py-1 rounded',
+                            getVitalBg('heartRate', Number(vitalsHR)),
+                            getVitalColor('heartRate', Number(vitalsHR))
+                          )}
+                        >
                           HR: {vitalsHR} bpm
                         </span>
                       )}
                       {vitalsBPSys && (
-                        <span className={cn('text-xs px-2 py-1 rounded', getVitalBg('bpSystolic', Number(vitalsBPSys)), getVitalColor('bpSystolic', Number(vitalsBPSys)))}>
+                        <span
+                          className={cn(
+                            'text-xs px-2 py-1 rounded',
+                            getVitalBg('bpSystolic', Number(vitalsBPSys)),
+                            getVitalColor('bpSystolic', Number(vitalsBPSys))
+                          )}
+                        >
                           SBP: {vitalsBPSys} mmHg
                         </span>
                       )}
                       {vitalsBPDia && (
-                        <span className={cn('text-xs px-2 py-1 rounded', getVitalBg('bpDiastolic', Number(vitalsBPDia)), getVitalColor('bpDiastolic', Number(vitalsBPDia)))}>
+                        <span
+                          className={cn(
+                            'text-xs px-2 py-1 rounded',
+                            getVitalBg('bpDiastolic', Number(vitalsBPDia)),
+                            getVitalColor('bpDiastolic', Number(vitalsBPDia))
+                          )}
+                        >
                           DBP: {vitalsBPDia} mmHg
                         </span>
                       )}
                       {vitalsTemp && (
-                        <span className={cn('text-xs px-2 py-1 rounded', getVitalBg('temperature', Number(vitalsTemp)), getVitalColor('temperature', Number(vitalsTemp)))}>
+                        <span
+                          className={cn(
+                            'text-xs px-2 py-1 rounded',
+                            getVitalBg('temperature', Number(vitalsTemp)),
+                            getVitalColor('temperature', Number(vitalsTemp))
+                          )}
+                        >
                           Temp: {vitalsTemp} F
                         </span>
                       )}
                       {vitalsO2 && (
-                        <span className={cn('text-xs px-2 py-1 rounded', getVitalBg('o2Sat', Number(vitalsO2)), getVitalColor('o2Sat', Number(vitalsO2)))}>
+                        <span
+                          className={cn(
+                            'text-xs px-2 py-1 rounded',
+                            getVitalBg('o2Sat', Number(vitalsO2)),
+                            getVitalColor('o2Sat', Number(vitalsO2))
+                          )}
+                        >
                           SpO2: {vitalsO2}%
                         </span>
                       )}
@@ -2405,15 +3386,29 @@ export default function HealthcareLensPage() {
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                       <div>
                         <label className={ds.label}>Dosage</label>
-                        <input value={formDosage} onChange={e => setFormDosage(e.target.value)} className={ds.input} placeholder="e.g. 500mg" />
+                        <input
+                          value={formDosage}
+                          onChange={(e) => setFormDosage(e.target.value)}
+                          className={ds.input}
+                          placeholder="e.g. 500mg"
+                        />
                       </div>
                       <div>
                         <label className={ds.label}>Frequency</label>
-                        <input value={formFrequency} onChange={e => setFormFrequency(e.target.value)} className={ds.input} placeholder="e.g. BID, TID, QHS" />
+                        <input
+                          value={formFrequency}
+                          onChange={(e) => setFormFrequency(e.target.value)}
+                          className={ds.input}
+                          placeholder="e.g. BID, TID, QHS"
+                        />
                       </div>
                       <div>
                         <label className={ds.label}>Route</label>
-                        <select value={formRoute} onChange={e => setFormRoute(e.target.value)} className={ds.select}>
+                        <select
+                          value={formRoute}
+                          onChange={(e) => setFormRoute(e.target.value)}
+                          className={ds.select}
+                        >
                           <option value="">Select route</option>
                           <option value="PO">PO (Oral)</option>
                           <option value="IV">IV (Intravenous)</option>
@@ -2429,32 +3424,66 @@ export default function HealthcareLensPage() {
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <label className={ds.label}>Start Date</label>
-                        <input type="date" value={formStartDate} onChange={e => setFormStartDate(e.target.value)} className={ds.input} />
+                        <input
+                          type="date"
+                          value={formStartDate}
+                          onChange={(e) => setFormStartDate(e.target.value)}
+                          className={ds.input}
+                        />
                       </div>
                       <div>
                         <label className={ds.label}>End Date</label>
-                        <input type="date" value={formEndDate} onChange={e => setFormEndDate(e.target.value)} className={ds.input} />
+                        <input
+                          type="date"
+                          value={formEndDate}
+                          onChange={(e) => setFormEndDate(e.target.value)}
+                          className={ds.input}
+                        />
                       </div>
                     </div>
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                       <div>
                         <label className={ds.label}>Refills Remaining</label>
-                        <input type="number" value={formRefills} onChange={e => setFormRefills(e.target.value)} className={ds.input} placeholder="0" min="0" />
+                        <input
+                          type="number"
+                          value={formRefills}
+                          onChange={(e) => setFormRefills(e.target.value)}
+                          className={ds.input}
+                          placeholder="0"
+                          min="0"
+                        />
                       </div>
                       <div>
                         <label className={ds.label}>Days Supply</label>
-                        <input type="number" value={formDaysSupply} onChange={e => setFormDaysSupply(e.target.value)} className={ds.input} placeholder="30" min="0" />
+                        <input
+                          type="number"
+                          value={formDaysSupply}
+                          onChange={(e) => setFormDaysSupply(e.target.value)}
+                          className={ds.input}
+                          placeholder="30"
+                          min="0"
+                        />
                       </div>
                       <div className="flex items-end pb-2">
                         <label className="flex items-center gap-2 text-sm text-gray-300">
-                          <input type="checkbox" checked={formIsPRN} onChange={e => setFormIsPRN(e.target.checked)} className="accent-neon-blue" />
+                          <input
+                            type="checkbox"
+                            checked={formIsPRN}
+                            onChange={(e) => setFormIsPRN(e.target.checked)}
+                            className="accent-neon-blue"
+                          />
                           PRN (As Needed)
                         </label>
                       </div>
                     </div>
                     <div>
                       <label className={ds.label}>Drug Interactions (comma-separated)</label>
-                      <input value={formInteractions} onChange={e => setFormInteractions(e.target.value)} className={ds.input} placeholder="e.g. Warfarin, Aspirin..." />
+                      <input
+                        value={formInteractions}
+                        onChange={(e) => setFormInteractions(e.target.value)}
+                        className={ds.input}
+                        placeholder="e.g. Warfarin, Aspirin..."
+                      />
                     </div>
                   </div>
                 )}
@@ -2471,37 +3500,70 @@ export default function HealthcareLensPage() {
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <label className={ds.label}>Test Panel</label>
-                        <select value={formTestPanel} onChange={e => setFormTestPanel(e.target.value)} className={ds.select}>
+                        <select
+                          value={formTestPanel}
+                          onChange={(e) => setFormTestPanel(e.target.value)}
+                          className={ds.select}
+                        >
                           <option value="">Select panel</option>
                           {Object.entries(LAB_PANELS).map(([key, panel]) => (
-                            <option key={key} value={key}>{panel.name} ({key})</option>
+                            <option key={key} value={key}>
+                              {panel.name} ({key})
+                            </option>
                           ))}
                         </select>
                       </div>
                       <div>
                         <label className={ds.label}>Unit</label>
-                        <input value={formUnit} onChange={e => setFormUnit(e.target.value)} className={ds.input} placeholder="e.g. mg/dL, mmol/L" />
+                        <input
+                          value={formUnit}
+                          onChange={(e) => setFormUnit(e.target.value)}
+                          className={ds.input}
+                          placeholder="e.g. mg/dL, mmol/L"
+                        />
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <label className={ds.label}>Result Value</label>
-                        <input value={formResultValue} onChange={e => setFormResultValue(e.target.value)} className={ds.input} placeholder="e.g. 120" />
+                        <input
+                          value={formResultValue}
+                          onChange={(e) => setFormResultValue(e.target.value)}
+                          className={ds.input}
+                          placeholder="e.g. 120"
+                        />
                       </div>
                       <div>
                         <label className={ds.label}>Reference Range</label>
-                        <input value={formReferenceRange} onChange={e => setFormReferenceRange(e.target.value)} className={ds.input} placeholder="e.g. 70-100" />
+                        <input
+                          value={formReferenceRange}
+                          onChange={(e) => setFormReferenceRange(e.target.value)}
+                          className={ds.input}
+                          placeholder="e.g. 70-100"
+                        />
                       </div>
                     </div>
                     {formResultValue && formReferenceRange && (
-                      <div className={cn('px-3 py-2 rounded-lg text-xs font-medium',
-                        isOutOfRange(formResultValue, formReferenceRange) ? 'bg-red-500/10 text-red-400' : 'bg-green-500/10 text-green-400'
-                      )}>
-                        {isOutOfRange(formResultValue, formReferenceRange) ? 'Result is OUT OF RANGE' : 'Result is within normal range'}
+                      <div
+                        className={cn(
+                          'px-3 py-2 rounded-lg text-xs font-medium',
+                          isOutOfRange(formResultValue, formReferenceRange)
+                            ? 'bg-red-500/10 text-red-400'
+                            : 'bg-green-500/10 text-green-400'
+                        )}
+                      >
+                        {isOutOfRange(formResultValue, formReferenceRange)
+                          ? 'Result is OUT OF RANGE'
+                          : 'Result is within normal range'}
                       </div>
                     )}
                     <label className="flex items-center gap-2 text-sm text-gray-300">
-                      <input type="checkbox" checked={formIsCritical} onChange={e => setFormIsCritical(e.target.checked)} className="accent-red-400" />
+                      <input
+                        type="checkbox"
+                        checked={formIsCritical}
+                        onChange={(e) => setFormIsCritical(e.target.checked)}
+                        className="accent-red-400"
+                      />
                       Mark as Critical Value
                     </label>
                   </div>
@@ -2519,18 +3581,52 @@ export default function HealthcareLensPage() {
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <label className={ds.label}>Symptom Name</label>
-                        <input value={formSymptomName} onChange={e => setFormSymptomName(e.target.value)} className={ds.input} placeholder="e.g. Headache, Nausea" />
+                        <input
+                          value={formSymptomName}
+                          onChange={(e) => setFormSymptomName(e.target.value)}
+                          className={ds.input}
+                          placeholder="e.g. Headache, Nausea"
+                        />
                       </div>
                       <div>
                         <label className={ds.label}>Category</label>
-                        <select value={formSymptomCategory} onChange={e => setFormSymptomCategory(e.target.value)} className={ds.select}>
-                          {SYMPTOM_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                        <select
+                          value={formSymptomCategory}
+                          onChange={(e) => setFormSymptomCategory(e.target.value)}
+                          className={ds.select}
+                        >
+                          {SYMPTOM_CATEGORIES.map((c) => (
+                            <option key={c} value={c}>
+                              {c}
+                            </option>
+                          ))}
                         </select>
                       </div>
                     </div>
                     <div>
-                      <label className={ds.label}>Severity (1-10): <span className={cn('font-bold', formSeverity >= 8 ? 'text-red-400' : formSeverity >= 5 ? 'text-yellow-400' : 'text-green-400')}>{formSeverity}</span></label>
-                      <input type="range" min="1" max="10" value={formSeverity} onChange={e => setFormSeverity(Number(e.target.value))} className="w-full accent-neon-blue" />
+                      <label className={ds.label}>
+                        Severity (1-10):{' '}
+                        <span
+                          className={cn(
+                            'font-bold',
+                            formSeverity >= 8
+                              ? 'text-red-400'
+                              : formSeverity >= 5
+                                ? 'text-yellow-400'
+                                : 'text-green-400'
+                          )}
+                        >
+                          {formSeverity}
+                        </span>
+                      </label>
+                      <input
+                        type="range"
+                        min="1"
+                        max="10"
+                        value={formSeverity}
+                        onChange={(e) => setFormSeverity(Number(e.target.value))}
+                        className="w-full accent-neon-blue"
+                      />
                       <div className="flex justify-between text-xs text-gray-500">
                         <span>Mild</span>
                         <span>Moderate</span>
@@ -2539,11 +3635,22 @@ export default function HealthcareLensPage() {
                     </div>
                     <div>
                       <label className={ds.label}>Date of Onset</label>
-                      <input type="date" value={formSymptomDate} onChange={e => setFormSymptomDate(e.target.value)} className={ds.input} />
+                      <input
+                        type="date"
+                        value={formSymptomDate}
+                        onChange={(e) => setFormSymptomDate(e.target.value)}
+                        className={ds.input}
+                      />
                     </div>
                     <div>
                       <label className={ds.label}>Symptom Notes</label>
-                      <textarea value={formSymptomNotes} onChange={e => setFormSymptomNotes(e.target.value)} className={ds.textarea} rows={3} placeholder="Duration, triggers, alleviating factors, associated symptoms..." />
+                      <textarea
+                        value={formSymptomNotes}
+                        onChange={(e) => setFormSymptomNotes(e.target.value)}
+                        className={ds.textarea}
+                        rows={3}
+                        placeholder="Duration, triggers, alleviating factors, associated symptoms..."
+                      />
                     </div>
                   </div>
                 )}
@@ -2560,23 +3667,46 @@ export default function HealthcareLensPage() {
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <label className={ds.label}>Next Appointment Date</label>
-                        <input type="date" value={formApptDate} onChange={e => setFormApptDate(e.target.value)} className={ds.input} />
+                        <input
+                          type="date"
+                          value={formApptDate}
+                          onChange={(e) => setFormApptDate(e.target.value)}
+                          className={ds.input}
+                        />
                       </div>
                       <div>
                         <label className={ds.label}>Time</label>
-                        <input type="time" value={formApptTime} onChange={e => setFormApptTime(e.target.value)} className={ds.input} />
+                        <input
+                          type="time"
+                          value={formApptTime}
+                          onChange={(e) => setFormApptTime(e.target.value)}
+                          className={ds.input}
+                        />
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <label className={ds.label}>Appointment Type</label>
-                        <select value={formApptType} onChange={e => setFormApptType(e.target.value)} className={ds.select}>
-                          {APPOINTMENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                        <select
+                          value={formApptType}
+                          onChange={(e) => setFormApptType(e.target.value)}
+                          className={ds.select}
+                        >
+                          {APPOINTMENT_TYPES.map((t) => (
+                            <option key={t} value={t}>
+                              {t}
+                            </option>
+                          ))}
                         </select>
                       </div>
                       <div>
                         <label className={ds.label}>Location</label>
-                        <input value={formApptLocation} onChange={e => setFormApptLocation(e.target.value)} className={ds.input} placeholder="Clinic, Hospital, Telehealth" />
+                        <input
+                          value={formApptLocation}
+                          onChange={(e) => setFormApptLocation(e.target.value)}
+                          className={ds.input}
+                          placeholder="Clinic, Hospital, Telehealth"
+                        />
                       </div>
                     </div>
                   </div>
@@ -2595,11 +3725,32 @@ export default function HealthcareLensPage() {
                     <div>
                       <label className={ds.label}>Add Goal</label>
                       <div className="flex gap-2">
-                        <input value={newGoalName} onChange={e => setNewGoalName(e.target.value)} className={cn(ds.input, 'flex-1')} placeholder="Goal name" />
-                        <input value={newGoalTarget} onChange={e => setNewGoalTarget(e.target.value)} className={cn(ds.input, 'w-32')} placeholder="Target" />
+                        <input
+                          value={newGoalName}
+                          onChange={(e) => setNewGoalName(e.target.value)}
+                          className={cn(ds.input, 'flex-1')}
+                          placeholder="Goal name"
+                        />
+                        <input
+                          value={newGoalTarget}
+                          onChange={(e) => setNewGoalTarget(e.target.value)}
+                          className={cn(ds.input, 'w-32')}
+                          placeholder="Target"
+                        />
                         <button
-                          onClick={() => { if (newGoalName) { setFormNotes(prev => prev + `\n[GOAL] ${newGoalName} -> ${newGoalTarget}`); setNewGoalName(''); setNewGoalTarget(''); } }}
-                          className={cn(ds.btnSmall, 'bg-purple-500/20 text-purple-400 border border-purple-500/30')}
+                          onClick={() => {
+                            if (newGoalName) {
+                              setFormNotes(
+                                (prev) => prev + `\n[GOAL] ${newGoalName} -> ${newGoalTarget}`
+                              );
+                              setNewGoalName('');
+                              setNewGoalTarget('');
+                            }
+                          }}
+                          className={cn(
+                            ds.btnSmall,
+                            'bg-purple-500/20 text-purple-400 border border-purple-500/30'
+                          )}
                         >
                           <Plus className="w-3 h-3" />
                         </button>
@@ -2609,11 +3760,33 @@ export default function HealthcareLensPage() {
                     <div>
                       <label className={ds.label}>Add Milestone</label>
                       <div className="flex gap-2">
-                        <input value={newMilestoneName} onChange={e => setNewMilestoneName(e.target.value)} className={cn(ds.input, 'flex-1')} placeholder="Milestone" />
-                        <input type="date" value={newMilestoneDue} onChange={e => setNewMilestoneDue(e.target.value)} className={cn(ds.input, 'w-40')} />
+                        <input
+                          value={newMilestoneName}
+                          onChange={(e) => setNewMilestoneName(e.target.value)}
+                          className={cn(ds.input, 'flex-1')}
+                          placeholder="Milestone"
+                        />
+                        <input
+                          type="date"
+                          value={newMilestoneDue}
+                          onChange={(e) => setNewMilestoneDue(e.target.value)}
+                          className={cn(ds.input, 'w-40')}
+                        />
                         <button
-                          onClick={() => { if (newMilestoneName) { setFormNotes(prev => prev + `\n[MILESTONE] ${newMilestoneName} by ${newMilestoneDue}`); setNewMilestoneName(''); setNewMilestoneDue(''); } }}
-                          className={cn(ds.btnSmall, 'bg-purple-500/20 text-purple-400 border border-purple-500/30')}
+                          onClick={() => {
+                            if (newMilestoneName) {
+                              setFormNotes(
+                                (prev) =>
+                                  prev + `\n[MILESTONE] ${newMilestoneName} by ${newMilestoneDue}`
+                              );
+                              setNewMilestoneName('');
+                              setNewMilestoneDue('');
+                            }
+                          }}
+                          className={cn(
+                            ds.btnSmall,
+                            'bg-purple-500/20 text-purple-400 border border-purple-500/30'
+                          )}
                         >
                           <Plus className="w-3 h-3" />
                         </button>
@@ -2623,10 +3796,23 @@ export default function HealthcareLensPage() {
                     <div>
                       <label className={ds.label}>Add Intervention</label>
                       <div className="flex gap-2">
-                        <input value={newIntervention} onChange={e => setNewIntervention(e.target.value)} className={cn(ds.input, 'flex-1')} placeholder="Intervention description" />
+                        <input
+                          value={newIntervention}
+                          onChange={(e) => setNewIntervention(e.target.value)}
+                          className={cn(ds.input, 'flex-1')}
+                          placeholder="Intervention description"
+                        />
                         <button
-                          onClick={() => { if (newIntervention) { setFormNotes(prev => prev + `\n[INTERVENTION] ${newIntervention}`); setNewIntervention(''); } }}
-                          className={cn(ds.btnSmall, 'bg-purple-500/20 text-purple-400 border border-purple-500/30')}
+                          onClick={() => {
+                            if (newIntervention) {
+                              setFormNotes((prev) => prev + `\n[INTERVENTION] ${newIntervention}`);
+                              setNewIntervention('');
+                            }
+                          }}
+                          className={cn(
+                            ds.btnSmall,
+                            'bg-purple-500/20 text-purple-400 border border-purple-500/30'
+                          )}
                         >
                           <Plus className="w-3 h-3" />
                         </button>
@@ -2635,7 +3821,16 @@ export default function HealthcareLensPage() {
                     {/* Outcome Measure */}
                     <div>
                       <label className={ds.label}>Outcome Measure</label>
-                      <input className={ds.input} placeholder="e.g., Pain score 0-10, PHQ-9, FIM score" onChange={e => setFormNotes(prev => prev.replace(/\[OUTCOME\].*/, '') + `\n[OUTCOME] ${e.target.value}`)} />
+                      <input
+                        className={ds.input}
+                        placeholder="e.g., Pain score 0-10, PHQ-9, FIM score"
+                        onChange={(e) =>
+                          setFormNotes(
+                            (prev) =>
+                              prev.replace(/\[OUTCOME\].*/, '') + `\n[OUTCOME] ${e.target.value}`
+                          )
+                        }
+                      />
                     </div>
                   </div>
                 )}
@@ -2643,7 +3838,13 @@ export default function HealthcareLensPage() {
                 {/* Notes (always shown) */}
                 <div>
                   <label className={ds.label}>Notes</label>
-                  <textarea value={formNotes} onChange={e => setFormNotes(e.target.value)} className={ds.textarea} rows={3} placeholder="Additional notes..." />
+                  <textarea
+                    value={formNotes}
+                    onChange={(e) => setFormNotes(e.target.value)}
+                    className={ds.textarea}
+                    rows={3}
+                    placeholder="Additional notes..."
+                  />
                 </div>
               </div>
 
@@ -2651,24 +3852,38 @@ export default function HealthcareLensPage() {
               <div className="flex items-center justify-between p-4 border-t border-lattice-border">
                 <div className="flex items-center gap-2">
                   {editingItem && (
-                    <button onClick={() => { handleDelete(editingItem.id); setShowEditor(false); }} className={ds.btnDanger}>
+                    <button
+                      onClick={() => {
+                        handleDelete(editingItem.id);
+                        setShowEditor(false);
+                      }}
+                      className={ds.btnDanger}
+                    >
                       <Trash2 className="w-4 h-4" /> Delete
                     </button>
                   )}
                   {/* Quick domain actions in editor */}
                   {editingItem && (
                     <>
-                      <button onClick={() => handleAction('generateSummary', editingItem.id)} className={cn(ds.btnGhost, 'text-xs')}>
+                      <button
+                        onClick={() => handleAction('generateSummary', editingItem.id)}
+                        className={cn(ds.btnGhost, 'text-xs')}
+                      >
                         <FileText className="w-3 h-3" /> Summary
                       </button>
-                      <button onClick={() => handleAction('exportEncounter', editingItem.id)} className={cn(ds.btnGhost, 'text-xs')}>
+                      <button
+                        onClick={() => handleAction('exportEncounter', editingItem.id)}
+                        className={cn(ds.btnGhost, 'text-xs')}
+                      >
                         <Download className="w-3 h-3" /> Export
                       </button>
                     </>
                   )}
                 </div>
                 <div className="flex items-center gap-2">
-                  <button onClick={() => setShowEditor(false)} className={ds.btnSecondary}>Cancel</button>
+                  <button onClick={() => setShowEditor(false)} className={ds.btnSecondary}>
+                    Cancel
+                  </button>
                   <button onClick={handleSave} className={ds.btnPrimary}>
                     {editingItem ? 'Update' : 'Create'} Record
                   </button>
@@ -2678,6 +3893,11 @@ export default function HealthcareLensPage() {
           </div>
         </>
       )}
+
+      {/* Live Web Feed */}
+      <div className="px-4 mb-2">
+        <LensFeedPanel lensId="healthcare" />
+      </div>
 
       {/* Lens Features */}
       <div className="border-t border-blue-900/15">
@@ -2689,7 +3909,9 @@ export default function HealthcareLensPage() {
             <Layers className="w-4 h-4" />
             Lens Features & Capabilities
           </span>
-          <ChevronDown className={`w-4 h-4 transition-transform ${showFeatures ? 'rotate-180' : ''}`} />
+          <ChevronDown
+            className={`w-4 h-4 transition-transform ${showFeatures ? 'rotate-180' : ''}`}
+          />
         </button>
         {showFeatures && (
           <div className="px-4 pb-4">
@@ -2702,7 +3924,8 @@ export default function HealthcareLensPage() {
       <div className="sticky bottom-0 bg-blue-950/90 backdrop-blur-sm border-t border-blue-400/10 px-4 py-2 text-center">
         <p className="text-xs text-blue-400/50">
           <ShieldCheck className="w-3 h-3 inline mr-1" />
-          This tool is for organizational purposes only. Not a substitute for professional medical advice, diagnosis, or treatment.
+          This tool is for organizational purposes only. Not a substitute for professional medical
+          advice, diagnosis, or treatment.
         </p>
       </div>
     </div>

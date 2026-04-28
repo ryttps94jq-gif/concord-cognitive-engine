@@ -16,7 +16,8 @@
     "validate-routes": "npx tsx scripts/validate-routes.ts",
     "score-lenses": "npx tsx scripts/score-lenses.ts",
     "validate-lens-quality": "npx tsx scripts/validate-lens-quality.ts",
-    "validate-lens-quality:strict": "npx tsx scripts/validate-lens-quality.ts --strict"
+    "validate-lens-quality:strict": "npx tsx scripts/validate-lens-quality.ts --strict",
+    "prepare": "husky"
   },
   "dependencies": {
     "@conform-to/zod": "^1.0.0",
@@ -35,6 +36,7 @@
     "@radix-ui/react-tooltip": "^1.0.7",
     "@react-three/drei": "^9.92.0",
     "@react-three/fiber": "^8.15.0",
+    "@sentry/nextjs": "^10.50.0",
     "@tanstack/react-query": "^5.17.0",
     "@tiptap/extension-highlight": "^2.2.0",
     "@tiptap/extension-image": "^2.2.0",
@@ -64,7 +66,7 @@
     "lucide-react": "^0.309.0",
     "monaco-editor": "^0.55.1",
     "nanoid": "^5.0.4",
-    "next": "^15.1.0",
+    "next": "^15.5.15",
     "react": "^18.3.1",
     "react-confetti": "^6.1.0",
     "react-dom": "^18.3.1",
@@ -100,12 +102,29 @@
     "eslint-config-next": "^15.1.0",
     "eslint-plugin-unused-imports": "^4.4.1",
     "globals": "^15.0.0",
+    "husky": "^9.1.7",
     "jsdom": "^25.0.0",
+    "lint-staged": "^16.4.0",
     "postcss": "^8.4.33",
     "prettier": "^3.2.4",
     "tailwindcss": "^3.4.1",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.0.0",
     "vitest": "^3.2.4"
+  },
+  "overrides": {
+    "dompurify": "^3.4.1"
+  },
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "eslint --fix --max-warnings=0",
+      "prettier --write"
+    ],
+    "*.{js,mjs,cjs}": [
+      "eslint --fix --max-warnings=0"
+    ],
+    "*.{json,css,md}": [
+      "prettier --write"
+    ]
   }
 }

@@ -22,7 +22,13 @@ import { useSovereignStore } from '@/store/sovereign';
 import { useUIStore } from '@/store/ui';
 import type { SocketEvent } from '@/lib/realtime/socket';
 import type { DTU } from '@/lib/types/dtu';
-import type { SystemAlert, AttentionAllocation, FocusOverride, Dream, Promotion } from '@/lib/types/system';
+import type {
+  SystemAlert,
+  AttentionAllocation,
+  FocusOverride,
+  Dream,
+  Promotion,
+} from '@/lib/types/system';
 
 const _SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || process.env.NEXT_PUBLIC_API_URL || '';
 
@@ -33,30 +39,51 @@ let _globalListenersRegistered = false;
 // ── All events to forward to the event bus ─────────────────────
 const FORWARDED_EVENTS: SocketEvent[] = [
   // DTU lifecycle
-  'dtu:created', 'dtu:updated', 'dtu:deleted', 'dtu:promoted',
+  'dtu:created',
+  'dtu:updated',
+  'dtu:deleted',
+  'dtu:promoted',
   // Entity lifecycle
-  'entity:death', 'body:instantiated', 'body:destroyed',
+  'entity:death',
+  'body:instantiated',
+  'body:destroyed',
   // Pain / qualia
-  'pain:recorded', 'pain:processed', 'pain:wound_created', 'pain:wound_healed',
+  'pain:recorded',
+  'pain:processed',
+  'pain:wound_created',
+  'pain:wound_healed',
   'affect:pain_signal',
   // Repair cortex
-  'repair:dtu_logged', 'repair:cycle_complete',
+  'repair:dtu_logged',
+  'repair:cycle_complete',
   // Meta-derivation
-  'lattice:meta:derived', 'lattice:meta:convergence', 'meta:committed',
+  'lattice:meta:derived',
+  'lattice:meta:convergence',
+  'meta:committed',
   // System
-  'system:alert', 'queue:notifications:new',
+  'system:alert',
+  'queue:notifications:new',
   // Council
-  'council:proposal', 'council:vote',
+  'council:proposal',
+  'council:vote',
   // Marketplace
-  'market:listing', 'market:trade',
+  'market:listing',
+  'market:trade',
   // Creative Registry & Royalties
-  'creative_registry:update', 'marketplace:purchase',
+  'creative_registry:update',
+  'marketplace:purchase',
   // Collaboration
-  'collab:change', 'collab:lock', 'collab:unlock',
-  'collab:session:created', 'collab:user:joined',
+  'collab:change',
+  'collab:lock',
+  'collab:unlock',
+  'collab:session:created',
+  'collab:user:joined',
   // Cognitive systems
-  'attention:allocation', 'forgetting:cycle_complete',
-  'dream:captured', 'promotion:approved', 'promotion:rejected',
+  'attention:allocation',
+  'forgetting:cycle_complete',
+  'dream:captured',
+  'promotion:approved',
+  'promotion:rejected',
   'app:published',
   // Music / studio
   'music:toggle',
@@ -64,28 +91,49 @@ const FORWARDED_EVENTS: SocketEvent[] = [
   'whiteboard:updated',
   // Resonance
   'resonance:update',
+  // Platform presence
+  'platform:activity',
   // MEGA SPEC: Chat streaming events
-  'chat:status', 'chat:token', 'chat:web_results', 'chat:complete',
+  'chat:status',
+  'chat:token',
+  'chat:web_results',
+  'chat:complete',
   // MEGA SPEC: Artifact & quality lifecycle events
-  'artifact:rendered', 'quality:approved', 'quality:shadowed',
+  'artifact:rendered',
+  'quality:approved',
+  'quality:shadowed',
   // MEGA SPEC: Entity & pipeline events
-  'entity:production_mode', 'pipeline:triggered',
+  'entity:production_mode',
+  'pipeline:triggered',
   // 12 NEW CAPABILITIES events
-  'pipeline:started', 'pipeline:step_started', 'pipeline:step_completed', 'pipeline:completed',
-  'prediction:ready', 'agent:insights',
-  'collab:invite', 'collab:accepted',
+  'pipeline:started',
+  'pipeline:step_started',
+  'pipeline:step_completed',
+  'pipeline:completed',
+  'prediction:ready',
+  'agent:insights',
+  'collab:invite',
+  'collab:accepted',
   'teaching:promotion_suggestion',
-  'research:started', 'research:completed',
+  'research:started',
+  'research:completed',
   // Shared Instance Conversation events
-  'shared-session:invite', 'shared-session:joined',
-  'shared-session:message', 'shared-session:ai-response',
-  'shared-session:artifact-produced', 'shared-session:dtu-shared',
+  'shared-session:invite',
+  'shared-session:joined',
+  'shared-session:message',
+  'shared-session:ai-response',
+  'shared-session:artifact-produced',
+  'shared-session:dtu-shared',
   'shared-session:ended',
   // Real-time data feed events (Phase 3)
-  'finance:ticker', 'finance:market_update', 'finance:alert',
+  'finance:ticker',
+  'finance:market_update',
+  'finance:alert',
   'crypto:ticker',
-  'news:update', 'news:breaking',
-  'weather:update', 'weather:alert',
+  'news:update',
+  'news:breaking',
+  'weather:update',
+  'weather:alert',
   'research:update',
   'health:update',
   'legal:update',
@@ -114,8 +162,11 @@ const FORWARDED_EVENTS: SocketEvent[] = [
   // Feed Manager real-time DTU events
   'feed:new-dtu',
   // City / World lens events
-  'city:positions', 'city:stream-started', 'city:stream-ended',
-  'city:stream-dtu-created', 'city:stream-sale',
+  'city:positions',
+  'city:stream-started',
+  'city:stream-ended',
+  'city:stream-dtu-created',
+  'city:stream-sale',
   // Comments
   'comment:added',
   // Activity feed
@@ -264,7 +315,8 @@ function routeToStores(event: SocketEvent, data: unknown, qc: QueryClient) {
       break;
     case 'dtu:updated':
       if (d.id) {
-        const changes = ((d.changes as Record<string, unknown> | undefined) ?? d) as unknown as Partial<DTU>;
+        const changes = ((d.changes as Record<string, unknown> | undefined) ??
+          d) as unknown as Partial<DTU>;
         useLatticeStore.getState().updateDTU(d.id as string, changes);
       }
       break;
@@ -289,10 +341,14 @@ function routeToStores(event: SocketEvent, data: unknown, qc: QueryClient) {
     // Attention → system store
     case 'attention:allocation':
       if (Array.isArray(d.allocation)) {
-        useSystemStore.getState().setAttentionAllocation(d.allocation as unknown as AttentionAllocation[]);
+        useSystemStore
+          .getState()
+          .setAttentionAllocation(d.allocation as unknown as AttentionAllocation[]);
       }
       if (d.focusOverride !== undefined) {
-        useSystemStore.getState().setFocusOverride(d.focusOverride as unknown as FocusOverride | null);
+        useSystemStore
+          .getState()
+          .setFocusOverride(d.focusOverride as unknown as FocusOverride | null);
       }
       break;
 
@@ -317,7 +373,9 @@ function routeToStores(event: SocketEvent, data: unknown, qc: QueryClient) {
     case 'promotion:approved':
     case 'promotion:rejected':
       if (d.id) {
-        useSovereignStore.getState().updatePromotion(d.id as string, data as unknown as Partial<Promotion>);
+        useSovereignStore
+          .getState()
+          .updatePromotion(d.id as string, data as unknown as Partial<Promotion>);
       }
       break;
 
@@ -358,9 +416,17 @@ function routeToStores(event: SocketEvent, data: unknown, qc: QueryClient) {
     // Agent insights → lattice store (knowledge gaps)
     case 'agent:insights':
       if (d.knowledgeGaps && Array.isArray(d.knowledgeGaps)) {
-        useLatticeStore.getState().setKnowledgeGaps(
-          d.knowledgeGaps as Array<{ id: string; domain: string; description: string; severity: number; discoveredAt: string }>
-        );
+        useLatticeStore
+          .getState()
+          .setKnowledgeGaps(
+            d.knowledgeGaps as Array<{
+              id: string;
+              domain: string;
+              description: string;
+              severity: number;
+              discoveredAt: string;
+            }>
+          );
       }
       break;
 

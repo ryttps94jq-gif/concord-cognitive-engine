@@ -5,7 +5,26 @@ import { motion } from 'framer-motion';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api/client';
-import { Search, Filter, ArrowRight, BookOpen, Tag, Calendar, Layers, ChevronDown, RefreshCw, Beaker, Download, X, AlertCircle, Zap, Save, FileText, Microscope, CheckCircle } from 'lucide-react';
+import {
+  Search,
+  Filter,
+  ArrowRight,
+  BookOpen,
+  Tag,
+  Calendar,
+  Layers,
+  ChevronDown,
+  RefreshCw,
+  Beaker,
+  Download,
+  X,
+  AlertCircle,
+  Zap,
+  Save,
+  FileText,
+  Microscope,
+  CheckCircle,
+} from 'lucide-react';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { cn } from '@/lib/utils';
 import { UniversalActions } from '@/components/lens/UniversalActions';
@@ -19,6 +38,7 @@ import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
+import { LensFeedPanel } from '@/components/feeds/LensFeedPanel';
 import { VisionAnalyzeButton } from '@/components/common/VisionAnalyzeButton';
 import { PullToSubstrate } from '@/components/lens/PullToSubstrate';
 import { FeedBanner } from '@/components/lens/FeedBanner';
@@ -37,12 +57,22 @@ interface DTUResult {
 
 export default function ResearchLensPage() {
   useLensNav('research');
-  const { latestData: realtimeData, alerts: realtimeAlerts, insights: realtimeInsights, isLive, lastUpdated } = useRealtimeLens('research');
+  const {
+    latestData: realtimeData,
+    alerts: realtimeAlerts,
+    insights: realtimeInsights,
+    isLive,
+    lastUpdated,
+  } = useRealtimeLens('research');
 
   const {
-    hyperDTUs, megaDTUs, regularDTUs,
-    tierDistribution, publishToMarketplace,
-    isLoading: dtusLoading, refetch: refetchDTUs,
+    hyperDTUs,
+    megaDTUs,
+    regularDTUs,
+    tierDistribution,
+    publishToMarketplace,
+    isLoading: dtusLoading,
+    refetch: refetchDTUs,
   } = useLensDTUs({ lens: 'research' });
 
   const [query, setQuery] = useState('');
@@ -54,25 +84,42 @@ export default function ResearchLensPage() {
 
   /* ---------- domain actions ---------- */
   const runResearchAction = useRunArtifact('research');
-  const [researchActionResult, setResearchActionResult] = useState<Record<string, unknown> | null>(null);
+  const [researchActionResult, setResearchActionResult] = useState<Record<string, unknown> | null>(
+    null
+  );
   const [researchActiveAction, setResearchActiveAction] = useState<string | null>(null);
 
-  const handleResearchAction = useCallback(async (action: string) => {
-    const all = [...hyperDTUs, ...megaDTUs, ...regularDTUs];
-    const id = all[0]?.id;
-    if (!id) return;
-    setResearchActiveAction(action);
-    try {
-      const res = await runResearchAction.mutateAsync({ id, action });
-      if (res.ok === false) { setResearchActionResult({ action, message: `Action failed: ${(res as Record<string, unknown>).error || 'Unknown error'}` }); } else { setResearchActionResult({ action, ...(res.result as Record<string, unknown>) }); }
-    } catch (err) { console.error('Research action failed:', err); }
-    finally { setResearchActiveAction(null); }
-  }, [hyperDTUs, megaDTUs, regularDTUs, runResearchAction]);
+  const handleResearchAction = useCallback(
+    async (action: string) => {
+      const all = [...hyperDTUs, ...megaDTUs, ...regularDTUs];
+      const id = all[0]?.id;
+      if (!id) return;
+      setResearchActiveAction(action);
+      try {
+        const res = await runResearchAction.mutateAsync({ id, action });
+        if (res.ok === false) {
+          setResearchActionResult({
+            action,
+            message: `Action failed: ${(res as Record<string, unknown>).error || 'Unknown error'}`,
+          });
+        } else {
+          setResearchActionResult({ action, ...(res.result as Record<string, unknown>) });
+        }
+      } catch (err) {
+        console.error('Research action failed:', err);
+      } finally {
+        setResearchActiveAction(null);
+      }
+    },
+    [hyperDTUs, megaDTUs, regularDTUs, runResearchAction]
+  );
 
   /* ---------- hypothesis / generate ---------- */
   const [hypothesis, setHypothesis] = useState('');
   const [generateLoading, setGenerateLoading] = useState(false);
-  const [generateResult, setGenerateResult] = useState<{ content: string; title: string } | null>(null);
+  const [generateResult, setGenerateResult] = useState<{ content: string; title: string } | null>(
+    null
+  );
   const [generateError, setGenerateError] = useState<string | null>(null);
   const [savingDTU, setSavingDTU] = useState(false);
   const [deepResearchLoading, setDeepResearchLoading] = useState(false);
@@ -83,12 +130,15 @@ export default function ResearchLensPage() {
     setGenerateError(null);
     setGenerateResult(null);
     try {
-      const data = await api.post('/api/research/conduct', { topic: hypothesis.trim() }).then(r => r.data);
-      const content = typeof data?.result === 'string'
-        ? data.result
-        : typeof data?.content === 'string'
-          ? data.content
-          : JSON.stringify(data, null, 2);
+      const data = await api
+        .post('/api/research/conduct', { topic: hypothesis.trim() })
+        .then((r) => r.data);
+      const content =
+        typeof data?.result === 'string'
+          ? data.result
+          : typeof data?.content === 'string'
+            ? data.content
+            : JSON.stringify(data, null, 2);
       setGenerateResult({
         content,
         title: data?.title || 'Deep Research Result',
@@ -112,11 +162,12 @@ export default function ResearchLensPage() {
         input: { hypothesis: hypothesis.trim(), type: 'analysis' },
       });
       const data = res.data;
-      const content = typeof data?.result === 'string'
-        ? data.result
-        : typeof data?.result?.content === 'string'
-          ? data.result.content
-          : JSON.stringify(data?.result ?? data, null, 2);
+      const content =
+        typeof data?.result === 'string'
+          ? data.result
+          : typeof data?.result?.content === 'string'
+            ? data.result.content
+            : JSON.stringify(data?.result ?? data, null, 2);
       setGenerateResult({
         content,
         title: data?.result?.title || 'Research Analysis',
@@ -138,9 +189,19 @@ export default function ResearchLensPage() {
     URL.revokeObjectURL(url);
   }, []);
 
-  const { data: dtusData, isLoading, isError, error, refetch } = useQuery({
+  const {
+    data: dtusData,
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useQuery({
     queryKey: ['research-dtus'],
-    queryFn: () => api.get('/api/dtus?limit=200').then(r => r.data).catch(() => ({ dtus: [] })),
+    queryFn: () =>
+      api
+        .get('/api/dtus?limit=200')
+        .then((r) => r.data)
+        .catch(() => ({ dtus: [] })),
   });
 
   const handleSaveAsDTU = useCallback(async () => {
@@ -168,7 +229,9 @@ export default function ResearchLensPage() {
   // Extract unique domains and tags for filters
   const domains = useMemo(() => {
     const set = new Set<string>();
-    dtus.forEach(d => { if (d.domain) set.add(d.domain); });
+    dtus.forEach((d) => {
+      if (d.domain) set.add(d.domain);
+    });
     return Array.from(set).sort();
   }, [dtus]);
 
@@ -179,7 +242,7 @@ export default function ResearchLensPage() {
     // Text search
     if (query) {
       const q = query.toLowerCase();
-      filtered = filtered.filter(d => {
+      filtered = filtered.filter((d) => {
         const text = [d.title, d.content, d.summary, ...(d.tags || [])].join(' ').toLowerCase();
         return text.includes(q);
       });
@@ -187,12 +250,12 @@ export default function ResearchLensPage() {
 
     // Domain filter
     if (domainFilter) {
-      filtered = filtered.filter(d => d.domain === domainFilter);
+      filtered = filtered.filter((d) => d.domain === domainFilter);
     }
 
     // Tier filter
     if (tierFilter) {
-      filtered = filtered.filter(d => d.tier === tierFilter);
+      filtered = filtered.filter((d) => d.tier === tierFilter);
     }
 
     // Sort
@@ -200,7 +263,9 @@ export default function ResearchLensPage() {
       filtered.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
     } else if (sortBy === 'tier') {
       const tierOrder: Record<string, number> = { hyper: 0, mega: 1, regular: 2, shadow: 3 };
-      filtered.sort((a, b) => (tierOrder[a.tier || 'regular'] || 2) - (tierOrder[b.tier || 'regular'] || 2));
+      filtered.sort(
+        (a, b) => (tierOrder[a.tier || 'regular'] || 2) - (tierOrder[b.tier || 'regular'] || 2)
+      );
     }
 
     return filtered;
@@ -236,26 +301,43 @@ export default function ResearchLensPage() {
           </p>
         </div>
 
-      {/* Real-time Enhancement Toolbar */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <LiveIndicator isLive={isLive} lastUpdated={lastUpdated} compact />
-        <DTUExportButton domain="research" data={realtimeData || {}} compact />
-        <VisionAnalyzeButton
-          domain="research"
-          prompt="Analyze this research image (chart, graph, diagram, figure, data visualization, etc.). Extract key findings, describe the data shown, and suggest relevant research tags and domain classification."
-          onResult={(res) => {
-            setSelectedDtu({ id: `vision-${Date.now()}`, title: 'Vision Analysis', content: res.analysis, summary: res.analysis.slice(0, 200), domain: 'research', tags: res.suggestedTags || [], createdAt: new Date().toISOString() });
-          }}
-        />
-        <button onClick={() => refetchDTUs()} disabled={dtusLoading} className="p-1 rounded hover:bg-lattice-surface/50 disabled:opacity-50 transition-colors" title="Refresh DTUs">
-          {dtusLoading ? <span className="w-4 h-4 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin inline-block" /> : <RefreshCw className="w-4 h-4 text-gray-400" />}
-        </button>
-        {realtimeAlerts.length > 0 && (
-          <span className="text-xs px-2 py-0.5 rounded bg-yellow-500/10 text-yellow-400">
-            {realtimeAlerts.length} alert{realtimeAlerts.length !== 1 ? 's' : ''}
-          </span>
-        )}
-      </div>
+        {/* Real-time Enhancement Toolbar */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <LiveIndicator isLive={isLive} lastUpdated={lastUpdated} compact />
+          <DTUExportButton domain="research" data={realtimeData || {}} compact />
+          <VisionAnalyzeButton
+            domain="research"
+            prompt="Analyze this research image (chart, graph, diagram, figure, data visualization, etc.). Extract key findings, describe the data shown, and suggest relevant research tags and domain classification."
+            onResult={(res) => {
+              setSelectedDtu({
+                id: `vision-${Date.now()}`,
+                title: 'Vision Analysis',
+                content: res.analysis,
+                summary: res.analysis.slice(0, 200),
+                domain: 'research',
+                tags: res.suggestedTags || [],
+                createdAt: new Date().toISOString(),
+              });
+            }}
+          />
+          <button
+            onClick={() => refetchDTUs()}
+            disabled={dtusLoading}
+            className="p-1 rounded hover:bg-lattice-surface/50 disabled:opacity-50 transition-colors"
+            title="Refresh DTUs"
+          >
+            {dtusLoading ? (
+              <span className="w-4 h-4 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin inline-block" />
+            ) : (
+              <RefreshCw className="w-4 h-4 text-gray-400" />
+            )}
+          </button>
+          {realtimeAlerts.length > 0 && (
+            <span className="text-xs px-2 py-0.5 rounded bg-yellow-500/10 text-yellow-400">
+              {realtimeAlerts.length} alert{realtimeAlerts.length !== 1 ? 's' : ''}
+            </span>
+          )}
+        </div>
       </header>
 
       <FeedBanner domain="research" />
@@ -264,9 +346,19 @@ export default function ResearchLensPage() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
           { icon: FileText, label: 'Total DTUs', value: dtus.length, color: 'text-neon-cyan' },
-          { icon: Microscope, label: 'Hyper Tier', value: dtus.filter(d => d.tier === 'hyper').length, color: 'text-pink-400' },
+          {
+            icon: Microscope,
+            label: 'Hyper Tier',
+            value: dtus.filter((d) => d.tier === 'hyper').length,
+            color: 'text-pink-400',
+          },
           { icon: BookOpen, label: 'Domains', value: domains.length, color: 'text-purple-400' },
-          { icon: Tag, label: 'Tagged', value: dtus.filter(d => (d.tags || []).length > 0).length, color: 'text-green-400' },
+          {
+            icon: Tag,
+            label: 'Tagged',
+            value: dtus.filter((d) => (d.tags || []).length > 0).length,
+            color: 'text-green-400',
+          },
         ].map((stat, i) => (
           <motion.div
             key={stat.label}
@@ -338,7 +430,12 @@ export default function ResearchLensPage() {
             </div>
             <div className="flex items-center gap-2">
               <button
-                onClick={() => handleDownloadResult(generateResult.content, `${generateResult.title.replace(/\s+/g, '-').toLowerCase()}.txt`)}
+                onClick={() =>
+                  handleDownloadResult(
+                    generateResult.content,
+                    `${generateResult.title.replace(/\s+/g, '-').toLowerCase()}.txt`
+                  )
+                }
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-neon-cyan/10 text-neon-cyan rounded-lg text-xs hover:bg-neon-cyan/20"
               >
                 <Download className="w-3.5 h-3.5" /> Download
@@ -383,7 +480,11 @@ export default function ResearchLensPage() {
             className="px-3 py-1.5 bg-lattice-surface border border-lattice-border rounded-lg text-sm text-white"
           >
             <option value="">All Domains</option>
-            {domains.map(d => <option key={d} value={d}>{d}</option>)}
+            {domains.map((d) => (
+              <option key={d} value={d}>
+                {d}
+              </option>
+            ))}
           </select>
         </div>
         <select
@@ -416,7 +517,7 @@ export default function ResearchLensPage() {
         <div className="lg:col-span-2 space-y-3">
           {isLoading ? (
             <div className="space-y-3">
-              {[1, 2, 3, 4, 5].map(i => (
+              {[1, 2, 3, 4, 5].map((i) => (
                 <div key={i} className="h-24 bg-lattice-surface animate-pulse rounded-lg" />
               ))}
             </div>
@@ -424,7 +525,9 @@ export default function ResearchLensPage() {
             <div className="text-center py-16">
               <Search className="w-12 h-12 text-gray-600 mx-auto mb-4" />
               <p className="text-gray-400">
-                {query ? `No results for "${query}"` : 'No DTUs found. Create some in the Chat lens.'}
+                {query
+                  ? `No results for "${query}"`
+                  : 'No DTUs found. Create some in the Chat lens.'}
               </p>
             </div>
           ) : (
@@ -450,14 +553,23 @@ export default function ResearchLensPage() {
                     <p className="text-xs text-gray-400 mt-1 line-clamp-2">{getSnippet(dtu)}</p>
                     <div className="flex items-center gap-2 mt-2 flex-wrap">
                       {dtu.domain && (
-                        <span className="text-xs px-1.5 py-0.5 rounded bg-neon-cyan/10 text-neon-cyan">{dtu.domain}</span>
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-neon-cyan/10 text-neon-cyan">
+                          {dtu.domain}
+                        </span>
                       )}
                       {dtu.tier && dtu.tier !== 'regular' && (
-                        <span className={cn('text-xs px-1.5 py-0.5 rounded',
-                          dtu.tier === 'hyper' ? 'bg-pink-500/20 text-pink-400' :
-                          dtu.tier === 'mega' ? 'bg-purple-500/20 text-purple-400' :
-                          'bg-gray-500/20 text-gray-400'
-                        )}>{dtu.tier}</span>
+                        <span
+                          className={cn(
+                            'text-xs px-1.5 py-0.5 rounded',
+                            dtu.tier === 'hyper'
+                              ? 'bg-pink-500/20 text-pink-400'
+                              : dtu.tier === 'mega'
+                                ? 'bg-purple-500/20 text-purple-400'
+                                : 'bg-gray-500/20 text-gray-400'
+                          )}
+                        >
+                          {dtu.tier}
+                        </span>
                       )}
                       {/* Citation count badge */}
                       {dtu.creti && (
@@ -471,8 +583,10 @@ export default function ResearchLensPage() {
                           <CheckCircle className="w-3 h-3" /> Verified
                         </span>
                       )}
-                      {(dtu.tags || []).slice(0, 3).map(tag => (
-                        <span key={tag} className="text-xs text-gray-500">#{tag}</span>
+                      {(dtu.tags || []).slice(0, 3).map((tag) => (
+                        <span key={tag} className="text-xs text-gray-500">
+                          #{tag}
+                        </span>
                       ))}
                     </div>
                   </div>
@@ -513,8 +627,13 @@ export default function ResearchLensPage() {
                 {(selectedDtu.tags || []).length > 0 && (
                   <div className="flex items-center gap-2 text-gray-400 flex-wrap">
                     <Tag className="w-4 h-4" />
-                    {selectedDtu.tags!.map(t => (
-                      <span key={t} className="text-xs px-1.5 py-0.5 rounded bg-lattice-deep text-gray-300">#{t}</span>
+                    {selectedDtu.tags!.map((t) => (
+                      <span
+                        key={t}
+                        className="text-xs px-1.5 py-0.5 rounded bg-lattice-deep text-gray-300"
+                      >
+                        #{t}
+                      </span>
                     ))}
                   </div>
                 )}
@@ -531,9 +650,14 @@ export default function ResearchLensPage() {
                         <div key={key} className="flex items-center gap-2">
                           <span className="text-xs text-gray-500 w-20">{key}</span>
                           <div className="flex-1 h-1.5 bg-lattice-deep rounded-full overflow-hidden">
-                            <div className="h-full bg-neon-cyan rounded-full" style={{ width: `${(val as number) * 100}%` }} />
+                            <div
+                              className="h-full bg-neon-cyan rounded-full"
+                              style={{ width: `${(val as number) * 100}%` }}
+                            />
                           </div>
-                          <span className="text-xs text-gray-400 w-10 text-right">{((val as number) * 100).toFixed(0)}%</span>
+                          <span className="text-xs text-gray-400 w-10 text-right">
+                            {((val as number) * 100).toFixed(0)}%
+                          </span>
                         </div>
                       ))}
                     </div>
@@ -562,34 +686,44 @@ export default function ResearchLensPage() {
         />
         <FeedbackWidget targetType="lens" targetId="research" />
 
-      {/* Real-time Data Panel */}
-      {realtimeData && (
-        <>
-          <UniversalActions domain="research" artifactId={null} compact />
-          <RealtimeDataPanel
-            domain="research"
-            data={realtimeData}
-            isLive={isLive}
-            lastUpdated={lastUpdated}
-            insights={realtimeInsights}
-            compact
-          />
-        </>
-      )}
+        {/* Real-time Data Panel */}
+        {realtimeData && (
+          <>
+            <UniversalActions domain="research" artifactId={null} compact />
+            <RealtimeDataPanel
+              domain="research"
+              data={realtimeData}
+              isLive={isLive}
+              lastUpdated={lastUpdated}
+              insights={realtimeInsights}
+              compact
+            />
+          </>
+        )}
       </div>
 
       {/* Research Domain Actions */}
       <div className="panel p-4 space-y-3">
-        <h3 className="text-sm font-semibold text-neon-cyan flex items-center gap-2"><Microscope className="w-4 h-4" /> Research Analysis</h3>
+        <h3 className="text-sm font-semibold text-neon-cyan flex items-center gap-2">
+          <Microscope className="w-4 h-4" /> Research Analysis
+        </h3>
         <div className="flex flex-wrap gap-2">
           {[
             { action: 'citationNetwork', label: 'Citation Network' },
             { action: 'methodologyScore', label: 'Methodology Score' },
             { action: 'reproducibilityCheck', label: 'Reproducibility Check' },
           ].map(({ action, label }) => (
-            <button key={action} onClick={() => handleResearchAction(action)} disabled={researchActiveAction === action}
-              className="px-3 py-1.5 text-xs bg-neon-cyan/10 border border-neon-cyan/20 rounded-lg hover:bg-neon-cyan/20 disabled:opacity-50 flex items-center gap-1.5">
-              {researchActiveAction === action ? <div className="w-3 h-3 border border-neon-cyan border-t-transparent rounded-full animate-spin" /> : <Zap className="w-3 h-3 text-neon-cyan" />}
+            <button
+              key={action}
+              onClick={() => handleResearchAction(action)}
+              disabled={researchActiveAction === action}
+              className="px-3 py-1.5 text-xs bg-neon-cyan/10 border border-neon-cyan/20 rounded-lg hover:bg-neon-cyan/20 disabled:opacity-50 flex items-center gap-1.5"
+            >
+              {researchActiveAction === action ? (
+                <div className="w-3 h-3 border border-neon-cyan border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <Zap className="w-3 h-3 text-neon-cyan" />
+              )}
               {label}
             </button>
           ))}
@@ -599,39 +733,101 @@ export default function ResearchLensPage() {
             {researchActionResult.action === 'citationNetwork' && (
               <div className="space-y-1">
                 <div className="flex gap-4 flex-wrap">
-                  <span className="text-gray-400">Papers: <span className="text-white font-mono">{String(researchActionResult.totalPapers ?? '')}</span></span>
-                  <span className="text-gray-400">Citations: <span className="text-neon-cyan font-mono">{String(researchActionResult.totalCitations ?? '')}</span></span>
-                  <span className="text-gray-400">H-index: <span className="text-neon-blue font-mono">{String(researchActionResult.hIndex ?? '')}</span></span>
+                  <span className="text-gray-400">
+                    Papers:{' '}
+                    <span className="text-white font-mono">
+                      {String(researchActionResult.totalPapers ?? '')}
+                    </span>
+                  </span>
+                  <span className="text-gray-400">
+                    Citations:{' '}
+                    <span className="text-neon-cyan font-mono">
+                      {String(researchActionResult.totalCitations ?? '')}
+                    </span>
+                  </span>
+                  <span className="text-gray-400">
+                    H-index:{' '}
+                    <span className="text-neon-blue font-mono">
+                      {String(researchActionResult.hIndex ?? '')}
+                    </span>
+                  </span>
                 </div>
-                {!!researchActionResult.message && <p className="text-gray-400 italic">{String(researchActionResult.message)}</p>}
+                {!!researchActionResult.message && (
+                  <p className="text-gray-400 italic">{String(researchActionResult.message)}</p>
+                )}
               </div>
             )}
             {researchActionResult.action === 'methodologyScore' && (
               <div className="space-y-1">
                 <div className="flex gap-4 flex-wrap">
-                  <span className="text-gray-400">Score: <span className={`font-mono font-bold ${(researchActionResult.score as number) >= 7 ? 'text-green-400' : (researchActionResult.score as number) >= 4 ? 'text-yellow-400' : 'text-red-400'}`}>{String(researchActionResult.score ?? '')}/10</span></span>
-                  <span className="text-gray-400">Quality: <span className="text-white">{String(researchActionResult.quality ?? '')}</span></span>
+                  <span className="text-gray-400">
+                    Score:{' '}
+                    <span
+                      className={`font-mono font-bold ${(researchActionResult.score as number) >= 7 ? 'text-green-400' : (researchActionResult.score as number) >= 4 ? 'text-yellow-400' : 'text-red-400'}`}
+                    >
+                      {String(researchActionResult.score ?? '')}/10
+                    </span>
+                  </span>
+                  <span className="text-gray-400">
+                    Quality:{' '}
+                    <span className="text-white">{String(researchActionResult.quality ?? '')}</span>
+                  </span>
                 </div>
-                {Array.isArray(researchActionResult.strengths) && researchActionResult.strengths.length > 0 && (
-                  <div className="space-y-0.5">{(researchActionResult.strengths as string[]).map((s, i) => <p key={i} className="text-green-300">✓ {s}</p>)}</div>
+                {Array.isArray(researchActionResult.strengths) &&
+                  researchActionResult.strengths.length > 0 && (
+                    <div className="space-y-0.5">
+                      {(researchActionResult.strengths as string[]).map((s, i) => (
+                        <p key={i} className="text-green-300">
+                          ✓ {s}
+                        </p>
+                      ))}
+                    </div>
+                  )}
+                {!!researchActionResult.message && (
+                  <p className="text-gray-400 italic">{String(researchActionResult.message)}</p>
                 )}
-                {!!researchActionResult.message && <p className="text-gray-400 italic">{String(researchActionResult.message)}</p>}
               </div>
             )}
             {researchActionResult.action === 'reproducibilityCheck' && (
               <div className="space-y-1">
                 <div className="flex gap-4 flex-wrap">
-                  <span className="text-gray-400">Score: <span className={`font-mono font-bold ${(researchActionResult.reproducibilityScore as number) >= 7 ? 'text-green-400' : (researchActionResult.reproducibilityScore as number) >= 4 ? 'text-yellow-400' : 'text-red-400'}`}>{String(researchActionResult.reproducibilityScore ?? '')}/10</span></span>
+                  <span className="text-gray-400">
+                    Score:{' '}
+                    <span
+                      className={`font-mono font-bold ${(researchActionResult.reproducibilityScore as number) >= 7 ? 'text-green-400' : (researchActionResult.reproducibilityScore as number) >= 4 ? 'text-yellow-400' : 'text-red-400'}`}
+                    >
+                      {String(researchActionResult.reproducibilityScore ?? '')}/10
+                    </span>
+                  </span>
                 </div>
-                {Array.isArray(researchActionResult.issues) && researchActionResult.issues.length > 0 && (
-                  <div className="space-y-0.5">{(researchActionResult.issues as string[]).map((s, i) => <p key={i} className="text-yellow-300">⚠ {s}</p>)}</div>
+                {Array.isArray(researchActionResult.issues) &&
+                  researchActionResult.issues.length > 0 && (
+                    <div className="space-y-0.5">
+                      {(researchActionResult.issues as string[]).map((s, i) => (
+                        <p key={i} className="text-yellow-300">
+                          ⚠ {s}
+                        </p>
+                      ))}
+                    </div>
+                  )}
+                {!!researchActionResult.message && (
+                  <p className="text-gray-400 italic">{String(researchActionResult.message)}</p>
                 )}
-                {!!researchActionResult.message && <p className="text-gray-400 italic">{String(researchActionResult.message)}</p>}
               </div>
             )}
-            <button onClick={() => setResearchActionResult(null)} className="text-gray-600 hover:text-gray-400 text-xs flex items-center gap-1"><X className="w-3 h-3" /> Dismiss</button>
+            <button
+              onClick={() => setResearchActionResult(null)}
+              className="text-gray-600 hover:text-gray-400 text-xs flex items-center gap-1"
+            >
+              <X className="w-3 h-3" /> Dismiss
+            </button>
           </div>
         )}
+      </div>
+
+      {/* Live Web Feed — science feeds are relevant to research */}
+      <div className="px-4 mb-2">
+        <LensFeedPanel lensId="science" />
       </div>
 
       {/* Lens Features */}
@@ -644,7 +840,9 @@ export default function ResearchLensPage() {
             <Layers className="w-4 h-4" />
             Lens Features & Capabilities
           </span>
-          <ChevronDown className={`w-4 h-4 transition-transform ${showFeatures ? 'rotate-180' : ''}`} />
+          <ChevronDown
+            className={`w-4 h-4 transition-transform ${showFeatures ? 'rotate-180' : ''}`}
+          />
         </button>
         {showFeatures && (
           <div className="px-4 pb-4">

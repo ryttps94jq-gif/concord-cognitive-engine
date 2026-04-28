@@ -1,0 +1,658 @@
+server/durable.js:414:        const userId = req.actor?.userId || req.query.user_id || req.headers["x-user-id"];
+server/durable.js:435:      logEvent(db, "artifact.downloaded", req.query.user_id || null, { artifactId: req.params.id, versionId: version.id }, req.headers["x-request-id"]);
+server/durable.js:695:      if (req.body.metadata) {
+server/durable.js:697:        params.push(JSON.stringify(req.body.metadata));
+server/eslint.config.js:55:          message: "req.body.userId is an auth bypass risk. Use req.user?.id from the authenticated session. If this is a target identifier (not the actor), add // safe: target-identifier",
+server/eslint.config.js:59:          message: "req.body.user_id is an auth bypass risk. Use req.user?.id from the authenticated session. If this is a target identifier (not the actor), add // safe: target-identifier",
+server/eslint.config.js:63:          message: "req.query.userId used as actor identity is an auth bypass risk. Use req.user?.id from the authenticated session.",
+server/guidance.js:403:          actorUserId: req.body.user_id || null,
+server/guidance.js:500:        actorUserId: req.body.owner_user_id || existing.owner_user_id,
+server/server.js:10319:      override: (req.query && (req.query.override === "1" || req.query.override === "true")) ? true : false,
+server/server.js:25992:  try { res.json(await runMacro("city", "listStreams", { cityId: req.query.cityId }, makeCtx(req))); }
+server/server.js:26030:  const limit = Math.min(Number(req.query.limit) || 20, 100);
+server/server.js:26045:  if (req.body.entityId) {
+server/server.js:26046:    try { hookVulnerability(req.body.entityId, vulnerability, delivery); } catch (_e) { logger.debug('server', 'silent', { error: _e?.message }); }
+server/server.js:28225:app.get("/api/marketplace/browse", asyncHandler(async (req, res) => res.json(await runMacro("marketplace", "browse", { category: req.query.category, search: req.query.search, sort: req.query.sort, page: req.query.page, pageSize: req.query.pageSize }, makeCtx(req)))));
+server/server.js:28228:app.get("/api/marketplace/dtu_browse", asyncHandler(async (req, res) => res.json(await runMacro("marketplace", "browse", { category: req.query.category, search: req.query.search, sort: req.query.sort, page: req.query.page, pageSize: req.query.pageSize }, makeCtx(req)))));
+server/server.js:29242:    res.json(await runMacro("graph", "visualData", { tier: req.query.tier, limit: req.query.limit, includeEdges: req.query.includeEdges !== "false" }, makeCtx(req)));
+server/server.js:29249:    res.json(await runMacro("graph", "forceGraph", { centerNode: req.query.centerNode, depth: req.query.depth, maxNodes: req.query.maxNodes }, makeCtx(req)));
+server/server.js:29494:app.get("/api/visual/moodboard", asyncHandler(async (req, res) => res.json(await runMacro("visual", "moodboard", { tags: req.query.tags?.split(","), tier: req.query.tier, maxNodes: req.query.maxNodes }, makeCtx(req)))));
+server/server.js:29495:app.get("/api/visual/sunburst", asyncHandler(async (req, res) => res.json(await runMacro("visual", "sunburst", { maxDepth: req.query.maxDepth, maxNodes: req.query.maxNodes }, makeCtx(req)))));
+server/server.js:29496:app.get("/api/visual/timeline", asyncHandler(async (req, res) => res.json(await runMacro("visual", "timeline", { startDate: req.query.startDate, endDate: req.query.endDate, limit: req.query.limit }, makeCtx(req)))));
+server/server.js:30145:  res.json(await runMacro("emergent", "context.panel", { sessionId: req.params.sessionId, lens: req.query.lens }, makeCtx(req)));
+server/server.js:30163:  const result = buildDTUConversationContext(STATE, req.params.id, { sessionId: req.query.sessionId });
+server/server.js:30209:    dtuId: req.body.dtuId,
+server/server.js:30211:    helpful: req.body.helpful,
+server/server.js:30212:    wrong: req.body.wrong,
+server/server.js:30213:    context: req.body.context,
+server/server.js:30214:    comment: req.body.comment,
+server/server.js:30474:  const name = req.body.name;
+server/server.js:30486:  const limit = parseInt(req.query.limit || "50", 10);
+server/server.js:30487:  const minDurationMs = req.query.slow ? parseInt(req.query.slow, 10) : undefined;
+server/server.js:30504:    text: req.body.text,
+server/server.js:30505:    capturedAt: req.body.capturedAt,
+server/server.js:30602:  const q = String(req.query.q || "").trim();
+server/server.js:30604:  const limit = Math.min(Math.max(Number(req.query.limit) || 10, 1), 30);
+server/server.js:30701:  const limit = Math.min(Number(req.query.limit) || 50, 200);
+server/server.js:30713:  const runFresh = req.query.run === "true";
+server/server.js:30743:  const runFresh = req.query.run === "true";
+server/server.js:30819:    const out = await runMacro("lens", "list", { domain: req.params.domain, type: req.query.type, search: req.query.search, tags: req.query.tags?.split(","), status: req.query.status, limit: Number(req.query.limit)||100, offset: Number(req.query.offset)||0 }, ctx);
+server/server.js:30898:    res.json(await runMacro("lens", "export", { id: req.params.id, format: req.query.format || "json" }, ctx));
+server/server.js:34392:  const limit = Math.min(parseInt(req.query.limit) || 20, 100);
+server/server.js:34921:  const status = req.query.status || null;
+server/server.js:35206:    const execution = await executePipeline(pipelineId, variables || {}, userId, req.body.sessionId || "default", {
+server/server.js:35516:      name: req.body.name || "Default",
+server/server.js:35517:      permissions: req.body.permissions || ["read", "execute"],
+server/server.js:35750:    if (req.body.name) agent.name = req.body.name;
+server/server.js:35751:    if (req.body.watchedLenses) agent.watchedLenses = req.body.watchedLenses;
+server/server.js:35752:    if (req.body.priorities) agent.priorities = req.body.priorities;
+server/server.js:35753:    if (typeof req.body.proactiveActions === "boolean") agent.proactiveActions = req.body.proactiveActions;
+server/server.js:35896:      email: req.body.email,
+server/server.js:35897:      role: req.body.role || "member",
+server/server.js:37636:  const lens = typeof req.query?.lens === "string" ? req.query.lens.slice(0, 32) : null;
+server/server.js:37717:app.get("/api/shard/route", asyncHandler(async (req, res) => res.json(await runMacro("shard", "route", { userId: req.query.userId, orgId: req.query.orgId }, makeCtx(req)))));
+server/server.js:37720:app.get("/api/governor/check", asyncHandler(async (req, res) => res.json(await runMacro("governor", "check", { userId: req.query.userId, action: req.query.action }, makeCtx(req)))));
+server/server.js:38051:app.get("/api/vscode/dtu-to-code/:id", asyncHandler(async (req, res) => res.json(await runMacro("vscode", "dtuToCode", { dtuId: req.params.id, format: req.query.format }, makeCtx(req)))));
+server/server.js:38052:app.get("/api/vscode/search", asyncHandler(async (req, res) => res.json(await runMacro("vscode", "search", { query: req.query.q, language: req.query.language, limit: req.query.limit }, makeCtx(req)))));
+server/server.js:38079:    const limit = Math.min(Number(req.query.limit) || 50, 200);
+server/server.js:38080:    const offset = Number(req.query.offset) || 0;
+server/server.js:38081:    const domain = req.query.domain;
+server/server.js:38082:    const entityType = req.query.entityType;
+server/server.js:38170:    const type = req.query.type;
+server/server.js:38171:    const limit = Math.min(Number(req.query.limit) || 20, 100);
+server/server.js:38301:    category: req.query.category,
+server/server.js:38302:    search: req.query.search,
+server/server.js:38303:    sort: req.query.sort,
+server/server.js:38304:    page: req.query.page,
+server/server.js:38305:    pageSize: req.query.pageSize
+server/server.js:38491:    const result = restoreDTUVersion(req.params.id, Number(req.body.version));
+server/server.js:38516:    const result = importFromObsidian(req.body.files || []);
+server/server.js:38525:    const result = importFromRoam(req.body.data || req.body);
+server/server.js:38533:  const ids = req.query.ids ? req.query.ids.split(",") : null;
+server/server.js:38535:  if (req.query.download === "1") {
+server/server.js:38544:  const ids = req.query.ids ? req.query.ids.split(",") : null;
+server/server.js:38546:  if (req.query.download === "1") {
+server/server.js:38555:    const result = queryDTUsAdvanced(req.body.query || "");
+server/server.js:38578:  const q = req.query.q || "";
+server/server.js:38579:  const limit = Number(req.query.limit || 10);
+server/server.js:38582:    minScore: Number(req.query.minScore || 0.3)
+server/server.js:38601:  const result = await suggestConnections(req.params.id, { limit: Number(req.query.limit || 5) });
+server/server.js:38616:  const result = await analyzeKnowledgeGaps(req.query.domain);
+server/server.js:38621:  const result = await chatWithLattice(req.body.query || req.body.message, {
+server/server.js:38622:    contextLimit: Number(req.body.contextLimit || 5)
+server/server.js:38629:  const result = getDueCards(Number(req.query.limit || 20));
+server/server.js:38644:    const result = reviewSRSCard(req.params.dtuId, Number(req.body.quality));
+server/server.js:38655:    const result = createWorkspace(userId, req.body.name, req.body.description);
+server/server.js:38683:    const result = addDTUToWorkspace(req.params.id, req.body.dtuId);
+server/server.js:38697:    const result = addWorkspaceMember(req.params.id, req.body.userId, req.body.role, { inviterId });
+server/server.js:38713:    const result = addComment(req.params.id, userId, req.body.content, req.body.parentId);
+server/server.js:38722:    const result = resolveComment(req.params.id, req.body.resolved !== false);
+server/server.js:38732:    const result = addReaction(req.params.id, userId, req.body.emoji);
+server/server.js:38921:    userId: req.query.userId,
+server/server.js:38922:    action: req.query.action,
+server/server.js:38923:    targetType: req.query.targetType,
+server/server.js:38924:    limit: Number(req.query.limit || 100),
+server/server.js:38925:    offset: Number(req.query.offset || 0)
+server/server.js:38948:    const result = setUserShortcut(userId, req.body.key, req.body.action);
+server/server.js:38964:  const userId = req.user?.id || req.query.userId || "anonymous";
+server/server.js:38974:    const result = completeOnboardingStep(userId, req.body.stepId);
+server/server.js:39059:    dtuId: req.query.dtuId,
+server/server.js:39060:    action: req.query.action,
+server/server.js:39061:    since: req.query.since,
+server/server.js:39062:    until: req.query.until,
+server/server.js:39063:    limit: Number(req.query.limit || 100)
+server/server.js:39069:  const result = replayThoughtsAt(req.query.timestamp || new Date().toISOString());
+server/server.js:39074:  const result = diffLattices(req.query.from, req.query.to);
+server/server.js:40234:    const result = createDatabase(req.body.name, req.body.schema || []);
+server/server.js:40271:  const result = getOrCreateDailyNote(req.query.date);
+server/server.js:40276:  const result = listDailyNotes(Number(req.query.limit || 30));
+server/server.js:40281:  const year = Number(req.query.year || new Date().getFullYear());
+server/server.js:40282:  const month = Number(req.query.month || new Date().getMonth() + 1);
+server/server.js:40287:  res.json(getKanbanData(req.query.groupBy || "tier"));
+server/server.js:40292:    const result = parseEmbed(req.body.url);
+server/server.js:40306:  const result = await processVoiceNote(req.body, { createDTU: req.query.createDTU === "1" });
+server/server.js:40311:  const result = await analyzeImage(req.body, req.query.prompt);
+server/server.js:40316:  const result = await generateDailyDigest(req.query.date);
+server/server.js:40327:  const result = await getInlineCompletion(req.body.text, Number(req.body.cursorPosition), req.body.context);
+server/server.js:40332:  const result = await suggestTags(req.body.content, req.body.existingTags || []);
+server/server.js:40347:  const result = await addRSSFeed(req.body.url, req.body.name);
+server/server.js:40366:  for (const item of fetchResult.items.slice(0, Number(req.query.limit || 10))) {
+server/server.js:40402:    const result = createReminder(req.body.dtuId, req.body.reminderAt, req.body.message);
+server/server.js:40477:  const result = await executeCLICommand(req.body.command);
+server/server.js:40487:    const result = registerWebhook(req.body.url, req.body.events);
+server/server.js:40638:  const limit = clamp(Number(req.query.limit || 20), 1, 100);
+server/server.js:41138:  const sessionId = req.query.sessionId || req.cookies?.concord_anon;
+server/server.js:41350:  const limit = clamp(Number(req.query.limit || 50), 1, 200);
+server/server.js:41380:  const userId = req.query.user_id || req.user?.id || "default";
+server/server.js:41496:  const refId = req.body?.refId ? String(req.body.refId).slice(0, 128) : undefined;
+server/server.js:41659:  if (req.body?.track) STATE.music.currentTrack = req.body.track;
+server/server.js:41660:  if (req.body?.volume !== undefined) STATE.music.volume = clamp(Number(req.body.volume), 0, 1);
+server/server.js:41685:    if (req.body?.name) existing.name = req.body.name;
+server/server.js:41686:    if (req.body?.tracks) existing.tracks = req.body.tracks;
+server/server.js:41687:    if (req.body?.type) existing.type = req.body.type;
+server/server.js:42246:  const sessionId = req.query.sessionId || req._atsSessionId || "default";
+server/server.js:42264:  const sessionId = req.query.sessionId || req._atsSessionId || "default";
+server/server.js:42282:  const sessionId = req.query.sessionId || req._atsSessionId || "default";
+server/server.js:42283:  const limit = Math.min(Number(req.query.limit) || 50, 500);
+server/server.js:42383:      domainType: req.query.domainType,
+server/server.js:42384:      epistemicClass: req.query.epistemicClass,
+server/server.js:42385:      status: req.query.status,
+server/server.js:42386:      entity: req.query.entity,
+server/server.js:42387:      minConfidence: req.query.minConfidence ? Number(req.query.minConfidence) : undefined,
+server/server.js:42388:      limit: Number(req.query.limit || 50),
+server/server.js:42389:      offset: Number(req.query.offset || 0),
+server/server.js:42474:  try { res.json(getCouncilQueue(STATE, { limit: Number(req.query.limit || 50), domainType: req.query.domainType })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+server/server.js:42492:  try { res.json(getCouncilActions(STATE, { dtuId: req.query.dtuId, actionType: req.query.actionType, limit: Number(req.query.limit || 50) })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+server/server.js:42517:  try { res.json(listProfiles(STATE, { sortBy: req.query.sortBy, limit: Number(req.query.limit || 50) })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+server/server.js:42537:  try { res.json(getFeed(STATE, req.user?.id || req.query.userId, { limit: Number(req.query.limit || 30), offset: Number(req.query.offset || 0) })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+server/server.js:42541:  try { res.json(computeTrending(STATE, Number(req.query.limit || 20))); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+server/server.js:42547:    const userId = req.user?.id || req.query.userId || "anon";
+server/server.js:42658:  try { res.json(socialGetUserPosts(STATE, req.params.userId, { limit: Number(req.query.limit || 30), offset: Number(req.query.offset || 0) })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+server/server.js:42671:    const currentUserId = req.user?.id || req.query.userId || null;
+server/server.js:42692:  try { res.json(socialGetComments(STATE, req.params.postId, { limit: Number(req.query.limit || 50) })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+server/server.js:42717:    const userId = req.query.userId || req.user?.id || req.actor?.userId || "anon";
+server/server.js:42718:    res.json(socialGetUserBookmarks(STATE, userId, { limit: Number(req.query.limit || 30), offset: Number(req.query.offset || 0) }));
+server/server.js:42725:    const userId = req.query.userId || req.user?.id || req.actor?.userId || "anon";
+server/server.js:42726:    res.json(getForYouFeed(STATE, userId, { limit: Number(req.query.limit || 30), offset: Number(req.query.offset || 0) }));
+server/server.js:42732:    const userId = req.query.userId || req.user?.id || req.actor?.userId || "anon";
+server/server.js:42733:    res.json(getFollowingFeed(STATE, userId, { limit: Number(req.query.limit || 30), offset: Number(req.query.offset || 0) }));
+server/server.js:42739:    res.json(getExploreFeed(STATE, { limit: Number(req.query.limit || 30), offset: Number(req.query.offset || 0), topic: req.query.topic }));
+server/server.js:42759:  try { res.json(socialGetMessages(STATE, req.params.conversationId, { limit: Number(req.query.limit || 50), offset: Number(req.query.offset || 0) })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+server/server.js:42780:    const userId = req.query.userId || req.user?.id || req.actor?.userId || "anon";
+server/server.js:42813:    const limit = Math.min(Number(req.query.limit) || 50, 200);
+server/server.js:42814:    const unreadOnly = req.query.unreadOnly === "true";
+server/server.js:42891:  try { res.json(collabListWorkspaces(STATE, req.query.userId || req.user?.id)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+server/server.js:42915:  try { res.json(collabGetComments(STATE, req.params.dtuId, { tree: req.query.tree === "true", limit: Number(req.query.limit || 50) })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+server/server.js:42935:  try { res.json(getRevisionProposals(STATE, req.params.dtuId, req.query.status)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+server/server.js:43004:  try { res.json(exportAuditLog(STATE, req.params.orgId, { since: req.query.since, until: req.query.until, action: req.query.action, limit: Number(req.query.limit || 1000) })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+server/server.js:43021:  try { res.json(getDtuGrowthTrends(STATE, { period: req.query.period || "24h" })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+server/server.js:43025:  try { res.json(getCitationAnalytics(STATE, { limit: Number(req.query.limit || 20) })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+server/server.js:43049:  try { res.json(getDeliveryHistory(STATE, req.params.id, Number(req.query.limit || 50))); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+server/server.js:43094:  try { res.json(getComplianceLog(STATE, { action: req.query.action, since: req.query.since, limit: Number(req.query.limit || 100) })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+server/server.js:43132:  try { res.json(getEfficiencyHistory(STATE, req.query.period || "24h")); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+server/server.js:43166:    res.json({ ok: true, ...runAutoPromoteGate(STATE, dtu, req.query.scope || "global") });
+server/server.js:43171:  try { res.json({ ok: true, log: getWriteGuardLog(Number(req.query.limit || 100)) }); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+server/server.js:43227:  try { res.json(listSubmissions(STATE, { status: req.query.status, targetScope: req.query.targetScope, submitter: req.query.submitter, limit: Number(req.query.limit || 50), offset: Number(req.query.offset || 0) })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+server/server.js:43256:  try { res.json(retrieveForChat(STATE, req.query.q, { limit: Number(req.query.limit || 10) })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+server/server.js:43260:  try { res.json(retrieveLabeled(STATE, req.query.policy, req.query.q, { limit: Number(req.query.limit || 20) })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+server/server.js:43264:  try { res.json(retrieveFromScope(STATE, req.params.scope, req.query.q, { limit: Number(req.query.limit || 20) })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+server/server.js:43290:  try { res.json({ ok: true, log: getInvariantLog(Number(req.query.limit || 100)) }); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+server/server.js:43525:  const limit = Math.min(Number(req.query.limit) || 5, 20);
+server/server.js:43574:  const hours = Number(req.query.hours) || 24;
+server/server.js:43580:  const days = Math.min(Number(req.query.days) || 30, 90);
+server/server.js:43586:  const users = Number(req.query.users) || 10000;
+server/server.js:43644:  const view = typeof req.query?.view === "string" ? req.query.view : "stats";
+server/server.js:43715:    const limit = parseInt(req.query.limit) || 50;
+server/server.js:43814:    const days = Number(req.query.days) || 30;
+server/server.js:43831:    const limit = Number(req.query.limit) || 50;
+server/server.js:44620:  const result = await executeRepairExecutor(req.params.executor, req.body.context || {});
+server/server.js:44647:  import("./emergent/forgetting-engine.js").then(m => res.json(m.protectDTU(req.body.dtuId))).catch(e => res.json({ ok: false, error: e.message }));
+server/server.js:44650:  import("./emergent/forgetting-engine.js").then(m => res.json(m.unprotectDTU(req.body.dtuId))).catch(e => res.json({ ok: false, error: e.message }));
+server/server.js:44653:  import("./emergent/forgetting-engine.js").then(m => res.json(m.getHistory(parseInt(req.query.limit || "20", 10)))).catch(e => res.json({ ok: false, error: e.message }));
+server/server.js:44664:    res.json(m.setFocusOverride(req.body.domain, req.body.weight, req.body.minutes));
+server/server.js:44683:  res.json(dc.getDreamHistory(parseInt(req.query.limit || "50", 10)));
+server/server.js:44717:  res.json(await m.exploreAdjacent(req.body.constraints, req.body.domain));
+server/server.js:44735:  res.json(m.rejectPromotion(req.params.id, req.body.reason, "sovereign"));
+server/server.js:46356:    type: req.query.type,
+server/server.js:46357:    domain: req.query.domain,
+server/server.js:46358:    minIntensity: req.query.minIntensity ? parseFloat(req.query.minIntensity) : undefined,
+server/server.js:46359:    emotion: req.query.emotion,
+server/server.js:46360:    since: req.query.since,
+server/server.js:46361:    limit: req.query.limit ? parseInt(req.query.limit) : 50,
+server/server.js:46532:  const limit = parseInt(req.query.limit) || 20;
+server/server.js:46662:  if (req.body.customInstructions !== undefined) persona.customInstructions = req.body.customInstructions;
+server/server.js:46663:  if (req.body.active !== undefined) persona.active = req.body.active;
+server/server.js:46664:  if (req.body.name) persona.name = req.body.name;
+server/server.js:46800:  const limit = parseInt(req.query.limit) || 20;
+server/server.js:46801:  const status = req.query.status;
+server/server.js:47025:  const status = req.query.status;
+server/server.js:47026:  const domain = req.query.domain;
+server/server.js:47056:  const result = completeBounty(req.params.id, req.body.accepted !== false);
+server/server.js:47135:  const status = req.query.status;
+server/server.js:47256:  const depth = parseInt(req.query.depth) || 2;
+server/server.js:47269:  const dtuId = req.query.dtuId;
+server/server.js:47409:  if (!req.body.domain) return res.status(400).json({ ok: false, error: "Domain required" });
+server/server.js:47535:  const result = await submitBattleResponse(req.params.id, req.body.participant || "sovereign", req.body.response);
+server/server.js:47570:  const sub = getSubscription(req.query.userId);
+server/server.js:47718:    const userId = req.query.userId || "default";
+server/server.js:47723:    res.status(500).json({ ok: false, error: String(e?.message || e), twin: { userId: req.query.userId || "default", insights: [], patterns: [] } });
+server/server.js:47740:  const userId = req.query.userId || "default";
+server/server.js:48190:  const fromDate = req.query.fromDate ? new Date(req.query.fromDate).getTime() : Date.now() - 30 * 24 * 60 * 60 * 1000;
+server/server.js:48191:  const toDate = req.query.toDate ? new Date(req.query.toDate).getTime() : Date.now();
+server/server.js:48554:  const limit = parseInt(req.query.limit) || 100;
+server/server.js:48555:  const type = req.query.type;
+server/server.js:48934:  const limit = parseInt(req.query.limit) || 50;
+server/server.js:48935:  const minDuration = parseInt(req.query.minDuration) || 0;
+server/server.js:49002:  const userId = req.query.userId || "default";
+server/server.js:49010:  const userId = req.query.userId || "default";
+server/server.js:49563:  res.json({ ok: true, ...getAdaptiveLayout(req.query.userId) });
+server/server.js:50096:  const result = await validateOrganismDTU(dtu, req.body.submitterId || "user");
+server/server.js:50105:  const result = await emergentQueryOrganism(fromRole, toOrganismId, query, req.body.context);
+server/server.js:50133:  const limit = Math.min(parseInt(req.query.limit) || 50, 200);
+server/server.js:50134:  const action = req.query.action;
+server/server.js:59356:    .slice(0, Number(req.query.limit) || 50);
+server/server.js:61233:    const status = req.query.status || "pending";
+server/economy/rights-enforcement.js:360:    const contentType = req.query.type || "music";
+server/economy/rights-enforcement.js:361:    const action = req.query.action || "stream";
+server/economy/rights-enforcement.js:410:    const contentType = req.query.type || "music";
+server/economy/routes.js:82:      const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
+server/economy/routes.js:83:      const offset = parseInt(req.query.offset, 10) || 0;
+server/economy/routes.js:84:      const type = req.query.type || undefined;
+server/economy/routes.js:98:      const limit = Math.min(parseInt(req.query.limit, 10) || 100, 500);
+server/economy/routes.js:99:      const offset = parseInt(req.query.offset, 10) || 0;
+server/economy/routes.js:100:      const type = req.query.type || undefined;
+server/economy/routes.js:101:      const status = req.query.status || undefined;
+server/economy/routes.js:115:      const userId = req.body.user_id || req.user?.id;
+server/economy/routes.js:116:      const amount = Math.round(parseFloat(req.body.amount) * 100) / 100;
+server/economy/routes.js:127:        metadata: { source: req.body.source || "admin_api" },
+server/economy/routes.js:177:      const to = req.body.to;
+server/economy/routes.js:178:      const amount = Math.round(parseFloat(req.body.amount) * 100) / 100;
+server/economy/routes.js:191:        type: req.body.type || "TRANSFER",
+server/economy/routes.js:192:        metadata: req.body.metadata || {},
+server/economy/routes.js:223:      const sellerId = req.body.seller_id;
+server/economy/routes.js:224:      const amount = Math.round(parseFloat(req.body.amount) * 100) / 100;
+server/economy/routes.js:225:      const listingId = req.body.listing_id;
+server/economy/routes.js:239:        metadata: req.body.metadata || {},
+server/economy/routes.js:272:      const amount = Math.round(parseFloat(req.body.amount) * 100) / 100;
+server/economy/routes.js:316:      const userId = req.query.user_id || req.user?.id;
+server/economy/routes.js:319:      const limit = Math.min(parseInt(req.query.limit, 10) || 25, 100);
+server/economy/routes.js:320:      const offset = parseInt(req.query.offset, 10) || 0;
+server/economy/routes.js:354:      const reviewerId = req.body.reviewer_id || req.user?.id || "system";
+server/economy/routes.js:378:      const reviewerId = req.body.reviewer_id || req.user?.id || "system";
+server/economy/routes.js:433:      const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
+server/economy/routes.js:434:      const offset = parseInt(req.query.offset, 10) || 0;
+server/economy/routes.js:435:      const status = req.query.status || undefined;
+server/economy/routes.js:579:      const tokens = parseInt(req.body.tokens, 10);
+server/economy/routes.js:661:      const userId = req.query.user_id || req.user?.id;
+server/economy/routes.js:743:      const userId = req.query.user_id || req.user?.id;
+server/economy/routes.js:746:      const role = req.query.role === "seller" ? "seller" : "buyer";
+server/economy/routes.js:747:      const status = req.query.status || undefined;
+server/economy/routes.js:748:      const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
+server/economy/routes.js:749:      const offset = parseInt(req.query.offset, 10) || 0;
+server/economy/routes.js:770:        reason: req.body.reason || "admin_refund",
+server/economy/routes.js:793:        reason: req.body.reason || "admin_make_good",
+server/economy/routes.js:813:      const adjustmentAmount = Math.round(parseFloat(req.body.amount) * 100) / 100;
+server/economy/routes.js:817:      if (!req.body.user_id) {
+server/economy/routes.js:824:        reason: req.body.reason || "admin_adjustment",
+server/economy/routes.js:827:        adjustmentUserId: req.body.user_id,
+server/economy/routes.js:873:      const dryRun = req.body.dry_run === true || req.query.dry_run === "true";
+server/economy/routes.js:874:      const staleCreatedMinutes = parseInt(req.body.stale_created_minutes, 10) || 30;
+server/economy/routes.js:875:      const stalePaidMinutes = parseInt(req.body.stale_paid_minutes, 10) || 15;
+server/economy/routes.js:876:      const staleSettledMinutes = parseInt(req.body.stale_settled_minutes, 10) || 15;
+server/economy/routes.js:914:      const status = req.query.status;
+server/economy/routes.js:917:      const limit = Math.min(parseInt(req.query.limit, 10) || 100, 500);
+server/economy/routes.js:918:      const olderThanMinutes = parseInt(req.query.older_than_minutes, 10) || undefined;
+server/economy/routes.js:951:      const stripeBalance = req.body.stripe_balance != null ? Math.round(parseFloat(req.body.stripe_balance) * 100) / 100 : undefined;
+server/economy/routes.js:965:      const limit = Math.min(parseInt(req.query.limit, 10) || 30, 100);
+server/economy/routes.js:966:      const offset = parseInt(req.query.offset, 10) || 0;
+server/economy/routes.js:1107:      const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
+server/economy/routes.js:1108:      const offset = parseInt(req.query.offset, 10) || 0;
+server/economy/routes.js:1134:    const generation = parseInt(req.query.generation, 10) || 0;
+server/economy/routes.js:1135:    const initialRate = parseFloat(req.query.initial_rate) || undefined;
+server/economy/routes.js:1191:      const status = req.query.status || "active";
+server/economy/routes.js:1192:      const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
+server/economy/routes.js:1193:      const offset = parseInt(req.query.offset, 10) || 0;
+server/economy/routes.js:1207:      const amount = Math.round(parseFloat(req.body.amount) * 100) / 100;
+server/economy/routes.js:1235:        reason: req.body.reason || "admin_action",
+server/economy/routes.js:1503:      const listingId = req.body.listing_id;
+server/economy/routes.js:1534:      const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
+server/economy/routes.js:1535:      const offset = parseInt(req.query.offset, 10) || 0;
+server/economy/routes.js:1537:        contentType: req.query.content_type,
+server/economy/routes.js:1538:        sellerId: req.query.seller_id,
+server/economy/routes.js:1539:        status: req.query.status || "active",
+server/economy/routes.js:1540:        minPrice: req.query.min_price ? Math.round(parseFloat(req.query.min_price) * 100) / 100 : undefined,
+server/economy/routes.js:1541:        maxPrice: req.query.max_price ? Math.round(parseFloat(req.query.max_price) * 100) / 100 : undefined,
+server/economy/routes.js:1571:      const sellerId = req.body.seller_id || req.user?.id;
+server/economy/routes.js:1588:      const sellerId = req.body.seller_id || req.user?.id;
+server/economy/routes.js:1589:      const newPrice = Math.round(parseFloat(req.body.price) * 100) / 100;
+server/economy/routes.js:1614:      const sellerId = req.body.seller_id || req.user?.id;
+server/economy/routes.js:1698:      const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
+server/economy/routes.js:1699:      const offset = parseInt(req.query.offset, 10) || 0;
+server/economy/routes.js:1751:      const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
+server/economy/routes.js:1752:      const offset = parseInt(req.query.offset, 10) || 0;
+server/economy/creator-economy-routes.js:70:      const result = mod.validatePricing(req.params.contentType, req.body.pricing);
+server/economy/creator-economy-routes.js:83:      const pricing = req.query.pricing ? JSON.parse(req.query.pricing) : undefined;
+server/economy/creator-economy-routes.js:148:      const highest = mod.getHighestTier(db, userId, req.params.dtuId, req.query.type || "music");
+server/economy/creator-economy-routes.js:163:      const limit = Math.min(parseInt(req.query.limit) || 50, 200);
+server/economy/creator-economy-routes.js:164:      const offset = parseInt(req.query.offset) || 0;
+server/economy/creator-economy-routes.js:354:        dtuId: req.body.dtuId,
+server/economy/creator-economy-routes.js:391:        reason: req.body.reason,
+server/economy/creator-economy-routes.js:406:        resolution: req.body.resolution,
+server/economy/creator-economy-routes.js:454:        content: req.body.content,
+server/economy/creator-economy-routes.js:474:      const result = mod.submitForGlobal(db, { dtuId: req.body.dtuId, submitterId: userId });
+server/economy/creator-economy-routes.js:492:        reviewerType: req.body.reviewerType || "council",
+server/economy/creator-economy-routes.js:493:        action: req.body.action,
+server/economy/creator-economy-routes.js:494:        comment: req.body.comment,
+server/economy/creator-economy-routes.js:523:        dtuId: req.body.dtuId,
+server/economy/creator-economy-routes.js:525:        evidence: req.body.evidence,
+server/economy/creator-economy-routes.js:540:        resolution: req.body.resolution,
+server/economy/creator-economy-routes.js:554:      const limit = Math.min(parseInt(req.query.limit) || 20, 100);
+server/economy/creator-economy-routes.js:555:      const offset = parseInt(req.query.offset) || 0;
+server/economy/creator-economy-routes.js:592:      const result = mod.demoteFromGlobal(db, { dtuId: req.params.dtuId, reason: req.body.reason });
+server/lib/cdn-middleware.js:66:  if (req.query.token) {
+server/lib/cdn-middleware.js:113:      const quality = req.query.quality || "original";
+server/routes/lens-culture.js:79:    const viewerId = req.query.viewerId;
+server/routes/lens-culture.js:98:  // Previously we trusted req.body.userId, which let any caller act as any
+server/routes/lens-culture.js:113:      body: req.body.body,
+server/routes/lens-culture.js:114:      media: req.body.media,
+server/routes/lens-culture.js:121:      limit: req.query.limit ? Number(req.query.limit) : 50,
+server/routes/lens-culture.js:122:      offset: req.query.offset ? Number(req.query.offset) : 0,
+server/routes/lens-culture.js:179:      limit: req.query.limit ? Number(req.query.limit) : 100,
+server/routes/lens-culture.js:180:      alertLevel: req.query.alertLevel,
+server/routes/lens-culture.js:234:    const isSystem = req.query.isSystem !== undefined ? req.query.isSystem === "true" : undefined;
+server/routes/compute.js:38:      const grouped = String(req.query.grouped || '') === '1'
+server/routes/compute.js:39:        || String(req.query.grouped || '') === 'true';
+server/routes/world.js:245:    const x = parseFloat(req.query.x);
+server/routes/world.js:246:    const z = parseFloat(req.query.z);
+server/routes/world.js:425:    const userId = _userId(req) || req.user?.id || req.query.userId;
+server/routes/world.js:761:    if (req.query.category) items = items.filter(i => i.category === req.query.category);
+server/routes/world.js:762:    if (req.query.sort === 'citations') items.sort((a, b) => (b.citationCount || 0) - (a.citationCount || 0));
+server/routes/world.js:763:    else if (req.query.sort === 'newest') items.sort((a, b) => (b.publishedAt || '').localeCompare(a.publishedAt || ''));
+server/routes/world.js:871:    firm.members.push({ userId: req.user?.id || 'anonymous', role: req.body.role || 'associate', joinedAt: new Date().toISOString(), contributions: 0 });
+server/routes/world.js:1089:    const itemId = req.body.itemId || req.body.id || `item-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
+server/routes/world.js:1090:    const quantity = Number(req.body.quantity) || 1;
+server/routes/world.js:1091:    const slot = req.body.slot || null;
+server/routes/world.js:1092:    const metadata = req.body.metadata || { name: req.body.name, type: req.body.type, rarity: req.body.rarity };
+server/routes/world.js:1210:    if (req.query.type) quests = quests.filter(q => q.type === req.query.type);
+server/routes/world.js:1211:    if (req.query.worldId) quests = quests.filter(q => q.worldId === req.query.worldId);
+server/routes/world.js:1340:    if (req.query.status) reports = reports.filter(r => r.status === req.query.status);
+server/routes/world.js:1367:    const friend = { userId: req.body.friendId, displayName: req.body.displayName || req.body.friendId, addedAt: new Date().toISOString(), onlineStatus: 'offline' };
+server/routes/world.js:1406:    const limit = parseInt(req.query.limit) || 50;
+server/routes/world.js:1443:      transitionType: req.body.transitionType || 'terminal',
+server/routes/world.js:1463:    if (req.query.category) templates = templates.filter(t => t.category === req.query.category);
+server/routes/world.js:1464:    if (req.query.sort === 'citations') templates.sort((a, b) => (b.citations || 0) - (a.citations || 0));
+server/routes/world.js:1465:    else if (req.query.sort === 'newest') templates.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+server/routes/world.js:1519:    res.json({ ok: true, reviewId: req.params.id, verdict: req.body.verdict, comments: req.body.comments });
+server/routes/world.js:1619:        quality: req.query.quality || 'medium',
+server/routes/world.js:1639:        cityId: String(req.body.cityId || "concordia-central"),
+server/routes/world.js:1640:        x: Number(req.body.x) || 0,
+server/routes/world.js:1641:        y: Number(req.body.y) || 0,
+server/routes/world.js:1642:        z: Number(req.body.z) || 0,
+server/routes/world.js:1643:        direction: Number(req.body.direction) || 0,
+server/routes/world.js:1644:        rotation: Number(req.body.rotation) || 0,
+server/routes/world.js:1645:        action: typeof req.body.action === "string" ? req.body.action.slice(0, 32) : "idle",
+server/routes/world.js:1646:        currentAnimation: typeof req.body.currentAnimation === "string" ? req.body.currentAnimation.slice(0, 32) : "idle",
+server/routes/world.js:1647:        districtId: typeof req.body.districtId === "string" ? req.body.districtId.slice(0, 64) : null,
+server/routes/world.js:1753:      dtuId: req.body.dtuId,
+server/routes/world.js:1783:      field: req.body.field,
+server/routes/world.js:1784:      oldValue: req.body.oldValue,
+server/routes/world.js:1785:      newValue: req.body.newValue,
+server/routes/world.js:1819:      dtuId: req.body.dtuId,
+server/routes/world.js:1822:      scale: req.body.scale || 1.0,
+server/routes/world.js:1830:      position: req.body.position || { x: 0, y: 0, z: 0 },
+server/routes/world.js:1831:      rotation: req.body.rotation || { x: 0, y: 0, z: 0 },
+server/routes/world.js:1832:      scale: req.body.scale || 1.0,
+server/routes/world.js:1833:      surfaceType: req.body.surfaceType || 'floor',
+server/routes/world.js:1941:      notificationType: req.body.type,
+server/routes/world.js:1942:      action: req.body.action, // 'opened', 'dismissed', 'snoozed'
+server/routes/world.js:1943:      timeToAction: req.body.timeToAction,
+server/routes/world.js:2176:      url: req.body.url,
+server/routes/world.js:2177:      events: req.body.events || [],
+server/routes/learning.js:90:    req.query.studentId ||
+server/routes/learning.js:91:    (req.body && req.body.studentId) ||
+server/routes/learning.js:140:        (req.body && req.body.studentId) ||
+server/routes/learning.js:141:        req.query.studentId ||
+server/routes/learning.js:226:      const limit = Math.min(Number(req.query && req.query.limit) || 20, 100);
+server/routes/learning.js:228:        Number(req.query && req.query.maxDistance) || 0.4,
+server/routes/learning.js:389:      const since = req.query.since ? Number(req.query.since) : 0;
+server/routes/learning.js:404:      const domain = req.query.domain ? String(req.query.domain) : undefined;
+server/routes/learning.js:405:      const timeframe = req.query.timeframe ? String(req.query.timeframe) : "month";
+server/routes/learning.js:960:      const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 100);
+server/routes/learning.js:961:      const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+server/routes/learning.js:986:      const q = String(req.query.q || "").trim();
+server/routes/learning.js:990:      const domain = req.query.domain ? String(req.query.domain).toLowerCase() : null;
+server/routes/learning.js:991:      const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 100);
+server/routes/learning.js:1037:      const domain = req.query.domain ? String(req.query.domain).toLowerCase() : null;
+server/routes/repair-enhanced.js:98:    const minConfidence = parseFloat(req.query.minConfidence) || 0;
+server/routes/repair-enhanced.js:99:    const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
+server/routes/repair-enhanced.js:114:    const limit = Math.min(parseInt(req.query.limit, 10) || 50, 500);
+server/routes/repair-enhanced.js:115:    const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+server/routes/repair-enhanced.js:116:    const success = req.query.filter === "success" ? true
+server/routes/repair-enhanced.js:117:      : req.query.filter === "failure" ? false
+server/routes/repair-enhanced.js:166:    const category = req.query.category || "memory";
+server/routes/repair-enhanced.js:186:    if (req.query.category) filters.category = req.query.category;
+server/routes/repair-enhanced.js:187:    if (req.query.severity) filters.severity = req.query.severity;
+server/routes/repair-enhanced.js:188:    const limit = Math.min(parseInt(req.query.limit, 10) || 100, 500);
+server/routes/repair-enhanced.js:230:    const hours = parseInt(req.query.hours, 10) || 24;
+server/routes/backup.js:40:    const limit = Math.min(Math.max(Number(req.query.limit) || 20, 1), 100);
+server/routes/backup.js:41:    const offset = Math.max(Number(req.query.offset) || 0, 0);
+server/routes/backup.js:42:    const type = req.query.type || undefined;
+server/routes/backup.js:43:    const status = req.query.status || undefined;
+server/routes/artifacts.js:120:      const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 100);
+server/routes/artifacts.js:121:      const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+server/routes/artifacts.js:122:      const dtuId = req.query.dtuId;
+server/routes/creative-marketplace.js:162:      requestId: req.body.requestId,
+server/routes/creative-marketplace.js:205:      raterId: req.body.raterId,
+server/routes/creative-marketplace.js:206:      rating: req.body.rating,
+server/routes/creative-marketplace.js:207:      review: req.body.review,
+server/routes/creative-marketplace.js:221:    // from req.body. Previously any caller could forge the promoter.
+server/routes/creative-marketplace.js:230:  // from req.body. Previously, any caller could pause/resume/delist or
+server/routes/creative-marketplace.js:260:      newPrice: req.body.newPrice,
+server/routes/creative-marketplace.js:299:      federationTier: req.query.tier || "regional",
+server/routes/creative-marketplace.js:300:      regional: req.query.regional || null,
+server/routes/creative-marketplace.js:301:      national: req.query.national || null,
+server/routes/creative-marketplace.js:302:      season: req.query.season || null,
+server/routes/creative-marketplace.js:315:      federationTier: req.query.tier || null,
+server/routes/moderation.js:107:      limit: Math.min(Number(req.query.limit) || 50, 200),
+server/routes/frontier-part1.js:237:    const limit = req.query.limit ? parseInt(req.query.limit, 10) : undefined;
+server/routes/helpers-extended.js:161:    dtu.tier = req.body.tier || "verified";
+server/routes/helpers-extended.js:171:    dtu.tier = req.body.tier || "regular";
+server/routes/helpers-extended.js:225:    progress.steps.push({ step: req.body.step, data: req.body.data, completedAt: new Date().toISOString() });
+server/routes/helpers-extended.js:228:    res.json({ ok: true, step: req.body.step });
+server/routes/helpers-extended.js:315:    res.json({ ok: true, installed: req.body.name || "unknown", message: "Plugin installation queued" });
+server/routes/helpers-extended.js:465:    const limit = Math.min(Number(req.query.limit) || 20, 100);
+server/routes/helpers-extended.js:471:    const q = (req.query.q || "").toLowerCase();
+server/routes/chat.js:42:      req._concordMode = req.body.mode || "chat";
+server/routes/chat.js:48:      const wantsFull = (String(req.query.full || "") === "1") || accept.includes("application/json");
+server/routes/chat.js:50:        String(req.query.stream || "") === "1" ||
+server/routes/chat.js:51:        String(req.body.stream || "") === "1" ||
+server/routes/chat.js:83:        sse("meta", { ok:true, mode: req._concordMode, sessionId: req.body.sessionId || null });
+server/routes/chat.js:107:            sessionId: req.body.sessionId || null,
+server/routes/chat.js:149:      const limit = Math.min(Number(req.query.limit) || 50, 200);
+server/routes/chat.js:180:        req._concordMode = req.body.mode || "chat";
+server/routes/chat.js:186:      req._concordMode = req.body.mode || "chat";
+server/routes/chat.js:282:      const sessionId = String(req.query.sessionId || "default");
+server/routes/chat.js:283:      const lens = String(req.query.lens || "chat");
+server/routes/chat.js:387:      req._concordMode = req.body.mode || "ask";
+server/routes/conflict.js:47:      status: req.query.status,
+server/routes/conflict.js:48:      type: req.query.type,
+server/routes/conflict.js:49:      limit: Math.min(Number(req.query.limit) || 50, 200),
+server/routes/conflict.js:103:    runMacro("conflict", "find_precedent", { query: req.query.q || "" }, makeCtx(req))));
+server/routes/atlas-signals.js:38:      const category = req.query.category || "all";
+server/routes/atlas-signals.js:39:      const limit = Math.min(Number(req.query.limit) || 50, 200);
+server/routes/atlas-signals.js:50:      const limit = Math.min(Number(req.query.limit) || 50, 200);
+server/routes/atlas-signals.js:61:      const limit = Math.min(Number(req.query.limit) || 50, 200);
+server/routes/atlas-signals.js:94:      const limit = Math.min(Number(req.query.limit) || 50, 200);
+server/routes/foundation-intel.js:46:      const limit = Math.min(Number(req.query.limit) || 50, 200);
+server/routes/foundation-intel.js:57:      const limit = Math.min(Number(req.query.limit) || 50, 200);
+server/routes/foundation-intel.js:68:      const limit = Math.min(Number(req.query.limit) || 50, 200);
+server/routes/foundation-intel.js:79:      const limit = Math.min(Number(req.query.limit) || 50, 200);
+server/routes/foundation-intel.js:90:      const limit = Math.min(Number(req.query.limit) || 50, 200);
+server/routes/foundation-intel.js:101:      const limit = Math.min(Number(req.query.limit) || 50, 200);
+server/routes/foundation-intel.js:112:      const limit = Math.min(Number(req.query.limit) || 50, 200);
+server/routes/foundation-intel.js:135:      const applicationId = req.query.applicationId;
+server/routes/foundation-intel.js:146:      const researcherId = req.query.researcherId;
+server/routes/foundation-intel.js:147:      const category = req.query.category;
+server/routes/foundation-intel.js:148:      const limit = Math.min(Number(req.query.limit) || 50, 200);
+server/routes/foundation-intel.js:159:      const researcherId = req.query.researcherId;
+server/routes/foundation-intel.js:160:      const limit = Math.min(Number(req.query.limit) || 50, 200);
+server/routes/foundation-intel.js:171:      const researcherId = req.query.researcherId;
+server/routes/foundation-intel.js:172:      const limit = Math.min(Number(req.query.limit) || 50, 200);
+server/routes/sovereign.js:745:    const limit = Math.min(Number(req.query.limit) || 50, 200);
+server/routes/oauth.js:394:          const userFormData = typeof req.body.user === "string" ? JSON.parse(req.body.user) : req.body.user;
+server/routes/film-studio.js:143:    const creatorId = req.user?.id || req.query.creatorId;
+server/routes/film-studio.js:239:    const maxDepth = parseInt(req.query.maxDepth) || 50;
+server/routes/film-studio.js:270:      filmDtuId: req.body.filmDtuId,
+server/routes/film-studio.js:293:      fromUserId: req.user?.id || req.body.fromUserId,
+server/routes/film-studio.js:299:    const toUserId = req.user?.id || req.body.toUserId;
+server/routes/film-studio.js:305:    const toUserId = req.user?.id || req.body.toUserId;
+server/routes/film-studio.js:313:    const creatorId = req.user?.id || req.query.creatorId;
+server/routes/emergent-features.js:169:    const result = surfaceInsight(req.body.insightId, req.body.context);
+server/routes/emergent-features.js:206:    const result = toggleUserRule(_userId(req), req.params.id, req.body.enabled);
+server/routes/emergent-features.js:229:    const history = getViolationHistory(_userId(req), parseInt(req.query.limit) || 20);
+server/routes/emergent-features.js:332:    const result = advancePipeline(req.params.id, req.body.stageOutput);
+server/routes/account-lifecycle.js:148:      limit: Math.min(parseInt(req.query.limit) || 50, 200),
+server/routes/account-lifecycle.js:149:      offset: parseInt(req.query.offset) || 0,
+server/routes/mesh.js:77:      const limit = Math.min(Number(req.query.limit) || 50, 200);
+server/routes/mesh.js:108:      const limit = Math.min(Number(req.query.limit) || 100, 500);
+server/routes/dtus.js:23:    return res.json({ ok:true, dtu: dtuForClient(d, { raw: req.query.raw === "1" }) });
+server/routes/dtus.js:40:      const out = await runMacro("dtu","list",{ q:req.query.q, tier:req.query.tier || "any", limit:req.query.limit, offset:req.query.offset, scope: req.query.scope || null }, ctx);
+server/routes/dtus.js:236:    const out = await runMacro("dtu", "listShadow", { limit: req.query.limit, q: req.query.q }, makeCtx(req));
+server/lib/webhook-auth.js:112:    if (domainSecret && req.query.secret === domainSecret) {
+server/lib/webhook-auth.js:115:    if (GLOBAL_SECRET && req.query.secret === GLOBAL_SECRET) {
+server/routes/atlas.js:35:      const lat = Number(req.query.lat);
+server/routes/atlas.js:36:      const lng = Number(req.query.lng);
+server/routes/atlas.js:47:      const lat_min = Number(req.query.lat_min);
+server/routes/atlas.js:48:      const lat_max = Number(req.query.lat_max);
+server/routes/atlas.js:49:      const lng_min = Number(req.query.lng_min);
+server/routes/atlas.js:50:      const lng_max = Number(req.query.lng_max);
+server/routes/atlas.js:51:      const tier = req.query.tier || "PUBLIC";
+server/routes/atlas.js:62:      const lat = Number(req.query.lat);
+server/routes/atlas.js:63:      const lng = Number(req.query.lng);
+server/routes/atlas.js:74:      const lat_min = Number(req.query.lat_min);
+server/routes/atlas.js:75:      const lat_max = Number(req.query.lat_max);
+server/routes/atlas.js:76:      const lng_min = Number(req.query.lng_min);
+server/routes/atlas.js:77:      const lng_max = Number(req.query.lng_max);
+server/routes/atlas.js:78:      const tier = req.query.tier || "RESEARCH";
+server/routes/atlas.js:89:      const lat_min = Number(req.query.lat_min) || undefined;
+server/routes/atlas.js:90:      const lat_max = Number(req.query.lat_max) || undefined;
+server/routes/atlas.js:91:      const lng_min = Number(req.query.lng_min) || undefined;
+server/routes/atlas.js:92:      const lng_max = Number(req.query.lng_max) || undefined;
+server/routes/atlas.js:93:      const since = req.query.since;
+server/routes/atlas.js:94:      const limit = Math.min(Number(req.query.limit) || 50, 200);
+server/routes/social-engagement.js:166:      const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 100);
+server/routes/domain.js:212:      const parts = req.body.recipeName.split(".");
+server/routes/domain.js:262:  app.get("/api/logs", asyncHandler(async (req,res)=> res.json(await runMacro("log","list", { limit: req.query.limit }, makeCtx(req)))));
+server/routes/domain.js:300:    const out = await runMacro("research", "physics.constants", { keys: req.query.keys?.split(',') }, makeCtx(req));
+server/routes/domain.js:355:  app.get("/api/scope/dtus/:scope", asyncHandler(async (req,res)=> res.json(await runMacro("emergent","scope.listByScope", { scope: req.params.scope, limit: Number(req.query.limit||50) }, makeCtx(req)))));
+server/routes/domain.js:356:  app.get("/api/scope/overrides", asyncHandler(async (req,res)=> res.json(await runMacro("emergent","scope.overrideLog", { limit: Number(req.query.limit||50) }, makeCtx(req)))));
+server/routes/domain.js:357:  app.get("/api/scope/marketplace-analytics", asyncHandler(async (req,res)=> res.json(await runMacro("emergent","scope.marketplaceAnalytics", { limit: Number(req.query.limit||50) }, makeCtx(req)))));
+server/routes/domain.js:384:    const out = await runMacro("paper", "export", { paperId: req.params.id, format: req.query.format || "md" }, makeCtx(req));
+server/routes/domain.js:403:      limit: req.query.limit,
+server/routes/domain.js:404:      domain: req.query.domain,
+server/routes/domain.js:405:      contains: req.query.contains
+server/routes/domain.js:508:      includeRelations: req.query.relations !== "false"
+server/routes/domain.js:1021:    const query = String(req.body.query || req.body.q || "");
+server/routes/domain.js:1022:    const topK = clamp(Number(req.body.topK || req.body.k || 10), 1, 100);
+server/routes/domain.js:1023:    const minScore = clamp(Number(req.body.minScore || 0.08), 0, 1);
+server/routes/domain.js:1045:    const out = await runMacro("admin", "logs", { limit: req.query.limit, type: req.query.type }, makeCtx(req));
+server/routes/shield.js:57:      const limit = Math.min(Number(req.query.limit) || 50, 200);
+server/routes/shield.js:58:      const subtype = req.query.subtype || null;
+server/routes/shield.js:96:      const limit = Math.min(Number(req.query.limit) || 50, 200);
+server/routes/shield.js:107:      const limit = Math.min(Number(req.query.limit) || 20, 50);
+server/routes/system.js:238:    const result = await createBackup(req.body.name);
+server/routes/system.js:245:    const result = await restoreBackup(req.body.path || req.body.name);
+server/routes/system.js:324:    const sessionId = req.query.sessionId || "";
+server/routes/system.js:374:      const tz = String(req.query.tz || "America/New_York");
+server/routes/system.js:384:      const location = String(req.query.location || req.query.q || "Poughkeepsie, NY");
+server/routes/system.js:385:      const tz = String(req.query.tz || "America/New_York");
+server/routes/system.js:396:      const sessionId = normalizeText(req.query.sessionId || "default");
+server/routes/system.js:555:    const page = clamp(Number(req.query.page || 1), 1, 10000);
+server/routes/system.js:556:    const pageSize = clamp(Number(req.query.pageSize || 20), 1, 100);
+server/routes/system.js:557:    const tier = req.query.tier || null;
+server/routes/system.js:558:    const tag = req.query.tag || null;
+server/routes/system.js:559:    const scopeFilter = req.query.scope || null;
+server/routes/system.js:585:    const q = String(req.query.q || "");
+server/routes/system.js:586:    const limit = clamp(Number(req.query.limit || 20), 1, 100);
+server/routes/system.js:592:    const out = await runMacro("search", "query", { q: req.query.q, limit: req.query.limit }, makeCtx(req));
+server/routes/system.js:602:    const query = String(req.query.q || "").trim();
+server/routes/system.js:603:    const scope = String(req.query.scope || "all");
+server/routes/system.js:604:    const limit = clamp(Number(req.query.limit || 20), 1, 100);
+server/routes/canonical.js:121:    const limit = parseInt(req.query.limit) || 10;
+server/routes/foundation.js:54:      const limit = Math.min(Number(req.query.limit) || 50, 200);
+server/routes/foundation.js:75:      const nodeId = req.query.nodeId;
+server/routes/foundation.js:116:      const limit = Math.min(Number(req.query.limit) || 50, 200);
+server/routes/foundation.js:147:      const limit = Math.min(Number(req.query.limit) || 50, 200);
+server/routes/foundation.js:168:      const limit = Math.min(Number(req.query.limit) || 50, 200);
+server/routes/foundation.js:179:      const limit = Math.min(Number(req.query.limit) || 50, 200);
+server/routes/foundation.js:190:      const limit = Math.min(Number(req.query.limit) || 50, 200);
+server/routes/agents.js:147:      const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
+server/routes/agents.js:148:      const status = req.query.status;
+server/routes/agents.js:270:      const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 500);
+server/routes/consent.js:131:    const limit = Math.min(parseInt(req.query.limit) || 50, 200);
+server/routes/consent.js:132:    const offset = parseInt(req.query.offset) || 0;
+server/routes/auth.js:118:    if (req.body.website || req.body.url || req.body.phone_number) {
+server/routes/auth.js:125:    const formLoadedAt = Number(req.body._t) || 0;
+server/routes/social-groups.js:143:      const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 100);
+server/routes/social-groups.js:144:      const search = (req.query.search || req.query.query || "").trim();
+server/routes/social-groups.js:261:      const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 100, 1), 500);
+server/routes/social-groups.js:288:      const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 30, 1), 100);
+server/routes/social-groups.js:289:      const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+server/routes/social-groups.js:470:      const q = typeof req.query?.q === "string" ? req.query.q.trim() : "";
+server/routes/social-groups.js:509:      const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
+server/routes/code-engine.js:66:    const limit = req.query.limit ? Number(req.query.limit) : undefined;
+server/routes/code-engine.js:67:    const offset = req.query.offset ? Number(req.query.offset) : undefined;
+server/routes/code-engine.js:84:      category: req.query.category || undefined,
+server/routes/code-engine.js:85:      language: req.query.language || undefined,
+server/routes/code-engine.js:86:      keyword: req.query.keyword || req.query.q || undefined,
+server/routes/code-engine.js:87:      repositoryId: req.query.repositoryId || req.query.repoId || undefined,
+server/routes/code-engine.js:88:      limit: req.query.limit ? Number(req.query.limit) : undefined,
+server/routes/code-engine.js:89:      offset: req.query.offset ? Number(req.query.offset) : undefined,
+server/routes/code-engine.js:125:      limit: req.query.limit ? Number(req.query.limit) : undefined,
+server/routes/code-engine.js:126:      offset: req.query.offset ? Number(req.query.offset) : undefined,
+server/routes/code-engine.js:156:      status: req.query.status || undefined,
+server/routes/code-engine.js:157:      limit: req.query.limit ? Number(req.query.limit) : undefined,
+server/routes/code-engine.js:158:      offset: req.query.offset ? Number(req.query.offset) : undefined,
+server/routes/code-engine.js:192:      lensId: req.query.lensId || undefined,
+server/routes/code-engine.js:193:      errorType: req.query.errorType || undefined,
+server/routes/code-engine.js:194:      limit: req.query.limit ? Number(req.query.limit) : undefined,
+server/routes/code-engine.js:195:      offset: req.query.offset ? Number(req.query.offset) : undefined,
+server/routes/initiative.js:127:    const limit = req.query.limit ? Number(req.query.limit) : undefined;
+server/routes/initiative.js:128:    const offset = req.query.offset ? Number(req.query.offset) : undefined;
+server/routes/initiative.js:129:    const status = req.query.status || undefined;
+server/routes/stsvk.js:84:      const subject = req.body && (req.body.subject || req.body.dtu || req.body);
+server/routes/stsvk.js:89:      const claimed = req.body && req.body.claimedRegime;
+server/routes/stsvk.js:116:      const point = req.body && (req.body.point || req.body.subject || req.body);
+server/routes/stsvk.js:118:        (req.body && Array.isArray(req.body.relevantDomains))
+server/routes/stsvk.js:119:          ? req.body.relevantDomains
+server/routes/stsvk.js:138:      const point = req.body && (req.body.point || req.body.subject || req.body);
+server/routes/cdn.js:149:    const expiresIn = req.query.expires
+server/routes/cdn.js:150:      ? parseInt(req.query.expires, 10)
+server/routes/cdn.js:189:    const duration = req.query.duration
+server/routes/cdn.js:190:      ? parseInt(req.query.duration, 10)
+server/routes/federation.js:114:    res.json(listRegions(db, { nationalId: req.query.nationalId || null }));
+server/routes/federation.js:131:      regionalId: req.query.regionalId || null,
+server/routes/federation.js:132:      nationalId: req.query.nationalId || null,
+server/routes/federation.js:133:      status: req.query.status || null,
+server/routes/federation.js:198:      regional: req.query.regional || null,
+server/routes/federation.js:199:      national: req.query.national || null,
+server/routes/federation.js:200:      hours: req.query.hours ? Number(req.query.hours) : 24,
+server/routes/federation.js:214:      entityId: req.query.entityId || null,
+server/routes/federation.js:215:      peerType: req.query.peerType || null,
+server/routes/federation.js:223:      hours: req.query.hours ? Number(req.query.hours) : 24,
+server/routes/federation.js:276:      federationTier: req.query.tier || "regional",
+server/routes/federation.js:277:      regional: req.query.regional || null,
+server/routes/federation.js:278:      national: req.query.national || null,
+server/routes/federation.js:279:      season: req.query.season || null,
+server/routes/federation.js:292:      federationTier: req.query.tier || null,
+server/routes/federation.js:349:      targetTier: req.query.tier || null,
+server/routes/federation.js:350:      limit: req.query.limit ? Number(req.query.limit) : 50,
+server/routes/federation.js:410:      season: req.query.season || null,
+server/routes/federation.js:411:      limit: req.query.limit ? Number(req.query.limit) : 50,
+server/routes/operations.js:72:      const out = await ctx.macro.run("lattice", "beacon", { threshold: req.query.threshold });
+server/routes/operations.js:519:    const limit = Math.max(1, Math.min(200, Number(req.query.limit||50)));
+server/routes/operations.js:641:    const out = await runMacro("agent", "enable", { id: req.params.id, enabled: req.body.enabled }, makeCtx(req));
+server/routes/operations.js:646:    const out = await runMacro("agent", "tick", { id: req.params.id, prompt: req.body.prompt }, makeCtx(req));
+server/routes/studio.js:191:      const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 100);
+server/routes/studio.js:192:      const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+server/routes/studio.js:193:      const userId = req.query.userId || req.user?.id;
+server/routes/studio.js:371:      const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 100);
+server/routes/studio.js:372:      const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+server/routes/inventory.js:104:      const q = req.query.q || "";
+server/routes/media.js:242:    // Previously we accepted `req.body.authorId` as a fallback, which let
+server/routes/media.js:308:    const userId = viewerId || req.query.userId;
+server/routes/media.js:352:    const quality = req.query.quality || "original";
+server/routes/media.js:475:    const userId = req.user?.id || req.query.userId || "anonymous";
+server/routes/media.js:602:    const viewerId = req.user?.id || req.query.viewerId;
+server/routes/lens-compliance.js:109:    const limit = parseInt(req.query.limit) || 20;
+server/routes/lens-compliance.js:139:    const limit = parseInt(req.query.limit) || 30;
+server/routes/connective-tissue.js:268:      if (!req.body.apiKey) {
+server/routes/connective-tissue.js:271:      const result = await authenticateBot(db, req.body.apiKey);
+server/routes/emergent.js:149:    const out = await runMacro("emergent", "lattice.read", { dtuId: req.params.id, readerId: req.query.readerId }, makeCtx(req));
+server/routes/emergent.js:230:    const out = await runMacro("emergent", "edge.paths", { fromId: req.query.fromId, toId: req.query.toId, maxDepth: req.query.maxDepth ? parseInt(req.query.maxDepth, 10) : undefined }, makeCtx(req));
+server/routes/emergent.js:251:    const out = await runMacro("emergent", "activation.workingSet", { sessionId: req.params.sessionId, k: req.query.k ? parseInt(req.query.k, 10) : undefined }, makeCtx(req));
+server/routes/emergent.js:256:    const out = await runMacro("emergent", "activation.global", { k: req.query.k ? parseInt(req.query.k, 10) : undefined }, makeCtx(req));
+server/routes/emergent.js:318:    const out = await runMacro("emergent", "journal.recent", { count: req.query.count ? parseInt(req.query.count, 10) : undefined }, makeCtx(req));
+server/routes/emergent.js:344:    const out = await runMacro("emergent", "reality.cost", { emergentId: req.params.emergentId, domain: req.query.domain }, makeCtx(req));
+server/routes/emergent.js:364:    const out = await runMacro("emergent", "reality.sociality", { emergentA: req.query.emergentA, emergentB: req.query.emergentB }, makeCtx(req));
+server/routes/emergent.js:465:    const out = await runMacro("emergent", "scheduler.completed", { limit: req.query.limit ? parseInt(req.query.limit, 10) : undefined }, makeCtx(req));

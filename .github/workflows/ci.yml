@@ -52,6 +52,29 @@ jobs:
         working-directory: ./concord-frontend
         run: npm run lint
 
+      - name: Typecheck frontend
+        working-directory: ./concord-frontend
+        run: npm run type-check
+
+      - name: Auth bypass grep gate
+        run: |
+          echo "Scanning for client-supplied userId used as actor identity..."
+          HITS=$(grep -rn \
+            -e "req\.body?\.userId || req\.user" \
+            -e "req\.body\.userId || req\.user" \
+            -e "req\.body?\.user_id || req\.user" \
+            -e "req\.body\.user_id || req\.user" \
+            -e "req\.body?\.buyer_id || req\.user" \
+            -e "req\.body\.buyer_id || req\.user" \
+            server/ --include="*.js" 2>/dev/null | \
+            grep -v "node_modules\|// safe:\|admin_only\|test\|spec\|adversarial\|audit\|report" || true)
+          if [ -n "$HITS" ]; then
+            echo "ERROR: Found auth bypass pattern (req.body userId used before req.user):"
+            echo "$HITS"
+            exit 1
+          fi
+          echo "Auth bypass gate: PASS (0 violations)"
+
       - name: Validate lens quality gate
         working-directory: ./concord-frontend
         run: npm run validate-lens-quality
@@ -178,6 +201,8 @@ jobs:
 
       - name: Audit frontend dependencies
         working-directory: ./concord-frontend
+        # lodash-es HIGH is unfixable (no upstream patch); postcss HIGH is a Next.js bundle transitive.
+        # Run at critical to enforce no critical regressions; HIGH tracked in audit/frontend-deps-audit.json.
         run: npm audit --audit-level=critical
 
       - name: Audit mobile dependencies
@@ -348,6 +373,24 @@ jobs:
         env:
           API_BASE: http://localhost:5050
         run: node --test tests/auth-security.test.js
+
+      - name: Run adversarial auth bypass tests
+        working-directory: ./server
+        env:
+          API_BASE: http://localhost:5050
+        run: node --test tests/adversarial-critical-endpoints.test.js
+
+      - name: Run edge case tests (critical paths)
+        working-directory: ./server
+        env:
+          API_BASE: http://localhost:5050
+        run: node --test tests/edge-cases-critical-paths.test.js
+
+      - name: Run error path tests (degraded mode)
+        working-directory: ./server
+        env:
+          API_BASE: http://localhost:5050
+        run: node --test tests/error-paths.test.js
 
       - name: Stop server
         if: always()

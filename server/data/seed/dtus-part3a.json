@@ -143,7 +143,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE3] Example instances will be attached as child DTUs when needed."
+        "Cicada: 17-year dormancy (Φ_low) accumulates B; adult emergence (Φ_high, 6 weeks): I_burst=mate-select+navigate. Buffer τ_low=17yr>>τ_high=0.12yr. D_burst·τ_high/Ḃ≈0.007 → fully recoverable. Measured by comparing emergence success rate vs. underground metabolic rate."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -152,22 +152,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{I_burst=I_max during Φ_high, I_burst=0 during Φ_low}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "I_burst": "burst-phase intelligence",
+          "Φ_high": "high-energy phase",
+          "Ḃ": "buffer rate during dormancy"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "I(t)=I_max·1_{Φ(t)=Φ_high}; Ḃ=R-D during Φ_low (accumulate buffer)",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "I_max≤κ·Φ_high/(D_burst+ε)",
+          "Ḃ≥0 during Φ_low (buffer recovery)"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_bpi=I_max-I(t); V_bpi=0 during burst, V_bpi=I_max during dormancy",
+        "implication": "Burst-phase intelligence trades continuous function for peak I_max; viable only if buffer recovers fully during Φ_low: Ḃ·τ_low≥I_max·D_burst·τ_high."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "I(t)=I_max·1_{Φ=Φ_high}; viable iff Ḃ·τ_low≥D_burst·τ_high",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -247,7 +246,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE3] Example instances will be attached as child DTUs when needed."
+        "Slime mold Physarum: N=10⁶ cells, w_{ij}=tube-flow rate. When ∑_j w_{ij}>w*=10⁻³ flow units: maze-solving emerges. Below: random walk. Measured by maze-solution time vs. network connectivity density (tube cross-section × density)."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -256,22 +255,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{I_mesh=∑_{i,j} I_i·w_{ij}: weighted mesh sum}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "I_i": "node i intelligence",
+          "w_{ij}": "connection weight between nodes i,j",
+          "w*": "critical connectivity threshold"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "w_{ij}(t+1)=w_{ij}(t)+α·corr(I_i,I_j); Hebbian weight update",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "∑_j w_{ij}≥w* (minimum connectivity)",
+          "w_{ij}∈[0,1]"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_dmi=I_mesh_max-I_mesh; V_dmi=0 at critical connectivity",
+        "implication": "Mesh intelligence reaches threshold when ∑w_{ij}>w*; below w* the mesh fragments. Measurable by measuring task performance vs. mean connection weight in distributed agent networks."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "I_mesh=∑_{i,j}I_i·w_{ij}; threshold at ∑_j w_{ij}≥w*",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -352,7 +350,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE3] Example instances will be attached as child DTUs when needed."
+        "Deinococcus radiodurans: Φ_rad=15 kGy absorbed, D_rad=1000 double-strand breaks. R_rad=rapid RecA recombination repair rate >1000/hr. V_rhi=0: fully radiation-hard. Human cells: R_rad=10/hr << D_rad → V_rhi>0, lethal at 5 Gy. Measured by colony-forming assay post-irradiation."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -361,22 +359,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{I_rad=I_max·(1-P_fail); R_rad>D_rad at high flux}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "I_rad": "radiation-hard intelligence",
+          "P_fail": "probability of radiation-induced failure per cycle",
+          "D_rad": "radiation damage rate"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "I_rad(t)=I_max·∏_τ(1-P_fail(Φ_rad(τ))); P_fail∝Φ_rad/E_repair",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "R_rad≥D_rad (repair dominance under radiation)",
+          "P_fail≤P_max (survivable error rate)"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_rhi=max(0,D_rad-R_rad); V_rhi=0 iff radiation-hard",
+        "implication": "Radiation-hard intelligence requires R_rad≥D_rad; P_fail must remain below P_max. Measurable by comparing error rates of radiation-hard vs. standard designs under controlled gamma irradiation."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "I_rad=I_max·(1-P_fail); viable iff R_rad≥D_rad; P_fail∝Φ_rad/E_repair",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -456,7 +453,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE3] Example instances will be attached as child DTUs when needed."
+        "Intertidal organism on Europa (hypothetical): |∇Φ_tidal|=10⁻³ ms⁻² tidal acceleration, κ_T=10⁵ I-units/(ms⁻²). I_tidal=100 units at high tide, 10 units at low tide. Behavior cycle = 3.5-day tidal period. Falsifiable by telemetry of activity vs. tidal phase."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -465,22 +462,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{I_tidal=κ_T·|∇Φ_tidal|; bounded by tidal gradient magnitude}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "I_tidal": "tidal-gradient intelligence",
+          "∇Φ_tidal": "tidal potential gradient",
+          "κ_T": "tidal transduction efficiency"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "I_tidal(t)=κ_T·|∇Φ_tidal(t)|; periodic with tidal cycle",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "|∇Φ_tidal|≥|∇Φ*| for intelligence emergence",
+          "I_tidal≤κ_T·|∇Φ_max|"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_tgi=κ_T·|∇Φ_max|-I_tidal; V_tgi=0 at peak tide",
+        "implication": "Tidal-gradient intelligence is periodic and bounded by |∇Φ_tidal|; it is falsifiable by measuring organism activity cycles vs. tidal gradient magnitude."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "I_tidal=κ_T·|∇Φ_tidal|; intelligence periodic with tidal cycle, ceiling=κ_T·|∇Φ_max|",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -560,7 +556,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE3] Example instances will be attached as child DTUs when needed."
+        "Eagle hunting in turbulent air: H_turb=visual contrast transfer function under wind. Re=10⁵ (moderate turbulence): SNR_turb=30dB → tracking accuracy ±5cm. Re=10⁶ (severe): SNR_turb=15dB < SNR*=20dB → hunting fails. Measured by prey-capture success rate vs. wind speed (Beaufort scale)."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -569,22 +565,22 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{y_turb=H_turb·x_atm+ξ_turb: turbulent signal extraction}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "y_turb": "turbulence-derived sensory signal",
+          "x_atm": "atmospheric state",
+          "ξ_turb": "turbulent noise",
+          "H_turb": "turbulence observation matrix"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "y_turb(t)=H_turb(Re_t)·x_atm(t)+ξ_turb(t); H_turb varies with Reynolds number",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "SNR_turb=‖H_turb·x_atm‖²/E[‖ξ_turb‖²]≥SNR*",
+          "Re_t bounded by atmospheric conditions"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_ati=1/SNR_turb; V_ati→0 iff turbulence-readable signal",
+        "implication": "Atmospheric turbulence intelligence requires extracting signal from turbulent flow; SNR_turb must exceed SNR*. Measured by comparing decision quality under varying turbulence intensities."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "y_turb=H_turb·x_atm+ξ_turb; I_turb viable iff SNR_turb=‖Hx‖²/E[‖ξ‖²]≥SNR*",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -664,7 +660,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE3] Example instances will be attached as child DTUs when needed."
+        "Hypothetical mineral computation on Titan: clay mineral template replication rate R_cryst=10⁻⁶ mol/s, dissolution D_cryst=8×10⁻⁷ mol/s → R_cryst-D_cryst=2×10⁻⁷>0, I_lith viable. Falsified by measuring clay replication rate in Titan-analog chemistry (hydrazine solvent, low temperature)."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -673,23 +669,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{I_lith=κ_l·(R_cryst-D_cryst): crystal repair vs. damage}",
         "variables": {
-          "B": "integrity",
-          "D": "damage",
-          "R": "repair",
-          "S": "stress"
+          "R_cryst": "crystalline repair/growth rate",
+          "D_cryst": "dissolution/damage rate",
+          "κ_l": "lithic intelligence efficiency"
         },
-        "dynamics": "dB/dt=R(B,S)-D(B,S)",
+        "dynamics": "I_lith=κ_l·(R_cryst-D_cryst); viable iff R_cryst≥D_cryst",
         "constraints": [
-          "B∈[0,1]",
-          "R≥0",
-          "D≥0"
+          "R_cryst≥D_cryst (repair dominance)",
+          "I_lith≥0"
         ],
-        "potential": "V=1-B",
-        "implication": "If R≥D+ε on [B0,1], then B increases toward 1 (repair-dominant)."
+        "potential": "V_lsi=max(0,D_cryst-R_cryst)/κ_l; V_lsi=0 iff I_lith viable",
+        "implication": "Lithic substrate intelligence requires crystal growth exceeding dissolution; the repair-dominance condition from ETCC applies to mineral substrates. Falsified by demonstrating I_lith without R_cryst≥D_cryst."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "I_lith=κ_l·(R_cryst-D_cryst); viable iff R_cryst≥D_cryst",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -769,7 +763,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE3] Example instances will be attached as child DTUs when needed."
+        "P. aeruginosa biofilm: N_quorum≈10⁷ cells/cm², I_cell=10⁻⁶ units. Below N_quorum: ρ_sync=0.05, I_film=N·I_cell·0.05. Above: ρ_sync=0.9, I_film=18× higher. Measured by virulence factor production (las/rhl quorum sensing) as proxy for I_film."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -778,22 +772,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{I_film=N·I_cell·ρ_sync: N cells at synchrony ρ_sync}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "N": "biofilm cell count",
+          "I_cell": "individual cell intelligence",
+          "ρ_sync": "quorum-sensing synchrony fraction"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "ρ̇_sync=α·(N-N_quorum)/N·(1-ρ_sync)-β·ρ_sync; Kuramoto quorum dynamics",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "N≥N_quorum for ρ_sync→1",
+          "I_film=N·I_cell·ρ_sync"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_bci=N·I_cell-I_film=N·I_cell·(1-ρ_sync); V_bci=0 at full synchrony",
+        "implication": "Biofilm collective intelligence requires N≥N_quorum for synchrony; below quorum, ρ_sync≈0 and I_film≈0. Measurable by comparing biofilm task performance above and below N_quorum."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "I_film=N·I_cell·ρ_sync; ρ_sync→1 iff N≥N_quorum",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -872,7 +865,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE3] Example instances will be attached as child DTUs when needed."
+        "Riftia pachyptila tube worm at vent: [H₂S]=0.5mM, μ=80 ATP/H₂S, D=40 ATP/s → Ė_chem=40 ATP/s. I_chem≤1·40/1=40 units. At 0.1mM [H₂S]: Ė_chem=-32<0 → no chemosynthetic intelligence possible. Measured by ATP turnover rate and behavioral complexity vs. substrate concentration."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -881,22 +874,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{Ė_chem=μ·[S]-D; I_chem≤κ·Ė_chem/(D+ε)}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "[S]": "substrate concentration (H₂S, CH₄, etc.)",
+          "μ": "chemosynthetic yield",
+          "Ė_chem": "chemosynthetic energy rate"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "Ė_chem=μ·[S]-D; I_chem≤κ·Ė_chem/(D_cog+ε)",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "[S]≥[S]_min (minimum substrate)",
+          "I_chem≤κ·Ė_chem/(D_cog+ε)"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_ci=max(0,D-μ·[S]); V_ci=0 iff substrate sufficient",
+        "implication": "Chemosynthetic intelligence is substrate-limited; I_chem ceiling rises linearly with [S]. Falsified if I_chem exceeds κ·μ·[S]_max/(D_cog+ε) at measured [S]."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "I_chem≤κ·(μ·[S]-D)/(D_cog+ε); substrate-limited intelligence ceiling",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -976,7 +968,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE3] Example instances will be attached as child DTUs when needed."
+        "Loggerhead sea turtle: ρ_mag=magnetite crystals in head (measurable), |B_field|=5×10⁻⁵ T (Earth's field). I_mag=κ_B·5×10⁻⁵·ρ_mag. Navigation accuracy: ±50km homing. Magnetic anomaly (+50%): I_mag×1.5, accuracy ±33km. Falsified by comparing homing accuracy in shielded (B→0) vs. normal magnetic conditions."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -985,22 +977,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{I_mag=κ_B·|B_field|·ρ_mag: magnetic coupling intelligence}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "|B_field|": "magnetic field strength",
+          "ρ_mag": "magnetoreceptor density",
+          "κ_B": "magnetic-cognitive coupling coefficient"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "I_mag(t)=κ_B·|B_field(t)|·ρ_mag; time-varying with B(t)",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "|B_field|≥B_min (minimum detectable field)",
+          "ρ_mag≤ρ_mag_max (physical density limit)"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_mci=I_mag_max-I_mag; V_mci=0 at peak field and density",
+        "implication": "Magnetic intelligence scales with B-field strength and receptor density; measurable by comparing navigation accuracy vs. field strength and magnetoreceptor ablation studies."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "I_mag=κ_B·|B_field|·ρ_mag; magnetic navigation accuracy∝I_mag",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -1080,7 +1071,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE3] Example instances will be attached as child DTUs when needed."
+        "Bat echolocation: SNR_ac=40dB (quiet forest), H_ac encodes 3D geometry. Target detection range∝√SNR_ac=100×. Near highway (noise floor +20dB): SNR_ac=20dB → range halved. Measured by prey-capture success rate vs. background noise level (dB SPL)."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -1089,22 +1080,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{I_ac=κ_A·SNR_ac; y_ac=H_ac·x+ξ_ac}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "SNR_ac": "acoustic signal-to-noise ratio",
+          "H_ac": "acoustic observation matrix",
+          "ξ_ac": "acoustic noise"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "y_ac(t)=H_ac(f,t)·x(t)+ξ_ac(t); time-frequency acoustic signal",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "SNR_ac≥SNR_ac* (minimum for acoustic intelligence)",
+          "BW_ac≤f_s/2"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_aci=1/SNR_ac; V_aci→0 iff high-SNR acoustic environment",
+        "implication": "Acoustic-dominant intelligence is bounded by SNR_ac; below SNR_ac* the acoustic channel cannot support intelligent behavior. Measured by task performance vs. signal-to-noise ratio in controlled acoustic environments."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "I_ac=κ_A·SNR_ac; y_ac=H_ac·x+ξ_ac; MMSE error=σ²_ξ/(‖H_ac‖²·σ²_x+σ²_ξ)",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -1184,7 +1174,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE3] Example instances will be attached as child DTUs when needed."
+        "Deep-sea fish at 1000m depth: Φ_photon≈10⁻⁶ W/m² (bioluminescence only). I_opt=κ_O·10⁻⁶≈minimal. Shallow reef fish: Φ_photon=100W/m² → I_opt=10⁸× higher. Measured by minimum detectable contrast threshold vs. depth (measured photon flux)."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -1193,22 +1183,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{I_opt≤κ_O·Φ_photon/(D_opt+ε): photon-flux-limited}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "Φ_photon": "photon flux (photons/s/m²)",
+          "κ_O": "photon-to-intelligence transduction",
+          "D_opt": "optical processing demand"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "y_opt=H_opt·x+ξ_shot; ξ_shot~Poisson(Φ_photon·t)",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "I_opt≤κ_O·Φ_photon/(D_opt+ε)",
+          "shot noise floor: σ²_ξ=Φ_photon·Δt"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_oli=I_opt_max-κ_O·Φ_photon/(D_opt+ε); V_oli→0 at peak flux",
+        "implication": "Optical intelligence is limited by photon flux; shot noise σ²_ξ=Φ_photon·Δt sets a fundamental floor. Falsified by achieving I_opt>κ_O·Φ_max/(D_opt+ε) at measured Φ_photon."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "I_opt≤κ_O·Φ_photon/(D_opt+ε); shot noise floor σ²_ξ=Φ_photon·Δt",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -1288,7 +1277,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE3] Example instances will be attached as child DTUs when needed."
+        "Pit viper infrared sensing: ΔT=30°C (prey body-air), T_cold=290K. η_C=30/320=9.4%. I_therm=κ_T·0.094. Detection threshold≈0.003°C at 30cm — near Carnot limit. In Arctic (T_cold=250K): ΔT=37°C, η_C=12.9% → better detection. Measured by minimum prey-temperature-above-background detection threshold."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -1297,22 +1286,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{I_therm=κ_T·ΔT/T_cold: Carnot-bounded}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "ΔT": "thermal gradient (T_hot-T_cold)",
+          "T_cold": "cold reservoir temperature",
+          "κ_T": "thermal-cognitive efficiency"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "I_therm=κ_T·(ΔT/T_cold); Carnot efficiency η_C=1-T_cold/T_hot=ΔT/(ΔT+T_cold)",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "I_therm≤κ_T·η_C (Carnot bound)",
+          "ΔT≥ΔT_min for transduction"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_tgi=κ_T·η_C-I_therm; V_tgi=0 at Carnot limit",
+        "implication": "Thermal gradient intelligence is bounded by the Carnot efficiency of the gradient; I_therm≤κ_T·(1-T_cold/T_hot). Measurable by comparing thermal organ performance vs. ΔT."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "I_therm=κ_T·ΔT/T_cold; Carnot bound: I_therm≤κ_T·(1-T_cold/T_hot)",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -1392,7 +1380,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE3] Example instances will be attached as child DTUs when needed."
+        "Lateral line organ (fish): ΔP=0.1 Pa water displacement, BW_P=200 Hz. I_pres=κ_P·20 Pa·Hz. Dolphin (BW_P=150 kHz for echolocation): I_pres=κ_P·15,000 Pa·Hz — 750× richer. Measured by minimum detectable water displacement vs. frequency (audiogram)."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -1401,22 +1389,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{I_pres=κ_P·ΔP·BW_P: pressure-bandwidth product}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "ΔP": "pressure gradient driving transduction",
+          "BW_P": "mechanosensory bandwidth",
+          "κ_P": "pressure-cognitive efficiency"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "y_pres=H_pres·x+ξ_pres; H_pres depends on ΔP",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "ΔP≥ΔP_min (threshold for detection)",
+          "BW_P≤f_s/2"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_pdi=I_pres_max-κ_P·ΔP·BW_P; V_pdi=0 at maximum pressure-bandwidth",
+        "implication": "Pressure-dominant intelligence scales with ΔP·BW_P product; both high sensitivity and broad bandwidth required. Falsified by finding I_pres>κ_P·ΔP_max·BW_P_max."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "I_pres=κ_P·ΔP·BW_P; bounded by pressure gradient × mechanosensory bandwidth",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -1497,7 +1484,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE3] Example instances will be attached as child DTUs when needed."
+        "Gaia hypothesis analog: Earth's biosphere maintains ΔS_bio<0 (locally) via solar flux 1.36 kW/m². V_lepm=‖x_climate-x*_climate‖². Perturbation (volcano): V_lepm rises, recovers in ~10⁴ yr (measured by ice core climate record). c_S=10⁻⁴ per yr² from temperature deviation autocorrelation."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -1506,21 +1493,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{ΔS_planet≤-c_S‖x_plan‖²: planetary mind stability}",
         "variables": {
-          "x": "substrate state",
-          "y": "experience proxy",
-          "π": "mapping"
+          "S_planet": "planetary entropy state",
+          "x_plan": "planetary cognitive deviation from equilibrium",
+          "c_S": "planetary stability constant"
         },
-        "dynamics": "y = π(x); x_{t+1}=F(x_t,u_t)",
+        "dynamics": "ΔS_planet(t)≤-c_S‖x_plan(t)‖²; Lyapunov stability for planetary consciousness",
         "constraints": [
-          "π preserves invariants (information/structure)",
-          "y well-defined on equivalence classes"
+          "ΔS_planet≤-c_S‖x_plan‖² (stability)",
+          "total entropy still increases (2nd law externally)"
         ],
-        "potential": "V=||π(F(x))-π(x)||",
-        "implication": "If π invariant-preserving and V small over time, experience is substrate-stable."
+        "potential": "V_lepm=‖x_plan‖²; V_lepm→0 iff planetary mind in equilibrium",
+        "implication": "A low-entropy planetary mind maintains local entropy decrease (Lyapunov stable) against the universal entropy increase; viable iff energy throughput from the star exceeds planetary entropy production."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "ΔS_planet≤-c_S‖x_plan‖²; planetary mind stable iff stellar input > planetary entropy rate",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -1601,7 +1588,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE3] Example instances will be attached as child DTUs when needed."
+        "Silicon vs. carbon-based chemistry: Ω_Si and Ω_C share Ω_core = {temperature 200-400K, moderate pressure, non-oxidizing}. vol(Ω_core)>0: transition possible via organometallic chemistry. Measured by enumerating molecules with both Si and C atoms in the viable core."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -1610,22 +1597,20 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{Ω_adj=∪_k Ω_k where ∩_k Ω_k≠∅}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "Ω_adj": "adjacent feasibility union",
+          "Ω_core": "common core ∩_k Ω_k"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "vol(Ω_adj)=∑vol(Ω_k)-vol_overlap; transition between worlds via Ω_core",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "∩_k Ω_k≠∅ (shared core enables transition)",
+          "Ω_core⊆∩_k Ω_k"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_afs=‖Ω_core‖; V_afs>0 iff worlds are adjacent (connected)",
+        "implication": "Adjacent feasibility worlds share a non-empty core; isolated worlds have Ω_core=∅. Transition between worlds requires passing through Ω_core. Measurable as the parameter region satisfying all worlds simultaneously."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "Ω_adj=∪_k Ω_k; adjacent iff ∩_k Ω_k≠∅; vol(Ω_adj)=∑vol(Ω_k)-vol(∩Ω_k)",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -1705,7 +1690,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE3] Example instances will be attached as child DTUs when needed."
+        "Organism adapting from aquatic to terrestrial: d_fw = distance from aquatic Ω to terrestrial Ω. Transition via amphibious Ω_core (shallow tidal zone). Navigation rate: 10⁻⁶ per generation. d_fw from Tiktaalik fossils: ~0.3 in normalized trait space, reached 0 in ~10⁷ generations. Measurable by fossil series."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -1714,22 +1699,20 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{d_fw=dist(x,∩_k Ω_k)≥0; navigate toward ∩Ω}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "d_fw": "distance to feasibility world intersection",
+          "∩Ω": "common core"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "d_fw(t+1)=d_fw(t)-α·∇d_fw+Π_{∩Ω}; constrained descent toward ∩Ω",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "d_fw≥0",
+          "navigation step ≤ξ_max per cycle"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_fwn=d_fw²; V_fwn→0 as x enters ∩Ω",
+        "implication": "World navigation is constrained gradient descent toward ∩Ω; convergence guaranteed if ∩Ω is non-empty and convex. Measurable by tracking d_fw reduction rate during transition."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "d_fw(t+1)=d_fw(t)-α‖∇d_fw‖²+Π_{∩Ω}; V_fwn=d_fw²→0 at ∩Ω",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -1810,7 +1793,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE3] Example instances will be attached as child DTUs when needed."
+        "Vacuum-adapted life: Ω_vacuum (P<10⁻¹⁰ Pa) is locked out from Ω_earth (P=10⁵ Pa). d_max=10 orders of magnitude pressure → dist>d_max. Without engineering (pressurized suit): V_lfw=10 orders. With technology: d_max raised to 15 orders → Ω_vacuum accessible. Falsified by finding pressure-bridge biology."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -1819,22 +1802,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{Ω_lock_out: dist(Ω_curr,Ω_lock_out)>d_max, unreachable}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "Ω_lock_out": "locked-out feasibility world",
+          "d_max": "maximum transition distance",
+          "Ω_curr": "current world"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "dist(Ω_curr,Ω_lock_out)>d_max → navigation infeasible; V_lock_out=dist-d_max>0",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "dist(Ω_curr,Ω_lock_out)≤d_max for accessible world",
+          "d_max from ETCC constraints"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_lfw=max(0,dist(Ω_curr,Ω_lock_out)-d_max); V_lfw>0 iff locked out",
+        "implication": "Worlds with V_lfw>0 are permanently inaccessible from the current world; only external perturbation (engineering) can reduce d_max. Measurable by quantifying the minimum parameter change needed to bridge the gap."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "locked out iff dist(Ω_curr,Ω_target)>d_max; V_lfw=max(0,dist-d_max)>0",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -1916,7 +1898,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE3] Example instances will be attached as child DTUs when needed."
+        "SCUBA diving: T_art=pressurized air supply. Ω_curr=terrestrial (air-breathing), Ω_adj=aquatic (40m depth). V_trans=tank weight + pressure training cost. V_max=available budget. V_trans<V_max → transition feasible. Without T_art: V_lfw>0, aquatic world locked out."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -1925,22 +1907,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{T_art: Ω_curr→Ω_adj; T_art engineered}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "T_art": "artificial transition operator",
+          "V_trans": "transition cost",
+          "Ω_adj": "target adjacent world"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "Ω_transit(t)=T_art(t)·Ω_curr; V_trans=‖T_art‖²·vol(Ω_curr)",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "T_art∈Diff(Ω_adj) (smooth transition)",
+          "V_trans<V_max (feasible cost)"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_aeaw=V_trans·(1-completion)²; V_aeaw=0 at transition complete",
+        "implication": "Artificial world entry is feasible iff V_trans<V_max; the transition operator T_art must be smooth and reversible. Measurable as the energy and time cost of the engineered transition procedure."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "T_art: Ω_curr→Ω_adj; feasible iff V_trans=‖T_art‖²·vol(Ω)≤V_max",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -2021,7 +2002,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE3] Example instances will be attached as child DTUs when needed."
+        "Coral reef multi-species system: ∩Ω = viable temperature-pH window. CO₂ increase: Ω_coral shrinks → vol(∩Ω) decreases from 2°C×0.4pH-units to 0.5°C×0.1pH-units (75% reduction). P_col rises by 4×. Measured by overlap area of species thermal and pH tolerance curves in ocean surveys."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -2030,22 +2011,20 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{V_fwcol=‖∩_k Ω_k‖→0: collapse as intersection vanishes}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "∩_k Ω_k": "feasibility world intersection (common core)",
+          "P_col": "collapse probability"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "P_col∝1/vol(∩_k Ω_k); P_col→1 as ∩Ω→∅",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "vol(∩Ω)≥vol_min (minimum viable intersection)",
+          "P_col≤P_max for safety"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_fwcol=1/vol(∩Ω); V_fwcol→∞ as intersection collapses",
+        "implication": "World collapse occurs when vol(∩Ω)→0; the collapse risk P_col is inversely proportional to intersection volume. Measured by tracking the shrinkage rate of the common viable parameter region."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "P_col∝1/vol(∩_k Ω_k); collapse iff vol(∩Ω)→0; V_fwcol=1/vol(∩Ω)",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -2127,7 +2106,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE3] Example instances will be attached as child DTUs when needed."
+        "Digital mind uploaded to new hardware substrate: I_func=memory contents + behavioral patterns. V_ipfw measured by comparing memory fidelity pre- vs. post-upload. If ‖I_func(Ω_silicon)-I_func(Ω_neuro)‖>ε_ID=0.01: identity not preserved. Measured by behavioral identity tests (Turing-style protocol)."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -2136,22 +2115,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{‖I_func(Ω_k)-I_func(Ω_j)‖≤ε_ID across worlds}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "I_func": "identity functional (preserved quantity)",
+          "Ω_k": "k-th feasibility world",
+          "ε_ID": "identity drift tolerance"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "I_func evolves as: dI_func/dt=∇I_func·(dΩ/dt); drift bounded by ε_ID",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "‖I_func(Ω_k)-I_func(Ω_j)‖≤ε_ID for all k,j",
+          "I_func continuous across Ω"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_ipfw=max_{k,j}‖I_func(Ω_k)-I_func(Ω_j)‖²; V_ipfw≤ε_ID² iff identity preserved",
+        "implication": "Identity is preserved across feasibility worlds iff V_ipfw≤ε_ID²; larger drift means identity breaks at the transition. Measured by comparing identity markers before and after world transition."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "‖I_func(Ω_k)-I_func(Ω_j)‖≤ε_ID; V_ipfw=max_{k,j}‖I_func(Ω_k)-I_func(Ω_j)‖²",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -2231,7 +2209,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE3] Example instances will be attached as child DTUs when needed."
+        "Human-AI ethics negotiation: Ω_human={harm-avoid, autonomy} ∩ Ω_AI={utility-max, corrigibility}. Intersection = {utility-max within harm boundaries}. V_eth_fw=0.3 (partial overlap). Measured by preference alignment surveys across human-AI interaction scenarios."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -2240,22 +2218,20 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{V_eth_fw=1-vol(∩_k Ω_k_ethical)/vol(Ω_ref)}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "Ω_k_ethical": "k-th agent's ethical constraint set",
+          "∩Ω_eth": "shared ethical feasibility"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "Ω_eth(t+1)=∩_k(Ω_k(t)+Δg_k·t); ethics evolve toward shared core",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "∩_k Ω_k_ethical≠∅ (ethical co-feasibility)",
+          "V_eth_fw≤V_eth_max"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_eth_fw=1-vol(∩Ω_eth)/vol(Ω_ref); V_eth_fw→0 iff strong shared ethics",
+        "implication": "Cross-world ethics requires ∩Ω_eth≠∅; if feasibility worlds have disjoint ethical cones, no common ethical framework is possible. Measurable by overlap analysis of world-specific value systems."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "∩_k Ω_k_ethical≠∅; V_eth_fw=1-vol(∩Ω_eth)/vol(Ω_ref)≥0",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -2336,7 +2312,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE3] Example instances will be attached as child DTUs when needed."
+        "Human-dolphin communication: BW_channel=acoustic (1kHz), BW_shared=~50 concepts (gesture+sound overlap). C_fw=50 concept-bits/session. Dolphin H(message)≈500 bits → V_fwcl=450 bits lost per session. Measured by correct concept transfer rate in trained dolphin-human protocols."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -2345,22 +2321,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{C_fw=min(BW_channel, BW_shared_concepts): communication limit}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "C_fw": "inter-world communication capacity",
+          "BW_channel": "physical channel bandwidth",
+          "BW_shared": "shared concept bandwidth"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "I_transmitted=min(C_fw, H(message)); Shannon capacity theorem across worlds",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "C_fw≤min(BW_channel, BW_shared)",
+          "H(message)≥H_min for meaningful communication"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_fwcl=H(message)-C_fw; V_fwcl>0 iff message exceeds capacity",
+        "implication": "Cross-world communication is limited by the minimum of physical bandwidth and shared conceptual bandwidth; V_fwcl>0 means information is lost. Measured by communication fidelity between entities from different feasibility worlds."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "C_fw=min(BW_channel,BW_shared); I_transmitted≤C_fw; V_fwcl=H(msg)-C_fw",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -2440,7 +2415,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE3] Example instances will be attached as child DTUs when needed."
+        "Mars colonization: Ω_native=Earth (101kPa, 21%O₂, 15°C), Ω_target=Mars (0.6kPa, 0%O₂, -60°C). vol(Ω_native∩Ω_target)≈0 without engineering. V_col≈∞ bare. With habitat (T_art brings T=20°C, P=101kPa): overlap created, V_col<V_max. Measured by minimum life-support system mass per colonist."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -2449,22 +2424,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{Ω_col=Ω_native∩Ω_target: colonizable intersection}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "Ω_native": "colonizing species feasibility",
+          "Ω_target": "target world feasibility",
+          "V_col": "colonization cost"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "V_col=‖Ω_native-Ω_target‖/(vol(Ω_native∩Ω_target)+ε)",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "vol(Ω_native∩Ω_target)>0 (overlap required)",
+          "V_col<V_col_max"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_col_pot=V_col; V_col→0 iff worlds nearly identical",
+        "implication": "World colonization requires non-zero overlap vol(Ω_native∩Ω_target)>0; zero overlap means colonization requires complete substrate replacement, scaling V_col→∞. Measured by overlap fraction between native and target parameter ranges."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "V_col=‖Ω_native-Ω_target‖/vol(Ω_native∩Ω_target); feasible iff vol(∩)>0",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -2544,7 +2518,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE3] Example instances will be attached as child DTUs when needed."
+        "Ecological niche saturation: bird species richness on Pacific islands. Small island ρ_sat=20 species/km². At ρ=20: V_sat_fw=0, new arrivals excluded (MacArthur-Wilson equilibrium). Immigration=Extinction=5 species/yr. Measured by species turnover rate vs. current vs. saturation density."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -2553,22 +2527,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{Ω_sat={x∈Ω: density≥ρ_sat}: saturated feasibility world}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "ρ_sat": "saturation density",
+          "Ω_sat": "saturated region of world",
+          "V_sat_fw": "saturation potential"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "ρ̇=α·(ρ_sat-ρ)·ρ-β·ρ; logistic-like saturation dynamics",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "ρ≤ρ_sat (saturation ceiling)",
+          "vol(Ω_sat)≤vol(Ω)"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_sat_fw=max(0,ρ-ρ_sat)²; V_sat_fw=0 below saturation",
+        "implication": "World saturation occurs when density ρ≥ρ_sat; new entities cannot enter without displacing existing ones. V_sat_fw>0 triggers competitive exclusion. Measurable by population density vs. carrying capacity ratio."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "V_sat_fw=max(0,ρ-ρ_sat)²; saturation iff ρ=ρ_sat and new entries impossible",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -2650,7 +2623,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE3] Example instances will be attached as child DTUs when needed."
+        "Exosuit for Venus surface (Ω_Venus: 90atm, 465°C): θ_body=(ceramic shell, active cooling, pressure vessel). Ω_body_art∩Ω_Venus=operational zone. V_abcv=0 iff suit meets full Venus requirements. Current best: V_abcv=0.15 (2hr operation limit). Measured by operational duration under Venus analog conditions."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -2659,22 +2632,20 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{Ω_body_art(θ_body): parameterized by design choice θ_body}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "θ_body": "artificial body design parameters",
+          "Ω_body_art": "resulting feasibility cone"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "Ω_body_art(t+1)=T_design(θ_body(t+1))·Ω_body_art(t); designer-controlled evolution",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "Ω_body_art⊆Ω_physical (physical laws)",
+          "R_art(θ)≥D_art(θ) for viable body"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_abcv=vol(Ω_target)-vol(Ω_body_art∩Ω_target); V_abcv=0 iff body reaches target world",
+        "implication": "Artificial bodies are designed Ω-vehicles; the designer chooses θ_body to achieve Ω_body_art=Ω_target. Measured by capability overlap between designed body and target environment."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "Ω_body_art(θ_body)⊆Ω_physical; V_abcv=vol(Ω_target-Ω_body_art∩Ω_target)",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -2755,7 +2726,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE3] Example instances will be attached as child DTUs when needed."
+        "Self-repairing robot with nano-repair (R_art=2 damage units/hr) vs. wear (D_art=1.5 units/hr): Ḃ_art=0.5>0, viable. MTBF→∞. Standard robot (R_art=0): MTBF=B_art/D_art=1000/1.5=667hr. Repair-dominant design extends MTBF from 667hr to ∞ — measured by accelerated wear testing."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -2764,23 +2735,20 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{R_art≥D_art: repair dominance in artificial body}",
         "variables": {
-          "B": "integrity",
-          "D": "damage",
-          "R": "repair",
-          "S": "stress"
+          "R_art": "artificial body repair rate (self-repair systems)",
+          "D_art": "wear/damage rate of artificial body"
         },
-        "dynamics": "dB/dt=R(B,S)-D(B,S)",
+        "dynamics": "B_art(t+1)=B_art(t)+(R_art-D_art)·Δt; viable iff R_art≥D_art",
         "constraints": [
-          "B∈[0,1]",
-          "R≥0",
-          "D≥0"
+          "R_art≥D_art (repair dominance)",
+          "B_art≥B_art_min"
         ],
-        "potential": "V=1-B",
-        "implication": "If R≥D+ε on [B0,1], then B increases toward 1 (repair-dominant)."
+        "potential": "V_rda=max(0,D_art-R_art); V_rda=0 iff repair dominant",
+        "implication": "Repair-dominant artificial bodies maintain B_art indefinitely; bodies with D_art>R_art have finite lifespan T=B_art/V_rda. Measurable by MTBF (mean-time-between-failure) analysis."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "Ḃ_art=R_art-D_art; viable iff R_art≥D_art; L_art=B_art/(D_art-R_art+ε)",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -2861,7 +2829,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE3] Example instances will be attached as child DTUs when needed."
+        "Explosive ordnance disposal robot: standby mode (R_art=10W charge, D_base=2W), burst mode (D_burst=500W for 30s). B_art needed=500×30=15,000J. Recovery time=15,000/(10-2)=1,875s≈31min. Falsified if burst repeated before recovery — battery depletion confirms formula."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -2870,22 +2838,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{I_burst_art=I_max·1_{Φ=Φ_high}; B_art recovery during Φ_low}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "I_max": "peak artificial body intelligence",
+          "Φ_high": "burst activation phase",
+          "B_art": "energy buffer"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "B_art(t+1)=B_art(t)+(R_art-D_base)·τ_low/(τ_low+τ_high)",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "B_art≥B_burst during Φ_high",
+          "Ḃ_art≥0 during Φ_low"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_bcab=I_max-I_burst_art; V_bcab=0 during burst",
+        "implication": "Burst-capable artificial bodies trade continuous operation for peak I_max; feasible iff buffer recovery ≥ burst consumption. Measurable by comparing peak vs. sustained performance under power budget constraints."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "I_burst_art=I_max·1_{B_art≥B_burst}; B_art recovers at Ḃ=R_art-D_base during standby",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -2966,7 +2933,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE3] Example instances will be attached as child DTUs when needed."
+        "Modular robot: 5 tool modules (gripper, drill, camera, sensor, welder). Each Ω_k covers 20% of industrial tasks. Ω_swap=∪Ω_k covers 85% (15% overlap). V_msba=0 for 85% of tasks if modules swapped correctly. Monolithic robot: Ω_fixed=30%. Advantage=55% more task coverage."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -2975,22 +2942,20 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{Ω_swap=∪_k Ω_module_k: union of module capabilities}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "Ω_module_k": "k-th module feasibility",
+          "Ω_swap": "total swappable capability space"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "Ω_active(t)=Ω_swap(modules_loaded(t)); reconfigured at swap events",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "vol(Ω_active)≥vol_required",
+          "swap_cost≤swap_budget"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_msba=vol(Ω_task)-vol(Ω_active∩Ω_task); V_msba=0 iff correct modules loaded",
+        "implication": "Modular swap architectures achieve vol(Ω_swap)>vol(Ω_fixed) by combining specialized modules; V_msba=0 requires loading the right modules for the task."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "Ω_swap=∪_k Ω_module_k; V_msba=vol(Ω_task-Ω_active∩Ω_task)→0 with right modules",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -3070,7 +3035,7 @@
         "Repair/feedback shifts regimes"
       ],
       "examples": [
-        "[WAVE3] Example instances will be attached as child DTUs when needed."
+        "Swarm drone with N=100: if all run same algorithm (corr=1): I_dist=I_single. With specialized roles (corr=0.1): I_dist=100·I_single-β·10·0.1=100·I_single-β. For β=5: I_dist=95·I_single — 95× better. Measured by area coverage per drone-hour vs. task allocation homogeneity."
       ],
       "nextActions": [
         "Add child DTUs that instantiate this model with concrete parameters; add counterexample shadow DTUs."
@@ -3079,22 +3044,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{I_dist_art=∑_i I_i-corr_{ij}·β: distributed AI body}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "I_i": "node i's contribution",
+          "corr_{ij}": "correlation between nodes i,j",
+          "β": "correlation penalty coefficient"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "I_dist_art(t+1)=∑_i I_i(t+1)-β·∑_{i<j}corr(I_i(t),I_j(t))",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "I_dist_art≥I_single (distributed advantage)",
+          "latency between nodes≤τ_max"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_dab=I_max_theoretical-I_dist_art; V_dab→0 at zero correlation",
+        "implication": "Distributed artificial bodies gain advantage from decorrelated nodes; nodes sharing identical computation waste the distribution. Measured by task performance vs. node correlation structure."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "I_dist_art=∑_i I_i-β·∑_{i<j}corr(I_i,I_j); maximize by minimizing inter-node corr",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -3183,22 +3147,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{u_hier=∑_k γ^k·u_level_k: hierarchical control sum}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "u_level_k": "control signal at level k",
+          "γ": "level-weighting factor",
+          "K": "hierarchy depth"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "u_{hier}(t)=∑_{k=1}^K γ^k·u_k(t); ΔV≤-c_hier·‖u_hier-u*‖²",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "γ∈(0,1) (higher levels dominate)",
+          "∑γ^k bounded"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_hcb=‖u_hier-u*‖²; V_hcb→0 at optimal hierarchical response",
+        "implication": "Hierarchical control allows different timescales at each level; γ<1 ensures high levels set strategy, low levels handle reflexes. Measurable by comparing performance of flat vs. hierarchical controllers on multi-timescale tasks."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "u_hier=∑_{k=1}^K γ^k·u_k; ΔV≤-c_hier·‖u_hier-u*‖²; stability from γ<1",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -3288,22 +3251,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{u_reflex=K_r·(x-x_ref): fast reflex loop, τ_reflex<<τ_cortex}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "K_r": "reflex gain matrix",
+          "x_ref": "reflex setpoint",
+          "τ_reflex": "reflex latency"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "u(t)=K_r·(x(t)-x_ref)+u_cortex(t-τ_cortex); ΔV≤-c_r‖x-x_ref‖² for t≤τ_reflex",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "τ_reflex≤τ_min (nerve conduction limit)",
+          "K_r bounded by actuator limits"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_rfbd=‖x-x_ref‖²; V_rfbd→0 via reflex before cortical response",
+        "implication": "Reflex-first designs guarantee stability at τ_reflex timescales; cortex overrides only if V_rfbd persists beyond τ_reflex. Falsified by demonstrating cortical-speed corrections at t<τ_reflex."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "u_reflex=K_r·(x-x_ref); ΔV≤-c_r‖x-x_ref‖² for t≤τ_reflex<<τ_cortex",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -3393,22 +3355,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{I_sd=κ_s·rank(H)·SNR_avg; y=Hx+ξ}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "rank(H)": "effective sensor rank (density)",
+          "SNR_avg": "average SNR across channels",
+          "κ_s": "sensing-intelligence transduction"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "I_sd=κ_s·rank(H)·SNR_avg; MMSE: min‖x̂-x‖²=σ²_ξ·Tr((HᵀH)⁻¹)",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "rank(H)≤n_sensors",
+          "SNR_avg≥SNR_min"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_sdba=κ_s·rank_max·SNR_max-I_sd; V_sdba=0 at maximum density",
+        "implication": "Sensor-dense architectures scale intelligence as rank(H)×SNR; new sensors only help if linearly independent of existing ones. Measurable by estimation accuracy vs. sensor count and spatial arrangement."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "I_sd=κ_s·rank(H)·SNR_avg; MMSE error=σ²_ξ·Tr((HᵀH)⁻¹)",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -3498,22 +3459,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{A_dense=|U_act|/vol(Ω_body)≥A*_dense: agency threshold}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "A_dense": "actuator volumetric density",
+          "|U_act|": "independent actuator count",
+          "A*_dense": "agency threshold density"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "ΔV≤-c_A·A_dense·‖x-x*‖²; precision scales with A_dense",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "A_dense≥A*_dense",
+          "τ_act≤τ_max (response time)"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_adab=max(0,A*_dense-A_dense); V_adab=0 iff agency-capable",
+        "implication": "Actuator-dense bodies achieve finer motor control; each independent actuator reduces minimum residual ‖x-x*‖². Measured by precision (minimum detectable displacement) vs. actuator density."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "A_dense=|U_act|/vol(Ω_body)≥A*; ΔV≤-c_A·A_dense·‖x-x*‖²",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -3604,22 +3564,22 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{τ_sys=τ_s+τ_p+τ_a≤τ_max: total system latency}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "τ_s": "sensor delay",
+          "τ_p": "processing delay",
+          "τ_a": "actuation delay",
+          "τ_max": "stability margin"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "ΔV(t+τ_sys)≤-c_lat·‖x(t)-x*(t)‖²; stable iff τ_sys<τ_stability_margin",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "τ_sys<τ_max (control stability)",
+          "τ_p≥τ_p_min (irreducible compute time)"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_llans=max(0,τ_sys-τ_max); V_llans=0 iff within stability margin",
+        "implication": "Low-latency nervous systems maintain stability by keeping τ_sys<τ_stability_margin; excess latency causes oscillation. Measurable by reaction-time tests plus closed-loop stability analysis."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "τ_sys=τ_s+τ_p+τ_a; stable iff τ_sys<τ_stability_margin; V_llans=max(0,τ_sys-τ_max)",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -3709,22 +3669,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{Ω_ncei=Ω_phys\\Ω_biochem: non-biochemical embodiment}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "Ω_ncei": "non-chemical embodiment feasibility",
+          "Ω_phys": "physical laws space",
+          "Ω_biochem": "excluded biochemical zone"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "I_ncei(t)=κ_nc·Φ_nc(t)/D_ncei; Φ_nc=non-chemical energy flux available",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "x_body∈Ω_ncei (no biochemistry required)",
+          "I_ncei≤κ_nc·Φ_nc/D_ncei"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_ncei=vol(Ω_ncei_accessible)-vol(Ω_ncei_occupied); V_ncei→0 as space explored",
+        "implication": "Non-chemical embodiment spans Ω_phys\\Ω_biochem; each new explored substrate reduces V_ncei. vol(Ω_ncei)>>vol(Ω_biochem). Measured by enumerating non-biochemical computation substrates with demonstrated cognition."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "Ω_ncei=Ω_phys\\Ω_biochem; I_ncei=κ_nc·Φ_nc/D_ncei; V_ncei=vol(unexplored Ω_ncei)",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -3814,22 +3773,22 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{I_ss=κ_ss·f_clock·N_gates/D_ss: solid-state cognition}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "f_clock": "clock frequency",
+          "N_gates": "logic gate count",
+          "D_ss": "heat dissipation rate",
+          "κ_ss": "gate-to-cognition efficiency"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "I_ss=κ_ss·f_clock·N_gates/D_ss; Ḃ_ss=P_supply-D_ss≥0 for operation",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "D_ss≤κ_T·ΔT (heat removal limit)",
+          "f_clock≤f_max"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_sscb=I_ss_max-I_ss; V_sscb→0 at Landauer-limit efficiency",
+        "implication": "Solid-state cognition scales with f_clock×N_gates/D_ss; thermal dissipation is the binding constraint. Falsified by I_ss exceeding κ_ss·f_max·N_gates/D_ss_min."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "I_ss=κ_ss·f_clock·N_gates/D_ss; heat-dominated iff D_ss=κ_T·ΔT_max",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -3919,22 +3878,22 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{I_fl=κ_fl·Re·∇P/ν; viable iff Re<Re_critical}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "Re": "Reynolds number",
+          "∇P": "pressure gradient",
+          "ν": "kinematic viscosity",
+          "Re_critical": "laminar-turbulent transition"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "I_fl=κ_fl·Re·∇P/ν; logic fidelity F=1-max(0,Re-Re_c)/(Re_c)",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "Re<Re_critical (laminar for computation)",
+          "∇P≥∇P_min (signal propagation)"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_fbai=max(0,Re-Re_critical); V_fbai=0 iff laminar cognitive regime",
+        "implication": "Fluid AI operates in laminar regime; turbulence (Re>Re_c) destroys computational structure. Measured by logic gate fidelity vs. Reynolds number in microfluidic circuits."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "I_fl=κ_fl·Re·∇P/ν; stable iff Re<Re_critical; V_fbai=max(0,Re-Re_c)",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -4024,23 +3983,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{I_ef=κ_ef·∫Φ_field·dΩ_body: field-integrated intelligence}",
         "variables": {
-          "C": "capacity",
-          "D": "decay",
-          "R": "repair",
-          "T": "throughput"
+          "Φ_field": "ambient energy field density (EM, gravitational, etc.)",
+          "Ω_body": "body volume occupying field",
+          "κ_ef": "field-cognitive coupling"
         },
-        "dynamics": "C_{t+1}=C_t+R_t-D_t; T_t≤C_t",
+        "dynamics": "I_ef(t)=κ_ef·∫_{Ω_body}Φ_field(x,t)dV; body moves to maximize ∫Φ_field",
         "constraints": [
-          "C≥0",
-          "R≥0",
-          "D≥0"
+          "∫Φ_field·dΩ≥Φ_min·vol(Ω_body) (minimum field density)",
+          "body must be permeable to field"
         ],
-        "potential": "V=max(0,C_min-C)",
-        "implication": "If E[R]≥E[D] and shocks bounded, then C stays above C_min with high probability."
+        "potential": "V_efei=I_ef_max-κ_ef·∫Φ_field·dΩ; V_efei→0 at field maximum",
+        "implication": "Field-embodied intelligence is proportional to field integral over body volume; organisms move toward field peaks to maximize I_ef. Measurable by tracking organism position vs. field strength map."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "I_ef=κ_ef·∫_{Ω_body}Φ_field dV; gradient ascent: ẋ∝∇(∫Φ_field dV)",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -4130,22 +4087,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{Ω_hyb=Ω_bio∪Ω_art; requires Ω_bio∩Ω_art≠∅}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "Ω_bio": "biological component feasibility",
+          "Ω_art": "artificial component feasibility",
+          "Ω_hyb": "hybrid total feasibility"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "Ω_hyb(t)=T_iface(t)·(Ω_bio(t)∪Ω_art(t)); interface T_iface controls coupling quality",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "Ω_bio∩Ω_art≠∅ (interface compatibility)",
+          "biocompatibility: g_bio(x_art)≤0"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_hbab=vol(Ω_bio∪Ω_art)-vol(Ω_hyb_achieved); V_hbab=0 at full integration",
+        "implication": "Hybrid bodies exceed either component alone iff vol(Ω_hyb)>max(vol(Ω_bio),vol(Ω_art)), requiring interface compatibility Ω_bio∩Ω_art≠∅. Measured by task coverage of hybrid vs. pure system."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "Ω_hyb=Ω_bio∪Ω_art; V_hbab=vol(Ω_bio∪Ω_art)-vol(Ω_hyb); requires Ω_bio∩Ω_art≠∅",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -4234,22 +4190,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{I_bl=max_u min_w ΔV(x_env,u,w): control without embodied body}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "x_env": "environmental state (not body state)",
+          "u": "disembodied control signal",
+          "w": "environmental disturbance"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "x_env(t+1)=F_env(x_env(t),u(t),w(t)); agent controls x_env directly",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "u∈U_bl (bodyless control set)",
+          "no physical body: Ω_body=∅"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_bci=min_w ΔV(x_env,u*,w); V_bci→0 at optimal bodyless control",
+        "implication": "Bodyless control achieves minimax optimality without embodiment cost; limited to systems where u directly affects x_env. Measured by comparing control performance of embodied vs. disembodied agents on identical tasks."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "I_bl=max_u min_w ΔV(x_env,u,w); optimal policy u*=argmax_u min_w ΔV",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -4338,22 +4293,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{Ω_part=Ω_full·α_cover: partial embodiment fraction}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "α_cover": "embodiment coverage fraction ∈(0,1)",
+          "Ω_part": "partially covered feasibility",
+          "I_part": "partial embodiment intelligence"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "I_part=α_cover·I_full; ΔV≤-c_part·α_cover·‖x-x*‖²",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "α_cover∈(0,1) (partial, not full)",
+          "I_part≥I_min for viability"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_pes=I_full·(1-α_cover); V_pes=0 at full embodiment",
+        "implication": "Partial embodiment scales intelligence and agency linearly with coverage α_cover; below critical α_min the system cannot sustain viable behavior. Measured by task success rate vs. embodiment fraction."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "I_part=α_cover·I_full; V_pes=(1-α_cover)·I_full; viable iff α_cover≥α_min",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -4442,22 +4396,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{Ω_temp(t)=Ω_body·1_{t∈[t_0,t_0+τ_emb]}: time-windowed embodiment}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "τ_emb": "embodiment duration",
+          "t_0": "embodiment start time",
+          "Ω_temp": "temporary feasibility window"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "I_temp(t)=I_body·1_{t∈[t_0,t_0+τ_emb]}; buffer B must sustain I_body for τ_emb",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "B≥I_body·D_body·τ_emb (buffer for duration)",
+          "τ_emb≤B/D_body"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_tem=max(0,I_body·D_body·τ_emb-B); V_tem=0 iff buffer sufficient",
+        "implication": "Temporary embodiment is feasible iff buffer B≥D_body·τ_emb; the embodiment window τ_emb is set by the buffer-to-demand ratio. Measured by operational duration vs. energy reserve under controlled conditions."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "τ_emb=B/(D_body); I_temp=I_body·1_{t<τ_emb}; V_tem=max(0,D_body·τ_target-B)",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -4547,22 +4500,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{I_func(Ω_k)=const ∀k: identity preserved across N bodies}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "I_func": "identity functional (invariant quantity)",
+          "Ω_k": "k-th body feasibility",
+          "ε_ID": "identity drift tolerance"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "max_{k,j}‖I_func(Ω_k)-I_func(Ω_j)‖≤ε_ID; drift bounded across bodies",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "‖I_func(Ω_k)-I_func(Ω_j)‖≤ε_ID ∀k,j",
+          "I_func continuous across body transitions"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_mbis=max_{k,j}‖I_func(Ω_k)-I_func(Ω_j)‖²; V_mbis≤ε_ID² iff identity preserved",
+        "implication": "Multi-body identity requires I_func invariance across all N bodies; V_mbis>ε_ID² signals identity fragmentation. Measured by behavioral consistency tests across body transitions."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "‖I_func(Ω_k)-I_func(Ω_j)‖≤ε_ID ∀k,j; V_mbis=max_{k,j}‖I_func(Ω_k)-I_func(Ω_j)‖²",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -4651,22 +4603,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{Ω_cycle(t)=Ω_{k(t)}: cycling through N body configurations}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "k(t)": "active body index at time t",
+          "τ_k": "duration in body k",
+          "C_switch": "switching cost"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "Ω_cycle(t)=Ω_{k(t)}; V_cyc=∑_k C_switch·1_{k(t)≠k(t-1)}",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "∑_k τ_k=T_total (full time coverage)",
+          "C_switch≤C_max per cycle"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_ecs=∑_k C_switch·n_switches-Σ_k τ_k·I_k; V_ecs minimized by optimal cycle schedule",
+        "implication": "Embodiment cycling gains access to specialized Ω_k for each task; optimal schedule minimizes V_ecs. Measurable by total task performance vs. switching frequency."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "Ω_cycle(t)=Ω_{k(t)}; optimal k(t)*=argmax_{k}(I_k·τ_k-C_switch); V_ecs minimized",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -4757,22 +4708,22 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{u_oc=K_oc·e, K_oc>>K*: over-control collapse}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "K_oc": "over-control gain",
+          "K*": "optimal gain",
+          "e": "error signal",
+          "V_oc": "over-control Lyapunov function"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "ẋ=Ax+B·K_oc·e; eigenvalues λ_i(A-B·K_oc)>0 iff K_oc>K_max → unstable",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "K_oc≤K_max for stability",
+          "phase margin≥30° (standard)"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_aioc=max(0,K_oc-K_max)²; V_aioc>0 iff over-control present",
+        "implication": "AI collapse via over-control occurs when gain K_oc exceeds stability margin K_max; eigenvalues cross imaginary axis. Measured by closed-loop pole locations vs. control gain in linear analysis."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "V_aioc=max(0,K_oc-K_max)²; unstable iff K_oc>K_max (poles in RHP)",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -4863,23 +4814,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{Ḃ=R_ai-D_ai<0: under-repair buffer depletion}",
         "variables": {
-          "B": "integrity",
-          "D": "damage",
-          "R": "repair",
-          "S": "stress"
+          "R_ai": "AI repair/maintenance rate",
+          "D_ai": "AI damage/degradation rate",
+          "B_ai": "AI health buffer"
         },
-        "dynamics": "dB/dt=R(B,S)-D(B,S)",
+        "dynamics": "B_ai(t)=B_ai(0)+(R_ai-D_ai)·t; collapse at t_col=B_ai(0)/(D_ai-R_ai)",
         "constraints": [
-          "B∈[0,1]",
-          "R≥0",
-          "D≥0"
+          "R_ai≥D_ai for indefinite operation",
+          "B_ai≥B_min for minimal function"
         ],
-        "potential": "V=1-B",
-        "implication": "If R≥D+ε on [B0,1], then B increases toward 1 (repair-dominant)."
+        "potential": "V_aiur=max(0,D_ai-R_ai); V_aiur=0 iff repair dominant",
+        "implication": "AI collapse via under-repair is deterministic when D_ai>R_ai; lifespan L=B_ai/(D_ai-R_ai). Measurable by mean-time-to-failure analysis across AI systems with known maintenance budgets."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "Ḃ_ai=R_ai-D_ai; collapse at t_col=B_ai/(D_ai-R_ai) iff D_ai>R_ai",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -4969,22 +4918,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{σ²_ai(t)=σ²_0+ν_noise·t: noise accumulation}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "σ²_ai": "AI state noise variance",
+          "ν_noise": "noise accumulation rate",
+          "σ²_max": "failure threshold"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "x_ai(t+1)=A·x_ai(t)+ξ_t; σ²(t)=σ²_0+ν_noise·t until σ²>σ²_max",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "σ²_ai≤σ²_max (coherence limit)",
+          "ν_noise≥0"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_ainaf=max(0,σ²_ai-σ²_max); V_ainaf=0 iff below noise threshold",
+        "implication": "AI noise accumulation failure occurs when σ²_ai(t_fail)=σ²_max; t_fail=(σ²_max-σ²_0)/ν_noise. Measurable by output variance growth rate in production AI systems over time."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "σ²_ai(t)=σ²_0+ν_noise·t; failure at t_fail=(σ²_max-σ²_0)/ν_noise",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -5073,22 +5021,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{τ_ai(t+1)=τ_ai(t)+Δτ_load: latency growth spiral}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "τ_ai": "AI response latency",
+          "Δτ_load": "latency increase per request cycle",
+          "τ_max": "failure latency threshold"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "τ_ai(t)=τ_0+Δτ_load·t; cascade failure when τ_ai>τ_max triggers timeout → more load",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "τ_ai≤τ_max (SLA limit)",
+          "Δτ_load>0 under overload"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_ails=max(0,τ_ai-τ_max)²; V_ails=0 iff within latency SLA",
+        "implication": "AI latency spirals are self-reinforcing: high latency → retries → more load → higher latency; V_ails grows superlinearly. Measurable by p99 latency vs. request rate in load tests."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "τ_ai(t)=τ_0+Δτ_load·t; V_ails=max(0,τ_ai-τ_max)²; spiral iff Δτ_load>0 and no throttling",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -5177,23 +5124,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{R_ai_eff=R_ai·(1-ρ_sat): saturated repair effectiveness}",
         "variables": {
-          "B": "integrity",
-          "D": "damage",
-          "R": "repair",
-          "S": "stress"
+          "R_ai": "nominal AI repair rate",
+          "ρ_sat": "repair saturation fraction ∈[0,1]",
+          "R_ai_eff": "effective repair rate"
         },
-        "dynamics": "dB/dt=R(B,S)-D(B,S)",
+        "dynamics": "ρ̇_sat=α·D_ai-β·(1-ρ_sat); ρ_sat→1 as D_ai>>β",
         "constraints": [
-          "B∈[0,1]",
-          "R≥0",
-          "D≥0"
+          "R_ai_eff=R_ai·(1-ρ_sat)≥D_ai for viability",
+          "ρ_sat∈[0,1]"
         ],
-        "potential": "V=1-B",
-        "implication": "If R≥D+ε on [B0,1], then B increases toward 1 (repair-dominant)."
+        "potential": "V_airs=max(0,D_ai-R_ai·(1-ρ_sat)); V_airs=0 iff repair keeps up",
+        "implication": "AI repair saturation occurs when damage rate D_ai overwhelms repair capacity, driving ρ_sat→1 and R_ai_eff→0; V_airs grows until collapse. Measured by recovery time vs. concurrent fault rate."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "R_ai_eff=R_ai·(1-ρ_sat); V_airs=max(0,D_ai-R_ai·(1-ρ_sat)); ρ_sat→1 under overload",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -5283,23 +5228,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{Ḃ_ai=R_self-D_ai≥0: self-repair dominance}",
         "variables": {
-          "B": "integrity",
-          "D": "damage",
-          "R": "repair",
-          "S": "stress"
+          "R_self": "AI self-repair rate (autonomous)",
+          "D_ai": "AI degradation rate",
+          "B_ai": "AI health buffer"
         },
-        "dynamics": "dB/dt=R(B,S)-D(B,S)",
+        "dynamics": "B_ai(t+1)=B_ai(t)+(R_self-D_ai)·Δt; self-repairing iff R_self≥D_ai",
         "constraints": [
-          "B∈[0,1]",
-          "R≥0",
-          "D≥0"
+          "R_self≥D_ai (self-repair dominance)",
+          "R_self powered by AI's own resources"
         ],
-        "potential": "V=1-B",
-        "implication": "If R≥D+ε on [B0,1], then B increases toward 1 (repair-dominant)."
+        "potential": "V_sraa=max(0,D_ai-R_self); V_sraa=0 iff self-repair dominant",
+        "implication": "Self-repairing AI architectures achieve B_ai(t)→∞ iff R_self≥D_ai without external intervention; V_sraa=0 is the design target. Measurable by MTBF with vs. without external maintenance."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "Ḃ_ai=R_self-D_ai; L_ai→∞ iff R_self≥D_ai; V_sraa=max(0,D_ai-R_self)=0",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -5388,22 +5331,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{P_survive_N=1-(1-P_single)^N: N-fold redundancy}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "P_single": "single-node survival probability",
+          "N": "redundancy factor",
+          "P_survive_N": "system survival probability"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "P_survive_N(t)=1-(1-P_single(t))^N; P_single(t)=exp(-D_ai·t)",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "N≥N_min (minimum redundancy for P_target)",
+          "cost=N·C_single"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_airs2=1-P_survive_N; V_airs2→0 as N→∞",
+        "implication": "N-fold redundancy achieves P_survive_N→1 at cost N·C_single; optimal N balances failure probability with cost. Measurable by failure rate vs. N in controlled reliability testing."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "P_survive_N=1-(1-P_single)^N; V_airs2=1-P_survive_N→0 as N→∞",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -5493,22 +5435,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{‖I_func(t)-I_func(0)‖≤ε_ID·t: identity drift bound}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "I_func": "AI identity functional",
+          "ε_ID": "drift rate bound",
+          "t": "elapsed time"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "dI_func/dt=∇I_func·θ̇; ‖dI_func/dt‖≤ε_ID ensures bounded drift",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "‖I_func(t)-I_func(0)‖≤ε_ID·t",
+          "I_func continuous in θ"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_aicg=‖I_func(t)-I_func(0)‖²; V_aicg≤(ε_ID·t)² iff guaranteed",
+        "implication": "AI identity continuity is guaranteed iff drift rate ‖dI_func/dt‖≤ε_ID; exceeded rate means identity breaks at t_break=ε_ID/‖dI_func/dt‖. Measurable by behavioral similarity tests over time."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "‖I_func(t)-I_func(0)‖≤ε_ID·t; V_aicg=‖I_func(t)-I_func(0)‖²≤(ε_ID·t)²",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -5599,23 +5540,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{V_align=‖u_ai-u_human‖²: alignment potential}",
         "variables": {
-          "B": "integrity",
-          "D": "damage",
-          "R": "repair",
-          "S": "stress"
+          "u_ai": "AI action",
+          "u_human": "human-preferred action",
+          "K_align": "alignment repair gain"
         },
-        "dynamics": "dB/dt=R(B,S)-D(B,S)",
+        "dynamics": "u_ai(t+1)=u_ai(t)-K_align·(u_ai(t)-u_human(t)); ΔV_align≤-c_a·‖u_ai-u_human‖²",
         "constraints": [
-          "B∈[0,1]",
-          "R≥0",
-          "D≥0"
+          "V_align≤V_align_max (tolerable misalignment)",
+          "K_align≥0 (repair direction)"
         ],
-        "potential": "V=1-B",
-        "implication": "If R≥D+ε on [B0,1], then B increases toward 1 (repair-dominant)."
+        "potential": "V_align=‖u_ai-u_human‖²; V_align→0 iff aligned",
+        "implication": "Alignment is a repair-control problem: V_align>0 is the misalignment potential, and the repair gain K_align drives V_align→0. Measurable by comparing AI actions to expert-labeled preferred actions."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "V_align=‖u_ai-u_human‖²; ΔV_align≤-K_align·V_align; aligned iff V_align≤V_max",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -5706,23 +5645,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{L_infra=B_infra/(D_infra-R_infra+ε): infrastructure lifespan}",
         "variables": {
-          "C": "capacity",
-          "D": "decay",
-          "R": "repair",
-          "T": "throughput"
+          "B_infra": "infrastructure health buffer",
+          "D_infra": "infrastructure degradation rate",
+          "R_infra": "infrastructure repair/update rate"
         },
-        "dynamics": "C_{t+1}=C_t+R_t-D_t; T_t≤C_t",
+        "dynamics": "Ḃ_infra=R_infra-D_infra; L_infra=B_infra/(max(D_infra-R_infra,ε))",
         "constraints": [
-          "C≥0",
-          "R≥0",
-          "D≥0"
+          "R_infra≥D_infra for indefinite operation",
+          "B_infra≥B_min"
         ],
-        "potential": "V=max(0,C_min-C)",
-        "implication": "If E[R]≥E[D] and shocks bounded, then C stays above C_min with high probability."
+        "potential": "V_aili=max(0,D_infra-R_infra); V_aili=0 iff infrastructure viable indefinitely",
+        "implication": "AI as infrastructure achieves L_infra→∞ iff R_infra≥D_infra; below this, L_infra=B_infra/(D_infra-R_infra). Measurable by system uptime vs. maintenance investment rate."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "L_infra=B_infra/(D_infra-R_infra+ε); L_infra→∞ iff R_infra≥D_infra",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -5812,22 +5749,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{I_notrain=κ_rule·vol(Ω_rules): rule-based intelligence without training}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "Ω_rules": "rule set feasibility space",
+          "κ_rule": "rule-to-intelligence transduction",
+          "I_notrain": "untrained AI intelligence"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "I_notrain=κ_rule·vol(Ω_rules); rules cover Ω_task iff Ω_rules⊇Ω_task",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "Ω_rules⊇Ω_task (rule completeness)",
+          "vol(Ω_rules) bounded by design budget"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_aiwt=vol(Ω_task)-vol(Ω_rules∩Ω_task); V_aiwt=0 iff rules cover all tasks",
+        "implication": "Untrained AI achieves I_notrain via rule completeness; V_aiwt>0 means uncovered task regions. Measurable by task-coverage fraction of rule set vs. trained alternative."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "I_notrain=κ_rule·vol(Ω_rules∩Ω_task); V_aiwt=vol(Ω_task-Ω_rules∩Ω_task)≥0",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -5917,22 +5853,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{θ̇=-∇_θ L(θ)|_{Π_{Ω_C}}: constraint-projected gradient}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "θ": "AI parameter vector",
+          "L(θ)": "training loss",
+          "Ω_C": "constraint feasibility set for development"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "θ_{t+1}=Π_{Ω_C}[θ_t-α·∇_θ L(θ_t)]; gradient projected onto constraints",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "θ∈Ω_C (constraint satisfaction throughout training)",
+          "∇_θL·n̂_Ω≤0 (feasible descent)"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_cgad=L(θ)+λ·dist(θ,Ω_C)²; V_cgad→L* iff θ stays in Ω_C",
+        "implication": "Constraint-guided development ensures θ stays in Ω_C during training; unconstrained gradient descent can exit Ω_C. Measured by constraint violation rate and performance gap vs. unconstrained training."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "θ_{t+1}=Π_{Ω_C}[θ_t-α·∇_θL]; V_cgad=L(θ)+λ·dist²(θ,Ω_C)→L*",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -6022,22 +5957,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{P(I>I*|θ)=Φ(EILI(θ)): AI probability iso-surfaces}",
         "variables": {
-          "x": "state",
-          "u": "control",
-          "w": "noise",
-          "θ": "parameters"
+          "EILI": "Emergent Intelligence Likelihood Index for AI",
+          "I*": "intelligence threshold",
+          "θ": "system design parameters"
         },
-        "dynamics": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+        "dynamics": "P(I>I*|θ)=Φ(w_E·E_comp+w_R·R_arch+w_B·B_mem-θ_AI); iso-P surfaces in θ space",
         "constraints": [
-          "g_i(x)≤0",
-          "h_j(x)=0"
+          "P∈[0,1]",
+          "EILI depends continuously on (E_comp,R_arch,B_mem)"
         ],
-        "potential": "V(x)≥0",
-        "implication": "If ΔV≤-c||x||^2 outside neighborhood, trajectories enter neighborhood (stability)."
+        "potential": "V_aips=1-P(I>I*|θ); V_aips→0 as EILI→1",
+        "implication": "AI probability surfaces partition design space into iso-EILI manifolds; moving toward higher EILI (more compute, better repair, larger memory) increases P(intelligence). Measurable by benchmarking AI performance vs. EILI score."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "P(I>I*|θ)=Φ(EILI(E_comp,R_arch,B_mem)); V_aips=1-P(I>I*)",
       "verifier": {
         "kind": "verifier",
         "inputs": [
@@ -6233,21 +6167,21 @@
     "machine": {
       "kind": "formal_model",
       "math": {
-        "space": "X ⊂ R^n",
+        "space": "{u*=argmax_u min_w ΔV(x_nav,u,w): navigator minimax policy}",
         "variables": {
-          "x": "substrate state",
-          "y": "experience proxy",
-          "π": "mapping"
+          "x_nav": "navigator state in feasibility space",
+          "u": "navigation control",
+          "w": "environmental adversary"
         },
-        "dynamics": "y = π(x); x_{t+1}=F(x_t,u_t)",
+        "dynamics": "x_nav(t+1)=F_nav(x_nav(t),u*(t),w(t)); minimax navigation toward Ω_target",
         "constraints": [
-          "π preserves invariants (information/structure)",
-          "y well-defined on equivalence classes"
+          "x_nav∈Ω_feasible (within navigable space)",
+          "w∈W_env (bounded adversary)"
         ],
-        "potential": "V=||π(F(x))-π(x)||",
-        "implication": "If π invariant-preserving and V small over time, experience is substrate-stable."
+        "potential": "V_amn=dist(x_nav,Ω_target)²; V_amn→0 as navigator reaches target",
+        "implication": "Artificial minds as navigators use minimax control to reach Ω_target despite adversarial environments; V_amn→0 certifies arrival. Measurable by comparing navigation success rate of minimax vs. non-minimax strategies."
       },
-      "primaryFormula": "x_{t+1}=F(x_t,u_t,w_t;θ)",
+      "primaryFormula": "u*=argmax_u min_w ΔV(x_nav,u,w); V_amn=dist(x_nav,Ω_target)²→0",
       "verifier": {
         "kind": "verifier",
         "inputs": [

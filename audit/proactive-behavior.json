@@ -1,0 +1,51 @@
+{
+  "auditDate": "2026-04-28",
+  "status": "PASS_WITH_NOTES",
+  "summary": "Initiative engine is fully implemented with 7 trigger types, rate limiting, and style learning. Proactive surfacing is via push notifications (initiatives), not inline chat DTU injection.",
+  "initiative_engine": {
+    "file": "server/lib/initiative-engine.js:1-1487",
+    "routes": "server/routes/initiative.js:1-268",
+    "trigger_types": [
+      "substrate_discovery",
+      "citation_alert",
+      "check_in",
+      "pending_work",
+      "world_event",
+      "reflective_followup",
+      "morning_context"
+    ],
+    "rate_limits": {
+      "max_per_day": 3,
+      "max_per_week": 10,
+      "min_gap_hours": 4,
+      "quiet_hours": "22:00-08:00"
+    },
+    "channels": ["in-app", "push", "sms", "email"],
+    "style_learning": "Exponential moving average (α=0.2) on length, formality, emoji, vocabulary"
+  },
+  "dtu_surfacing_in_chat": {
+    "method": "reactive",
+    "description": "DTUs are surfaced in response to user messages via semantic search. The initiative engine sends separate push-style messages, not inline chat suggestions.",
+    "surfacing_file": "server/lib/chat-context-pipeline.js:264-305"
+  },
+  "cross_lens_awareness": {
+    "status": "PARTIAL",
+    "description": "Lens parameter is received by chat backend and tracked in session. chat-lens-recommender.ts suggests lens transitions but doesn't change chat response behavior.",
+    "recommender_file": "concord-frontend/lib/lenses/chat-lens-recommender.ts:24-100",
+    "intent_classes": ["CHAT_ONLY", "IDEATE", "STRUCTURE", "PLAN", "SIMULATE", "BUILD", "PUBLISH", "AUDIT"]
+  },
+  "gaps": [
+    {
+      "severity": "P2",
+      "id": "PROACTIVE-001",
+      "description": "Chat DTU surfacing is purely reactive — the system only retrieves DTUs triggered by user messages. There is no path where the initiative engine injects proactive suggestions into active chat turns.",
+      "suggested_fix": "Wire initiative engine to check for pending, high-relevance initiatives at chat turn start; if found, prepend a brief substrate note to the response."
+    },
+    {
+      "severity": "P2",
+      "id": "PROACTIVE-002",
+      "description": "Lens context does not reshape DTU selection or system prompt. A user in the 'studio' lens and a user in the 'code' lens get the same DTU scoring against the same working set.",
+      "suggested_fix": "Add LENS_DOMAIN_AFFINITY map and apply a 1.3x boost to DTU scores for DTUs matching the current lens's domain keywords. Fixed in Phase 3."
+    }
+  ]
+}

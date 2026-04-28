@@ -35,6 +35,7 @@ import cors from "cors";
 import crypto from "crypto";
 import fs from "fs";
 import path from "path";
+import zlib from "zlib";
 import { spawnSync } from "child_process";
 import { Worker } from "node:worker_threads";
 import { initAll as initLoaf } from "./loaf/index.js";
@@ -378,6 +379,27 @@ try { helmet = (await import("helmet")).default; } catch (e) {
 }
 try { compression = (await import("compression")).default; } catch (_e) { logger.debug('server', 'optional in all envs', { error: _e?.message }); }
 try { Database = (await import("better-sqlite3")).default; } catch (_e) { logger.debug('server', 'optional - falls back to JSON', { error: _e?.message }); }
+
+// Sentry — only activates when SENTRY_DSN is set; completely no-op otherwise
+if (process.env.SENTRY_DSN) {
+  try {
+    const Sentry = await import("@sentry/node");
+    Sentry.init({
+      dsn: process.env.SENTRY_DSN,
+      tracesSampleRate: 0,
+      sendDefaultPii: false,
+      environment: process.env.NODE_ENV || "development",
+      beforeSend(event) {
+        delete event.user;
+        if (event.request) { delete event.request.cookies; delete event.request.headers?.cookie; }
+        return event;
+      },
+    });
+    // Store reference for error handler registration after routes
+    globalThis.__sentry = Sentry;
+    console.log("[Sentry] Backend error monitoring initialized.");
+  } catch (_e) { console.warn("[Sentry] Failed to initialize:", _e?.message); }
+}
 
 // CRITICAL: Refuse to start in production without security dependencies
 if (_isProduction && _securityLoadErrors.length > 0) {
@@ -4358,13 +4380,82 @@ const _TOKEN_BLACKLIST = {
 setInterval(() => _TOKEN_BLACKLIST.cleanup(), 3600000);
 
 // ---- Refresh Token Family Tracking (detects token theft via reuse) ----
-const _REFRESH_FAMILIES = new Map(); // family -> { userId, currentJti, rotatedAt }
+// SQLite-backed so theft detection survives server restarts.
+// Falls back to a plain Map if DB is unavailable (e.g. test environments).
+class SqliteRefreshFamilies {
+  constructor(database) {
+    this._db = database;
+    if (this._db) {
+      this._db.exec(`
+        CREATE TABLE IF NOT EXISTS refresh_families (
+          family      TEXT PRIMARY KEY,
+          user_id     TEXT NOT NULL,
+          current_jti TEXT NOT NULL,
+          rotated_at  INTEGER NOT NULL,
+          expires_at  INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_rf_user ON refresh_families (user_id);
+        CREATE INDEX IF NOT EXISTS idx_rf_expires ON refresh_families (expires_at);
+      `);
+      this._get = this._db.prepare("SELECT * FROM refresh_families WHERE family = ?");
+      this._set = this._db.prepare(
+        `INSERT OR REPLACE INTO refresh_families (family, user_id, current_jti, rotated_at, expires_at)
+         VALUES (?, ?, ?, ?, ?)`
+      );
+      this._del = this._db.prepare("DELETE FROM refresh_families WHERE family = ?");
+      this._delUser = this._db.prepare("DELETE FROM refresh_families WHERE user_id = ?");
+      this._all = this._db.prepare("SELECT family, user_id, current_jti, rotated_at FROM refresh_families WHERE expires_at > ?");
+      this._purge = this._db.prepare("DELETE FROM refresh_families WHERE expires_at < ?");
+    } else {
+      this._fallback = new Map();
+    }
+  }
+  get(family) {
+    if (!this._db) return this._fallback.get(family);
+    const row = this._get.get(family);
+    if (!row) return undefined;
+    return { userId: row.user_id, currentJti: row.current_jti, rotatedAt: row.rotated_at };
+  }
+  set(family, { userId, currentJti, rotatedAt }) {
+    if (!this._db) { this._fallback.set(family, { userId, currentJti, rotatedAt }); return; }
+    const expiresAt = (rotatedAt || Date.now()) + 30 * 24 * 60 * 60 * 1000;
+    this._set.run(family, userId, currentJti, rotatedAt || Date.now(), expiresAt);
+  }
+  delete(family) {
+    if (!this._db) { this._fallback.delete(family); return; }
+    this._del.run(family);
+  }
+  has(family) {
+    return this.get(family) !== undefined;
+  }
+  deleteAllForUser(userId) {
+    if (!this._db) {
+      for (const [k, v] of this._fallback) { if (v.userId === userId) this._fallback.delete(k); }
+      return;
+    }
+    this._delUser.run(userId);
+  }
+  [Symbol.iterator]() {
+    if (!this._db) return this._fallback[Symbol.iterator]();
+    const rows = this._all.all(Date.now());
+    return rows.map(r => [r.family, { userId: r.user_id, currentJti: r.current_jti, rotatedAt: r.rotated_at }])[Symbol.iterator]();
+  }
+  cleanup() {
+    if (!this._db) return;
+    this._purge.run(Date.now());
+  }
+}
 
-// Cleanup stale refresh families (no rotation in 30 days) — prevents unbounded growth
+const _REFRESH_FAMILIES = new SqliteRefreshFamilies(db);
+
+// Cleanup expired refresh families every 6 hours
 setInterval(() => {
+  _REFRESH_FAMILIES.cleanup();
   const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
-  for (const [key, family] of _REFRESH_FAMILIES) {
-    if (!family.rotatedAt || family.rotatedAt < cutoff) _REFRESH_FAMILIES.delete(key);
+  if (_REFRESH_FAMILIES._fallback) {
+    for (const [key, family] of _REFRESH_FAMILIES._fallback) {
+      if (!family.rotatedAt || family.rotatedAt < cutoff) _REFRESH_FAMILIES._fallback.delete(key);
+    }
   }
 }, 6 * 60 * 60 * 1000); // every 6 hours
 
@@ -5341,6 +5432,19 @@ function createBackup(name = null) {
     };
 
     fs.writeFileSync(backupPath, JSON.stringify(backup, null, 2));
+
+    // Rotate: keep only the 24 most recent JSON state backups (~48 hours at 2h interval)
+    try {
+      const MAX_STATE_BACKUPS = 24;
+      const allBackups = fs.readdirSync(BACKUP_DIR)
+        .filter(f => f.endsWith(".json") && !f.startsWith("."))
+        .sort();
+      while (allBackups.length > MAX_STATE_BACKUPS) {
+        const oldest = allBackups.shift();
+        try { fs.unlinkSync(path.join(BACKUP_DIR, oldest)); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
+      }
+    } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
+
     structuredLog("info", "backup_created", { path: backupPath });
     return { ok: true, path: backupPath, name: backupName, size: fs.statSync(backupPath).size };
   } catch (e) {
@@ -5838,11 +5942,28 @@ async function tryInitWebSockets(server) {
   }
   if (!Server) return { ok: false, reason: "socketio_import_failed" };
 
+  const _wsAllowedOrigins = process.env.ALLOWED_ORIGINS
+    ? process.env.ALLOWED_ORIGINS.split(",").map(o => o.trim())
+    : (NODE_ENV !== "production" ? ["http://localhost:3000", "http://127.0.0.1:3000"] : null);
+  if (NODE_ENV === "production" && !process.env.ALLOWED_ORIGINS) {
+    console.warn("[Socket.IO] WARNING: ALLOWED_ORIGINS not set — WebSocket CORS will use same-host matching. Set ALLOWED_ORIGINS for production.");
+  }
   const io = new Server(server, {
     cors: {
-      origin: NODE_ENV === "production"
-        ? (process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(",").map(o => o.trim()) : [])
-        : ["http://localhost:3000", "http://127.0.0.1:3000"],
+      origin: _wsAllowedOrigins !== null
+        ? _wsAllowedOrigins
+        : (origin, callback) => {
+            // same-host fallback when ALLOWED_ORIGINS is not configured in production
+            if (!origin) return callback(null, true);
+            try {
+              const serverHost = process.env.SERVER_HOST || process.env.HOSTNAME || process.env.DOMAIN || "";
+              const originHost = new URL(origin).hostname;
+              if (serverHost && originHost === serverHost) return callback(null, true);
+              const apiUrl = process.env.NEXT_PUBLIC_API_URL || process.env.API_URL || "";
+              if (apiUrl && new URL(apiUrl).hostname === originHost) return callback(null, true);
+            } catch { /* invalid origin */ }
+            return callback(new Error("Origin not allowed"));
+          },
       methods: ["GET", "POST"],
       credentials: true
     },
@@ -5853,6 +5974,7 @@ async function tryInitWebSockets(server) {
 
   REALTIME.io = io;
   REALTIME.ready = true;
+  globalThis._concordREALTIME = REALTIME;
 
   // SECURITY: Socket.IO authentication middleware
   io.use((socket, next) => {
@@ -6254,7 +6376,14 @@ async function tryInitNativeWebSockets(server) {
     return { ok: true, sent, dropped, skipped };
   };
 
+  const WS_MAX_CLIENTS = 10_000; // soft connection ceiling — reject above this
+
   wss.on("connection", (ws, _req) => {
+    if (REALTIME.clients.size >= WS_MAX_CLIENTS) {
+      try { ws.send(JSON.stringify({ type: "error", code: "server_full", ts: nowISO() })); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
+      ws.close(1013, "server_full");
+      return;
+    }
     const clientId = uid("ws");
     REALTIME.clients.set(clientId, { ws, sessionId: "", orgId: "", createdAt: nowISO() });
 
@@ -18219,6 +18348,24 @@ const _consentFiltered = all.filter(d => {
   return false;
 });
 
+// Embedding semantic search — run async in parallel with lexical scoring.
+// Guards: times out in 120ms, never blocks the chat path if embeddings unavailable.
+let _queryVec = null;
+let _dtuEmbedMap = null;
+try {
+  const _embedTimeout = new Promise(r => setTimeout(() => r(null), 120));
+  const _embedQuery = embed(qRaw.slice(0, 512));
+  _queryVec = await Promise.race([_embedQuery, _embedTimeout]);
+  if (_queryVec && embeddingState?.available) {
+    // Build a fast lookup: dtuId → cached embedding vector
+    _dtuEmbedMap = new Map();
+    for (const d of _consentFiltered) {
+      const cached = embeddingState.cache?.get(d.id);
+      if (cached) _dtuEmbedMap.set(d.id, cached);
+    }
+  }
+} catch (_embErr) { _queryVec = null; _dtuEmbedMap = null; }
+
 const scored = _consentFiltered.map(d => {
   const dText = [
     d?.title || "",
@@ -18237,8 +18384,41 @@ const scored = _consentFiltered.map(d => {
   // Soft temporal boost (never dominates)
   const tW = temporalRecencyWeight(d);
 
+  // Lens-domain affinity boost — prioritize DTUs matching the active lens's domain
+  // so "studio" chat surfaces audio/music DTUs ahead of unrelated content.
+  const _LENS_DOMAIN_AFFINITY = {
+    studio:   ["audio","music","sound","creative","production","mixing","recording","composition","track","beat","melody","harmony"],
+    code:     ["programming","software","algorithm","implementation","code","function","class","typescript","javascript","python","api","debug"],
+    board:    ["planning","task","project","kanban","sprint","milestone","workflow","schedule","deadline","backlog","roadmap"],
+    graph:    ["relationship","network","graph","node","edge","connection","topology","cluster","link","visualization","map","tree"],
+    research: ["research","academic","citation","paper","study","experiment","hypothesis","analysis","literature","evidence","findings"],
+    film:     ["film","video","scene","shot","edit","cut","narrative","cinematography","screenplay","director","footage"],
+    forge:    ["prototype","build","design","artifact","template","generate","create","wireframe","mockup","specification"],
+    atlas:    ["knowledge","concept","definition","theory","domain","taxonomy","ontology","category","classification"],
+  };
+  const _lensAffinity = _LENS_DOMAIN_AFFINITY[currentLens] || null;
+  let _lensBoost = 1.0;
+  if (_lensAffinity) {
+    const dTextLower = dText.toLowerCase();
+    const dDomain = String(d.domain || d.meta?.domain || "").toLowerCase();
+    const hasAffinity = _lensAffinity.some(kw => dTextLower.includes(kw) || dDomain.includes(kw));
+    if (hasAffinity) _lensBoost = 1.30;
+  }
+
+  // Semantic embedding similarity (optional — only when embeddings are available and cached)
+  let sEmbed = 0;
+  if (_queryVec && _dtuEmbedMap) {
+    const dVec = _dtuEmbedMap.get(d.id);
+    if (dVec) sEmbed = Math.max(0, cosineSimilarity(_queryVec, dVec));
+  }
+  const _hasEmbed = sEmbed > 0 ? 1 : 0;
+  // When embedding is available: redistribute 20% weight to it from lexical terms
   const score = clamp(
-    0.55*sBase + 0.30*sExp + 0.15*sNg + 0.10*tW,
+    _lensBoost * (
+      _hasEmbed
+        ? (0.44*sBase + 0.24*sExp + 0.12*sNg + 0.08*tW + 0.20*sEmbed)
+        : (0.55*sBase + 0.30*sExp + 0.15*sNg + 0.10*tW)
+    ),
     0, 1
   );
     return { d, score };
@@ -18540,7 +18720,18 @@ let localReply = formatCrispResponse({
     // Phase 2: Token Budget Assembly
     const _entityBlock = _pipelineHarvest.entityStateBlock || "";
     const _convSummary = _pipelineHarvest.conversationSummary || "";
-    const _baseSystem = `You are ConcordOS. Be natural, concise but not dry. Use DTUs as memory. Never pretend features exist.\nMode: ${mode}.`;
+    const _LENS_CONTEXT_HINTS = {
+      studio:   "You are in the Studio lens — emphasize audio, music, and creative production topics.",
+      code:     "You are in the Code lens — emphasize software, algorithms, and implementation topics.",
+      board:    "You are in the Board lens — emphasize planning, tasks, and project management topics.",
+      graph:    "You are in the Graph lens — emphasize relationships, networks, and knowledge connections.",
+      research: "You are in the Research lens — emphasize evidence, citations, and analytical rigor.",
+      film:     "You are in the Film Studio lens — emphasize video, narrative, and cinematic craft.",
+      forge:    "You are in the Forge lens — emphasize building, prototyping, and design artifacts.",
+      atlas:    "You are in the Atlas lens — emphasize knowledge organization and domain classification.",
+    };
+    const _lensHint = (currentLens && currentLens !== "chat") ? (_LENS_CONTEXT_HINTS[currentLens] || `You are in the ${currentLens} lens.`) : "";
+    const _baseSystem = `You are ConcordOS. Be natural, concise but not dry. Use DTUs as memory. Never pretend features exist.\nMode: ${mode}.${_lensHint ? " " + _lensHint : ""}`;
 
     _pipelineBudget = assembleWithTokenBudget({
       systemPromptBase: _baseSystem,
@@ -24697,6 +24888,12 @@ function startHeartbeat() {
       artifactCount: STATE.lensArtifacts.size,
       sessionCount: STATE.sessions.size,
     });
+    // Aggregate presence signal — no user identifiers, just counts
+    realtimeEmit("platform:activity", {
+      activeSessions: REALTIME.io?.sockets?.size || REALTIME.clients?.size || 0,
+      dtuCount: STATE.dtus.size,
+      sessionCount: STATE.sessions.size,
+    });
     const ctx = makeInternalCtx("heartbeat");
 
     // process crawl queue once (Local scope only — ingest is local activity)
@@ -25669,6 +25866,7 @@ if (db) {
 
   app.use("/api", createTransparencyRouter({ db, adminOnly: economyAdminOnly }));
   const backupScheduler = createBackupScheduler(db, { dataDir: DATA_DIR });
+  backupScheduler.start();
   registerBackupRoutes(app, { requireRole, backupScheduler, db });
   registerCodeEngineRoutes(app, { db, requireAuth });
   structuredLog("info", "db_routes_registered", { count: 9, routes: ["account","consent","disputes","legal","repair-enhanced","initiative","transparency","backup","code-engine"] });
@@ -25714,6 +25912,21 @@ try { app.use("/api/moderation", createModerationRouter({ db, requireAuth, requi
 
 import createSocialGroupRoutes from "./routes/social-groups.js";
 try { app.use("/api/social", createSocialGroupRoutes({ db, requireAuth })); } catch (e) { structuredLog("warn", "social_groups_routes_skip", { error: e.message }); }
+
+import createSocialEngagementRoutes from "./routes/social-engagement.js";
+try { app.use("/api/social", createSocialEngagementRoutes({ db, requireAuth })); } catch (e) { structuredLog("warn", "social_engagement_routes_skip", { error: e.message }); }
+
+import createChannelsRouter from "./routes/channels.js";
+try { app.use("/api/channels", createChannelsRouter({ STATE, requireAuth, realtimeEmit })); } catch (e) { structuredLog("warn", "channels_routes_skip", { error: e.message }); }
+
+import createAgentsRouter from "./routes/agents.js";
+try { app.use("/api/agents", createAgentsRouter({ db, requireAuth, STATE })); } catch (e) { structuredLog("warn", "agents_routes_skip", { error: e.message }); }
+
+import createArtifactsRouter from "./routes/artifacts.js";
+try { app.use("/api/artifacts", createArtifactsRouter({ db, requireAuth, STATE })); } catch (e) { structuredLog("warn", "artifacts_routes_skip", { error: e.message }); }
+
+import createStudioRouter from "./routes/studio.js";
+try { app.use("/api/studio", createStudioRouter({ db, requireAuth })); } catch (e) { structuredLog("warn", "studio_routes_skip", { error: e.message }); }
 
 import createFeedRoutes from "./routes/feeds.js";
 try { app.use("/api/feeds", createFeedRoutes({ requireAuth })); } catch (e) { structuredLog("warn", "feed_routes_skip", { error: e.message }); }
@@ -28035,7 +28248,42 @@ app.get("/api/marketplace/browse", asyncHandler(async (req, res) => res.json(awa
 // Legacy alias — some frontend code still calls /api/marketplace/dtu_browse.
 // Route it to the same macro so both URLs work during deprecation.
 app.get("/api/marketplace/dtu_browse", asyncHandler(async (req, res) => res.json(await runMacro("marketplace", "browse", { category: req.query.category, search: req.query.search, sort: req.query.sort, page: req.query.page, pageSize: req.query.pageSize }, makeCtx(req)))));
-app.post("/api/marketplace/submit", validate("marketplaceSubmit"), asyncHandler(async (req, res) => res.json(await runMacro("marketplace", "submit", req.body, makeCtx(req)))));
+app.post("/api/marketplace/submit", requireAuth(), (req, res) => {
+  try {
+    const userId = req.user?.id;
+    const { dtuId, price } = req.body;
+    const dtu = STATE.dtus.get(dtuId);
+    if (!dtu) return res.status(404).json({ ok: false, error: "DTU not found" });
+    if (dtu.ownerId !== userId) return res.status(403).json({ ok: false, error: "Not your DTU" });
+    if (dtu.scope !== "personal") return res.status(400).json({ ok: false, error: "Can only list personal DTUs" });
+
+    const listing = {
+      id: uid("listing"),
+      sourceDtuId: dtuId,
+      sellerId: userId,
+      scope: "marketplace",
+      title: dtu.title,
+      domain: dtu.domain,
+      description: dtu.human?.summary || "",
+      artifact: dtu.artifact ? { ...dtu.artifact } : null,
+      qualityTier: dtu.meta?.qualityTier,
+      qualityScore: dtu.meta?.qualityScore,
+      price: Number(price || 0),
+      currency: "concord_coin",
+      listedAt: nowISO(),
+      downloads: 0,
+      ratings: [],
+      status: "active",
+    };
+
+    if (!STATE.marketplaceListings) STATE.marketplaceListings = new Map();
+    STATE.marketplaceListings.set(listing.id, listing);
+    saveStateDebounced();
+    res.json({ ok: true, listing });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
+});
 app.post("/api/marketplace/install", validate("marketplaceInstall"), asyncHandler(async (req, res) => res.json(await runMacro("marketplace", "install", req.body, makeCtx(req)))));
 app.post("/api/marketplace/review", asyncHandler(async (req, res) => res.json(await runMacro("marketplace", "review", req.body, makeCtx(req)))));
 app.get("/api/marketplace/installed", asyncHandler(async (req, res) => res.json(await runMacro("marketplace", "installed", {}, makeCtx(req)))));
@@ -34778,46 +35026,6 @@ app.get("/api/sovereignty/status", requireAuth(), async (req, res) => {
   });
 });
 
-// ── Marketplace Scope Rules ─────────────────────────────────────────────────
-
-app.post("/api/marketplace/submit", requireAuth(), (req, res) => {
-  try {
-    const userId = req.user?.id || req.actor?.userId;
-    if (!userId) return res.status(401).json({ ok: false, error: "Auth required" });
-
-    const { dtuId, price } = req.body;
-    const dtu = STATE.dtus.get(dtuId);
-    if (!dtu) return res.status(404).json({ ok: false, error: "DTU not found" });
-    if (dtu.ownerId !== userId) return res.status(403).json({ ok: false, error: "Not your DTU" });
-    if (dtu.scope !== "personal") return res.status(400).json({ ok: false, error: "Can only list personal DTUs" });
-
-    const listing = {
-      id: uid("listing"),
-      sourceDtuId: dtuId,
-      sellerId: userId,
-      scope: "marketplace",
-      title: dtu.title,
-      domain: dtu.domain,
-      description: dtu.human?.summary || "",
-      artifact: dtu.artifact ? { ...dtu.artifact } : null,
-      qualityTier: dtu.meta?.qualityTier,
-      qualityScore: dtu.meta?.qualityScore,
-      price: Number(price || 0),
-      currency: "concord_coin",
-      listedAt: nowISO(),
-      downloads: 0,
-      ratings: [],
-      status: "active",
-    };
-
-    if (!STATE.marketplaceListings) STATE.marketplaceListings = new Map();
-    STATE.marketplaceListings.set(listing.id, listing);
-    saveStateDebounced();
-    res.json({ ok: true, listing });
-  } catch (e) {
-    res.status(500).json({ ok: false, error: String(e?.message || e) });
-  }
-});
 
 // ============================================================================
 // 12 NEW CAPABILITIES: Pipeline Registry, Predictive Substrate, Teaching,
@@ -37536,6 +37744,34 @@ app.get("/api/perf/metrics", asyncHandler(async (req, res) => res.json(await run
 app.post("/api/perf/gc", asyncHandler(async (req, res) => res.json(await runMacro("perf", "gc", {}, makeCtx(req)))));
 app.get("/api/backpressure/status", asyncHandler(async (req, res) => res.json(await runMacro("backpressure", "status", {}, makeCtx(req)))));
 
+// Web Vitals ingest — receives anonymous performance metrics from the frontend (no user data)
+const _webVitals = { LCP: [], FID: [], CLS: [], TTFB: [], INP: [] };
+app.post("/api/metrics/vitals", (req, res) => {
+  try {
+    const { name, value, kind } = req.body || {};
+    if (typeof name !== "string" || typeof value !== "number") {
+      return res.status(400).json({ ok: false, error: "name and value required" });
+    }
+    const bucket = _webVitals[name];
+    if (bucket) {
+      bucket.push(value);
+      if (bucket.length > 500) bucket.shift(); // rolling window
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+app.get("/api/metrics/vitals", requireAuth(), (req, res) => {
+  const summary = {};
+  for (const [metric, values] of Object.entries(_webVitals)) {
+    if (!values.length) continue;
+    const sorted = [...values].sort((a, b) => a - b);
+    summary[metric] = { count: values.length, p50: sorted[Math.floor(sorted.length * 0.5)], p75: sorted[Math.floor(sorted.length * 0.75)], p95: sorted[Math.floor(sorted.length * 0.95)] };
+  }
+  res.json({ ok: true, vitals: summary });
+});
+
 // ---- Observability & Cost Endpoints (Categories 5+6) ----
 app.get("/api/observability/latency", (req, res) => {
   res.json({ ok: true, latency: _LATENCY.stats() });
@@ -38534,13 +38770,13 @@ app.post("/api/dtus/:id/share", (req, res) => {
 });
 
 // POST /api/dtus/:id/sync-lens — sync a DTU into a specific lens as an artifact
-app.post("/api/dtus/:id/sync-lens", (req, res) => {
+app.post("/api/dtus/:id/sync-lens", requireAuth(), (req, res) => {
   try {
     const dtu = STATE.dtus?.get?.(req.params.id);
     if (!dtu) return res.status(404).json({ ok: false, error: "DTU not found" });
     const lens = req.body?.lens || req.body?.domain;
     if (!lens) return res.status(400).json({ ok: false, error: "lens/domain required" });
-    const userId = req.user?.id || "anon";
+    const userId = req.user.id;
 
     // Create a lens artifact from this DTU
     const artifactId = uid("lart");
@@ -38569,11 +38805,11 @@ app.post("/api/dtus/:id/sync-lens", (req, res) => {
 });
 
 // POST /api/dtus/:id/fork — fork/clone a DTU into the user's substrate
-app.post("/api/dtus/:id/fork", (req, res) => {
+app.post("/api/dtus/:id/fork", requireAuth(), (req, res) => {
   try {
     const sourceDtu = STATE.dtus?.get?.(req.params.id);
     if (!sourceDtu) return res.status(404).json({ ok: false, error: "DTU not found" });
-    const userId = req.user?.id || req.body?.userId || "anon";
+    const userId = req.user.id;
     const forkedDtu = {
       ...structuredClone(sourceDtu),
       id: uid("dtu"),
@@ -38654,12 +38890,19 @@ app.post("/api/lens/:domain/:id/pull", (req, res) => {
 });
 
 // POST /api/dtus/:id/vote — up/down vote a DTU (forum)
-app.post("/api/dtus/:id/vote", validate("dtuVote"), (req, res) => {
+app.post("/api/dtus/:id/vote", requireAuth(), validate("dtuVote"), (req, res) => {
   try {
     const dtu = STATE.dtus?.get?.(req.params.id) || (Array.isArray(STATE.dtuList) ? STATE.dtuList.find(d => d.id === req.params.id) : null);
     if (!dtu) return res.status(404).json({ ok: false, error: "DTU not found" });
+    const userId = req.user?.id;
     const vote = Number(req.body?.vote) || 0;
     if (!dtu.meta) dtu.meta = {};
+    if (!dtu.meta.voters) dtu.meta.voters = {};
+    // Prevent duplicate votes from the same user
+    if (userId && dtu.meta.voters[userId] !== undefined) {
+      return res.json({ ok: true, score: dtu.meta.score, votes: dtu.meta.votes, alreadyVoted: true });
+    }
+    if (userId) dtu.meta.voters[userId] = vote;
     dtu.meta.score = (dtu.meta.score || 0) + vote;
     dtu.meta.votes = (dtu.meta.votes || 0) + 1;
     res.json({ ok: true, score: dtu.meta.score, votes: dtu.meta.votes });
@@ -38669,11 +38912,18 @@ app.post("/api/dtus/:id/vote", validate("dtuVote"), (req, res) => {
 });
 
 // POST /api/dtus/:id/like — like a DTU (feed/timeline)
-app.post("/api/dtus/:id/like", (req, res) => {
+app.post("/api/dtus/:id/like", requireAuth(), (req, res) => {
   try {
     const dtu = STATE.dtus?.get?.(req.params.id) || (Array.isArray(STATE.dtuList) ? STATE.dtuList.find(d => d.id === req.params.id) : null);
     if (!dtu) return res.status(404).json({ ok: false, error: "DTU not found" });
+    const userId = req.user?.id;
     if (!dtu.meta) dtu.meta = {};
+    if (!dtu.meta.likedBy) dtu.meta.likedBy = [];
+    // Prevent duplicate likes from the same user
+    if (userId && dtu.meta.likedBy.includes(userId)) {
+      return res.json({ ok: true, likes: dtu.meta.likes, alreadyLiked: true });
+    }
+    if (userId) dtu.meta.likedBy.push(userId);
     dtu.meta.likes = (dtu.meta.likes || 0) + 1;
     res.json({ ok: true, likes: dtu.meta.likes });
   } catch (e) {
@@ -38779,10 +39029,6 @@ const swaggerUIHtml = `<!DOCTYPE html>
 </body>
 </html>`;
 
-app.get("/api/docs", (req, res) => {
-  // Serve Swagger UI
-  res.type("text/html").send(swaggerUIHtml);
-});
 
 app.get("/api/docs/openapi.json", (req, res) => {
   // Try to load YAML spec, fall back to generated spec
@@ -41087,9 +41333,6 @@ app.post("/api/sovereign/repair/acknowledge", async (req, res) => {
 });
 
 // Sovereignty/audit
-app.get("/api/sovereignty/status", (req, res) => {
-  res.json({ ok: true, sovereign: true, dataLocal: true, federationEnabled: false });
-});
 
 app.post("/api/sovereignty/audit", asyncHandler(async (req, res) => {
   try {
@@ -41109,7 +41352,7 @@ app.post("/api/sovereignty/audit", asyncHandler(async (req, res) => {
 
 // Finance - backed by real economic state
 app.get("/api/finance/portfolio", (req, res) => {
-  const userId = req.user?.id || req.query.odId;
+  const userId = req.user?.id;
   ensureEconomicState();
   const wallet = userId ? getWallet(userId) : { balance: 0, purchases: [] };
   const listings = Array.from(STATE.economic?.listings?.values() || []).filter(l => l.seller === userId);
@@ -41125,7 +41368,7 @@ app.get("/api/finance/portfolio", (req, res) => {
 
 app.get("/api/finance/transactions", (req, res) => {
   ensureEconomicState();
-  const userId = req.user?.id || req.query.odId;
+  const userId = req.user?.id;
   const limit = clamp(Number(req.query.limit || 50), 1, 200);
   const allTx = Array.from(STATE.economic?.transactions?.values() || []);
   const userTx = userId ? allTx.filter(t => t.buyer === userId || t.seller === userId) : allTx;
@@ -41156,7 +41399,7 @@ app.get("/api/economy/status", (req, res) => {
 // GET /api/economy/balance — return wallet balance for current user (marketplace)
 app.get("/api/economy/balance", (req, res) => {
   ensureEconomicState();
-  const userId = req.query.user_id || req.user?.id || "default";
+  const userId = req.user?.id || req.query.user_id || "default";
   const wallet = STATE.economic?.wallets?.get(userId);
   res.json({ ok: true, balance: wallet?.balance || 0, tier: wallet?.tier || "free" });
 });
@@ -42276,8 +42519,8 @@ app.get("/api/atlas/council/metrics", (req, res) => {
 });
 
 // ---- Social Layer ----
-app.post("/api/social/profile", (req, res) => {
-  try { res.json(upsertProfile(STATE, req.body?.userId || req.user?.id || req.actor?.userId || "anon", req.body || {})); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+app.post("/api/social/profile", requireAuth(), (req, res) => {
+  try { res.json(upsertProfile(STATE, req.user?.id, req.body || {})); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
 // Own profile — GET /api/social/profile (no userId param)
@@ -42296,12 +42539,12 @@ app.get("/api/social/profiles", (req, res) => {
   try { res.json(listProfiles(STATE, { sortBy: req.query.sortBy, limit: Number(req.query.limit || 50) })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
-app.post("/api/social/follow", (req, res) => {
-  try { res.json(followUser(STATE, req.body?.followerId || req.user?.id, req.body?.followedId)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+app.post("/api/social/follow", requireAuth(), (req, res) => {
+  try { res.json(followUser(STATE, req.user?.id, req.body?.followedId)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
-app.post("/api/social/unfollow", (req, res) => {
-  try { res.json(unfollowUser(STATE, req.body?.followerId || req.user?.id, req.body?.followedId)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+app.post("/api/social/unfollow", requireAuth(), (req, res) => {
+  try { res.json(unfollowUser(STATE, req.user?.id, req.body?.followedId)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
 app.get("/api/social/followers/:userId", (req, res) => {
@@ -42313,7 +42556,7 @@ app.get("/api/social/following/:userId", (req, res) => {
 });
 
 app.get("/api/social/feed", (req, res) => {
-  try { res.json(getFeed(STATE, req.query.userId || req.user?.id, { limit: Number(req.query.limit || 30), offset: Number(req.query.offset || 0) })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  try { res.json(getFeed(STATE, req.user?.id || req.query.userId, { limit: Number(req.query.limit || 30), offset: Number(req.query.offset || 0) })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
 app.get("/api/social/trending", (req, res) => {
@@ -42323,7 +42566,7 @@ app.get("/api/social/trending", (req, res) => {
 // Social analytics + trending extensions
 app.get("/api/social/analytics/creator", (req, res) => {
   try {
-    const userId = req.query.userId || req.user?.id || req.actor?.userId || "anon";
+    const userId = req.user?.id || req.query.userId || "anon";
     const profile = getProfile(STATE, userId);
     const dtus = dtusArray().filter(d => d.createdBy === userId || d.userId === userId);
     res.json({ ok: true, creator: { userId, totalDTUs: dtus.length, profile, engagement: { views: dtus.reduce((s, d) => s + (d.views || 0), 0), votes: dtus.reduce((s, d) => s + (d.votes || 0), 0) } } });
@@ -42364,12 +42607,12 @@ app.get("/api/loaf/status", (_req, res) => {
 });
 
 // Consent update
-app.post("/api/consent/update", (req, res) => {
+app.post("/api/consent/update", requireAuth(), (req, res) => {
   try {
-    const { userId, action, granted } = req.body || {};
+    const { action, granted } = req.body || {};
     if (!action) return res.status(400).json({ ok: false, error: "action required" });
     if (!STATE.consent) STATE.consent = new Map();
-    const key = `${userId || "anon"}:${action}`;
+    const key = `${req.user?.id}:${action}`;
     STATE.consent.set(key, { granted: !!granted, updatedAt: nowISO() });
     res.json({ ok: true, consent: { action, granted: !!granted } });
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
@@ -42414,9 +42657,9 @@ app.get("/api/social/metrics", (req, res) => {
 });
 
 // ---- Social Posts CRUD ----
-app.post("/api/social/post", (req, res) => {
+app.post("/api/social/post", requireAuth(), (req, res) => {
   try {
-    const userId = req.body?.userId || req.user?.id || req.actor?.userId || "anon";
+    const userId = req.user?.id || req.actor?.userId || "anon";
     const result = socialCreatePost(STATE, { userId, ...req.body });
     res.json(result);
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
@@ -42426,9 +42669,9 @@ app.get("/api/social/post/:postId", (req, res) => {
   try { res.json(socialGetPost(STATE, req.params.postId)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
-app.delete("/api/social/post/:postId", (req, res) => {
+app.delete("/api/social/post/:postId", requireAuth(), (req, res) => {
   try {
-    const userId = req.body?.userId || req.user?.id || req.actor?.userId || "anon";
+    const userId = req.user?.id || req.actor?.userId || "anon";
     res.json(socialDeletePost(STATE, { userId, postId: req.params.postId }));
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
@@ -42438,31 +42681,31 @@ app.get("/api/social/posts/user/:userId", (req, res) => {
 });
 
 // ---- Social Reactions ----
-app.post("/api/social/react", (req, res) => {
+app.post("/api/social/react", requireAuth(), (req, res) => {
   try {
-    const userId = req.body?.userId || req.user?.id || req.actor?.userId || "anon";
+    const userId = req.user?.id || req.actor?.userId || "anon";
     res.json(socialAddReaction(STATE, { userId, postId: req.body?.postId, type: req.body?.type || "like" }));
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
 app.get("/api/social/reactions/:postId", (req, res) => {
   try {
-    const currentUserId = req.query.userId || req.user?.id || req.actor?.userId || null;
+    const currentUserId = req.user?.id || req.query.userId || null;
     res.json(socialGetReactions(STATE, req.params.postId, currentUserId));
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
 // ---- Social Comments ----
-app.post("/api/social/comment", (req, res) => {
+app.post("/api/social/comment", requireAuth(), (req, res) => {
   try {
-    const userId = req.body?.userId || req.user?.id || req.actor?.userId || "anon";
+    const userId = req.user?.id || req.actor?.userId || "anon";
     res.json(socialAddComment(STATE, { userId, postId: req.body?.postId, content: req.body?.content, parentCommentId: req.body?.parentCommentId }));
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
-app.delete("/api/social/comment/:postId/:commentId", (req, res) => {
+app.delete("/api/social/comment/:postId/:commentId", requireAuth(), (req, res) => {
   try {
-    const userId = req.body?.userId || req.user?.id || req.actor?.userId || "anon";
+    const userId = req.user?.id || req.actor?.userId || "anon";
     res.json(socialDeleteComment(STATE, { userId, postId: req.params.postId, commentId: req.params.commentId }));
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
@@ -42472,9 +42715,9 @@ app.get("/api/social/comments/:postId", (req, res) => {
 });
 
 // ---- Social Shares ----
-app.post("/api/social/share", (req, res) => {
+app.post("/api/social/share", requireAuth(), (req, res) => {
   try {
-    const userId = req.body?.userId || req.user?.id || req.actor?.userId || "anon";
+    const userId = req.user?.id || req.actor?.userId || "anon";
     res.json(socialSharePost(STATE, { userId, postId: req.body?.postId, commentary: req.body?.commentary }));
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
@@ -42484,16 +42727,16 @@ app.get("/api/social/shares/:postId", (req, res) => {
 });
 
 // ---- Social Bookmarks ----
-app.post("/api/social/bookmark", (req, res) => {
+app.post("/api/social/bookmark", requireAuth(), (req, res) => {
   try {
-    const userId = req.body?.userId || req.user?.id || req.actor?.userId || "anon";
+    const userId = req.user?.id || req.actor?.userId || "anon";
     res.json(socialBookmarkPost(STATE, { userId, postId: req.body?.postId }));
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
 app.get("/api/social/bookmarks", (req, res) => {
   try {
-    const userId = req.query.userId || req.user?.id || req.actor?.userId || "anon";
+    const userId = req.user?.id || req.query.userId || "anon";
     res.json(socialGetUserBookmarks(STATE, userId, { limit: Number(req.query.limit || 30), offset: Number(req.query.offset || 0) }));
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
@@ -42501,14 +42744,14 @@ app.get("/api/social/bookmarks", (req, res) => {
 // ---- Social Feeds (For-You, Following, Explore) ----
 app.get("/api/social/feed/foryou", (req, res) => {
   try {
-    const userId = req.query.userId || req.user?.id || req.actor?.userId || "anon";
+    const userId = req.user?.id || req.query.userId || "anon";
     res.json(getForYouFeed(STATE, userId, { limit: Number(req.query.limit || 30), offset: Number(req.query.offset || 0) }));
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
 app.get("/api/social/feed/following", (req, res) => {
   try {
-    const userId = req.query.userId || req.user?.id || req.actor?.userId || "anon";
+    const userId = req.user?.id || req.query.userId || "anon";
     res.json(getFollowingFeed(STATE, userId, { limit: Number(req.query.limit || 30), offset: Number(req.query.offset || 0) }));
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
@@ -42520,51 +42763,64 @@ app.get("/api/social/feed/explore", (req, res) => {
 });
 
 // ---- Social DMs ----
-app.post("/api/social/dm", (req, res) => {
+app.post("/api/social/dm", requireAuth(), (req, res) => {
   try {
-    const fromUserId = req.body?.fromUserId || req.user?.id || req.actor?.userId || "anon";
+    const fromUserId = req.user?.id || req.actor?.userId || "anon";
     res.json(socialSendMessage(STATE, { fromUserId, toUserId: req.body?.toUserId, content: req.body?.content, mediaUrl: req.body?.mediaUrl }));
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
-app.get("/api/social/dm/conversations", (req, res) => {
+app.get("/api/social/dm/conversations", requireAuth(), (req, res) => {
   try {
-    const userId = req.query.userId || req.user?.id || req.actor?.userId || "anon";
+    const userId = req.user?.id || req.actor?.userId || "anon";
     res.json(socialGetConversations(STATE, userId));
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
-app.get("/api/social/dm/:conversationId", (req, res) => {
+app.get("/api/social/dm/:conversationId", requireAuth(), (req, res) => {
   try { res.json(socialGetMessages(STATE, req.params.conversationId, { limit: Number(req.query.limit || 50), offset: Number(req.query.offset || 0) })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
-app.post("/api/social/dm/read", (req, res) => {
+app.post("/api/social/dm/read", requireAuth(), (req, res) => {
   try {
-    const userId = req.body?.userId || req.user?.id || req.actor?.userId || "anon";
+    const userId = req.user?.id || req.actor?.userId || "anon";
     res.json(socialMarkMessagesRead(STATE, { userId, conversationId: req.body?.conversationId }));
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// Param-path variant: frontend calls POST /api/social/dm/:conversationId/read
+app.post("/api/social/dm/:conversationId/read", requireAuth(), (req, res) => {
+  try {
+    const userId = req.user?.id || req.actor?.userId || "anon";
+    res.json(socialMarkMessagesRead(STATE, { userId, conversationId: req.params.conversationId }));
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
 // ---- Social Stories ----
 app.get("/api/social/stories", (req, res) => {
   try {
-    const userId = req.query.userId || req.user?.id || req.actor?.userId || "anon";
+    const userId = req.user?.id || req.query.userId || "anon";
     res.json(getActiveStories(STATE, userId));
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
-app.post("/api/social/stories/view", (req, res) => {
+app.post("/api/social/stories/view", requireAuth(), (req, res) => {
   try {
-    const userId = req.body?.userId || req.user?.id || req.actor?.userId || "anon";
-    res.json(socialViewStory(STATE, { userId, storyId: req.body?.storyId }));
+    res.json(socialViewStory(STATE, { userId: req.user?.id, storyId: req.body?.storyId }));
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// Param-path variant: frontend calls POST /api/social/stories/:storyId/view
+app.post("/api/social/stories/:storyId/view", requireAuth(), (req, res) => {
+  try {
+    res.json(socialViewStory(STATE, { userId: req.user?.id, storyId: req.params.storyId }));
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
 // ---- Social Polls ----
-app.post("/api/social/poll/vote", (req, res) => {
+app.post("/api/social/poll/vote", requireAuth(), (req, res) => {
   try {
-    const userId = req.body?.userId || req.user?.id || req.actor?.userId || "anon";
-    res.json(socialVotePoll(STATE, { userId, postId: req.body?.postId, optionIndex: req.body?.optionIndex }));
+    res.json(socialVotePoll(STATE, { userId: req.user?.id, postId: req.body?.postId, optionIndex: req.body?.optionIndex }));
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
@@ -42573,9 +42829,9 @@ app.get("/api/social/poll/:postId", (req, res) => {
 });
 
 // ---- Social Notifications ----
-app.get("/api/social/notifications", (req, res) => {
+app.get("/api/social/notifications", requireAuth(), (req, res) => {
   try {
-    const userId = req.query.userId || req.user?.id;
+    const userId = req.user?.id;
     const limit = Math.min(Number(req.query.limit) || 50, 200);
     const unreadOnly = req.query.unreadOnly === "true";
     // STATE.notifications is a Map<id, notification> if it exists
@@ -42594,9 +42850,9 @@ app.get("/api/social/notifications", (req, res) => {
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
-app.get("/api/social/notifications/count", (req, res) => {
+app.get("/api/social/notifications/count", requireAuth(), (req, res) => {
   try {
-    const userId = req.query.userId || req.user?.id;
+    const userId = req.user?.id;
     const allNotifications = STATE.notifications
       ? Array.from(STATE.notifications.values())
       : [];
@@ -42617,9 +42873,9 @@ app.post("/api/social/notifications/:id/read", (req, res) => {
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
-app.post("/api/social/notifications/read-all", (req, res) => {
+app.post("/api/social/notifications/read-all", requireAuth(), (req, res) => {
   try {
-    const userId = req.body?.userId || req.user?.id;
+    const userId = req.user?.id;
     const now = new Date().toISOString();
     if (STATE.notifications) {
       for (const n of STATE.notifications.values()) {
@@ -42643,15 +42899,10 @@ app.delete("/api/social/notifications/:id", (req, res) => {
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
-// ---- Social Groups (DB-backed) ----
-if (db) {
-  const { default: createSocialGroupRoutes } = await import("./routes/social-groups.js");
-  app.use("/api/social", createSocialGroupRoutes({ db, requireAuth }));
-}
 
 // ---- Collaboration ----
-app.post("/api/collab/workspace", (req, res) => {
-  try { res.json(collabCreateWorkspace(STATE, { ...req.body, ownerId: req.body?.ownerId || req.user?.id })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+app.post("/api/collab/workspace", requireAuth(), (req, res) => {
+  try { res.json(collabCreateWorkspace(STATE, { ...req.body, ownerId: req.user?.id })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
 app.get("/api/collab/workspace/:id", (req, res) => {
@@ -42659,14 +42910,14 @@ app.get("/api/collab/workspace/:id", (req, res) => {
 });
 
 app.get("/api/collab/workspaces", (req, res) => {
-  try { res.json(collabListWorkspaces(STATE, req.query.userId || req.user?.id)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  try { res.json(collabListWorkspaces(STATE, req.user?.id || req.query.userId)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
 app.post("/api/collab/workspace/:id/member", (req, res) => {
   try { res.json(collabAddWorkspaceMember(STATE, req.params.id, req.body?.userId, req.body?.role, req.user?.id)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
-app.delete("/api/collab/workspace/:id/member/:userId", (req, res) => {
+app.delete("/api/collab/workspace/:id/member/:userId", requireAuth(), (req, res) => {
   try { res.json(collabRemoveWorkspaceMember(STATE, req.params.id, req.params.userId)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
@@ -42674,9 +42925,9 @@ app.post("/api/collab/workspace/:id/dtu", (req, res) => {
   try { res.json(collabAddDtuToWorkspace(STATE, req.params.id, req.body?.dtuId)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
-app.post("/api/collab/comment", (req, res) => {
+app.post("/api/collab/comment", requireAuth(), (req, res) => {
   try {
-    const result = collabAddComment(STATE, req.body?.dtuId, req.body?.userId || req.user?.id, req.body?.text, req.body?.parentCommentId);
+    const result = collabAddComment(STATE, req.body?.dtuId, req.user?.id, req.body?.text, req.body?.parentCommentId);
     if (result.ok) dispatchWebhookEvent(STATE, "comment:added", { dtuId: req.body?.dtuId, commentId: result.comment?.id });
     res.json(result);
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
@@ -42686,17 +42937,17 @@ app.get("/api/collab/comments/:dtuId", (req, res) => {
   try { res.json(collabGetComments(STATE, req.params.dtuId, { tree: req.query.tree === "true", limit: Number(req.query.limit || 50) })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
-app.put("/api/collab/comment/:id", (req, res) => {
-  try { res.json(collabEditComment(STATE, req.params.id, req.body?.userId || req.user?.id, req.body?.text)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+app.put("/api/collab/comment/:id", requireAuth(), (req, res) => {
+  try { res.json(collabEditComment(STATE, req.params.id, req.user?.id, req.body?.text)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
 app.post("/api/collab/comment/:id/resolve", (req, res) => {
   try { res.json(collabResolveComment(STATE, req.params.id)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
-app.post("/api/collab/revision", (req, res) => {
+app.post("/api/collab/revision", requireAuth(), (req, res) => {
   try {
-    const result = proposeRevision(STATE, req.body?.dtuId, req.body?.userId || req.user?.id, req.body?.changes, req.body?.reason);
+    const result = proposeRevision(STATE, req.body?.dtuId, req.user?.id, req.body?.changes, req.body?.reason);
     if (result.ok) dispatchWebhookEvent(STATE, "revision:proposed", { dtuId: req.body?.dtuId, proposalId: result.proposal?.id });
     res.json(result);
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
@@ -42706,20 +42957,20 @@ app.get("/api/collab/revisions/:dtuId", (req, res) => {
   try { res.json(getRevisionProposals(STATE, req.params.dtuId, req.query.status)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
-app.post("/api/collab/revision/:id/vote", (req, res) => {
-  try { res.json(voteOnRevision(STATE, req.params.id, req.body?.userId || req.user?.id, req.body?.vote)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+app.post("/api/collab/revision/:id/vote", requireAuth(), (req, res) => {
+  try { res.json(voteOnRevision(STATE, req.params.id, req.user?.id, req.body?.vote)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
 app.post("/api/collab/revision/:id/apply", (req, res) => {
   try { res.json(applyRevision(STATE, req.params.id, req.user?.id || "api")); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
-app.post("/api/collab/edit-session/:dtuId/start", (req, res) => {
-  try { res.json(startEditSession(STATE, req.params.dtuId, req.body?.userId || req.user?.id)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+app.post("/api/collab/edit-session/:dtuId/start", requireAuth(), (req, res) => {
+  try { res.json(startEditSession(STATE, req.params.dtuId, req.user?.id)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
-app.post("/api/collab/edit-session/:dtuId/edit", (req, res) => {
-  try { res.json(recordEdit(STATE, req.params.dtuId, req.body?.userId || req.user?.id, req.body?.field, req.body?.oldValue, req.body?.newValue)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+app.post("/api/collab/edit-session/:dtuId/edit", requireAuth(), (req, res) => {
+  try { res.json(recordEdit(STATE, req.params.dtuId, req.user?.id, req.body?.field, req.body?.oldValue, req.body?.newValue)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
 app.post("/api/collab/edit-session/:dtuId/end", (req, res) => {
@@ -42739,11 +42990,11 @@ app.get("/api/rbac/org/:orgId", (req, res) => {
   try { res.json(getOrgWorkspace(STATE, req.params.orgId)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
-app.post("/api/rbac/role", (req, res) => {
+app.post("/api/rbac/role", requireAuth(), (req, res) => {
   try { res.json(assignRole(STATE, req.body?.orgId, req.body?.userId, req.body?.role, req.user?.id)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
-app.delete("/api/rbac/role", (req, res) => {
+app.delete("/api/rbac/role", requireAuth(), (req, res) => {
   try { res.json(revokeRole(STATE, req.body?.orgId, req.body?.userId, req.user?.id)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
@@ -42808,21 +43059,8 @@ app.get("/api/analytics/atlas-domains", (req, res) => {
   try { res.json(getAtlasDomainAnalytics(STATE)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
-// ---- Public API & Webhooks ----
-app.post("/api/webhooks", (req, res) => {
-  try { res.json(registerWh(STATE, { ...req.body, ownerId: req.body?.ownerId || req.user?.id })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
-});
-
-app.get("/api/webhooks", (req, res) => {
-  try { res.json(listWebhooks(STATE, req.query.ownerId || req.user?.id)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
-});
-
 app.get("/api/webhooks/:id", (req, res) => {
   try { res.json(getWebhook(STATE, req.params.id)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
-});
-
-app.delete("/api/webhooks/:id", (req, res) => {
-  try { res.json(deleteWebhook(STATE, req.params.id)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
 app.post("/api/webhooks/:id/deactivate", (req, res) => {
@@ -42883,20 +43121,20 @@ app.get("/api/compliance/status", (req, res) => {
 });
 
 // ---- Onboarding ----
-app.post("/api/onboarding/start", (req, res) => {
-  try { res.json(startOnboardingV2(STATE, req.body?.userId || req.user?.id)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+app.post("/api/onboarding/start", requireAuth(), (req, res) => {
+  try { res.json(startOnboardingV2(STATE, req.user?.id)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
 app.get("/api/onboarding/progress/:userId", (req, res) => {
   try { res.json(getOnboardingProgressV2(STATE, req.params.userId)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
-app.post("/api/onboarding/complete-step", (req, res) => {
-  try { res.json(completeOnboardingStepV2(STATE, req.body?.userId || req.user?.id, req.body?.stepId, req.body?.metadata)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+app.post("/api/onboarding/complete-step", requireAuth(), (req, res) => {
+  try { res.json(completeOnboardingStepV2(STATE, req.user?.id, req.body?.stepId, req.body?.metadata)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
-app.post("/api/onboarding/skip", (req, res) => {
-  try { res.json(skipOnboardingV2(STATE, req.body?.userId || req.user?.id)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+app.post("/api/onboarding/skip", requireAuth(), (req, res) => {
+  try { res.json(skipOnboardingV2(STATE, req.user?.id)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
 app.get("/api/onboarding/hints/:userId", (req, res) => {
@@ -43078,9 +43316,9 @@ app.get("/api/atlas/invariants/log", (req, res) => {
 // Chat sits ABOVE Atlas — fast retrieval, no governance, no DTU writes.
 // Escalation ("Save as DTU", "Publish to Global", "List on Marketplace") is explicit.
 
-app.get("/api/atlas/chat/retrieve", (req, res) => {
+app.post("/api/atlas/chat/retrieve", (req, res) => {
   try {
-    const { q, limit, policy, minConfidence, domainType, sessionId } = req.query;
+    const { q, limit, policy, minConfidence, domainType, sessionId } = { ...req.body, ...req.query };
     const result = chatRetrieve(STATE, q, {
       limit: limit ? Number(limit) : undefined,
       policy,
@@ -43155,9 +43393,9 @@ app.get("/api/atlas/chat/metrics", (req, res) => {
 
 // ── Atlas v2: Rights & Citation Endpoints ───────────────────────────────────
 
-app.get("/api/atlas/rights/check", (req, res) => {
+app.post("/api/atlas/rights/check", (req, res) => {
   try {
-    const { userId, artifactId, action } = req.query;
+    const { userId, artifactId, action } = { ...req.body, ...req.query };
     if (!userId || !artifactId || !action) return res.status(400).json({ ok: false, error: "userId, artifactId, and action required" });
     res.json(canUse(STATE, userId, artifactId, action));
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
@@ -43313,10 +43551,6 @@ app.get("/api/dtus/:id/connections", asyncHandler(async (req, res) => {
   res.json({ ok: true, dtuId: id, connections });
 }));
 
-// Semantic cache stats
-app.get("/api/cache/stats", asyncHandler(async (_req, res) => {
-  res.json({ ok: true, ...getCacheStats() });
-}));
 
 // Record cache satisfaction (thumbs up/down)
 app.post("/api/cache/satisfaction", asyncHandler(async (req, res) => {
@@ -43535,6 +43769,23 @@ app.post("/api/brain/wants/decay", (_req, res) => {
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
+// Per-brain health and stats endpoint
+app.get("/api/brain/status", (_req, res) => {
+  try {
+    const brainStatus = {};
+    for (const [name, cfg] of Object.entries(BRAIN_CONFIG)) {
+      const b = BRAIN?.[name] || {};
+      brainStatus[name] = {
+        enabled: b.enabled ?? false,
+        model: cfg.model,
+        url: cfg.url,
+        stats: b.stats || { requests: 0, totalMs: 0, errors: 0, lastCallAt: null },
+      };
+    }
+    res.json({ ok: true, llmReady: LLM_READY, brains: brainStatus });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
 // Spontaneous message endpoints
 app.get("/api/brain/spontaneous/status", (_req, res) => {
   try {
@@ -43550,11 +43801,10 @@ app.post("/api/brain/spontaneous/enqueue", express.json(), (req, res) => {
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
-app.post("/api/brain/spontaneous/preferences", express.json(), (req, res) => {
+app.post("/api/brain/spontaneous/preferences", requireAuth(), express.json(), (req, res) => {
   try {
-    const { userId, enabled } = req.body;
-    if (!userId) return res.status(400).json({ ok: false, error: "userId required" });
-    const result = setUserSpontaneousEnabled(STATE, userId, enabled);
+    const { enabled } = req.body;
+    const result = setUserSpontaneousEnabled(STATE, req.user?.id, enabled);
     res.json(result);
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
@@ -43760,11 +44010,6 @@ try {
 }
 
 // ---- Three-Brain Cognitive Architecture API ----
-
-// Brain status endpoint — monitoring dashboard data
-app.get("/api/brain/status", asyncHandler(async (_req, res) => {
-  res.json(getBrainStatus());
-}));
 
 // Utility brain endpoint — lens-specific AI tasks
 app.post("/api/utility/call", asyncHandler(async (req, res) => {
@@ -46924,9 +47169,9 @@ app.post("/api/futures", (req, res) => {
   }
 });
 
-app.post("/api/futures/:id/stake", (req, res) => {
-  const { optionId, amount, userId } = req.body;
-  const result = stakeFuture(req.params.id, optionId, amount, userId);
+app.post("/api/futures/:id/stake", requireAuth(), (req, res) => {
+  const { optionId, amount } = req.body;
+  const result = stakeFuture(req.params.id, optionId, amount, req.user?.id);
   res.json(result);
 });
 
@@ -47492,7 +47737,7 @@ function updateCognitiveDigitalTwin(userId) {
 // Digital Twin API routes
 app.get("/api/twin", (req, res) => {
   try {
-    const userId = req.query.userId || "default";
+    const userId = req.user?.id || req.query.userId || "default";
     let twin = STATE.cognitiveDigitalTwins?.get(userId);
     if (!twin) twin = updateCognitiveDigitalTwin(userId);
     res.json({ ok: true, twin });
@@ -47514,7 +47759,7 @@ app.post("/api/twin/update", (req, res) => {
 });
 
 app.get("/api/twin/circadian", (req, res) => {
-  const userId = req.query.userId || "default";
+  const userId = req.user?.id || req.query.userId || "default";
   const twin = STATE.cognitiveDigitalTwins.get(userId) || initializeTwin(userId);
   res.json({ ok: true, circadian: twin.circadianProfile, peakHours: findPeakHours(twin.circadianProfile) });
 });
@@ -48776,7 +49021,7 @@ function recordCost(userId, brainName, tokensIn, tokensOut, durationMs) {
 }
 
 app.get("/api/rate-limits", (req, res) => {
-  const userId = req.query.userId || "default";
+  const userId = req.user?.id || req.query.userId || "default";
   const limits = STATE._rateLimits.get(userId);
   const hourAgo = Date.now() - 60 * 60 * 1000;
   const recentCalls = limits ? limits.calls.filter(t => t > hourAgo).length : 0;
@@ -48784,7 +49029,7 @@ app.get("/api/rate-limits", (req, res) => {
 });
 
 app.get("/api/costs", (req, res) => {
-  const userId = req.query.userId || "default";
+  const userId = req.user?.id || req.query.userId || "default";
   const account = STATE._costAccounting.get(userId) || { daily: {}, total: 0, calls: [] };
   res.json({ ok: true, ...account });
 });
@@ -49337,7 +49582,7 @@ function getAdaptiveLayout(userId) {
 }
 
 app.get("/api/adaptive/layout", (req, res) => {
-  res.json({ ok: true, ...getAdaptiveLayout(req.query.userId) });
+  res.json({ ok: true, ...getAdaptiveLayout(req.user?.id || req.query.userId) });
 });
 
 app.post("/api/adaptive/track", (req, res) => {
@@ -50146,6 +50391,11 @@ try { await initStateSync(STATE); } catch (e) {
   structuredLog("warn", "state_sync_init_failed", { error: String(e?.message || e) });
 }
 startAllIntervals(structuredLog);
+
+// Sentry error handler — must be registered after all routes but before listen
+if (globalThis.__sentry) {
+  app.use(globalThis.__sentry.Handlers.errorHandler());
+}
 
 const SHOULD_LISTEN = (String(process.env.CONCORD_NO_LISTEN || "").toLowerCase() !== "true") && (String(process.env.NODE_ENV || "").toLowerCase() !== "test");
 
@@ -59750,46 +60000,48 @@ app.post('/api/artistry/collab/sessions', (req, res) => {
   res.json({ ok: true, session: art.collabSessions.get(sessionId) });
 });
 
-app.post('/api/artistry/collab/sessions/:id/join', (req, res) => {
+app.post('/api/artistry/collab/sessions/:id/join', requireAuth(), (req, res) => {
   const art = ensureArtistryState();
   const session = art.collabSessions.get(req.params.id);
   if (!session) return res.status(404).json({ error: 'Session not found' });
   if (session.status !== 'active') return res.status(400).json({ error: 'Session not active' });
   if (session.participants.length >= session.maxParticipants) return res.status(400).json({ error: 'Session full' });
-  const { userId } = req.body;
+  const userId = req.user?.id;
   if (session.participants.some(p => p.userId === userId)) return res.status(400).json({ error: 'Already in session' });
   session.participants.push({ userId, role: 'collaborator', joinedAt: Date.now() });
   session.updatedAt = Date.now();
   res.json({ ok: true, session });
 });
 
-app.post('/api/artistry/collab/sessions/:id/leave', (req, res) => {
+app.post('/api/artistry/collab/sessions/:id/leave', requireAuth(), (req, res) => {
   const art = ensureArtistryState();
   const session = art.collabSessions.get(req.params.id);
   if (!session) return res.status(404).json({ error: 'Session not found' });
-  const { userId } = req.body;
+  const userId = req.user?.id;
   session.participants = session.participants.filter(p => p.userId !== userId);
   if (session.participants.length === 0) session.status = 'ended';
   session.updatedAt = Date.now();
   res.json({ ok: true, session });
 });
 
-app.post('/api/artistry/collab/sessions/:id/action', (req, res) => {
+app.post('/api/artistry/collab/sessions/:id/action', requireAuth(), (req, res) => {
   const art = ensureArtistryState();
   const session = art.collabSessions.get(req.params.id);
   if (!session) return res.status(404).json({ error: 'Session not found' });
-  const { userId, action, data } = req.body;
+  const { action, data } = req.body;
+  const userId = req.user?.id;
   session.actions.push({ userId, action, data, at: Date.now() });
   if (session.actions.length > 5000) session.actions = session.actions.slice(-5000);
   session.updatedAt = Date.now();
   res.json({ ok: true, actionCount: session.actions.length });
 });
 
-app.post('/api/artistry/collab/sessions/:id/chat', (req, res) => {
+app.post('/api/artistry/collab/sessions/:id/chat', requireAuth(), (req, res) => {
   const art = ensureArtistryState();
   const session = art.collabSessions.get(req.params.id);
   if (!session) return res.status(404).json({ error: 'Session not found' });
-  const { userId, message } = req.body;
+  const { message } = req.body;
+  const userId = req.user?.id;
   session.chat.push({ userId, message, at: Date.now() });
   if (session.chat.length > 1000) session.chat = session.chat.slice(-1000);
   res.json({ ok: true, chatCount: session.chat.length });
@@ -61193,11 +61445,13 @@ function runBackup() {
         JSON.stringify(STATE.globalThread?.councilQueue || []));
     } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
-    // Backup SQLite DB if exists
+    // Backup SQLite DB if exists — gzip compressed to avoid ballooning pod storage
     try {
       const dbPath = "/data/db/concord.db";
       if (fs.existsSync(dbPath)) {
-        fs.copyFileSync(dbPath, `${backupDir}/concord.db`);
+        const raw = fs.readFileSync(dbPath);
+        const compressed = zlib.gzipSync(raw, { level: 6 });
+        fs.writeFileSync(`${backupDir}/concord.db.gz`, compressed);
       }
     } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
