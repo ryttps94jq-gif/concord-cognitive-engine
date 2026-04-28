@@ -42818,9 +42818,9 @@ app.get("/api/social/poll/:postId", (req, res) => {
 });
 
 // ---- Social Notifications ----
-app.get("/api/social/notifications", (req, res) => {
+app.get("/api/social/notifications", requireAuth(), (req, res) => {
   try {
-    const userId = req.query.userId || req.user?.id;
+    const userId = req.user?.id;
     const limit = Math.min(Number(req.query.limit) || 50, 200);
     const unreadOnly = req.query.unreadOnly === "true";
     // STATE.notifications is a Map<id, notification> if it exists
@@ -42839,9 +42839,9 @@ app.get("/api/social/notifications", (req, res) => {
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
-app.get("/api/social/notifications/count", (req, res) => {
+app.get("/api/social/notifications/count", requireAuth(), (req, res) => {
   try {
-    const userId = req.query.userId || req.user?.id;
+    const userId = req.user?.id;
     const allNotifications = STATE.notifications
       ? Array.from(STATE.notifications.values())
       : [];

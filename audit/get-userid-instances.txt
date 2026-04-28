@@ -1,0 +1,27 @@
+/home/user/concord-cognitive-engine/server/eslint.config.js:63:          message: "req.query.userId used as actor identity is an auth bypass risk. Use req.user?.id from the authenticated session.",
+/home/user/concord-cognitive-engine/server/server.js:37721:app.get("/api/shard/route", asyncHandler(async (req, res) => res.json(await runMacro("shard", "route", { userId: req.query.userId, orgId: req.query.orgId }, makeCtx(req)))));
+/home/user/concord-cognitive-engine/server/server.js:37724:app.get("/api/governor/check", asyncHandler(async (req, res) => res.json(await runMacro("governor", "check", { userId: req.query.userId, action: req.query.action }, makeCtx(req)))));
+/home/user/concord-cognitive-engine/server/server.js:38925:    userId: req.query.userId,
+/home/user/concord-cognitive-engine/server/server.js:38968:  const userId = req.user?.id || req.query.userId || "anonymous";
+/home/user/concord-cognitive-engine/server/server.js:42548:  try { res.json(getFeed(STATE, req.query.userId || req.user?.id, { limit: Number(req.query.limit || 30), offset: Number(req.query.offset || 0) })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+/home/user/concord-cognitive-engine/server/server.js:42558:    const userId = req.query.userId || req.user?.id || req.actor?.userId || "anon";
+/home/user/concord-cognitive-engine/server/server.js:42682:    const currentUserId = req.query.userId || req.user?.id || req.actor?.userId || null;
+/home/user/concord-cognitive-engine/server/server.js:42728:    const userId = req.query.userId || req.user?.id || req.actor?.userId || "anon";
+/home/user/concord-cognitive-engine/server/server.js:42736:    const userId = req.query.userId || req.user?.id || req.actor?.userId || "anon";
+/home/user/concord-cognitive-engine/server/server.js:42743:    const userId = req.query.userId || req.user?.id || req.actor?.userId || "anon";
+/home/user/concord-cognitive-engine/server/server.js:42791:    const userId = req.query.userId || req.user?.id || req.actor?.userId || "anon";
+/home/user/concord-cognitive-engine/server/server.js:42823:    const userId = req.query.userId || req.user?.id;
+/home/user/concord-cognitive-engine/server/server.js:42844:    const userId = req.query.userId || req.user?.id;
+/home/user/concord-cognitive-engine/server/server.js:42907:  try { res.json(collabListWorkspaces(STATE, req.query.userId || req.user?.id)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+/home/user/concord-cognitive-engine/server/server.js:47608:  const sub = getSubscription(req.query.userId);
+/home/user/concord-cognitive-engine/server/server.js:47756:    const userId = req.query.userId || "default";
+/home/user/concord-cognitive-engine/server/server.js:47761:    res.status(500).json({ ok: false, error: String(e?.message || e), twin: { userId: req.query.userId || "default", insights: [], patterns: [] } });
+/home/user/concord-cognitive-engine/server/server.js:47778:  const userId = req.query.userId || "default";
+/home/user/concord-cognitive-engine/server/server.js:49040:  const userId = req.query.userId || "default";
+/home/user/concord-cognitive-engine/server/server.js:49048:  const userId = req.query.userId || "default";
+/home/user/concord-cognitive-engine/server/server.js:49601:  res.json({ ok: true, ...getAdaptiveLayout(req.query.userId) });
+/home/user/concord-cognitive-engine/server/routes/shield.js:46:      const userId = req.query.userId || req.user?.id || "anonymous";
+/home/user/concord-cognitive-engine/server/routes/world.js:425:    const userId = _userId(req) || req.user?.id || req.query.userId;
+/home/user/concord-cognitive-engine/server/routes/studio.js:193:      const userId = req.query.userId || req.user?.id;
+/home/user/concord-cognitive-engine/server/routes/media.js:308:    const userId = viewerId || req.query.userId;
+/home/user/concord-cognitive-engine/server/routes/media.js:475:    const userId = req.user?.id || req.query.userId || "anonymous";
