@@ -60,7 +60,7 @@ export function useEvent<T = unknown>(event: string, callback: (data: T) => void
 
 // Expose event bus on window for Playwright E2E tests (browser context only).
 if (typeof window !== 'undefined') {
-  (window as Record<string, unknown>).__concordEventBus = { emitEvent, onEvent };
+  (window as unknown as Record<string, unknown>).__concordEventBus = { emitEvent, onEvent };
 }
 
 /**

@@ -24866,6 +24866,12 @@ function startHeartbeat() {
       artifactCount: STATE.lensArtifacts.size,
       sessionCount: STATE.sessions.size,
     });
+    // Aggregate presence signal — no user identifiers, just counts
+    realtimeEmit("platform:activity", {
+      activeSessions: REALTIME.io?.sockets?.size || REALTIME.clients?.size || 0,
+      dtuCount: STATE.dtus.size,
+      sessionCount: STATE.sessions.size,
+    });
     const ctx = makeInternalCtx("heartbeat");
 
     // process crawl queue once (Local scope only — ingest is local activity)

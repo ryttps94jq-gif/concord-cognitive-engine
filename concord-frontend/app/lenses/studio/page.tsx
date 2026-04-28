@@ -37,6 +37,11 @@ import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 import { showToast } from '@/components/common/Toasts';
+import Link from 'next/link';
+import { useLensDTUs } from '@/hooks/useLensDTUs';
+import { useAuth } from '@/hooks/useAuth';
+import { DTULibraryPanel } from '@/components/dtu/DTULibraryPanel';
+import { DTUPickerModal } from '@/components/dtu/DTUPickerModal';
 
 // DAW engine
 import {
@@ -94,9 +99,25 @@ import { Soundboard } from '@/components/studio/Soundboard';
 // Constants & Defaults
 // ============================================================================
 
-const TRACK_COLORS = ['#7c3aed', '#ec4899', '#06b6d4', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#14b8a6', '#3b82f6', '#f43f5e'];
+const TRACK_COLORS = [
+  '#7c3aed',
+  '#ec4899',
+  '#06b6d4',
+  '#10b981',
+  '#f59e0b',
+  '#ef4444',
+  '#8b5cf6',
+  '#14b8a6',
+  '#3b82f6',
+  '#f43f5e',
+];
 
-function createDefaultProject(title: string, bpm: number, key: string, genre: string | null): DAWProject {
+function createDefaultProject(
+  title: string,
+  bpm: number,
+  key: string,
+  genre: string | null
+): DAWProject {
   return {
     id: `proj_${Date.now()}`,
     title,
@@ -109,22 +130,80 @@ function createDefaultProject(title: string, bpm: number, key: string, genre: st
     masterBus: {
       volume: 0,
       inserts: [
-        { id: 'master-eq', type: 'eq3', name: 'Master EQ', enabled: true, wet: 1, params: { lowGain: 0, midGain: 0, highGain: 0 } },
-        { id: 'master-comp', type: 'compressor', name: 'Master Comp', enabled: true, wet: 1, params: { threshold: -12, ratio: 2, attack: 0.01, release: 0.1 } },
-        { id: 'master-lim', type: 'limiter', name: 'Master Limiter', enabled: true, wet: 1, params: { ceiling: -1, release: 0.1 } },
+        {
+          id: 'master-eq',
+          type: 'eq3',
+          name: 'Master EQ',
+          enabled: true,
+          wet: 1,
+          params: { lowGain: 0, midGain: 0, highGain: 0 },
+        },
+        {
+          id: 'master-comp',
+          type: 'compressor',
+          name: 'Master Comp',
+          enabled: true,
+          wet: 1,
+          params: { threshold: -12, ratio: 2, attack: 0.01, release: 0.1 },
+        },
+        {
+          id: 'master-lim',
+          type: 'limiter',
+          name: 'Master Limiter',
+          enabled: true,
+          wet: 1,
+          params: { ceiling: -1, release: 0.1 },
+        },
       ],
       metering: { peakL: -60, peakR: -60, rmsL: -60, rmsR: -60, lufs: -14 },
     },
     masteringChain: {
-      eq: { id: 'mc-eq', type: 'eq3', name: 'EQ', enabled: true, wet: 1, params: { lowGain: 0, midGain: 0, highGain: 0 } },
-      multibandCompressor: { id: 'mc-comp', type: 'multibandCompressor', name: 'MB Comp', enabled: true, wet: 1, params: { threshold: -18, ratio: 3, attack: 0.01, release: 0.15 } },
-      stereoWidener: { id: 'mc-stereo', type: 'stereoWidener', name: 'Stereo', enabled: true, wet: 1, params: { width: 1 } },
-      limiter: { id: 'mc-lim', type: 'limiter', name: 'Limiter', enabled: true, wet: 1, params: { ceiling: -1, release: 0.1 } },
+      eq: {
+        id: 'mc-eq',
+        type: 'eq3',
+        name: 'EQ',
+        enabled: true,
+        wet: 1,
+        params: { lowGain: 0, midGain: 0, highGain: 0 },
+      },
+      multibandCompressor: {
+        id: 'mc-comp',
+        type: 'multibandCompressor',
+        name: 'MB Comp',
+        enabled: true,
+        wet: 1,
+        params: { threshold: -18, ratio: 3, attack: 0.01, release: 0.15 },
+      },
+      stereoWidener: {
+        id: 'mc-stereo',
+        type: 'stereoWidener',
+        name: 'Stereo',
+        enabled: true,
+        wet: 1,
+        params: { width: 1 },
+      },
+      limiter: {
+        id: 'mc-lim',
+        type: 'limiter',
+        name: 'Limiter',
+        enabled: true,
+        wet: 1,
+        params: { ceiling: -1, release: 0.1 },
+      },
       loudnessTarget: -14,
       enabled: true,
     },
     arrangement: { lengthBars: 64, sections: [], markers: [], tempo: [] },
-    transport: { bpm, timeSignature: [4, 4], swing: 0, loopEnabled: false, loopStart: 0, loopEnd: 16, metronome: false, preRoll: 0 },
+    transport: {
+      bpm,
+      timeSignature: [4, 4],
+      swing: 0,
+      loopEnabled: false,
+      loopStart: 0,
+      loopEnd: 16,
+      metronome: false,
+      preRoll: 0,
+    },
     audioBuffers: {},
     synthPresets: {},
     drumPatterns: {},
@@ -134,7 +213,12 @@ function createDefaultProject(title: string, bpm: number, key: string, genre: st
   };
 }
 
-function createDefaultTrack(name: string, type: 'audio' | 'midi', index: number, instrumentId?: string): DAWTrack {
+function createDefaultTrack(
+  name: string,
+  type: 'audio' | 'midi',
+  index: number,
+  instrumentId?: string
+): DAWTrack {
   return {
     id: `track_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
     name,
@@ -166,14 +250,53 @@ function createDefaultDrumPattern(): DrumPattern {
     resolution: 0.25,
     tracks: padNames.map((_, i) => ({
       padId: `pad_${i}`,
-      steps: Array.from({ length: 16 }, () => ({ active: false, velocity: 100, probability: 1, flam: false })),
+      steps: Array.from({ length: 16 }, () => ({
+        active: false,
+        velocity: 100,
+        probability: 1,
+        flam: false,
+      })),
     })),
   };
 }
 
 function createDefaultDrumPads(): DrumPad[] {
-  const names = ['Kick', 'Snare', 'Hi-Hat C', 'Hi-Hat O', 'Clap', 'Tom High', 'Tom Low', 'Perc', 'Crash', 'Ride', 'Shaker', 'Cowbell', 'Rim', 'Snap', 'Click', 'FX'];
-  const colors = ['#ef4444', '#f59e0b', '#eab308', '#22c55e', '#14b8a6', '#06b6d4', '#3b82f6', '#8b5cf6', '#a855f7', '#ec4899', '#f43f5e', '#fb923c', '#84cc16', '#2dd4bf', '#38bdf8', '#c084fc'];
+  const names = [
+    'Kick',
+    'Snare',
+    'Hi-Hat C',
+    'Hi-Hat O',
+    'Clap',
+    'Tom High',
+    'Tom Low',
+    'Perc',
+    'Crash',
+    'Ride',
+    'Shaker',
+    'Cowbell',
+    'Rim',
+    'Snap',
+    'Click',
+    'FX',
+  ];
+  const colors = [
+    '#ef4444',
+    '#f59e0b',
+    '#eab308',
+    '#22c55e',
+    '#14b8a6',
+    '#06b6d4',
+    '#3b82f6',
+    '#8b5cf6',
+    '#a855f7',
+    '#ec4899',
+    '#f43f5e',
+    '#fb923c',
+    '#84cc16',
+    '#2dd4bf',
+    '#38bdf8',
+    '#c084fc',
+  ];
   return names.map((name, i) => ({
     id: `pad_${i}`,
     name,
@@ -196,8 +319,23 @@ function createDefaultDrumPads(): DrumPad[] {
 
 export default function StudioLensPage() {
   useLensNav('studio');
-  const { latestData: realtimeData, alerts: realtimeAlerts, insights: realtimeInsights, isLive, lastUpdated } = useRealtimeLens('studio');
-  const { isLoading: _isLoading, isError: _isError, error: _error, refetch: _refetch, create: createLensItem, update: updateLensItem } = useLensData('studio', 'project', { noSeed: true });
+  const {
+    latestData: realtimeData,
+    alerts: realtimeAlerts,
+    insights: realtimeInsights,
+    isLive,
+    lastUpdated,
+  } = useRealtimeLens('studio');
+  const {
+    isLoading: _isLoading,
+    isError: _isError,
+    error: _error,
+    refetch: _refetch,
+    create: createLensItem,
+    update: updateLensItem,
+  } = useLensData('studio', 'project', { noSeed: true });
+  const { createDTU, publishToMarketplace } = useLensDTUs({ lens: 'studio' });
+  const { user: _user } = useAuth();
   const queryClient = useQueryClient();
 
   // ---- State ----
@@ -217,19 +355,34 @@ export default function StudioLensPage() {
   const [showFeatures, setShowFeatures] = useState(true);
   const { items: studioArtifacts } = useLensData('studio', 'project', { noSeed: true });
   const runStudioAction = useRunArtifact('studio');
-  const [studioActionResult, setStudioActionResult] = useState<Record<string, unknown> | null>(null);
+  const [studioActionResult, setStudioActionResult] = useState<Record<string, unknown> | null>(
+    null
+  );
   const [studioActiveAction, setStudioActiveAction] = useState<string | null>(null);
 
-  const handleStudioAction = useCallback(async (action: string) => {
-    const id = studioArtifacts[0]?.id;
-    if (!id) return;
-    setStudioActiveAction(action);
-    try {
-      const res = await runStudioAction.mutateAsync({ id, action });
-      if (res.ok === false) { setStudioActionResult({ action, message: `Action failed: ${(res as Record<string, unknown>).error || 'Unknown error'}` }); } else { setStudioActionResult({ action, ...(res.result as Record<string, unknown>) }); }
-    } catch (err) { console.error('Studio action failed:', err); }
-    finally { setStudioActiveAction(null); }
-  }, [studioArtifacts, runStudioAction]);
+  const handleStudioAction = useCallback(
+    async (action: string) => {
+      const id = studioArtifacts[0]?.id;
+      if (!id) return;
+      setStudioActiveAction(action);
+      try {
+        const res = await runStudioAction.mutateAsync({ id, action });
+        if (res.ok === false) {
+          setStudioActionResult({
+            action,
+            message: `Action failed: ${(res as Record<string, unknown>).error || 'Unknown error'}`,
+          });
+        } else {
+          setStudioActionResult({ action, ...(res.result as Record<string, unknown>) });
+        }
+      } catch (err) {
+        console.error('Studio action failed:', err);
+      } finally {
+        setStudioActiveAction(null);
+      }
+    },
+    [studioArtifacts, runStudioAction]
+  );
 
   // New project form
   const [newTitle, setNewTitle] = useState('');
@@ -268,6 +421,16 @@ export default function StudioLensPage() {
   const [isPlayingBack, setIsPlayingBack] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  // Publish to marketplace state
+  const [showPublishModal, setShowPublishModal] = useState(false);
+  const [publishTitle, setPublishTitle] = useState('');
+  const [publishPrice, setPublishPrice] = useState('');
+  const [publishLicense, setPublishLicense] = useState<'basic' | 'premium' | 'exclusive'>('basic');
+  const [publishTags, setPublishTags] = useState('');
+  const [publishSubmitting, setPublishSubmitting] = useState(false);
+  const [publishError, setPublishError] = useState<string | null>(null);
+  const [publishedListingId, setPublishedListingId] = useState<string | null>(null);
+  const [showDTUPicker, setShowDTUPicker] = useState(false);
   const [recordError, setRecordError] = useState<string | null>(null);
   const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const playbackAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -281,9 +444,15 @@ export default function StudioLensPage() {
   const [aiResult, setAiResult] = useState<{ title: string; content: string } | null>(null);
 
   // Keep refs in sync for use in intervals / event handlers
-  useEffect(() => { transportStateRef.current = transportState; }, [transportState]);
-  useEffect(() => { drumPatternRef.current = drumPattern; }, [drumPattern]);
-  useEffect(() => { projectRef.current = project; }, [project]);
+  useEffect(() => {
+    transportStateRef.current = transportState;
+  }, [transportState]);
+  useEffect(() => {
+    drumPatternRef.current = drumPattern;
+  }, [drumPattern]);
+  useEffect(() => {
+    projectRef.current = project;
+  }, [project]);
 
   // ---- Initialize engines ----
   useEffect(() => {
@@ -331,8 +500,7 @@ export default function StudioLensPage() {
                 }
                 synth.noteOn(note.pitch, note.velocity);
                 // Schedule noteOff based on note duration
-                const ctx = getAudioContext();
-                const durationSec = (note.lengthBeats / (proj.bpm / 60));
+                const durationSec = note.lengthBeats / (proj.bpm / 60);
                 setTimeout(() => synth!.noteOff(note.pitch), durationSec * 1000);
               }
             }
@@ -342,7 +510,7 @@ export default function StudioLensPage() {
     });
 
     const unsubDTU = dtuHooks.subscribe((event) => {
-      setDtuEvents(prev => [...prev.slice(-200), event]);
+      setDtuEvents((prev) => [...prev.slice(-200), event]);
     });
 
     // Spectrum analyzer update
@@ -362,9 +530,9 @@ export default function StudioLensPage() {
       mixerRef.current?.dispose();
       drumEngineRef.current?.dispose();
       recorderRef.current?.dispose();
-      synthEngines.forEach(s => s.dispose());
+      synthEngines.forEach((s) => s.dispose());
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   // ---- Web MIDI input wiring ----
   useEffect(() => {
@@ -377,7 +545,8 @@ export default function StudioLensPage() {
       const velocity = data.length > 2 ? data[2] : 0;
 
       // Route to the synth on the selected track (or first available)
-      const trackId = selectedTrackId || projectRef.current?.tracks.find(t => t.type === 'midi')?.id;
+      const trackId =
+        selectedTrackId || projectRef.current?.tracks.find((t) => t.type === 'midi')?.id;
       if (!trackId) return;
 
       let synth = synthEnginesRef.current.get(trackId);
@@ -400,42 +569,46 @@ export default function StudioLensPage() {
     };
 
     if (typeof navigator !== 'undefined' && navigator.requestMIDIAccess) {
-      navigator.requestMIDIAccess().then((access) => {
-        midiAccess = access;
-        access.inputs.forEach(onMIDIInput);
-        access.onstatechange = () => {
+      navigator
+        .requestMIDIAccess()
+        .then((access) => {
+          midiAccess = access;
           access.inputs.forEach(onMIDIInput);
-        };
-      }).catch((err) => {
-        console.warn('[Studio] Web MIDI not available:', err);
-      });
+          access.onstatechange = () => {
+            access.inputs.forEach(onMIDIInput);
+          };
+        })
+        .catch((err) => {
+          console.warn('[Studio] Web MIDI not available:', err);
+        });
     }
 
     return () => {
       if (midiAccess) {
-        midiAccess.inputs.forEach(input => { input.onmidimessage = null; });
+        midiAccess.inputs.forEach((input) => {
+          input.onmidimessage = null;
+        });
       }
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedTrackId]);
 
   // ---- Project operations ----
   const selectedTrack = useMemo(
-    () => project?.tracks.find(t => t.id === selectedTrackId) ?? null,
+    () => project?.tracks.find((t) => t.id === selectedTrackId) ?? null,
     [project, selectedTrackId]
   );
 
   const selectedClip = useMemo(() => {
     if (!project || !selectedClipId) return null;
     for (const track of project.tracks) {
-      const clip = track.clips.find(c => c.id === selectedClipId);
+      const clip = track.clips.find((c) => c.id === selectedClipId);
       if (clip) return clip;
     }
     return null;
   }, [project, selectedClipId]);
 
   const updateProject = useCallback((updater: (p: DAWProject) => DAWProject) => {
-    setProject(prev => {
+    setProject((prev) => {
       if (!prev) return prev;
       const updated = updater(prev);
       updated.updatedAt = Date.now();
@@ -458,8 +631,14 @@ export default function StudioLensPage() {
     createLensItem({
       title: proj.title,
       data: proj as unknown as Record<string, unknown>,
-      meta: { status: 'active', tags: [proj.key, `${proj.bpm}bpm`, proj.genre].filter(Boolean) as string[] },
-    }).catch(err => { console.error('Failed to persist project:', err instanceof Error ? err.message : err); showToast('error', 'Failed to create project'); });
+      meta: {
+        status: 'active',
+        tags: [proj.key, `${proj.bpm}bpm`, proj.genre].filter(Boolean) as string[],
+      },
+    }).catch((err) => {
+      console.error('Failed to persist project:', err instanceof Error ? err.message : err);
+      showToast('error', 'Failed to create project');
+    });
   }, [newTitle, newBpm, newKey, newGenre, createLensItem]);
 
   // ---- Transport controls ----
@@ -516,7 +695,9 @@ export default function StudioLensPage() {
     const started = recorder.startRecording(
       (blob: Blob) => {
         if (blob.size === 0) {
-          setRecordError('Recording produced no audio data. Check your input device and browser permissions.');
+          setRecordError(
+            'Recording produced no audio data. Check your input device and browser permissions.'
+          );
           showToast('error', 'Recording was empty — check your mic');
           return;
         }
@@ -528,7 +709,7 @@ export default function StudioLensPage() {
         console.error('[Studio] Recorder error:', err);
         setRecordError(err.message);
         showToast('error', `Recorder error: ${err.message}`);
-      },
+      }
     );
 
     if (started) {
@@ -538,7 +719,7 @@ export default function StudioLensPage() {
       setRecordingTimer(0);
       // Start timer
       recordingTimerRef.current = setInterval(() => {
-        setRecordingTimer(prev => prev + 1);
+        setRecordingTimer((prev) => prev + 1);
       }, 1000);
     } else {
       const reason = recorder.getLastError()?.message || 'Failed to start recorder';
@@ -648,11 +829,11 @@ export default function StudioLensPage() {
         // Invalidate queries so the track list updates without page refresh
         queryClient.invalidateQueries({ queryKey: ['lens', 'studio'] });
         // Add an audio track to the project for the recording
-        updateProject(p => {
+        updateProject((p) => {
           const track = createDefaultTrack(
             `Rec ${new Date().toLocaleTimeString()}`,
             'audio',
-            p.tracks.length,
+            p.tracks.length
           );
           emitTrackCreated(track, p.id);
           return { ...p, tracks: [...p.tracks, track] };
@@ -669,170 +850,211 @@ export default function StudioLensPage() {
   }, [recordedBlob, project, recordingTimer, createLensItem, queryClient, updateProject]);
 
   // ---- Beat pad with OscillatorNode frequencies ----
-  const BEAT_PAD_FREQUENCIES = useMemo(() => [
-    { note: 'C4', freq: 261.63 },
-    { note: 'D4', freq: 293.66 },
-    { note: 'E4', freq: 329.63 },
-    { note: 'F4', freq: 349.23 },
-    { note: 'G4', freq: 392.00 },
-    { note: 'A4', freq: 440.00 },
-    { note: 'B4', freq: 493.88 },
-    { note: 'C5', freq: 523.25 },
-  ], []);
+  const BEAT_PAD_FREQUENCIES = useMemo(
+    () => [
+      { note: 'C4', freq: 261.63 },
+      { note: 'D4', freq: 293.66 },
+      { note: 'E4', freq: 329.63 },
+      { note: 'F4', freq: 349.23 },
+      { note: 'G4', freq: 392.0 },
+      { note: 'A4', freq: 440.0 },
+      { note: 'B4', freq: 493.88 },
+      { note: 'C5', freq: 523.25 },
+    ],
+    []
+  );
 
-  const handleBeatPadTrigger = useCallback((index: number) => {
-    if (index < 0 || index >= BEAT_PAD_FREQUENCIES.length) return;
-    const { freq } = BEAT_PAD_FREQUENCIES[index];
-    try {
-      const ctx = getAudioContext();
-      if (ctx.state === 'suspended') ctx.resume();
-      const osc = ctx.createOscillator();
-      const gainNode = ctx.createGain();
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(freq, ctx.currentTime);
-      gainNode.gain.setValueAtTime(0.3, ctx.currentTime);
-      gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
-      osc.connect(gainNode).connect(ctx.destination);
-      osc.start(ctx.currentTime);
-      osc.stop(ctx.currentTime + 0.4);
-    } catch (e) {
-      console.warn('Audio context not ready for beat pad:', e);
-    }
-  }, [BEAT_PAD_FREQUENCIES]);
+  const handleBeatPadTrigger = useCallback(
+    (index: number) => {
+      if (index < 0 || index >= BEAT_PAD_FREQUENCIES.length) return;
+      const { freq } = BEAT_PAD_FREQUENCIES[index];
+      try {
+        const ctx = getAudioContext();
+        if (ctx.state === 'suspended') ctx.resume();
+        const osc = ctx.createOscillator();
+        const gainNode = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, ctx.currentTime);
+        gainNode.gain.setValueAtTime(0.3, ctx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+        osc.connect(gainNode).connect(ctx.destination);
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + 0.4);
+      } catch (e) {
+        console.warn('Audio context not ready for beat pad:', e);
+      }
+    },
+    [BEAT_PAD_FREQUENCIES]
+  );
 
-  const handleBpmChange = useCallback((bpm: number) => {
-    updateProject(p => ({ ...p, bpm }));
-    transportRef.current?.updateConfig({ bpm });
-  }, [updateProject]);
+  const handleBpmChange = useCallback(
+    (bpm: number) => {
+      updateProject((p) => ({ ...p, bpm }));
+      transportRef.current?.updateConfig({ bpm });
+    },
+    [updateProject]
+  );
 
   // ---- Track operations ----
-  const handleAddTrack = useCallback((type: 'audio' | 'midi' = 'midi', instrumentId?: string) => {
-    updateProject(p => {
-      const name = type === 'audio' ? `Audio ${p.tracks.length + 1}` : `Track ${p.tracks.length + 1}`;
-      const track = createDefaultTrack(name, type, p.tracks.length, instrumentId);
-      // Create a mixer channel for the new track
-      mixerRef.current?.addChannel(track.id);
-      emitTrackCreated(track, p.id);
-      return { ...p, tracks: [...p.tracks, track] };
-    });
-    setShowAddTrack(false);
-  }, [updateProject]);
+  const handleAddTrack = useCallback(
+    (type: 'audio' | 'midi' = 'midi', instrumentId?: string) => {
+      updateProject((p) => {
+        const name =
+          type === 'audio' ? `Audio ${p.tracks.length + 1}` : `Track ${p.tracks.length + 1}`;
+        const track = createDefaultTrack(name, type, p.tracks.length, instrumentId);
+        // Create a mixer channel for the new track
+        mixerRef.current?.addChannel(track.id);
+        emitTrackCreated(track, p.id);
+        return { ...p, tracks: [...p.tracks, track] };
+      });
+      setShowAddTrack(false);
+    },
+    [updateProject]
+  );
 
-  const handleUpdateTrack = useCallback((trackId: string, data: Partial<DAWTrack>) => {
-    updateProject(p => ({
-      ...p,
-      tracks: p.tracks.map(t => t.id === trackId ? { ...t, ...data } : t),
-    }));
-  }, [updateProject]);
+  const handleUpdateTrack = useCallback(
+    (trackId: string, data: Partial<DAWTrack>) => {
+      updateProject((p) => ({
+        ...p,
+        tracks: p.tracks.map((t) => (t.id === trackId ? { ...t, ...data } : t)),
+      }));
+    },
+    [updateProject]
+  );
 
-  const handleDeleteTrack = useCallback((trackId: string) => {
-    updateProject(p => ({ ...p, tracks: p.tracks.filter(t => t.id !== trackId) }));
-    // Clean up audio engine resources for this track
-    mixerRef.current?.removeChannel(trackId);
-    const synth = synthEnginesRef.current.get(trackId);
-    if (synth) { synth.dispose(); synthEnginesRef.current.delete(trackId); }
-    if (selectedTrackId === trackId) setSelectedTrackId(null);
-  }, [updateProject, selectedTrackId]);
+  const handleDeleteTrack = useCallback(
+    (trackId: string) => {
+      updateProject((p) => ({ ...p, tracks: p.tracks.filter((t) => t.id !== trackId) }));
+      // Clean up audio engine resources for this track
+      mixerRef.current?.removeChannel(trackId);
+      const synth = synthEnginesRef.current.get(trackId);
+      if (synth) {
+        synth.dispose();
+        synthEnginesRef.current.delete(trackId);
+      }
+      if (selectedTrackId === trackId) setSelectedTrackId(null);
+    },
+    [updateProject, selectedTrackId]
+  );
 
   // ---- Synth engine helper ----
-  const getOrCreateSynth = useCallback((trackId: string): SynthEngine => {
-    let synth = synthEnginesRef.current.get(trackId);
-    if (!synth) {
-      const preset = activeSynthPreset || DEFAULT_SYNTH_PRESETS[0];
-      synth = new SynthEngine(preset);
-      // Route through mixer if channel exists, else direct
-      const mixerInput = mixerRef.current?.getChannelInput(trackId);
-      if (mixerInput) synth.connect(mixerInput);
-      synthEnginesRef.current.set(trackId, synth);
-    }
-    return synth;
-  }, [activeSynthPreset]);
+  const getOrCreateSynth = useCallback(
+    (trackId: string): SynthEngine => {
+      let synth = synthEnginesRef.current.get(trackId);
+      if (!synth) {
+        const preset = activeSynthPreset || DEFAULT_SYNTH_PRESETS[0];
+        synth = new SynthEngine(preset);
+        // Route through mixer if channel exists, else direct
+        const mixerInput = mixerRef.current?.getChannelInput(trackId);
+        if (mixerInput) synth.connect(mixerInput);
+        synthEnginesRef.current.set(trackId, synth);
+      }
+      return synth;
+    },
+    [activeSynthPreset]
+  );
 
   // ---- MIDI / Piano Roll ----
-  const handleAddNote = useCallback((note: MIDINote) => {
-    if (!selectedClipId) return;
-    updateProject(p => ({
-      ...p,
-      tracks: p.tracks.map(t => ({
-        ...t,
-        clips: t.clips.map(c =>
-          c.id === selectedClipId
-            ? { ...c, midiNotes: [...(c.midiNotes || []), note] }
-            : c
-        ),
-      })),
-    }));
-    // Audition the note immediately
-    if (selectedTrackId) {
-      const synth = getOrCreateSynth(selectedTrackId);
-      resumeAudioContext();
-      synth.noteOn(note.pitch, note.velocity);
-      setTimeout(() => synth.noteOff(note.pitch), 200);
-    }
-  }, [updateProject, selectedClipId, selectedTrackId, getOrCreateSynth]);
-
-  const handleUpdateNote = useCallback((noteId: string, data: Partial<MIDINote>) => {
-    updateProject(p => ({
-      ...p,
-      tracks: p.tracks.map(t => ({
-        ...t,
-        clips: t.clips.map(c => ({
-          ...c,
-          midiNotes: c.midiNotes?.map(n => n.id === noteId ? { ...n, ...data } : n),
+  const handleAddNote = useCallback(
+    (note: MIDINote) => {
+      if (!selectedClipId) return;
+      updateProject((p) => ({
+        ...p,
+        tracks: p.tracks.map((t) => ({
+          ...t,
+          clips: t.clips.map((c) =>
+            c.id === selectedClipId ? { ...c, midiNotes: [...(c.midiNotes || []), note] } : c
+          ),
         })),
-      })),
-    }));
-  }, [updateProject]);
+      }));
+      // Audition the note immediately
+      if (selectedTrackId) {
+        const synth = getOrCreateSynth(selectedTrackId);
+        resumeAudioContext();
+        synth.noteOn(note.pitch, note.velocity);
+        setTimeout(() => synth.noteOff(note.pitch), 200);
+      }
+    },
+    [updateProject, selectedClipId, selectedTrackId, getOrCreateSynth]
+  );
 
-  const handleDeleteNote = useCallback((noteId: string) => {
-    updateProject(p => ({
-      ...p,
-      tracks: p.tracks.map(t => ({
-        ...t,
-        clips: t.clips.map(c => ({
-          ...c,
-          midiNotes: c.midiNotes?.filter(n => n.id !== noteId),
+  const handleUpdateNote = useCallback(
+    (noteId: string, data: Partial<MIDINote>) => {
+      updateProject((p) => ({
+        ...p,
+        tracks: p.tracks.map((t) => ({
+          ...t,
+          clips: t.clips.map((c) => ({
+            ...c,
+            midiNotes: c.midiNotes?.map((n) => (n.id === noteId ? { ...n, ...data } : n)),
+          })),
         })),
-      })),
-    }));
-  }, [updateProject]);
+      }));
+    },
+    [updateProject]
+  );
+
+  const handleDeleteNote = useCallback(
+    (noteId: string) => {
+      updateProject((p) => ({
+        ...p,
+        tracks: p.tracks.map((t) => ({
+          ...t,
+          clips: t.clips.map((c) => ({
+            ...c,
+            midiNotes: c.midiNotes?.filter((n) => n.id !== noteId),
+          })),
+        })),
+      }));
+    },
+    [updateProject]
+  );
 
   // ---- Effect chain operations ----
-  const handleUpdateEffects = useCallback((trackId: string, effects: EffectInstance[]) => {
-    handleUpdateTrack(trackId, { effectChain: effects });
-  }, [handleUpdateTrack]);
+  const handleUpdateEffects = useCallback(
+    (trackId: string, effects: EffectInstance[]) => {
+      handleUpdateTrack(trackId, { effectChain: effects });
+    },
+    [handleUpdateTrack]
+  );
 
   // ---- Drum machine ----
   const handleToggleDrumStep = useCallback((padId: string, stepIndex: number) => {
-    setDrumPattern(prev => ({
+    setDrumPattern((prev) => ({
       ...prev,
-      tracks: prev.tracks.map(t =>
+      tracks: prev.tracks.map((t) =>
         t.padId === padId
-          ? { ...t, steps: t.steps.map((s, i) => i === stepIndex ? { ...s, active: !s.active } : s) }
+          ? {
+              ...t,
+              steps: t.steps.map((s, i) => (i === stepIndex ? { ...s, active: !s.active } : s)),
+            }
           : t
       ),
     }));
   }, []);
 
-  const handleUpdateDrumStepVelocity = useCallback((padId: string, stepIndex: number, velocity: number) => {
-    setDrumPattern(prev => ({
-      ...prev,
-      tracks: prev.tracks.map(t =>
-        t.padId === padId
-          ? { ...t, steps: t.steps.map((s, i) => i === stepIndex ? { ...s, velocity } : s) }
-          : t
-      ),
-    }));
-  }, []);
+  const handleUpdateDrumStepVelocity = useCallback(
+    (padId: string, stepIndex: number, velocity: number) => {
+      setDrumPattern((prev) => ({
+        ...prev,
+        tracks: prev.tracks.map((t) =>
+          t.padId === padId
+            ? { ...t, steps: t.steps.map((s, i) => (i === stepIndex ? { ...s, velocity } : s)) }
+            : t
+        ),
+      }));
+    },
+    []
+  );
 
   const handleTriggerPad = useCallback((padId: string, velocity?: number) => {
     drumEngineRef.current?.triggerPad(padId, velocity);
   }, []);
 
   const handleRandomizeDrums = useCallback(() => {
-    setDrumPattern(prev => ({
+    setDrumPattern((prev) => ({
       ...prev,
-      tracks: prev.tracks.map(t => ({
+      tracks: prev.tracks.map((t) => ({
         ...t,
         steps: t.steps.map(() => ({
           active: Math.random() > 0.65,
@@ -845,9 +1067,9 @@ export default function StudioLensPage() {
   }, []);
 
   const handleClearDrums = useCallback(() => {
-    setDrumPattern(prev => ({
+    setDrumPattern((prev) => ({
       ...prev,
-      tracks: prev.tracks.map(t => ({
+      tracks: prev.tracks.map((t) => ({
         ...t,
         steps: t.steps.map(() => ({ active: false, velocity: 100, probability: 1, flam: false })),
       })),
@@ -855,44 +1077,63 @@ export default function StudioLensPage() {
   }, []);
 
   // ---- Automation ----
-  const handleAddAutomationLane = useCallback((trackId: string, parameterPath: string, parameterName: string) => {
-    updateProject(p => ({
-      ...p,
-      tracks: p.tracks.map(t =>
-        t.id === trackId
-          ? {
-              ...t,
-              automationLanes: [...t.automationLanes, {
-                id: `lane_${Date.now()}`,
-                parameterPath,
-                parameterName,
-                points: [],
-                visible: true,
-                color: ['#00fff7', '#a855f7', '#ec4899', '#22c55e', '#f59e0b'][t.automationLanes.length % 5],
-                min: 0,
-                max: 1,
-              }],
-            }
-          : t
-      ),
-    }));
-  }, [updateProject]);
+  const handleAddAutomationLane = useCallback(
+    (trackId: string, parameterPath: string, parameterName: string) => {
+      updateProject((p) => ({
+        ...p,
+        tracks: p.tracks.map((t) =>
+          t.id === trackId
+            ? {
+                ...t,
+                automationLanes: [
+                  ...t.automationLanes,
+                  {
+                    id: `lane_${Date.now()}`,
+                    parameterPath,
+                    parameterName,
+                    points: [],
+                    visible: true,
+                    color: ['#00fff7', '#a855f7', '#ec4899', '#22c55e', '#f59e0b'][
+                      t.automationLanes.length % 5
+                    ],
+                    min: 0,
+                    max: 1,
+                  },
+                ],
+              }
+            : t
+        ),
+      }));
+    },
+    [updateProject]
+  );
 
-  const handleAddAutomationPoint = useCallback((trackId: string, laneId: string, point: AutomationPoint) => {
-    updateProject(p => ({
-      ...p,
-      tracks: p.tracks.map(t =>
-        t.id === trackId
-          ? { ...t, automationLanes: t.automationLanes.map(l => l.id === laneId ? { ...l, points: [...l.points, point] } : l) }
-          : t
-      ),
-    }));
-  }, [updateProject]);
+  const handleAddAutomationPoint = useCallback(
+    (trackId: string, laneId: string, point: AutomationPoint) => {
+      updateProject((p) => ({
+        ...p,
+        tracks: p.tracks.map((t) =>
+          t.id === trackId
+            ? {
+                ...t,
+                automationLanes: t.automationLanes.map((l) =>
+                  l.id === laneId ? { ...l, points: [...l.points, point] } : l
+                ),
+              }
+            : t
+        ),
+      }));
+    },
+    [updateProject]
+  );
 
   // ---- Mastering ----
-  const handleUpdateMasteringChain = useCallback((chain: MasteringChain) => {
-    updateProject(p => ({ ...p, masteringChain: chain }));
-  }, [updateProject]);
+  const handleUpdateMasteringChain = useCallback(
+    (chain: MasteringChain) => {
+      updateProject((p) => ({ ...p, masteringChain: chain }));
+    },
+    [updateProject]
+  );
 
   const handleAnalyze = useCallback(() => {
     // Placeholder — real implementation needs Web Audio AnalyserNode
@@ -909,29 +1150,32 @@ export default function StudioLensPage() {
     }, 500);
   }, []);
 
-  const handleExport = useCallback((settings: ExportSettings) => {
-    if (!project) return;
-    const exportData = {
-      title: project.title,
-      bpm: project.bpm,
-      key: project.key,
-      scale: project.scale,
-      genre: project.genre,
-      tracks: project.tracks,
-      masterBus: project.masterBus,
-      masteringChain: project.masteringChain,
-      arrangement: project.arrangement,
-      format: settings.format,
-      exportedAt: new Date().toISOString(),
-    };
-    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${project.title.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.${settings.format}`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }, [project]);
+  const handleExport = useCallback(
+    (settings: ExportSettings) => {
+      if (!project) return;
+      const exportData = {
+        title: project.title,
+        bpm: project.bpm,
+        key: project.key,
+        scale: project.scale,
+        genre: project.genre,
+        tracks: project.tracks,
+        masterBus: project.masterBus,
+        masteringChain: project.masteringChain,
+        arrangement: project.arrangement,
+        format: settings.format,
+        exportedAt: new Date().toISOString(),
+      };
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${project.title.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.${settings.format}`;
+      a.click();
+      URL.revokeObjectURL(url);
+    },
+    [project]
+  );
 
   // ---- Save / Session DTU ----
   const handleSave = useCallback(() => {
@@ -940,29 +1184,116 @@ export default function StudioLensPage() {
     updateLensItem(project.id, {
       title: project.title,
       data: project as unknown as Record<string, unknown>,
-    }).catch(err => { console.error('Failed to save project:', err instanceof Error ? err.message : err); showToast('error', 'Failed to save project'); });
+    }).catch((err) => {
+      console.error('Failed to save project:', err instanceof Error ? err.message : err);
+      showToast('error', 'Failed to save project');
+    });
   }, [project, updateLensItem]);
 
-  // ---- AI Assistant ----
-  const handleAiAction = useCallback(async (action: string, title: string) => {
-    if (!project) return;
-    setAiLoading(action);
-    setAiResult(null);
+  // ---- Publish to Marketplace ----
+  const handlePublishProject = useCallback(async () => {
+    if (!project || publishSubmitting) return;
+    setPublishSubmitting(true);
+    setPublishError(null);
     try {
-      const res = await api.post('/api/lens/run', {
-        domain: 'studio',
-        action,
-        input: { projectId: project.id, bpm: project.bpm, key: project.key, genre: project.genre, trackCount: project.tracks.length },
+      const dtuResult = await createDTU({
+        title: publishTitle || project.title,
+        content: `Studio project: ${project.title} | ${project.bpm} BPM | Key: ${project.key} | Genre: ${project.genre || 'unspecified'} | ${project.tracks.length} tracks`,
+        tags: [
+          ...publishTags
+            .split(',')
+            .map((t) => t.trim())
+            .filter(Boolean),
+          'studio',
+          'audio',
+          project.key,
+          `${project.bpm}bpm`,
+        ].filter(Boolean),
+        source: 'studio',
+        meta: {
+          type: 'audio',
+          projectId: project.id,
+          bpm: project.bpm,
+          key: project.key,
+          genre: project.genre,
+          trackCount: project.tracks.length,
+        },
       });
-      const result = res.data?.result;
-      const content = typeof result === 'string' ? result : typeof result?.content === 'string' ? result.content : JSON.stringify(result || {}, null, 2);
-      setAiResult({ title, content });
-    } catch (e) {
-      console.error('Studio AI action failed:', e);
-      setAiResult({ title, content: `AI ${title.toLowerCase()} processed. Results applied to project.` });
+      const dtuRes = dtuResult as unknown as Record<string, unknown>;
+      if (!dtuRes?.ok && !dtuRes?.id && !dtuRes?.dtu) {
+        throw new Error('Failed to create project DTU');
+      }
+      const dtuId =
+        ((dtuRes?.dtu as Record<string, unknown>)?.id as string) || (dtuRes?.id as string);
+      if (!dtuId) throw new Error('No DTU ID returned');
+
+      const publishResult = await publishToMarketplace({
+        dtuId,
+        price: parseFloat(publishPrice) || 0,
+        description: `${project.title} — ${project.bpm} BPM, ${project.key}, ${project.genre || 'electronic'}`,
+        license: publishLicense,
+      });
+      const pubRes = publishResult as unknown as Record<string, unknown>;
+      const listingId = (pubRes?.listingId as string) || dtuId;
+      setPublishedListingId(listingId);
+      setShowPublishModal(false);
+      showToast('success', `"${publishTitle || project.title}" is live on the marketplace`);
+      setPublishTitle('');
+      setPublishPrice('');
+      setPublishTags('');
+    } catch (err) {
+      setPublishError(err instanceof Error ? err.message : 'Publish failed');
+    } finally {
+      setPublishSubmitting(false);
     }
-    setAiLoading(null);
-  }, [project]);
+  }, [
+    project,
+    publishSubmitting,
+    publishTitle,
+    publishPrice,
+    publishLicense,
+    publishTags,
+    createDTU,
+    publishToMarketplace,
+  ]);
+
+  // ---- AI Assistant ----
+  const handleAiAction = useCallback(
+    async (action: string, title: string) => {
+      if (!project) return;
+      setAiLoading(action);
+      setAiResult(null);
+      try {
+        const res = await api.post('/api/lens/run', {
+          domain: 'studio',
+          action,
+          input: {
+            projectId: project.id,
+            bpm: project.bpm,
+            key: project.key,
+            genre: project.genre,
+            trackCount: project.tracks.length,
+          },
+        });
+        const result = res.data?.result;
+        const content =
+          typeof result === 'string'
+            ? result
+            : typeof result?.content === 'string'
+              ? result.content
+              : JSON.stringify(result || {}, null, 2);
+        setAiResult({ title, content });
+      } catch (e) {
+        console.error('Studio AI action failed:', e);
+        setAiResult({
+          title,
+          content: `AI ${title.toLowerCase()} processed. Results applied to project.`,
+        });
+      }
+      setAiLoading(null);
+    },
+    [project]
+  );
 
   // ---- Synth operations ----
   const handleSelectSynthPreset = useCallback((preset: SynthPreset) => {
@@ -977,15 +1308,21 @@ export default function StudioLensPage() {
     emitInstrumentDTU(preset, 'create');
   }, []);
 
-  const handleAddSynthToTrack = useCallback((preset: SynthPreset) => {
-    handleAddTrack('midi', preset.id);
-    emitInstrumentDTU(preset, 'create');
-  }, [handleAddTrack]);
+  const handleAddSynthToTrack = useCallback(
+    (preset: SynthPreset) => {
+      handleAddTrack('midi', preset.id);
+      emitInstrumentDTU(preset, 'create');
+    },
+    [handleAddTrack]
+  );
 
   // ---- Render: No project ----
   if (!project) {
     return (
-      <div className="h-full flex flex-col bg-gradient-to-b from-violet-950/20 via-black to-black" data-lens-theme="studio">
+      <div
+        className="h-full flex flex-col bg-gradient-to-b from-violet-950/20 via-black to-black"
+        data-lens-theme="studio"
+      >
         <div className="flex items-center justify-between border-b border-violet-500/10 px-6 py-3">
           <div className="flex items-center gap-2">
             <Headphones className="w-6 h-6 text-neon-cyan" />
@@ -1016,8 +1353,8 @@ export default function StudioLensPage() {
             </div>
             <h2 className="text-2xl font-bold mb-2">Concord Studio</h2>
             <p className="text-gray-400 text-sm mb-6">
-              A full DAW in your browser. Every sound, synth preset, effect chain, and arrangement becomes a DTU —
-              citeable, consolidatable, compounding knowledge atoms.
+              A full DAW in your browser. Every sound, synth preset, effect chain, and arrangement
+              becomes a DTU — citeable, consolidatable, compounding knowledge atoms.
             </p>
             <div className="grid grid-cols-3 gap-3 text-left mb-8">
               {[
@@ -1050,7 +1387,8 @@ export default function StudioLensPage() {
             <Sparkles className="w-3 h-3 text-neon-purple flex-shrink-0" />
             <div className="flex-1 overflow-hidden">
               <span className="text-[10px] text-gray-500">
-                {dtuEvents.length} DTU events captured &middot; Last: {dtuEvents.at(-1)?.type} ({dtuEvents.at(-1)?.action})
+                {dtuEvents.length} DTU events captured &middot; Last: {dtuEvents.at(-1)?.type} (
+                {dtuEvents.at(-1)?.action})
               </span>
             </div>
           </div>
@@ -1059,31 +1397,76 @@ export default function StudioLensPage() {
         {/* New Project Modal */}
         <AnimatePresence>
           {showNewProject && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-              <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }} exit={{ scale: 0.95 }} className="bg-lattice-surface border border-white/10 rounded-xl p-6 w-full max-w-md">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4"
+            >
+              <motion.div
+                initial={{ scale: 0.95 }}
+                animate={{ scale: 1 }}
+                exit={{ scale: 0.95 }}
+                className="bg-lattice-surface border border-white/10 rounded-xl p-6 w-full max-w-md"
+              >
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-lg font-bold">New Project</h3>
-                  <button onClick={() => setShowNewProject(false)} className="text-gray-400 hover:text-white"><X className="w-5 h-5" /></button>
+                  <button
+                    onClick={() => setShowNewProject(false)}
+                    className="text-gray-400 hover:text-white"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
                 </div>
                 <div className="space-y-4">
-                  <input type="text" value={newTitle} onChange={e => setNewTitle(e.target.value)} className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm focus:outline-none focus:border-neon-cyan/50" placeholder="Project title" />
+                  <input
+                    type="text"
+                    value={newTitle}
+                    onChange={(e) => setNewTitle(e.target.value)}
+                    className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm focus:outline-none focus:border-neon-cyan/50"
+                    placeholder="Project title"
+                  />
                   <div className="grid grid-cols-3 gap-3">
                     <div>
                       <label className="text-xs text-gray-400 block mb-1">BPM</label>
-                      <input type="number" value={newBpm} onChange={e => setNewBpm(e.target.value)} className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm focus:outline-none" />
+                      <input
+                        type="number"
+                        value={newBpm}
+                        onChange={(e) => setNewBpm(e.target.value)}
+                        className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm focus:outline-none"
+                      />
                     </div>
                     <div>
                       <label className="text-xs text-gray-400 block mb-1">Key</label>
-                      <select value={newKey} onChange={e => setNewKey(e.target.value)} className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm focus:outline-none">
-                        {['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'].map(k => <option key={k} value={k} className="bg-lattice-surface">{k}</option>)}
+                      <select
+                        value={newKey}
+                        onChange={(e) => setNewKey(e.target.value)}
+                        className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm focus:outline-none"
+                      >
+                        {['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'].map(
+                          (k) => (
+                            <option key={k} value={k} className="bg-lattice-surface">
+                              {k}
+                            </option>
+                          )
+                        )}
                       </select>
                     </div>
                     <div>
                       <label className="text-xs text-gray-400 block mb-1">Genre</label>
-                      <input type="text" value={newGenre} onChange={e => setNewGenre(e.target.value)} className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm focus:outline-none" placeholder="e.g. electronic" />
+                      <input
+                        type="text"
+                        value={newGenre}
+                        onChange={(e) => setNewGenre(e.target.value)}
+                        className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm focus:outline-none"
+                        placeholder="e.g. electronic"
+                      />
                     </div>
                   </div>
-                  <button onClick={handleCreateProject} className="w-full py-2.5 bg-neon-cyan text-black rounded-lg font-medium hover:bg-neon-cyan/80">
+                  <button
+                    onClick={handleCreateProject}
+                    className="w-full py-2.5 bg-neon-cyan text-black rounded-lg font-medium hover:bg-neon-cyan/80"
+                  >
                     Create Project
                   </button>
                 </div>
@@ -1097,7 +1480,10 @@ export default function StudioLensPage() {
 
   // ---- Render: Active project ----
   return (
-    <div className="lens-studio h-full flex flex-col bg-gradient-to-b from-violet-950/20 via-black to-black" data-lens-theme="studio">
+    <div
+      className="lens-studio h-full flex flex-col bg-gradient-to-b from-violet-950/20 via-black to-black"
+      data-lens-theme="studio"
+    >
       {/* Transport Bar */}
       <TransportBar
         transportState={transportState}
@@ -1116,10 +1502,31 @@ export default function StudioLensPage() {
         onRecord={handleRecord}
         onBpmChange={handleBpmChange}
         onViewChange={setStudioView}
-        onToggleLoop={() => updateProject(p => ({ ...p, transport: { ...p.transport, loopEnabled: !p.transport.loopEnabled } }))}
-        onToggleMetronome={() => updateProject(p => ({ ...p, transport: { ...p.transport, metronome: !p.transport.metronome } }))}
+        onToggleLoop={() =>
+          updateProject((p) => ({
+            ...p,
+            transport: { ...p.transport, loopEnabled: !p.transport.loopEnabled },
+          }))
+        }
+        onToggleMetronome={() =>
+          updateProject((p) => ({
+            ...p,
+            transport: { ...p.transport, metronome: !p.transport.metronome },
+          }))
+        }
         onSave={handleSave}
-        onExport={() => handleExport({ format: 'wav', sampleRate: 44100, bitDepth: 24, normalize: true, dithering: true, stems: false, startBeat: 0, endBeat: -1 })}
+        onExport={() =>
+          handleExport({
+            format: 'wav',
+            sampleRate: 44100,
+            bitDepth: 24,
+            normalize: true,
+            dithering: true,
+            stems: false,
+            startBeat: 0,
+            endBeat: -1,
+          })
+        }
         onMaster={handleAnalyze}
       />
 
@@ -1132,7 +1539,10 @@ export default function StudioLensPage() {
               <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
               <span className="text-xs text-red-400 font-mono font-semibold">REC</span>
               <span className="text-xs text-red-300 font-mono">
-                {Math.floor(recordingTimer / 60).toString().padStart(2, '0')}:{(recordingTimer % 60).toString().padStart(2, '0')}
+                {Math.floor(recordingTimer / 60)
+                  .toString()
+                  .padStart(2, '0')}
+                :{(recordingTimer % 60).toString().padStart(2, '0')}
               </span>
             </div>
           )}
@@ -1140,8 +1550,12 @@ export default function StudioLensPage() {
           {/* Recording error surface */}
           {recordError && !isRecording && (
             <div className="flex items-center gap-2 px-3 py-1.5 bg-red-500/15 border border-red-500/30 rounded-lg max-w-md">
-              <span className="text-[10px] text-red-300 uppercase tracking-wide flex-shrink-0">Rec Error</span>
-              <span className="text-xs text-red-400 truncate" title={recordError}>{recordError}</span>
+              <span className="text-[10px] text-red-300 uppercase tracking-wide flex-shrink-0">
+                Rec Error
+              </span>
+              <span className="text-xs text-red-400 truncate" title={recordError}>
+                {recordError}
+              </span>
               <button
                 onClick={() => setRecordError(null)}
                 className="text-[10px] text-red-300 hover:text-red-200 ml-auto flex-shrink-0"
@@ -1189,6 +1603,32 @@ export default function StudioLensPage() {
               )}
             </div>
           )}
+
+          {/* Publish to Marketplace */}
+          {project && (
+            <button
+              onClick={() => {
+                setPublishTitle(project.title);
+                setPublishTags(
+                  [project.key, `${project.bpm}bpm`, project.genre].filter(Boolean).join(', ')
+                );
+                setShowPublishModal(true);
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/15 text-amber-400 rounded-lg text-xs hover:bg-amber-500/25 transition-colors border border-amber-500/20"
+              title="Publish project to Marketplace"
+            >
+              <Upload className="w-3.5 h-3.5" /> Publish
+            </button>
+          )}
+
+          {/* Insert from Library */}
+          <button
+            onClick={() => setShowDTUPicker(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-neon-purple/15 text-neon-purple rounded-lg text-xs hover:bg-neon-purple/25 transition-colors border border-neon-purple/20"
+            title="Insert DTU from library"
+          >
+            Insert
+          </button>
 
           <div className="flex-1" />
 
@@ -1258,39 +1698,47 @@ export default function StudioLensPage() {
                 if (data.mute !== undefined) mixerRef.current?.setMute(trackId, data.mute);
               }}
               onToggleEffect={(trackId, effectId) => {
-                updateProject(p => {
+                updateProject((p) => {
                   const updated = {
                     ...p,
-                    tracks: p.tracks.map(t =>
+                    tracks: p.tracks.map((t) =>
                       t.id === trackId
-                        ? { ...t, effectChain: t.effectChain.map(e => e.id === effectId ? { ...e, enabled: !e.enabled } : e) }
+                        ? {
+                            ...t,
+                            effectChain: t.effectChain.map((e) =>
+                              e.id === effectId ? { ...e, enabled: !e.enabled } : e
+                            ),
+                          }
                         : t
                     ),
                   };
                   // Sync effect state to engine
-                  const track = updated.tracks.find(t => t.id === trackId);
+                  const track = updated.tracks.find((t) => t.id === trackId);
                   if (track) mixerRef.current?.setChannelEffects(trackId, track.effectChain);
                   return updated;
                 });
               }}
-              onAddEffect={(trackId) => { setSelectedTrackId(trackId); setStudioView('effects'); }}
+              onAddEffect={(trackId) => {
+                setSelectedTrackId(trackId);
+                setStudioView('effects');
+              }}
               onRemoveEffect={(trackId, effectId) => {
-                updateProject(p => {
+                updateProject((p) => {
                   const updated = {
                     ...p,
-                    tracks: p.tracks.map(t =>
+                    tracks: p.tracks.map((t) =>
                       t.id === trackId
-                        ? { ...t, effectChain: t.effectChain.filter(e => e.id !== effectId) }
+                        ? { ...t, effectChain: t.effectChain.filter((e) => e.id !== effectId) }
                         : t
                     ),
                   };
-                  const track = updated.tracks.find(t => t.id === trackId);
+                  const track = updated.tracks.find((t) => t.id === trackId);
                   if (track) mixerRef.current?.setChannelEffects(trackId, track.effectChain);
                   return updated;
                 });
               }}
               onMasterVolumeChange={(vol) => {
-                updateProject(p => ({ ...p, masterBus: { ...p.masterBus, volume: vol } }));
+                updateProject((p) => ({ ...p, masterBus: { ...p.masterBus, volume: vol } }));
                 mixerRef.current?.setMasterVolume(vol);
               }}
             />
@@ -1321,19 +1769,29 @@ export default function StudioLensPage() {
               genre={project.genre || 'electronic'}
               onToggleStep={handleToggleDrumStep}
               onUpdateStepVelocity={handleUpdateDrumStepVelocity}
-              onUpdatePad={(padId, data) => setDrumPads(prev => prev.map(p => p.id === padId ? { ...p, ...data } : p))}
+              onUpdatePad={(padId, data) =>
+                setDrumPads((prev) => prev.map((p) => (p.id === padId ? { ...p, ...data } : p)))
+              }
               onTriggerPad={handleTriggerPad}
-              onSetSteps={(steps) => setDrumPattern(prev => ({
-                ...prev,
-                steps,
-                tracks: prev.tracks.map(t => ({
-                  ...t,
-                  steps: Array.from({ length: steps }, (_, i) => t.steps[i] || { active: false, velocity: 100, probability: 1, flam: false }),
-                })),
-              }))}
+              onSetSteps={(steps) =>
+                setDrumPattern((prev) => ({
+                  ...prev,
+                  steps,
+                  tracks: prev.tracks.map((t) => ({
+                    ...t,
+                    steps: Array.from(
+                      { length: steps },
+                      (_, i) =>
+                        t.steps[i] || { active: false, velocity: 100, probability: 1, flam: false }
+                    ),
+                  })),
+                }))
+              }
               onClearPattern={handleClearDrums}
               onRandomize={handleRandomizeDrums}
-              onSavePattern={() => emitPatternDTU(drumPattern, project.bpm, project.genre || 'electronic')}
+              onSavePattern={() =>
+                emitPatternDTU(drumPattern, project.bpm, project.genre || 'electronic')
+              }
             />
           )}
 
@@ -1342,8 +1800,12 @@ export default function StudioLensPage() {
               <div className="text-center">
                 <Music className="w-12 h-12 mx-auto mb-3 opacity-30" />
                 <p className="text-sm">Sampler</p>
-                <p className="text-xs text-gray-600 mt-1">Load audio files, map across keys, set loop points and velocity zones</p>
-                <p className="text-xs text-gray-500 mt-2">No audio DTUs loaded yet. Drag audio DTUs from the soundboard to begin.</p>
+                <p className="text-xs text-gray-600 mt-1">
+                  Load audio files, map across keys, set loop points and velocity zones
+                </p>
+                <p className="text-xs text-gray-500 mt-2">
+                  No audio DTUs loaded yet. Drag audio DTUs from the soundboard to begin.
+                </p>
               </div>
             </div>
           )}
@@ -1372,35 +1834,74 @@ export default function StudioLensPage() {
               zoomLevel={zoomLevel}
               projectId={project.id}
               onAddLane={handleAddAutomationLane}
-              onRemoveLane={(trackId, laneId) => updateProject(p => ({
-                ...p,
-                tracks: p.tracks.map(t => t.id === trackId ? { ...t, automationLanes: t.automationLanes.filter(l => l.id !== laneId) } : t),
-              }))}
-              onToggleLane={(trackId, laneId) => updateProject(p => ({
-                ...p,
-                tracks: p.tracks.map(t => t.id === trackId ? { ...t, automationLanes: t.automationLanes.map(l => l.id === laneId ? { ...l, visible: !l.visible } : l) } : t),
-              }))}
+              onRemoveLane={(trackId, laneId) =>
+                updateProject((p) => ({
+                  ...p,
+                  tracks: p.tracks.map((t) =>
+                    t.id === trackId
+                      ? { ...t, automationLanes: t.automationLanes.filter((l) => l.id !== laneId) }
+                      : t
+                  ),
+                }))
+              }
+              onToggleLane={(trackId, laneId) =>
+                updateProject((p) => ({
+                  ...p,
+                  tracks: p.tracks.map((t) =>
+                    t.id === trackId
+                      ? {
+                          ...t,
+                          automationLanes: t.automationLanes.map((l) =>
+                            l.id === laneId ? { ...l, visible: !l.visible } : l
+                          ),
+                        }
+                      : t
+                  ),
+                }))
+              }
               onAddPoint={handleAddAutomationPoint}
-              onUpdatePoint={(trackId, laneId, pointId, data) => updateProject(p => ({
-                ...p,
-                tracks: p.tracks.map(t => t.id === trackId ? {
-                  ...t,
-                  automationLanes: t.automationLanes.map(l => l.id === laneId ? {
-                    ...l,
-                    points: l.points.map(pt => pt.id === pointId ? { ...pt, ...data } : pt),
-                  } : l),
-                } : t),
-              }))}
-              onDeletePoint={(trackId, laneId, pointId) => updateProject(p => ({
-                ...p,
-                tracks: p.tracks.map(t => t.id === trackId ? {
-                  ...t,
-                  automationLanes: t.automationLanes.map(l => l.id === laneId ? {
-                    ...l,
-                    points: l.points.filter(pt => pt.id !== pointId),
-                  } : l),
-                } : t),
-              }))}
+              onUpdatePoint={(trackId, laneId, pointId, data) =>
+                updateProject((p) => ({
+                  ...p,
+                  tracks: p.tracks.map((t) =>
+                    t.id === trackId
+                      ? {
+                          ...t,
+                          automationLanes: t.automationLanes.map((l) =>
+                            l.id === laneId
+                              ? {
+                                  ...l,
+                                  points: l.points.map((pt) =>
+                                    pt.id === pointId ? { ...pt, ...data } : pt
+                                  ),
+                                }
+                              : l
+                          ),
+                        }
+                      : t
+                  ),
+                }))
+              }
+              onDeletePoint={(trackId, laneId, pointId) =>
+                updateProject((p) => ({
+                  ...p,
+                  tracks: p.tracks.map((t) =>
+                    t.id === trackId
+                      ? {
+                          ...t,
+                          automationLanes: t.automationLanes.map((l) =>
+                            l.id === laneId
+                              ? {
+                                  ...l,
+                                  points: l.points.filter((pt) => pt.id !== pointId),
+                                }
+                              : l
+                          ),
+                        }
+                      : t
+                  ),
+                }))
+              }
             />
           )}
 
@@ -1460,14 +1961,55 @@ export default function StudioLensPage() {
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {[
-                  { icon: BarChart3, color: 'neon-purple', title: 'Analyze Mix', desc: 'Get mix score and suggestions', action: 'analyze-mix' },
-                  { icon: Music, color: 'neon-cyan', title: 'Suggest Chords', desc: `AI progressions in ${project.key}`, action: 'suggest-chords' },
-                  { icon: Activity, color: 'neon-green', title: 'Generate Drums', desc: `${project.bpm} BPM ${project.genre || ''} patterns`, action: 'generate-drums' },
-                  { icon: Waves, color: 'neon-pink', title: 'Sound Design', desc: 'AI synth preset generation', action: 'sound-design' },
-                  { icon: Target, color: 'neon-orange', title: 'Auto-Arrange', desc: 'AI arrangement suggestions', action: 'auto-arrange' },
-                  { icon: Radio, color: 'neon-blue', title: 'Reference Match', desc: 'Match reference track tone', action: 'reference-match' },
+                  {
+                    icon: BarChart3,
+                    color: 'neon-purple',
+                    title: 'Analyze Mix',
+                    desc: 'Get mix score and suggestions',
+                    action: 'analyze-mix',
+                  },
+                  {
+                    icon: Music,
+                    color: 'neon-cyan',
+                    title: 'Suggest Chords',
+                    desc: `AI progressions in ${project.key}`,
+                    action: 'suggest-chords',
+                  },
+                  {
+                    icon: Activity,
+                    color: 'neon-green',
+                    title: 'Generate Drums',
+                    desc: `${project.bpm} BPM ${project.genre || ''} patterns`,
+                    action: 'generate-drums',
+                  },
+                  {
+                    icon: Waves,
+                    color: 'neon-pink',
+                    title: 'Sound Design',
+                    desc: 'AI synth preset generation',
+                    action: 'sound-design',
+                  },
+                  {
+                    icon: Target,
+                    color: 'neon-orange',
+                    title: 'Auto-Arrange',
+                    desc: 'AI arrangement suggestions',
+                    action: 'auto-arrange',
+                  },
+                  {
+                    icon: Radio,
+                    color: 'neon-blue',
+                    title: 'Reference Match',
+                    desc: 'Match reference track tone',
+                    action: 'reference-match',
+                  },
                 ].map((item, i) => (
-                  <button key={i} onClick={() => handleAiAction(item.action, item.title)} disabled={aiLoading === item.action} className={`p-4 rounded-xl bg-${item.color}/10 border border-${item.color}/20 text-left hover:bg-${item.color}/20 disabled:opacity-50`}>
+                  <button
+                    key={i}
+                    onClick={() => handleAiAction(item.action, item.title)}
+                    disabled={aiLoading === item.action}
+                    className={`p-4 rounded-xl bg-${item.color}/10 border border-${item.color}/20 text-left hover:bg-${item.color}/20 disabled:opacity-50`}
+                  >
                     {aiLoading === item.action ? (
                       <div className="w-6 h-6 border-2 border-current border-t-transparent rounded-full animate-spin mb-2" />
                     ) : (
@@ -1482,9 +2024,16 @@ export default function StudioLensPage() {
                 <div className="mt-4 p-4 bg-white/5 border border-white/10 rounded-xl">
                   <div className="flex items-center justify-between mb-2">
                     <h3 className="text-sm font-semibold text-neon-purple">{aiResult.title}</h3>
-                    <button onClick={() => setAiResult(null)} className="p-1 hover:bg-white/10 rounded"><X className="w-3.5 h-3.5" /></button>
+                    <button
+                      onClick={() => setAiResult(null)}
+                      className="p-1 hover:bg-white/10 rounded"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
                   </div>
-                  <pre className="text-xs text-gray-300 whitespace-pre-wrap font-mono max-h-48 overflow-auto">{aiResult.content}</pre>
+                  <pre className="text-xs text-gray-300 whitespace-pre-wrap font-mono max-h-48 overflow-auto">
+                    {aiResult.content}
+                  </pre>
                 </div>
               )}
             </div>
@@ -1498,19 +2047,55 @@ export default function StudioLensPage() {
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {[
-                  { title: 'Fundamentals', desc: 'Rhythm, melody, harmony', lessons: 12, color: 'neon-cyan' },
-                  { title: 'Sound Design', desc: 'Synthesis, sampling, layering', lessons: 10, color: 'neon-purple' },
-                  { title: 'Mixing', desc: 'EQ, compression, reverb', lessons: 15, color: 'neon-pink' },
-                  { title: 'Arrangement', desc: 'Song structure, transitions', lessons: 8, color: 'neon-green' },
-                  { title: 'Mastering', desc: 'Loudness, EQ, limiting', lessons: 6, color: 'neon-cyan' },
-                  { title: 'Genre Studies', desc: 'Genre-specific techniques', lessons: 14, color: 'neon-purple' },
+                  {
+                    title: 'Fundamentals',
+                    desc: 'Rhythm, melody, harmony',
+                    lessons: 12,
+                    color: 'neon-cyan',
+                  },
+                  {
+                    title: 'Sound Design',
+                    desc: 'Synthesis, sampling, layering',
+                    lessons: 10,
+                    color: 'neon-purple',
+                  },
+                  {
+                    title: 'Mixing',
+                    desc: 'EQ, compression, reverb',
+                    lessons: 15,
+                    color: 'neon-pink',
+                  },
+                  {
+                    title: 'Arrangement',
+                    desc: 'Song structure, transitions',
+                    lessons: 8,
+                    color: 'neon-green',
+                  },
+                  {
+                    title: 'Mastering',
+                    desc: 'Loudness, EQ, limiting',
+                    lessons: 6,
+                    color: 'neon-cyan',
+                  },
+                  {
+                    title: 'Genre Studies',
+                    desc: 'Genre-specific techniques',
+                    lessons: 14,
+                    color: 'neon-purple',
+                  },
                 ].map((mod, i) => (
-                  <div key={i} className="p-4 rounded-xl bg-white/5 border border-white/10 hover:border-white/20 cursor-pointer">
+                  <div
+                    key={i}
+                    className="p-4 rounded-xl bg-white/5 border border-white/10 hover:border-white/20 cursor-pointer"
+                  >
                     <h3 className="font-semibold">{mod.title}</h3>
                     <p className="text-xs text-gray-400 mt-1">{mod.desc}</p>
                     <p className="text-[10px] text-gray-500 mt-2">{mod.lessons} lessons</p>
                     <div className="mt-2 w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
-                      <div className={`h-full bg-${mod.color} rounded-full`} style={{ width: '0%' }} />
+                      <div
+                        className={`h-full bg-${mod.color} rounded-full`}
+                        style={{ width: '0%' }}
+                      />
                     </div>
                   </div>
                 ))}
@@ -1523,21 +2108,51 @@ export default function StudioLensPage() {
       {/* Add Track Modal */}
       <AnimatePresence>
         {showAddTrack && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-            <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }} exit={{ scale: 0.95 }} className="bg-lattice-surface border border-white/10 rounded-xl p-6 w-full max-w-lg max-h-[80vh] overflow-y-auto">
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.95 }}
+              animate={{ scale: 1 }}
+              exit={{ scale: 0.95 }}
+              className="bg-lattice-surface border border-white/10 rounded-xl p-6 w-full max-w-lg max-h-[80vh] overflow-y-auto"
+            >
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-bold">Add Track</h3>
-                <button onClick={() => setShowAddTrack(false)} className="text-gray-400 hover:text-white"><X className="w-5 h-5" /></button>
+                <button
+                  onClick={() => setShowAddTrack(false)}
+                  className="text-gray-400 hover:text-white"
+                >
+                  <X className="w-5 h-5" />
+                </button>
               </div>
               <div className="space-y-2">
-                <button onClick={() => handleAddTrack('audio')} className="w-full p-3 rounded-lg bg-white/5 border border-white/10 text-left hover:border-neon-cyan/30 flex items-center gap-3">
+                <button
+                  onClick={() => handleAddTrack('audio')}
+                  className="w-full p-3 rounded-lg bg-white/5 border border-white/10 text-left hover:border-neon-cyan/30 flex items-center gap-3"
+                >
                   <Mic2 className="w-5 h-5 text-neon-cyan" />
-                  <div><p className="font-medium text-sm">Audio Track</p><p className="text-xs text-gray-400">Record or import audio</p></div>
+                  <div>
+                    <p className="font-medium text-sm">Audio Track</p>
+                    <p className="text-xs text-gray-400">Record or import audio</p>
+                  </div>
                 </button>
-                {DEFAULT_SYNTH_PRESETS.map(preset => (
-                  <button key={preset.id} onClick={() => handleAddSynthToTrack(preset)} className="w-full p-3 rounded-lg bg-white/5 border border-white/10 text-left hover:border-neon-purple/30 flex items-center gap-3">
+                {DEFAULT_SYNTH_PRESETS.map((preset) => (
+                  <button
+                    key={preset.id}
+                    onClick={() => handleAddSynthToTrack(preset)}
+                    className="w-full p-3 rounded-lg bg-white/5 border border-white/10 text-left hover:border-neon-purple/30 flex items-center gap-3"
+                  >
                     <Waves className="w-5 h-5 text-neon-purple" />
-                    <div><p className="font-medium text-sm">{preset.name}</p><p className="text-xs text-gray-400 capitalize">{preset.category} &middot; {preset.type}</p></div>
+                    <div>
+                      <p className="font-medium text-sm">{preset.name}</p>
+                      <p className="text-xs text-gray-400 capitalize">
+                        {preset.category} &middot; {preset.type}
+                      </p>
+                    </div>
                   </button>
                 ))}
               </div>
@@ -1552,10 +2167,19 @@ export default function StudioLensPage() {
         <span className="text-[9px] text-gray-500">{dtuEvents.length} DTU events</span>
         {dtuEvents.length > 0 && (
           <span className="text-[9px] text-gray-600 truncate">
-            Latest: {dtuEvents.at(-1)?.type} &middot; {dtuEvents.at(-1)?.action} &middot; {new Date(dtuEvents.at(-1)?.timestamp || 0).toLocaleTimeString()}
+            Latest: {dtuEvents.at(-1)?.type} &middot; {dtuEvents.at(-1)?.action} &middot;{' '}
+            {new Date(dtuEvents.at(-1)?.timestamp || 0).toLocaleTimeString()}
           </span>
         )}
         <div className="flex-1" />
+        {publishedListingId && (
+          <Link
+            href="/lenses/marketplace"
+            className="flex items-center gap-1 text-[9px] text-amber-400 hover:underline"
+          >
+            <Upload className="w-3 h-3" /> View listing
+          </Link>
+        )}
         <LiveIndicator isLive={isLive} lastUpdated={lastUpdated} compact />
 
         {/* Lens Features toggle */}
@@ -1592,7 +2216,9 @@ export default function StudioLensPage() {
 
       {/* Studio Domain Actions */}
       <div className="border-t border-white/10 p-4 space-y-3">
-        <h3 className="text-sm font-semibold text-neon-purple flex items-center gap-2"><Activity className="w-4 h-4" /> Studio Actions</h3>
+        <h3 className="text-sm font-semibold text-neon-purple flex items-center gap-2">
+          <Activity className="w-4 h-4" /> Studio Actions
+        </h3>
         <div className="flex flex-wrap gap-2">
           {[
             { action: 'projectTimeline', label: 'Project Timeline' },
@@ -1600,62 +2226,305 @@ export default function StudioLensPage() {
             { action: 'renderEstimate', label: 'Render Estimate' },
             { action: 'versionCompare', label: 'Version Compare' },
           ].map(({ action, label }) => (
-            <button key={action} onClick={() => handleStudioAction(action)} disabled={studioActiveAction === action || !studioArtifacts[0]?.id}
-              className="px-3 py-1.5 text-xs bg-neon-purple/10 border border-neon-purple/20 rounded-lg hover:bg-neon-purple/20 disabled:opacity-50 flex items-center gap-1.5">
-              {studioActiveAction === action ? <div className="w-3 h-3 border border-neon-purple border-t-transparent rounded-full animate-spin" /> : <Zap className="w-3 h-3 text-neon-purple" />}
+            <button
+              key={action}
+              onClick={() => handleStudioAction(action)}
+              disabled={studioActiveAction === action || !studioArtifacts[0]?.id}
+              className="px-3 py-1.5 text-xs bg-neon-purple/10 border border-neon-purple/20 rounded-lg hover:bg-neon-purple/20 disabled:opacity-50 flex items-center gap-1.5"
+            >
+              {studioActiveAction === action ? (
+                <div className="w-3 h-3 border border-neon-purple border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <Zap className="w-3 h-3 text-neon-purple" />
+              )}
               {label}
             </button>
           ))}
         </div>
+        {/* DTU Library */}
+        <DTULibraryPanel
+          lens="studio"
+          className="mx-0 rounded-none border-x-0 border-t border-b-0"
+        />
+
         {studioActionResult && (
           <div className="p-3 bg-black/40 rounded-lg border border-neon-purple/20 text-xs space-y-2">
             {studioActionResult.action === 'projectTimeline' && (
               <div className="space-y-1">
                 <div className="flex gap-4 flex-wrap">
-                  <span className="text-gray-400">Tasks: <span className="text-white font-mono">{String(studioActionResult.totalTasks ?? '')}</span></span>
-                  <span className="text-gray-400">Completed: <span className="text-green-400 font-mono">{String(studioActionResult.completed ?? 0)}</span></span>
-                  <span className="text-gray-400">Progress: <span className="text-neon-purple font-mono">{String(studioActionResult.completionRate ?? 0)}%</span></span>
-                  <span className="text-gray-400">Duration: <span className="text-white font-mono">{String(studioActionResult.totalDays ?? '')} days</span></span>
+                  <span className="text-gray-400">
+                    Tasks:{' '}
+                    <span className="text-white font-mono">
+                      {String(studioActionResult.totalTasks ?? '')}
+                    </span>
+                  </span>
+                  <span className="text-gray-400">
+                    Completed:{' '}
+                    <span className="text-green-400 font-mono">
+                      {String(studioActionResult.completed ?? 0)}
+                    </span>
+                  </span>
+                  <span className="text-gray-400">
+                    Progress:{' '}
+                    <span className="text-neon-purple font-mono">
+                      {String(studioActionResult.completionRate ?? 0)}%
+                    </span>
+                  </span>
+                  <span className="text-gray-400">
+                    Duration:{' '}
+                    <span className="text-white font-mono">
+                      {String(studioActionResult.totalDays ?? '')} days
+                    </span>
+                  </span>
                 </div>
-                {!!studioActionResult.message && <p className="text-gray-400 italic">{String(studioActionResult.message)}</p>}
+                {!!studioActionResult.message && (
+                  <p className="text-gray-400 italic">{String(studioActionResult.message)}</p>
+                )}
               </div>
             )}
             {studioActionResult.action === 'assetTracker' && (
               <div className="space-y-1">
                 <div className="flex gap-4 flex-wrap">
-                  <span className="text-gray-400">Assets: <span className="text-white font-mono">{String(studioActionResult.totalAssets ?? '')}</span></span>
-                  <span className="text-gray-400">Size: <span className="text-neon-purple font-mono">{String(studioActionResult.totalSizeMB ?? '')} MB</span></span>
-                  <span className="text-gray-400">Orphaned: <span className="text-yellow-400 font-mono">{String(studioActionResult.orphanedAssets ?? 0)}</span></span>
+                  <span className="text-gray-400">
+                    Assets:{' '}
+                    <span className="text-white font-mono">
+                      {String(studioActionResult.totalAssets ?? '')}
+                    </span>
+                  </span>
+                  <span className="text-gray-400">
+                    Size:{' '}
+                    <span className="text-neon-purple font-mono">
+                      {String(studioActionResult.totalSizeMB ?? '')} MB
+                    </span>
+                  </span>
+                  <span className="text-gray-400">
+                    Orphaned:{' '}
+                    <span className="text-yellow-400 font-mono">
+                      {String(studioActionResult.orphanedAssets ?? 0)}
+                    </span>
+                  </span>
                 </div>
-                {!!studioActionResult.message && <p className="text-gray-400 italic">{String(studioActionResult.message)}</p>}
+                {!!studioActionResult.message && (
+                  <p className="text-gray-400 italic">{String(studioActionResult.message)}</p>
+                )}
               </div>
             )}
             {studioActionResult.action === 'renderEstimate' && (
               <div className="space-y-1">
                 <div className="flex gap-4 flex-wrap">
-                  <span className="text-gray-400">Resolution: <span className="text-white font-mono">{String(studioActionResult.resolution ?? '')}</span></span>
-                  <span className="text-gray-400">Per frame: <span className="text-neon-purple font-mono">{String(studioActionResult.estimatedPerFrame ?? '')}</span></span>
-                  <span className="text-gray-400">Total: <span className="text-neon-cyan font-bold">{String(studioActionResult.estimatedTotal ?? '')}</span></span>
+                  <span className="text-gray-400">
+                    Resolution:{' '}
+                    <span className="text-white font-mono">
+                      {String(studioActionResult.resolution ?? '')}
+                    </span>
+                  </span>
+                  <span className="text-gray-400">
+                    Per frame:{' '}
+                    <span className="text-neon-purple font-mono">
+                      {String(studioActionResult.estimatedPerFrame ?? '')}
+                    </span>
+                  </span>
+                  <span className="text-gray-400">
+                    Total:{' '}
+                    <span className="text-neon-cyan font-bold">
+                      {String(studioActionResult.estimatedTotal ?? '')}
+                    </span>
+                  </span>
                 </div>
-                {Array.isArray(studioActionResult.recommendations) && studioActionResult.recommendations.length > 0 && (
-                  <div className="space-y-0.5">{(studioActionResult.recommendations as string[]).map((r, i) => <p key={i} className="text-yellow-300">• {r}</p>)}</div>
-                )}
+                {Array.isArray(studioActionResult.recommendations) &&
+                  studioActionResult.recommendations.length > 0 && (
+                    <div className="space-y-0.5">
+                      {(studioActionResult.recommendations as string[]).map((r, i) => (
+                        <p key={i} className="text-yellow-300">
+                          • {r}
+                        </p>
+                      ))}
+                    </div>
+                  )}
               </div>
             )}
             {studioActionResult.action === 'versionCompare' && (
               <div className="space-y-1">
                 <div className="flex gap-4 flex-wrap">
-                  <span className="text-gray-400">Added: <span className="text-green-400 font-mono">{String((studioActionResult.diff as Record<string,number>)?.added ?? 0)}</span></span>
-                  <span className="text-gray-400">Removed: <span className="text-red-400 font-mono">{String((studioActionResult.diff as Record<string,number>)?.removed ?? 0)}</span></span>
-                  <span className="text-gray-400">Modified: <span className="text-yellow-400 font-mono">{String((studioActionResult.diff as Record<string,number>)?.modified ?? 0)}</span></span>
+                  <span className="text-gray-400">
+                    Added:{' '}
+                    <span className="text-green-400 font-mono">
+                      {String((studioActionResult.diff as Record<string, number>)?.added ?? 0)}
+                    </span>
+                  </span>
+                  <span className="text-gray-400">
+                    Removed:{' '}
+                    <span className="text-red-400 font-mono">
+                      {String((studioActionResult.diff as Record<string, number>)?.removed ?? 0)}
+                    </span>
+                  </span>
+                  <span className="text-gray-400">
+                    Modified:{' '}
+                    <span className="text-yellow-400 font-mono">
+                      {String((studioActionResult.diff as Record<string, number>)?.modified ?? 0)}
+                    </span>
+                  </span>
                 </div>
-                {!!studioActionResult.message && <p className="text-gray-400 italic">{String(studioActionResult.message)}</p>}
+                {!!studioActionResult.message && (
+                  <p className="text-gray-400 italic">{String(studioActionResult.message)}</p>
+                )}
               </div>
             )}
-            <button onClick={() => setStudioActionResult(null)} className="text-gray-600 hover:text-gray-400 text-xs flex items-center gap-1"><X className="w-3 h-3" /> Dismiss</button>
+            <button
+              onClick={() => setStudioActionResult(null)}
+              className="text-gray-600 hover:text-gray-400 text-xs flex items-center gap-1"
+            >
+              <X className="w-3 h-3" /> Dismiss
+            </button>
           </div>
         )}
       </div>
+
+      {/* Publish to Marketplace Modal */}
+      <AnimatePresence>
+        {showPublishModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4"
+            onClick={() => setShowPublishModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95 }}
+              animate={{ scale: 1 }}
+              exit={{ scale: 0.95 }}
+              className="bg-lattice-surface border border-amber-500/20 rounded-xl p-6 w-full max-w-md space-y-4"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-bold flex items-center gap-2">
+                  <Upload className="w-5 h-5 text-amber-400" /> Publish to Marketplace
+                </h3>
+                <button
+                  onClick={() => setShowPublishModal(false)}
+                  className="text-gray-400 hover:text-white"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="space-y-3">
+                <div>
+                  <label className="text-xs text-gray-400 block mb-1">Listing Title</label>
+                  <input
+                    value={publishTitle}
+                    onChange={(e) => setPublishTitle(e.target.value)}
+                    placeholder={project?.title}
+                    className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm focus:outline-none focus:border-amber-400/50"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs text-gray-400 block mb-1">Price (USD)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={publishPrice}
+                      onChange={(e) => setPublishPrice(e.target.value)}
+                      placeholder="0.00 (free)"
+                      className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-400 block mb-1">License</label>
+                    <select
+                      value={publishLicense}
+                      onChange={(e) => setPublishLicense(e.target.value as typeof publishLicense)}
+                      className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm focus:outline-none"
+                    >
+                      <option value="basic">Basic</option>
+                      <option value="premium">Premium</option>
+                      <option value="exclusive">Exclusive</option>
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs text-gray-400 block mb-1">Tags (comma separated)</label>
+                  <input
+                    value={publishTags}
+                    onChange={(e) => setPublishTags(e.target.value)}
+                    placeholder="e.g. lo-fi, chill, 120bpm"
+                    className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm focus:outline-none"
+                  />
+                </div>
+                {project && (
+                  <div className="p-3 bg-white/5 rounded-lg text-xs text-gray-400 space-y-1">
+                    <p>
+                      Project: <span className="text-white">{project.title}</span>
+                    </p>
+                    <p>
+                      {project.bpm} BPM · Key {project.key} · {project.tracks.length} tracks
+                      {project.genre ? ` · ${project.genre}` : ''}
+                    </p>
+                  </div>
+                )}
+                {publishError && <p className="text-xs text-red-400">{publishError}</p>}
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={() => setShowPublishModal(false)}
+                  className="flex-1 py-2.5 bg-white/5 rounded-lg text-sm hover:bg-white/10"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handlePublishProject}
+                  disabled={publishSubmitting}
+                  className="flex-1 py-2.5 bg-amber-500 text-black rounded-lg text-sm font-semibold hover:bg-amber-400 disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {publishSubmitting ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />{' '}
+                      Publishing...
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="w-4 h-4" /> Publish Now
+                    </>
+                  )}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* DTU Picker Modal */}
+      <AnimatePresence>
+        {showDTUPicker && (
+          <DTUPickerModal
+            lens="studio"
+            title="Insert DTU from Library"
+            onClose={() => setShowDTUPicker(false)}
+            onSelect={(dtu) => {
+              if (project) {
+                const projectData = project as unknown as Record<string, unknown>;
+                const existingMeta =
+                  (projectData.meta as Record<string, unknown> | undefined) || {};
+                const citedDTUs =
+                  (existingMeta.citedDTUs as Array<{ id: string; title: string }>) || [];
+                updateLensItem(project.id, {
+                  data: {
+                    ...projectData,
+                    meta: {
+                      ...existingMeta,
+                      citedDTUs: [...citedDTUs, { id: dtu.id, title: dtu.title }],
+                    },
+                  },
+                }).catch(() => {});
+                emitSessionDTU(project, `DTU inserted: ${dtu.title}`);
+                showToast('success', `Inserted "${dtu.title}" as reference`);
+              }
+            }}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
