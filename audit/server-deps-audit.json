@@ -1,0 +1,150 @@
+{
+  "auditReportVersion": 2,
+  "vulnerabilities": {
+    "@xenova/transformers": {
+      "name": "@xenova/transformers",
+      "severity": "critical",
+      "isDirect": true,
+      "via": [
+        "onnxruntime-web"
+      ],
+      "effects": [],
+      "range": ">=2.0.2",
+      "nodes": [
+        "node_modules/@xenova/transformers"
+      ],
+      "fixAvailable": {
+        "name": "@xenova/transformers",
+        "version": "2.0.1",
+        "isSemVerMajor": true
+      }
+    },
+    "onnx-proto": {
+      "name": "onnx-proto",
+      "severity": "critical",
+      "isDirect": false,
+      "via": [
+        "protobufjs"
+      ],
+      "effects": [
+        "onnxruntime-web"
+      ],
+      "range": "*",
+      "nodes": [
+        "node_modules/onnx-proto"
+      ],
+      "fixAvailable": {
+        "name": "@xenova/transformers",
+        "version": "2.0.1",
+        "isSemVerMajor": true
+      }
+    },
+    "onnxruntime-web": {
+      "name": "onnxruntime-web",
+      "severity": "critical",
+      "isDirect": false,
+      "via": [
+        "onnx-proto"
+      ],
+      "effects": [
+        "@xenova/transformers"
+      ],
+      "range": "<=1.16.0-dev.20230910-24f0893d3c",
+      "nodes": [
+        "node_modules/onnxruntime-web"
+      ],
+      "fixAvailable": {
+        "name": "@xenova/transformers",
+        "version": "2.0.1",
+        "isSemVerMajor": true
+      }
+    },
+    "protobufjs": {
+      "name": "protobufjs",
+      "severity": "critical",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1117042,
+          "name": "protobufjs",
+          "dependency": "protobufjs",
+          "title": "Arbitrary code execution in protobufjs",
+          "url": "https://github.com/advisories/GHSA-xq3m-2v4x-88gg",
+          "severity": "critical",
+          "cwe": [
+            "CWE-94"
+          ],
+          "cvss": {
+            "score": 9.8,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
+          },
+          "range": "<7.5.5"
+        }
+      ],
+      "effects": [
+        "onnx-proto"
+      ],
+      "range": "<7.5.5",
+      "nodes": [
+        "node_modules/protobufjs"
+      ],
+      "fixAvailable": {
+        "name": "@xenova/transformers",
+        "version": "2.0.1",
+        "isSemVerMajor": true
+      }
+    },
+    "uuid": {
+      "name": "uuid",
+      "severity": "moderate",
+      "isDirect": true,
+      "via": [
+        {
+          "source": 1116970,
+          "name": "uuid",
+          "dependency": "uuid",
+          "title": "uuid: Missing buffer bounds check in v3/v5/v6 when buf is provided",
+          "url": "https://github.com/advisories/GHSA-w5hq-g745-h8pq",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-787",
+            "CWE-1285"
+          ],
+          "cvss": {
+            "score": 0,
+            "vectorString": null
+          },
+          "range": "<14.0.0"
+        }
+      ],
+      "effects": [],
+      "range": "<14.0.0",
+      "nodes": [
+        "node_modules/uuid"
+      ],
+      "fixAvailable": {
+        "name": "uuid",
+        "version": "14.0.0",
+        "isSemVerMajor": true
+      }
+    }
+  },
+  "metadata": {
+    "vulnerabilities": {
+      "info": 0,
+      "low": 0,
+      "moderate": 1,
+      "high": 0,
+      "critical": 4,
+      "total": 5
+    },
+    "dependencies": {
+      "prod": 212,
+      "dev": 95,
+      "optional": 98,
+      "peer": 0,
+      "peerOptional": 0,
+      "total": 404
+    }
+  }
+}

@@ -56,6 +56,9 @@
     "pg": "^8.11.3",
     "redis": "^4.6.12"
   },
+  "overrides": {
+    "protobufjs": "^7.5.5"
+  },
   "engines": {
     "node": ">=18.0.0"
   }
