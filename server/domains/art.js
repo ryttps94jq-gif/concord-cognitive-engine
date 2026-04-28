@@ -310,13 +310,14 @@ export default function registerArtActions(registerLensAction) {
         }
         break;
       case "analogous":
-      default:
+      default: {
         const spread = 30;
         for (let i = 0; i < count; i++) {
           const offset = (i - Math.floor(count / 2)) * spread;
           addColor(hsl.h + offset, hsl.s, hsl.l + (i % 2 === 0 ? 0 : 5), i === Math.floor(count / 2) ? "base" : "analogous");
         }
         break;
+      }
     }
 
     return {

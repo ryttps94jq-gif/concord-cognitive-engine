@@ -63,8 +63,8 @@ export function verifyAllInitializations(STATE, log) {
   check('wallets', !!hasWallets, hasWallets ? 'found' : 'no wallet store detected');
 
   // __chicken2 + __chicken3 (lattice invariants)
-  check('__chicken2', !!STATE.__chicken2?.enabled !== undefined, STATE.__chicken2 ? 'present' : 'missing');
-  check('__chicken3', !!STATE.__chicken3?.enabled !== undefined, STATE.__chicken3 ? 'present' : 'missing');
+  check('__chicken2', STATE.__chicken2?.enabled !== undefined, STATE.__chicken2 ? 'present' : 'missing');
+  check('__chicken3', STATE.__chicken3?.enabled !== undefined, STATE.__chicken3 ? 'present' : 'missing');
 
   // Guardian status (repair cortex)
   if (typeof globalThis._guardianStatus === 'function') {

@@ -56,6 +56,7 @@ export default function registerInvariantActions(registerLensAction) {
         });
 
         // Evaluate using Function constructor with no global access
+        // eslint-disable-next-line no-new-func
         const fn = new Function(`"use strict"; return (${processed});`);
         return { value: fn(), error: null };
       } catch (err) {

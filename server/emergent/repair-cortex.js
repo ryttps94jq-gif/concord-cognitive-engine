@@ -3826,7 +3826,7 @@ REASONING: <why>`;
   try {
     // Yield to active chat — but don't wait more than 1s
     if (queues.conscious?.active > 0 || queues.utility?.active > 0) {
-      await new Promise(r => setTimeout(r, 1000));
+      await new Promise(r => { setTimeout(r, 1000); });
     }
 
     const resp = await fetch(`${BRAIN.repair.url}/api/generate`, {

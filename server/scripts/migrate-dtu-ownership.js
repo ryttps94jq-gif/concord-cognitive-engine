@@ -153,7 +153,7 @@ async function main() {
     console.log(`[migrate-dtu-ownership] State saved successfully.`);
   } catch (e) {
     console.error(`[migrate-dtu-ownership] Failed to save state: ${e.message}`);
-    try { fs.unlinkSync(tmpPath); } catch {}
+    try { fs.unlinkSync(tmpPath); } catch { /* intentional */ }
     process.exit(1);
   }
 }

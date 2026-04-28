@@ -82,7 +82,7 @@ function record(testNum, testName, status, evidence) {
 let db;
 
 function setupTestDb() {
-  try { fs.unlinkSync(TEST_DB_PATH); } catch (_) {}
+  try { fs.unlinkSync(TEST_DB_PATH); } catch (_) { /* intentional */ }
 
   db = new Database(TEST_DB_PATH);
   db.pragma("journal_mode = WAL");
@@ -230,7 +230,7 @@ function seedUser(userId, amount) {
 
 describe("Test 1: Economy Invariant", () => {
   before(() => setupTestDb());
-  after(() => { try { db?.close(); } catch (_) {} });
+  after(() => { try { db?.close(); } catch (_) { /* intentional */ } });
 
   it("1a — Deposit $10 via mint, verify 10 CC credited", () => {
     const result = mintCoins(db, { amount: 10, userId: "user_alice", refId: "stripe_test_001" });

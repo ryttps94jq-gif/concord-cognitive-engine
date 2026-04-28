@@ -463,7 +463,7 @@ export async function backfillEmbeddings(dtusMap, { onProgress = null } = {}) {
           errors,
         });
       }
-      await new Promise(r => setTimeout(r, 10));
+      await new Promise(r => { setTimeout(r, 10); });
     }
 
     // GC every BACKFILL_BATCH_SIZE DTUs to keep RSS stable

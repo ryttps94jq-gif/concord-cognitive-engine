@@ -8,7 +8,7 @@ export default function registerIngestActions(registerLensAction) {
     const words = text.split(/\s+/).filter(Boolean);
     const lines = text.split("\n");
     const sections = lines.filter(l => /^#{1,6}\s/.test(l) || /^[A-Z][A-Z\s]{3,}$/.test(l.trim()));
-    const hasMarkdown = /[#*_`\[\]]/.test(text);
+    const hasMarkdown = /[#*_`[\]]/.test(text);
     const hasHtml = /<\/?[a-z][\s\S]*>/i.test(text);
     const format = hasHtml ? "html" : hasMarkdown ? "markdown" : "plaintext";
     return { ok: true, result: { format, lineCount: lines.length, paragraphCount: paragraphs.length, sentenceCount: sentences.length, wordCount: words.length, sectionCount: sections.length, sections: sections.slice(0, 20), avgWordsPerSentence: sentences.length > 0 ? Math.round(words.length / sentences.length) : 0, avgWordsPerParagraph: paragraphs.length > 0 ? Math.round(words.length / paragraphs.length) : 0 } };
@@ -18,7 +18,7 @@ export default function registerIngestActions(registerLensAction) {
     const text = artifact.data?.text || artifact.data?.content || "";
     if (!text) return { ok: true, result: { message: "Provide text to extract entities from." } };
     const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
-    const urlRegex = /https?:\/\/[^\s<>"{}|\\^`\[\]]+/g;
+    const urlRegex = /https?:\/\/[^\s<>"{}|\\^`[\]]+/g;
     const dateRegex = /\b\d{4}[-/]\d{1,2}[-/]\d{1,2}\b|\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]* \d{1,2},? \d{4}\b/gi;
     const numberRegex = /\$[\d,.]+|\b\d{1,3}(?:,\d{3})*(?:\.\d+)?%?\b/g;
     const phoneRegex = /\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/g;

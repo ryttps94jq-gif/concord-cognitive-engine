@@ -91,7 +91,7 @@ export default function registerDocsActions(registerLensAction) {
     const passiveMatches = text.match(/\b(is|are|was|were|been|being|be)\s+\w+ed\b/gi) || [];
     const passiveRatio = passiveMatches.length / sentenceCount;
     // Code-like tokens
-    const codeTokens = (text.match(/[{}\[\]<>()=;|&]/g) || []).length;
+    const codeTokens = (text.match(/[{}[\]<>()=;|&]/g) || []).length;
     const codeDensity = codeTokens / Math.max(1, charCount);
 
     const technicalIndex = Math.max(0, Math.min(100,
