@@ -41377,7 +41377,7 @@ app.get("/api/economy/status", (req, res) => {
 // GET /api/economy/balance — return wallet balance for current user (marketplace)
 app.get("/api/economy/balance", (req, res) => {
   ensureEconomicState();
-  const userId = req.query.user_id || req.user?.id || "default";
+  const userId = req.user?.id || req.query.user_id || "default";
   const wallet = STATE.economic?.wallets?.get(userId);
   res.json({ ok: true, balance: wallet?.balance || 0, tier: wallet?.tier || "free" });
 });
@@ -42714,7 +42714,7 @@ app.post("/api/social/bookmark", requireAuth(), (req, res) => {
 
 app.get("/api/social/bookmarks", (req, res) => {
   try {
-    const userId = req.query.userId || req.user?.id || req.actor?.userId || "anon";
+    const userId = req.user?.id || req.query.userId || "anon";
     res.json(socialGetUserBookmarks(STATE, userId, { limit: Number(req.query.limit || 30), offset: Number(req.query.offset || 0) }));
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
@@ -42722,14 +42722,14 @@ app.get("/api/social/bookmarks", (req, res) => {
 // ---- Social Feeds (For-You, Following, Explore) ----
 app.get("/api/social/feed/foryou", (req, res) => {
   try {
-    const userId = req.query.userId || req.user?.id || req.actor?.userId || "anon";
+    const userId = req.user?.id || req.query.userId || "anon";
     res.json(getForYouFeed(STATE, userId, { limit: Number(req.query.limit || 30), offset: Number(req.query.offset || 0) }));
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
 app.get("/api/social/feed/following", (req, res) => {
   try {
-    const userId = req.query.userId || req.user?.id || req.actor?.userId || "anon";
+    const userId = req.user?.id || req.query.userId || "anon";
     res.json(getFollowingFeed(STATE, userId, { limit: Number(req.query.limit || 30), offset: Number(req.query.offset || 0) }));
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
@@ -42777,7 +42777,7 @@ app.post("/api/social/dm/:conversationId/read", requireAuth(), (req, res) => {
 // ---- Social Stories ----
 app.get("/api/social/stories", (req, res) => {
   try {
-    const userId = req.query.userId || req.user?.id || req.actor?.userId || "anon";
+    const userId = req.user?.id || req.query.userId || "anon";
     res.json(getActiveStories(STATE, userId));
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
@@ -42888,7 +42888,7 @@ app.get("/api/collab/workspace/:id", (req, res) => {
 });
 
 app.get("/api/collab/workspaces", (req, res) => {
-  try { res.json(collabListWorkspaces(STATE, req.query.userId || req.user?.id)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  try { res.json(collabListWorkspaces(STATE, req.user?.id || req.query.userId)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
 app.post("/api/collab/workspace/:id/member", (req, res) => {
@@ -47715,7 +47715,7 @@ function updateCognitiveDigitalTwin(userId) {
 // Digital Twin API routes
 app.get("/api/twin", (req, res) => {
   try {
-    const userId = req.query.userId || "default";
+    const userId = req.user?.id || req.query.userId || "default";
     let twin = STATE.cognitiveDigitalTwins?.get(userId);
     if (!twin) twin = updateCognitiveDigitalTwin(userId);
     res.json({ ok: true, twin });
@@ -47737,7 +47737,7 @@ app.post("/api/twin/update", (req, res) => {
 });
 
 app.get("/api/twin/circadian", (req, res) => {
-  const userId = req.query.userId || "default";
+  const userId = req.user?.id || req.query.userId || "default";
   const twin = STATE.cognitiveDigitalTwins.get(userId) || initializeTwin(userId);
   res.json({ ok: true, circadian: twin.circadianProfile, peakHours: findPeakHours(twin.circadianProfile) });
 });
@@ -48999,7 +48999,7 @@ function recordCost(userId, brainName, tokensIn, tokensOut, durationMs) {
 }
 
 app.get("/api/rate-limits", (req, res) => {
-  const userId = req.query.userId || "default";
+  const userId = req.user?.id || req.query.userId || "default";
   const limits = STATE._rateLimits.get(userId);
   const hourAgo = Date.now() - 60 * 60 * 1000;
   const recentCalls = limits ? limits.calls.filter(t => t > hourAgo).length : 0;
@@ -49007,7 +49007,7 @@ app.get("/api/rate-limits", (req, res) => {
 });
 
 app.get("/api/costs", (req, res) => {
-  const userId = req.query.userId || "default";
+  const userId = req.user?.id || req.query.userId || "default";
   const account = STATE._costAccounting.get(userId) || { daily: {}, total: 0, calls: [] };
   res.json({ ok: true, ...account });
 });
@@ -49560,7 +49560,7 @@ function getAdaptiveLayout(userId) {
 }
 
 app.get("/api/adaptive/layout", (req, res) => {
-  res.json({ ok: true, ...getAdaptiveLayout(req.query.userId) });
+  res.json({ ok: true, ...getAdaptiveLayout(req.user?.id || req.query.userId) });
 });
 
 app.post("/api/adaptive/track", (req, res) => {

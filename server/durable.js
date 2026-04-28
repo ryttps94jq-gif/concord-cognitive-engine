@@ -411,7 +411,7 @@ export function registerDurableEndpoints(app, db) {
 
       // Check entitlement if marketplace
       if (artifact.visibility === "marketplace") {
-        const userId = req.actor?.userId || req.query.user_id || req.headers["x-user-id"];
+        const userId = req.actor?.userId || req.user?.id || req.headers["x-user-id"];
         if (userId && userId !== artifact.owner_user_id) {
           const listingAsset = db.prepare(
             "SELECT la.listing_id FROM marketplace_listing_assets la JOIN marketplace_listings l ON la.listing_id = l.id WHERE la.artifact_id = ? AND l.visibility = 'published'"
@@ -432,7 +432,7 @@ export function registerDurableEndpoints(app, db) {
 
       const file = await storage.get(version.storage_uri);
 
-      logEvent(db, "artifact.downloaded", req.query.user_id || null, { artifactId: req.params.id, versionId: version.id }, req.headers["x-request-id"]);
+      logEvent(db, "artifact.downloaded", req.user?.id || null, { artifactId: req.params.id, versionId: version.id }, req.headers["x-request-id"]);
 
       res.setHeader("Content-Type", file.contentType);
       res.setHeader("Content-Length", file.size);

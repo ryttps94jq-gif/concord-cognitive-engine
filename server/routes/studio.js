@@ -190,7 +190,7 @@ export default function createStudioRouter({ db, requireAuth }) {
     try {
       const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 100);
       const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
-      const userId = req.query.userId || req.user?.id;
+      const userId = req.user?.id || req.query.userId;
       const rows = userId
         ? stmts.listByCreator.all(userId, limit)
         : stmts.listProjects.all(limit, offset);

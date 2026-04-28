@@ -112,7 +112,7 @@ export function registerEconomyRoutes(app, db, opts = {}) {
 
   app.post("/api/economy/buy", adminOnly, (req, res) => {
     try {
-      const userId = req.body.user_id || req.user?.id;
+      const userId = req.body.user_id || req.user?.id; // safe: adminOnly route — user_id is the target account to credit, not the actor
       const amount = Math.round(parseFloat(req.body.amount) * 100) / 100;
 
       if (!userId) return res.status(400).json({ ok: false, error: "missing_user_id" });
@@ -311,10 +311,9 @@ export function registerEconomyRoutes(app, db, opts = {}) {
     }
   });
 
-  app.get("/api/economy/withdrawals", (req, res) => {
+  app.get("/api/economy/withdrawals", authRequired, (req, res) => {
     try {
-      const userId = req.query.user_id || req.user?.id;
-      if (!userId) return res.status(400).json({ ok: false, error: "missing_user_id" });
+      const userId = req.user.id;
 
       const limit = Math.min(parseInt(req.query.limit, 10) || 25, 100);
       const offset = parseInt(req.query.offset, 10) || 0;
@@ -351,7 +350,7 @@ export function registerEconomyRoutes(app, db, opts = {}) {
 
   app.post("/api/economy/admin/withdrawals/:id/approve", adminOnly, (req, res) => {
     try {
-      const reviewerId = req.body.reviewer_id || req.user?.id || "system";
+      const reviewerId = req.user?.id || "system";
       const ctx = auditCtx(req);
       const result = approveWithdrawal(db, { withdrawalId: req.params.id, reviewerId });
       if (!result.ok) return res.status(400).json(result);
@@ -375,7 +374,7 @@ export function registerEconomyRoutes(app, db, opts = {}) {
 
   app.post("/api/economy/admin/withdrawals/:id/reject", adminOnly, (req, res) => {
     try {
-      const reviewerId = req.body.reviewer_id || req.user?.id || "system";
+      const reviewerId = req.user?.id || "system";
       const ctx = auditCtx(req);
       const result = rejectWithdrawal(db, { withdrawalId: req.params.id, reviewerId });
       if (!result.ok) return res.status(400).json(result);
@@ -656,10 +655,9 @@ export function registerEconomyRoutes(app, db, opts = {}) {
     }
   });
 
-  app.get("/api/stripe/connect/status", (req, res) => {
+  app.get("/api/stripe/connect/status", authRequired, (req, res) => {
     try {
-      const userId = req.query.user_id || req.user?.id;
-      if (!userId) return res.status(400).json({ ok: false, error: "missing_user_id" });
+      const userId = req.user.id;
 
       const result = getConnectStatus(db, userId);
       res.json({ ok: true, userId, ...result });
@@ -738,10 +736,9 @@ export function registerEconomyRoutes(app, db, opts = {}) {
 
   // ── User purchases (buyer or seller) ─────────────────────────────────────
 
-  app.get("/api/economy/purchases", (req, res) => {
+  app.get("/api/economy/purchases", authRequired, (req, res) => {
     try {
-      const userId = req.query.user_id || req.user?.id;
-      if (!userId) return res.status(400).json({ ok: false, error: "missing_user_id" });
+      const userId = req.user.id;
 
       const role = req.query.role === "seller" ? "seller" : "buyer";
       const status = req.query.status || undefined;
@@ -1566,10 +1563,9 @@ export function registerEconomyRoutes(app, db, opts = {}) {
     }
   });
 
-  app.post("/api/economy/marketplace/listings/:listingId/delist", (req, res) => {
+  app.post("/api/economy/marketplace/listings/:listingId/delist", authRequired, (req, res) => {
     try {
-      const sellerId = req.body.seller_id || req.user?.id;
-      if (!sellerId) return res.status(400).json({ ok: false, error: "missing_seller_id" });
+      const sellerId = req.user.id;
 
       const result = delistListing(db, { listingId: req.params.listingId, sellerId });
       if (!result.ok) return res.status(400).json(result);
@@ -1583,11 +1579,10 @@ export function registerEconomyRoutes(app, db, opts = {}) {
     }
   });
 
-  app.patch("/api/economy/marketplace/listings/:listingId/price", (req, res) => {
+  app.patch("/api/economy/marketplace/listings/:listingId/price", authRequired, (req, res) => {
     try {
-      const sellerId = req.body.seller_id || req.user?.id;
+      const sellerId = req.user.id;
       const newPrice = Math.round(parseFloat(req.body.price) * 100) / 100;
-      if (!sellerId) return res.status(400).json({ ok: false, error: "missing_seller_id" });
 
       const result = updateListingPrice(db, {
         listingId: req.params.listingId,
@@ -1609,12 +1604,10 @@ export function registerEconomyRoutes(app, db, opts = {}) {
   // KNOWLEDGE PACKS (bundled DTU collections)
   // ═══════════════════════════════════════════════════════════════════════════
 
-  app.post("/api/marketplace/pack", (req, res) => {
+  app.post("/api/marketplace/pack", authRequired, (req, res) => {
     try {
-      const sellerId = req.body.seller_id || req.user?.id;
+      const sellerId = req.user.id;
       const { name, description, dtu_ids, price } = req.body;
-
-      if (!sellerId) return res.status(400).json({ ok: false, error: "missing_seller_id" });
       if (!name || !name.trim()) return res.status(400).json({ ok: false, error: "missing_pack_name" });
       if (!Array.isArray(dtu_ids) || dtu_ids.length === 0) return res.status(400).json({ ok: false, error: "missing_dtu_ids" });
       if (!price || price <= 0) return res.status(400).json({ ok: false, error: "invalid_price" });
