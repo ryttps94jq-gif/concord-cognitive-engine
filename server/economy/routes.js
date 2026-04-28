@@ -42,6 +42,7 @@ import { distributeFee, getFeeSplitBalances, getFeeDistributions } from "./fee-s
 import { runTreasuryReconciliation, getReconciliationHistory } from "./treasury-reconciliation.js";
 import { getSystemBalanceSummary } from "./balances.js";
 import { getDescendants } from "./royalty-cascade.js";
+import { initReservesSchema, allocateFromFee, getReserveHealth } from "./reserves.js";
 
 /**
  * Register all economy + Stripe routes on the Express app.
@@ -52,6 +53,9 @@ import { getDescendants } from "./royalty-cascade.js";
  */
 export function registerEconomyRoutes(app, db, opts = {}) {
   const log = opts.structuredLog || ((level, event, data) => console[level === "error" ? "error" : "log"](`[economy] ${event}`, data));
+
+  // Initialise chargeback reserve schema (idempotent)
+  initReservesSchema(db);
 
   // ═══════════════════════════════════════════════════════════════════════════
   // ECONOMY ENDPOINTS
@@ -251,6 +255,20 @@ export function registerEconomyRoutes(app, db, opts = {}) {
         details: { sellerId, listingId, fee: result.fee, net: result.net },
         ...ctx,
       });
+
+      // Allocate a portion of the platform fee to reserves
+      if (result.fee > 0) {
+        try {
+          allocateFromFee(db, {
+            feeAmount:  result.fee,
+            sourceTxId: result.batchId,
+            requestId:  ctx.requestId,
+            ip:         ctx.ip,
+          });
+        } catch (allocErr) {
+          log("error", "reserve_allocation_failed", { error: allocErr.message });
+        }
+      }
 
       res.json(result);
     } catch (err) {
@@ -1516,6 +1534,21 @@ export function registerEconomyRoutes(app, db, opts = {}) {
       });
 
       if (!result.ok) return res.status(400).json(result);
+
+      // Allocate a portion of the platform fee to reserves
+      if (result.fee > 0) {
+        try {
+          allocateFromFee(db, {
+            feeAmount:  result.fee,
+            sourceTxId: result.batchId,
+            requestId:  ctx.requestId,
+            ip:         ctx.ip,
+          });
+        } catch (allocErr) {
+          log("error", "reserve_allocation_failed", { error: allocErr.message });
+        }
+      }
+
       res.json(result);
     } catch (err) {
 
@@ -1907,6 +1940,40 @@ export function registerEconomyRoutes(app, db, opts = {}) {
     } catch (err) {
       log("error", "economy_tax_summary_failed", { error: err.message });
       res.status(500).json({ ok: false, error: "tax_summary_failed" });
+    }
+  });
+
+  // ── Reserve Health (admin) ─────────────────────────────────────────────────
+
+  app.get("/api/admin/reserves/health", adminOnly, (req, res) => {
+    try {
+      const health = getReserveHealth(db);
+      res.json({ ok: true, ...health });
+    } catch (err) {
+      log("error", "reserves_health_fetch_failed", { error: err.message });
+      res.status(500).json({ ok: false, error: "reserves_health_fetch_failed" });
+    }
+  });
+
+  // ── Chargeback Protection Status (user) ───────────────────────────────────
+
+  app.get("/api/wallet/protection-status", authRequired, (req, res) => {
+    try {
+      const health = getReserveHealth(db);
+      res.json({
+        ok: true,
+        chargebackProtection: {
+          enabled: true,
+          description:
+            "Your purchases are protected by the Concord platform reserve. " +
+            "In the event of a chargeback dispute, the platform reserve covers " +
+            "the cost — your creators keep their distributions.",
+          reserveStatus: health.status,
+        },
+      });
+    } catch (err) {
+      log("error", "protection_status_fetch_failed", { error: err.message });
+      res.status(500).json({ ok: false, error: "protection_status_fetch_failed" });
     }
   });
 }
