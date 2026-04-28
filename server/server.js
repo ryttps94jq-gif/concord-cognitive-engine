@@ -18326,6 +18326,24 @@ const _consentFiltered = all.filter(d => {
   return false;
 });
 
+// Embedding semantic search — run async in parallel with lexical scoring.
+// Guards: times out in 120ms, never blocks the chat path if embeddings unavailable.
+let _queryVec = null;
+let _dtuEmbedMap = null;
+try {
+  const _embedTimeout = new Promise(r => setTimeout(() => r(null), 120));
+  const _embedQuery = embed(qRaw.slice(0, 512));
+  _queryVec = await Promise.race([_embedQuery, _embedTimeout]);
+  if (_queryVec && embeddingState?.available) {
+    // Build a fast lookup: dtuId → cached embedding vector
+    _dtuEmbedMap = new Map();
+    for (const d of _consentFiltered) {
+      const cached = embeddingState.cache?.get(d.id);
+      if (cached) _dtuEmbedMap.set(d.id, cached);
+    }
+  }
+} catch (_embErr) { _queryVec = null; _dtuEmbedMap = null; }
+
 const scored = _consentFiltered.map(d => {
   const dText = [
     d?.title || "",
@@ -18344,8 +18362,41 @@ const scored = _consentFiltered.map(d => {
   // Soft temporal boost (never dominates)
   const tW = temporalRecencyWeight(d);
 
+  // Lens-domain affinity boost — prioritize DTUs matching the active lens's domain
+  // so "studio" chat surfaces audio/music DTUs ahead of unrelated content.
+  const _LENS_DOMAIN_AFFINITY = {
+    studio:   ["audio","music","sound","creative","production","mixing","recording","composition","track","beat","melody","harmony"],
+    code:     ["programming","software","algorithm","implementation","code","function","class","typescript","javascript","python","api","debug"],
+    board:    ["planning","task","project","kanban","sprint","milestone","workflow","schedule","deadline","backlog","roadmap"],
+    graph:    ["relationship","network","graph","node","edge","connection","topology","cluster","link","visualization","map","tree"],
+    research: ["research","academic","citation","paper","study","experiment","hypothesis","analysis","literature","evidence","findings"],
+    film:     ["film","video","scene","shot","edit","cut","narrative","cinematography","screenplay","director","footage"],
+    forge:    ["prototype","build","design","artifact","template","generate","create","wireframe","mockup","specification"],
+    atlas:    ["knowledge","concept","definition","theory","domain","taxonomy","ontology","category","classification"],
+  };
+  const _lensAffinity = _LENS_DOMAIN_AFFINITY[currentLens] || null;
+  let _lensBoost = 1.0;
+  if (_lensAffinity) {
+    const dTextLower = dText.toLowerCase();
+    const dDomain = String(d.domain || d.meta?.domain || "").toLowerCase();
+    const hasAffinity = _lensAffinity.some(kw => dTextLower.includes(kw) || dDomain.includes(kw));
+    if (hasAffinity) _lensBoost = 1.30;
+  }
+
+  // Semantic embedding similarity (optional — only when embeddings are available and cached)
+  let sEmbed = 0;
+  if (_queryVec && _dtuEmbedMap) {
+    const dVec = _dtuEmbedMap.get(d.id);
+    if (dVec) sEmbed = Math.max(0, cosineSimilarity(_queryVec, dVec));
+  }
+  const _hasEmbed = sEmbed > 0 ? 1 : 0;
+  // When embedding is available: redistribute 20% weight to it from lexical terms
   const score = clamp(
-    0.55*sBase + 0.30*sExp + 0.15*sNg + 0.10*tW,
+    _lensBoost * (
+      _hasEmbed
+        ? (0.44*sBase + 0.24*sExp + 0.12*sNg + 0.08*tW + 0.20*sEmbed)
+        : (0.55*sBase + 0.30*sExp + 0.15*sNg + 0.10*tW)
+    ),
     0, 1
   );
     return { d, score };
@@ -18647,7 +18698,18 @@ let localReply = formatCrispResponse({
     // Phase 2: Token Budget Assembly
     const _entityBlock = _pipelineHarvest.entityStateBlock || "";
     const _convSummary = _pipelineHarvest.conversationSummary || "";
-    const _baseSystem = `You are ConcordOS. Be natural, concise but not dry. Use DTUs as memory. Never pretend features exist.\nMode: ${mode}.`;
+    const _LENS_CONTEXT_HINTS = {
+      studio:   "You are in the Studio lens — emphasize audio, music, and creative production topics.",
+      code:     "You are in the Code lens — emphasize software, algorithms, and implementation topics.",
+      board:    "You are in the Board lens — emphasize planning, tasks, and project management topics.",
+      graph:    "You are in the Graph lens — emphasize relationships, networks, and knowledge connections.",
+      research: "You are in the Research lens — emphasize evidence, citations, and analytical rigor.",
+      film:     "You are in the Film Studio lens — emphasize video, narrative, and cinematic craft.",
+      forge:    "You are in the Forge lens — emphasize building, prototyping, and design artifacts.",
+      atlas:    "You are in the Atlas lens — emphasize knowledge organization and domain classification.",
+    };
+    const _lensHint = (currentLens && currentLens !== "chat") ? (_LENS_CONTEXT_HINTS[currentLens] || `You are in the ${currentLens} lens.`) : "";
+    const _baseSystem = `You are ConcordOS. Be natural, concise but not dry. Use DTUs as memory. Never pretend features exist.\nMode: ${mode}.${_lensHint ? " " + _lensHint : ""}`;
 
     _pipelineBudget = assembleWithTokenBudget({
       systemPromptBase: _baseSystem,
@@ -43698,6 +43760,23 @@ app.post("/api/brain/wants/decay", (_req, res) => {
   try {
     const result = decayAllWants(STATE);
     res.json(result);
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// Per-brain health and stats endpoint
+app.get("/api/brain/status", (_req, res) => {
+  try {
+    const brainStatus = {};
+    for (const [name, cfg] of Object.entries(BRAIN_CONFIG)) {
+      const b = BRAIN?.[name] || {};
+      brainStatus[name] = {
+        enabled: b.enabled ?? false,
+        model: cfg.model,
+        url: cfg.url,
+        stats: b.stats || { requests: 0, totalMs: 0, errors: 0, lastCallAt: null },
+      };
+    }
+    res.json({ ok: true, llmReady: LLM_READY, brains: brainStatus });
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 

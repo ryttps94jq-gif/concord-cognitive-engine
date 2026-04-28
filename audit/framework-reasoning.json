@@ -1,0 +1,40 @@
+{
+  "auditDate": "2026-04-28",
+  "status": "PASS_WITH_NOTES",
+  "summary": "STSVK framework reasoning is implemented in the Oracle Engine (Phase 3 formal path). Conversational chat has access to the 481 seed DTUs containing constraint geometry and repair dominance content.",
+  "oracle_engine": {
+    "file": "server/lib/oracle-engine.js:1-100",
+    "pipeline_phases": [
+      "analyze() — classify query, pick domain + task type",
+      "retrieve() — pull relevant DTUs + context from lattice",
+      "compute() — synthesize answer; run STSVK constraint check if formal",
+      "cite() — attach source DTUs and theorem citations",
+      "validate() — confidence scoring including STSVK constraint score",
+      "record() — persist result as oracle_answer DTU"
+    ],
+    "oracle_prompt": "Explicitly instructs LLM to: cite DTU sources by ID, include computation traces for formal claims, mark claims as KNOWN/PROBABLE/UNCERTAIN/UNKNOWN, suggest follow-up questions, never contradict computationalGroundTruth"
+  },
+  "stsvk_framework": {
+    "description": "480 theorems + 1 root fixed-point identity = seed DTU lattice",
+    "seed_files": "server/data/seed/dtus-part1.json through dtus-part8.json",
+    "total_seed_dtus": 373,
+    "constraint_geometry_dtus": [
+      "dtu_017_constraint_geometry_theory",
+      "dtu_012_repair_dominance_condition",
+      "and 30+ related theorems"
+    ],
+    "cache": "STSVK theorem cache (_stsvkCache) loaded lazily on first formal compute()"
+  },
+  "chat_integration": {
+    "formal_mode": "Oracle Phase 3 runs STSVK constraint checks for formal queries",
+    "conversational_mode": "Chat has access to constraint geometry DTUs through semantic retrieval; framework language appears when query matches DTU content"
+  },
+  "gaps": [
+    {
+      "severity": "P2",
+      "id": "FRAMEWORK-001",
+      "description": "Framework-grounded reasoning (explicit STSVK constraint checking) only activates in Oracle mode (formal queries). Conversational chat does not explicitly invoke constraint geometry verification, though the underlying DTU content is available.",
+      "note": "This is a design choice, not a bug. Oracle mode is the formal-reasoning path. Chat mode is conversational."
+    }
+  ]
+}

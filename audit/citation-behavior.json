@@ -1,0 +1,44 @@
+{
+  "auditDate": "2026-04-28",
+  "status": "PASS_WITH_NOTES",
+  "summary": "DTU citation system is implemented and functional. Uses lexical search (token + n-gram); embedding-based semantic search exists but is not used in the chat retrieval path.",
+  "retrieval": {
+    "algorithm": "Lexical: token Jaccard (0.55) + expanded token Jaccard (0.30) + n-gram similarity (0.15) + temporal recency (0.10)",
+    "file": "server/server.js:18329-18355",
+    "consent_filtering": true,
+    "consent_file": "server/server.js:18314-18327",
+    "threshold": 0.08,
+    "max_dtus": "5-10 (affect depthBudget controlled)"
+  },
+  "response_format": {
+    "field": "relevant",
+    "type": "array of { id, title, tier }",
+    "file": "server/server.js:19206-19247",
+    "additional_fields": ["dtuCount", "dtuSources", "pipeline.sources", "pipeline.tokenEstimate"]
+  },
+  "frontend_rendering": {
+    "component": "DTUSourcesSection",
+    "file": "concord-frontend/components/chat/PersistentChatRail.tsx:181-254",
+    "shows": ["tier badge (hyper/mega/regular/shadow/archive)", "title + ID", "relevance score %", "activation tags (query/spread/global/profile/autogen)", "tier boost multiplier"]
+  },
+  "oracle_citations": {
+    "component": "OracleResponse",
+    "file": "concord-frontend/components/chat/OracleResponse.tsx:311",
+    "shows": ["Sources tab", "Computations tab", "Connections tab", "Epistemic breakdown"]
+  },
+  "embedding_search": {
+    "status": "EXISTS_BUT_NOT_WIRED",
+    "embedding_file": "server/embeddings.js",
+    "model": "nomic-embed-text (768-dim) via Ollama, fallback all-minilm (384-dim)",
+    "store": "SQLite embedding_cache table + in-memory Map",
+    "note": "Embeddings are generated and stored but cosineSimilarity is not called in the chat.respond macro DTU retrieval path. Only lexical search is used."
+  },
+  "gaps": [
+    {
+      "severity": "P1",
+      "id": "CITE-001",
+      "description": "Embedding-based semantic search exists (server/embeddings.js) with SQLite cache, but chat DTU retrieval uses only lexical token/n-gram matching. Semantically similar queries with different vocabulary miss relevant DTUs.",
+      "suggested_fix": "In chat DTU scoring (server/server.js:18347-18350), add embedding similarity score term: embed the query, compute cosine similarity against cached DTU embeddings, blend at 0.20 weight."
+    }
+  ]
+}

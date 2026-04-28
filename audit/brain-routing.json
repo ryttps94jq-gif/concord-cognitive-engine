@@ -1,0 +1,72 @@
+{
+  "auditDate": "2026-04-28",
+  "status": "PASS",
+  "summary": "Four-brain architecture is fully implemented and operational.",
+  "brains": {
+    "conscious": {
+      "url_env": "BRAIN_CONSCIOUS_URL",
+      "default_url": "http://ollama-conscious:11434",
+      "model_env": "BRAIN_CONSCIOUS_MODEL",
+      "default_model": "concord-conscious:latest",
+      "context_tokens": 32768,
+      "max_output_tokens": 4096,
+      "max_concurrent": 3,
+      "timeout_ms": 90000,
+      "routes": ["chat", "sovereign_decree", "entity_dialogue"],
+      "file": "server/lib/brain-config.js:9-18"
+    },
+    "subconscious": {
+      "url_env": "BRAIN_SUBCONSCIOUS_URL",
+      "default_url": "http://ollama-subconscious:11434",
+      "model_env": "BRAIN_SUBCONSCIOUS_MODEL",
+      "default_model": "concord-subconscious:latest",
+      "context_tokens": 8192,
+      "max_output_tokens": 1200,
+      "routes": ["autogen", "autogen_pipeline", "meta_derivation", "dream_synthesis", "chat_unsaid"],
+      "file": "server/lib/brain-config.js:20-28"
+    },
+    "utility": {
+      "url_env": "BRAIN_UTILITY_URL",
+      "default_url": "http://ollama-utility:11434",
+      "model_env": "BRAIN_UTILITY_MODEL",
+      "default_model": "concord-utility:latest",
+      "context_tokens": 16384,
+      "max_output_tokens": 800,
+      "routes": ["hlr_engine", "agent_system", "hypothesis_engine", "council_voices", "research_jobs", "chat_summary"],
+      "file": "server/lib/brain-config.js:31-39"
+    },
+    "repair": {
+      "url_env": "BRAIN_REPAIR_URL",
+      "default_url": "http://ollama-repair:11434",
+      "model_env": "BRAIN_REPAIR_MODEL",
+      "default_model": "concord-repair:latest",
+      "context_tokens": 4096,
+      "max_output_tokens": 500,
+      "priority": 0,
+      "routes": ["repair_cortex", "repair_diagnosis", "chat_consistency"],
+      "file": "server/lib/brain-config.js:42-50"
+    }
+  },
+  "routing_function": "resolveBrain(systemName) → SYSTEM_TO_BRAIN[systemName] || 'conscious'",
+  "routing_file": "server/lib/brain-router.js:92-94",
+  "failover": {
+    "tier1": "ctx.llm.chat() — managed LLM service or OpenAI",
+    "tier2": "Direct Ollama conscious brain (BRAIN.conscious.url)",
+    "tier3": "Local crisp DTU-based response (no LLM) at server/server.js:19045-19065",
+    "file": "server/server.js:18802-18966"
+  },
+  "health_monitoring": {
+    "init": "initThreeBrains() probes each brain's /api/tags with 15s timeout",
+    "stats": "BRAIN[name].stats tracks {requests, totalMs, errors, lastCallAt}",
+    "circuit_breaker": "createBreakerRegistry() from server/lib/circuit-breaker.js",
+    "llm_ready_flag": "LLM_READY boolean updated on brain status change",
+    "file": "server/server.js:12505-12612"
+  },
+  "gaps": [
+    {
+      "severity": "P3",
+      "description": "No explicit health probe endpoint for individual brains at /api/brain/{name}/health. Only overall LLM_READY flag exposed.",
+      "suggested_fix": "Add GET /api/brain/status endpoint returning per-brain enabled/stats/lastCallAt"
+    }
+  ]
+}
