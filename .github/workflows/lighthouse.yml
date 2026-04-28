@@ -1,0 +1,116 @@
+name: Lighthouse CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+env:
+  NODE_VERSION: '20'
+
+jobs:
+  lighthouse:
+    name: Lighthouse Performance Audit
+    runs-on: ubuntu-latest
+    needs: []
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: |
+            server/package-lock.json
+            concord-frontend/package-lock.json
+
+      - name: Install server dependencies
+        working-directory: ./server
+        run: npm ci || (sleep 5 && npm ci)
+
+      - name: Install frontend dependencies
+        working-directory: ./concord-frontend
+        run: npm ci || (sleep 5 && npm ci)
+
+      - name: Build frontend
+        working-directory: ./concord-frontend
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:5050
+        run: npm run build
+
+      - name: Run migrations
+        working-directory: ./server
+        env:
+          DATA_DIR: /tmp/concord-lighthouse-data
+        run: node migrate.js
+
+      - name: Start server
+        working-directory: ./server
+        env:
+          NODE_ENV: ci
+          PORT: 5050
+          DATA_DIR: /tmp/concord-lighthouse-data
+          JWT_SECRET: lighthouse-ci-secret-not-for-production
+          ADMIN_PASSWORD: lighthousepass123
+          AUTH_MODE: public
+        run: |
+          node server.js > server.log 2>&1 &
+          echo $! > server.pid
+
+      - name: Wait for server
+        run: |
+          for i in {1..30}; do
+            if curl -sf http://localhost:5050/ready > /dev/null 2>&1; then
+              echo "Server ready"
+              break
+            fi
+            sleep 1
+          done
+
+      - name: Start Next.js production server
+        working-directory: ./concord-frontend
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:5050
+          PORT: 3000
+        run: |
+          npm run start > frontend.log 2>&1 &
+          echo $! > frontend.pid
+
+      - name: Wait for frontend
+        run: |
+          for i in {1..30}; do
+            if curl -sf http://localhost:3000 > /dev/null 2>&1; then
+              echo "Frontend ready"
+              break
+            fi
+            sleep 2
+          done
+
+      - name: Run Lighthouse CI
+        working-directory: ./concord-frontend
+        run: |
+          npx @lhci/cli@0.14.x autorun \
+            --config=.lighthouserc.json \
+            --collect.url=http://localhost:3000 \
+            --collect.url=http://localhost:3000/lenses/news \
+            --collect.startServerCommand="" \
+            --collect.startServerReadyPattern="" || true
+        continue-on-error: true
+
+      - name: Upload Lighthouse reports
+        uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: lighthouse-reports
+          path: concord-frontend/.lighthouseci/
+          retention-days: 14
+
+      - name: Stop servers
+        if: always()
+        run: |
+          [ -f server/server.pid ] && kill $(cat server/server.pid) 2>/dev/null || true
+          [ -f concord-frontend/frontend.pid ] && kill $(cat concord-frontend/frontend.pid) 2>/dev/null || true
