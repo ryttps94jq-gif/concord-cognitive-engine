@@ -42508,8 +42508,8 @@ app.get("/api/atlas/council/metrics", (req, res) => {
 });
 
 // ---- Social Layer ----
-app.post("/api/social/profile", (req, res) => {
-  try { res.json(upsertProfile(STATE, req.body?.userId || req.user?.id || req.actor?.userId || "anon", req.body || {})); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+app.post("/api/social/profile", requireAuth(), (req, res) => {
+  try { res.json(upsertProfile(STATE, req.user?.id, req.body || {})); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
 // Own profile — GET /api/social/profile (no userId param)
@@ -42596,12 +42596,12 @@ app.get("/api/loaf/status", (_req, res) => {
 });
 
 // Consent update
-app.post("/api/consent/update", (req, res) => {
+app.post("/api/consent/update", requireAuth(), (req, res) => {
   try {
-    const { userId, action, granted } = req.body || {};
+    const { action, granted } = req.body || {};
     if (!action) return res.status(400).json({ ok: false, error: "action required" });
     if (!STATE.consent) STATE.consent = new Map();
-    const key = `${userId || "anon"}:${action}`;
+    const key = `${req.user?.id}:${action}`;
     STATE.consent.set(key, { granted: !!granted, updatedAt: nowISO() });
     res.json({ ok: true, consent: { action, granted: !!granted } });
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
@@ -42793,26 +42793,23 @@ app.get("/api/social/stories", (req, res) => {
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
-app.post("/api/social/stories/view", (req, res) => {
+app.post("/api/social/stories/view", requireAuth(), (req, res) => {
   try {
-    const userId = req.body?.userId || req.user?.id || req.actor?.userId || "anon";
-    res.json(socialViewStory(STATE, { userId, storyId: req.body?.storyId }));
+    res.json(socialViewStory(STATE, { userId: req.user?.id, storyId: req.body?.storyId }));
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
 // Param-path variant: frontend calls POST /api/social/stories/:storyId/view
-app.post("/api/social/stories/:storyId/view", (req, res) => {
+app.post("/api/social/stories/:storyId/view", requireAuth(), (req, res) => {
   try {
-    const userId = req.body?.userId || req.user?.id || req.actor?.userId || "anon";
-    res.json(socialViewStory(STATE, { userId, storyId: req.params.storyId }));
+    res.json(socialViewStory(STATE, { userId: req.user?.id, storyId: req.params.storyId }));
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
 // ---- Social Polls ----
-app.post("/api/social/poll/vote", (req, res) => {
+app.post("/api/social/poll/vote", requireAuth(), (req, res) => {
   try {
-    const userId = req.body?.userId || req.user?.id || req.actor?.userId || "anon";
-    res.json(socialVotePoll(STATE, { userId, postId: req.body?.postId, optionIndex: req.body?.optionIndex }));
+    res.json(socialVotePoll(STATE, { userId: req.user?.id, postId: req.body?.postId, optionIndex: req.body?.optionIndex }));
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
@@ -42865,9 +42862,9 @@ app.post("/api/social/notifications/:id/read", (req, res) => {
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
-app.post("/api/social/notifications/read-all", (req, res) => {
+app.post("/api/social/notifications/read-all", requireAuth(), (req, res) => {
   try {
-    const userId = req.body?.userId || req.user?.id;
+    const userId = req.user?.id;
     const now = new Date().toISOString();
     if (STATE.notifications) {
       for (const n of STATE.notifications.values()) {
@@ -42898,8 +42895,8 @@ if (db) {
 }
 
 // ---- Collaboration ----
-app.post("/api/collab/workspace", (req, res) => {
-  try { res.json(collabCreateWorkspace(STATE, { ...req.body, ownerId: req.body?.ownerId || req.user?.id })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+app.post("/api/collab/workspace", requireAuth(), (req, res) => {
+  try { res.json(collabCreateWorkspace(STATE, { ...req.body, ownerId: req.user?.id })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
 app.get("/api/collab/workspace/:id", (req, res) => {
@@ -42914,7 +42911,7 @@ app.post("/api/collab/workspace/:id/member", (req, res) => {
   try { res.json(collabAddWorkspaceMember(STATE, req.params.id, req.body?.userId, req.body?.role, req.user?.id)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
-app.delete("/api/collab/workspace/:id/member/:userId", (req, res) => {
+app.delete("/api/collab/workspace/:id/member/:userId", requireAuth(), (req, res) => {
   try { res.json(collabRemoveWorkspaceMember(STATE, req.params.id, req.params.userId)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
@@ -42922,9 +42919,9 @@ app.post("/api/collab/workspace/:id/dtu", (req, res) => {
   try { res.json(collabAddDtuToWorkspace(STATE, req.params.id, req.body?.dtuId)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
-app.post("/api/collab/comment", (req, res) => {
+app.post("/api/collab/comment", requireAuth(), (req, res) => {
   try {
-    const result = collabAddComment(STATE, req.body?.dtuId, req.body?.userId || req.user?.id, req.body?.text, req.body?.parentCommentId);
+    const result = collabAddComment(STATE, req.body?.dtuId, req.user?.id, req.body?.text, req.body?.parentCommentId);
     if (result.ok) dispatchWebhookEvent(STATE, "comment:added", { dtuId: req.body?.dtuId, commentId: result.comment?.id });
     res.json(result);
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
@@ -42934,17 +42931,17 @@ app.get("/api/collab/comments/:dtuId", (req, res) => {
   try { res.json(collabGetComments(STATE, req.params.dtuId, { tree: req.query.tree === "true", limit: Number(req.query.limit || 50) })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
-app.put("/api/collab/comment/:id", (req, res) => {
-  try { res.json(collabEditComment(STATE, req.params.id, req.body?.userId || req.user?.id, req.body?.text)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+app.put("/api/collab/comment/:id", requireAuth(), (req, res) => {
+  try { res.json(collabEditComment(STATE, req.params.id, req.user?.id, req.body?.text)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
 app.post("/api/collab/comment/:id/resolve", (req, res) => {
   try { res.json(collabResolveComment(STATE, req.params.id)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
-app.post("/api/collab/revision", (req, res) => {
+app.post("/api/collab/revision", requireAuth(), (req, res) => {
   try {
-    const result = proposeRevision(STATE, req.body?.dtuId, req.body?.userId || req.user?.id, req.body?.changes, req.body?.reason);
+    const result = proposeRevision(STATE, req.body?.dtuId, req.user?.id, req.body?.changes, req.body?.reason);
     if (result.ok) dispatchWebhookEvent(STATE, "revision:proposed", { dtuId: req.body?.dtuId, proposalId: result.proposal?.id });
     res.json(result);
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
@@ -42954,20 +42951,20 @@ app.get("/api/collab/revisions/:dtuId", (req, res) => {
   try { res.json(getRevisionProposals(STATE, req.params.dtuId, req.query.status)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
-app.post("/api/collab/revision/:id/vote", (req, res) => {
-  try { res.json(voteOnRevision(STATE, req.params.id, req.body?.userId || req.user?.id, req.body?.vote)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+app.post("/api/collab/revision/:id/vote", requireAuth(), (req, res) => {
+  try { res.json(voteOnRevision(STATE, req.params.id, req.user?.id, req.body?.vote)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
 app.post("/api/collab/revision/:id/apply", (req, res) => {
   try { res.json(applyRevision(STATE, req.params.id, req.user?.id || "api")); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
-app.post("/api/collab/edit-session/:dtuId/start", (req, res) => {
-  try { res.json(startEditSession(STATE, req.params.dtuId, req.body?.userId || req.user?.id)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+app.post("/api/collab/edit-session/:dtuId/start", requireAuth(), (req, res) => {
+  try { res.json(startEditSession(STATE, req.params.dtuId, req.user?.id)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
-app.post("/api/collab/edit-session/:dtuId/edit", (req, res) => {
-  try { res.json(recordEdit(STATE, req.params.dtuId, req.body?.userId || req.user?.id, req.body?.field, req.body?.oldValue, req.body?.newValue)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+app.post("/api/collab/edit-session/:dtuId/edit", requireAuth(), (req, res) => {
+  try { res.json(recordEdit(STATE, req.params.dtuId, req.user?.id, req.body?.field, req.body?.oldValue, req.body?.newValue)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
 app.post("/api/collab/edit-session/:dtuId/end", (req, res) => {
@@ -42987,11 +42984,11 @@ app.get("/api/rbac/org/:orgId", (req, res) => {
   try { res.json(getOrgWorkspace(STATE, req.params.orgId)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
-app.post("/api/rbac/role", (req, res) => {
+app.post("/api/rbac/role", requireAuth(), (req, res) => {
   try { res.json(assignRole(STATE, req.body?.orgId, req.body?.userId, req.body?.role, req.user?.id)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
-app.delete("/api/rbac/role", (req, res) => {
+app.delete("/api/rbac/role", requireAuth(), (req, res) => {
   try { res.json(revokeRole(STATE, req.body?.orgId, req.body?.userId, req.user?.id)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
@@ -43131,20 +43128,20 @@ app.get("/api/compliance/status", (req, res) => {
 });
 
 // ---- Onboarding ----
-app.post("/api/onboarding/start", (req, res) => {
-  try { res.json(startOnboardingV2(STATE, req.body?.userId || req.user?.id)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+app.post("/api/onboarding/start", requireAuth(), (req, res) => {
+  try { res.json(startOnboardingV2(STATE, req.user?.id)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
 app.get("/api/onboarding/progress/:userId", (req, res) => {
   try { res.json(getOnboardingProgressV2(STATE, req.params.userId)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
-app.post("/api/onboarding/complete-step", (req, res) => {
-  try { res.json(completeOnboardingStepV2(STATE, req.body?.userId || req.user?.id, req.body?.stepId, req.body?.metadata)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+app.post("/api/onboarding/complete-step", requireAuth(), (req, res) => {
+  try { res.json(completeOnboardingStepV2(STATE, req.user?.id, req.body?.stepId, req.body?.metadata)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
-app.post("/api/onboarding/skip", (req, res) => {
-  try { res.json(skipOnboardingV2(STATE, req.body?.userId || req.user?.id)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+app.post("/api/onboarding/skip", requireAuth(), (req, res) => {
+  try { res.json(skipOnboardingV2(STATE, req.user?.id)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
 app.get("/api/onboarding/hints/:userId", (req, res) => {
@@ -43815,11 +43812,10 @@ app.post("/api/brain/spontaneous/enqueue", express.json(), (req, res) => {
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
-app.post("/api/brain/spontaneous/preferences", express.json(), (req, res) => {
+app.post("/api/brain/spontaneous/preferences", requireAuth(), express.json(), (req, res) => {
   try {
-    const { userId, enabled } = req.body;
-    if (!userId) return res.status(400).json({ ok: false, error: "userId required" });
-    const result = setUserSpontaneousEnabled(STATE, userId, enabled);
+    const { enabled } = req.body;
+    const result = setUserSpontaneousEnabled(STATE, req.user?.id, enabled);
     res.json(result);
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
@@ -47189,9 +47185,9 @@ app.post("/api/futures", (req, res) => {
   }
 });
 
-app.post("/api/futures/:id/stake", (req, res) => {
-  const { optionId, amount, userId } = req.body;
-  const result = stakeFuture(req.params.id, optionId, amount, userId);
+app.post("/api/futures/:id/stake", requireAuth(), (req, res) => {
+  const { optionId, amount } = req.body;
+  const result = stakeFuture(req.params.id, optionId, amount, req.user?.id);
   res.json(result);
 });
 
@@ -60020,46 +60016,48 @@ app.post('/api/artistry/collab/sessions', (req, res) => {
   res.json({ ok: true, session: art.collabSessions.get(sessionId) });
 });
 
-app.post('/api/artistry/collab/sessions/:id/join', (req, res) => {
+app.post('/api/artistry/collab/sessions/:id/join', requireAuth(), (req, res) => {
   const art = ensureArtistryState();
   const session = art.collabSessions.get(req.params.id);
   if (!session) return res.status(404).json({ error: 'Session not found' });
   if (session.status !== 'active') return res.status(400).json({ error: 'Session not active' });
   if (session.participants.length >= session.maxParticipants) return res.status(400).json({ error: 'Session full' });
-  const { userId } = req.body;
+  const userId = req.user?.id;
   if (session.participants.some(p => p.userId === userId)) return res.status(400).json({ error: 'Already in session' });
   session.participants.push({ userId, role: 'collaborator', joinedAt: Date.now() });
   session.updatedAt = Date.now();
   res.json({ ok: true, session });
 });
 
-app.post('/api/artistry/collab/sessions/:id/leave', (req, res) => {
+app.post('/api/artistry/collab/sessions/:id/leave', requireAuth(), (req, res) => {
   const art = ensureArtistryState();
   const session = art.collabSessions.get(req.params.id);
   if (!session) return res.status(404).json({ error: 'Session not found' });
-  const { userId } = req.body;
+  const userId = req.user?.id;
   session.participants = session.participants.filter(p => p.userId !== userId);
   if (session.participants.length === 0) session.status = 'ended';
   session.updatedAt = Date.now();
   res.json({ ok: true, session });
 });
 
-app.post('/api/artistry/collab/sessions/:id/action', (req, res) => {
+app.post('/api/artistry/collab/sessions/:id/action', requireAuth(), (req, res) => {
   const art = ensureArtistryState();
   const session = art.collabSessions.get(req.params.id);
   if (!session) return res.status(404).json({ error: 'Session not found' });
-  const { userId, action, data } = req.body;
+  const { action, data } = req.body;
+  const userId = req.user?.id;
   session.actions.push({ userId, action, data, at: Date.now() });
   if (session.actions.length > 5000) session.actions = session.actions.slice(-5000);
   session.updatedAt = Date.now();
   res.json({ ok: true, actionCount: session.actions.length });
 });
 
-app.post('/api/artistry/collab/sessions/:id/chat', (req, res) => {
+app.post('/api/artistry/collab/sessions/:id/chat', requireAuth(), (req, res) => {
   const art = ensureArtistryState();
   const session = art.collabSessions.get(req.params.id);
   if (!session) return res.status(404).json({ error: 'Session not found' });
-  const { userId, message } = req.body;
+  const { message } = req.body;
+  const userId = req.user?.id;
   session.chat.push({ userId, message, at: Date.now() });
   if (session.chat.length > 1000) session.chat = session.chat.slice(-1000);
   res.json({ ok: true, chatCount: session.chat.length });

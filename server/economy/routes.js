@@ -11,7 +11,7 @@ import {
   requestWithdrawal, approveWithdrawal, rejectWithdrawal,
   processWithdrawal, cancelWithdrawal, getUserWithdrawals, getAllWithdrawals,
 } from "./withdrawals.js";
-import { adminOnly } from "./guards.js";
+import { adminOnly, authRequired } from "./guards.js";
 import { economyAudit, auditCtx } from "./audit.js";
 import {
   createCheckoutSession, handleWebhook, createConnectOnboarding,
@@ -217,9 +217,9 @@ export function registerEconomyRoutes(app, db, opts = {}) {
 
   // ── Marketplace Purchase (buyer → seller, with fee) ────────────────────────
 
-  app.post("/api/economy/marketplace-purchase", (req, res) => {
+  app.post("/api/economy/marketplace-purchase", authRequired, (req, res) => {
     try {
-      const buyerId = req.body.buyer_id || req.user?.id;
+      const buyerId = req.user?.id;
       const sellerId = req.body.seller_id;
       const amount = Math.round(parseFloat(req.body.amount) * 100) / 100;
       const listingId = req.body.listing_id;
@@ -266,9 +266,9 @@ export function registerEconomyRoutes(app, db, opts = {}) {
   // WITHDRAWALS
   // ═══════════════════════════════════════════════════════════════════════════
 
-  app.post("/api/economy/withdraw", (req, res) => {
+  app.post("/api/economy/withdraw", authRequired, (req, res) => {
     try {
-      const userId = req.body.user_id || req.user?.id;
+      const userId = req.user?.id;
       const amount = Math.round(parseFloat(req.body.amount) * 100) / 100;
 
       if (!userId) return res.status(400).json({ ok: false, error: "missing_user_id" });
@@ -330,9 +330,9 @@ export function registerEconomyRoutes(app, db, opts = {}) {
     }
   });
 
-  app.post("/api/economy/withdrawals/:id/cancel", (req, res) => {
+  app.post("/api/economy/withdrawals/:id/cancel", authRequired, (req, res) => {
     try {
-      const userId = req.body.user_id || req.user?.id;
+      const userId = req.user?.id;
       if (!userId) return res.status(400).json({ ok: false, error: "missing_user_id" });
 
       const result = cancelWithdrawal(db, { withdrawalId: req.params.id, userId });
@@ -569,13 +569,13 @@ export function registerEconomyRoutes(app, db, opts = {}) {
 
   // ── Buy tokens via Stripe Checkout ─────────────────────────────────────────
 
-  app.post("/api/economy/buy/checkout", async (req, res) => {
+  app.post("/api/economy/buy/checkout", authRequired, async (req, res) => {
     try {
       if (!STRIPE_ENABLED) {
         return res.status(503).json({ ok: false, error: "stripe_not_configured" });
       }
 
-      const userId = req.body.user_id || req.user?.id;
+      const userId = req.user?.id;
       const tokens = parseInt(req.body.tokens, 10);
 
       if (!userId) return res.status(400).json({ ok: false, error: "missing_user_id" });
@@ -629,13 +629,13 @@ export function registerEconomyRoutes(app, db, opts = {}) {
 
   // ── Stripe Connect ─────────────────────────────────────────────────────────
 
-  app.post("/api/stripe/connect/onboard", async (req, res) => {
+  app.post("/api/stripe/connect/onboard", authRequired, async (req, res) => {
     try {
       if (!STRIPE_ENABLED) {
         return res.status(503).json({ ok: false, error: "stripe_not_configured" });
       }
 
-      const userId = req.body.user_id || req.user?.id;
+      const userId = req.user?.id;
       if (!userId) return res.status(400).json({ ok: false, error: "missing_user_id" });
 
       const ctx = auditCtx(req);
@@ -1497,9 +1497,9 @@ export function registerEconomyRoutes(app, db, opts = {}) {
     }
   });
 
-  app.post("/api/economy/marketplace/purchase", (req, res) => {
+  app.post("/api/economy/marketplace/purchase", authRequired, (req, res) => {
     try {
-      const buyerId = req.body.buyer_id || req.user?.id;
+      const buyerId = req.user?.id;
       const listingId = req.body.listing_id;
 
       if (!buyerId) return res.status(400).json({ ok: false, error: "missing_buyer_id" });

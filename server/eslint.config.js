@@ -47,6 +47,22 @@ export default [
       'prefer-regex-literals': 'warn',
       radix: 'warn',
       yoda: 'warn',
+      // Auth bypass prevention — client-supplied userId must never substitute for req.user.id
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: "MemberExpression[object.object.name='req'][object.property.name='body'][property.name='userId']",
+          message: "req.body.userId is an auth bypass risk. Use req.user?.id from the authenticated session. If this is a target identifier (not the actor), add // safe: target-identifier",
+        },
+        {
+          selector: "MemberExpression[object.object.name='req'][object.property.name='body'][property.name='user_id']",
+          message: "req.body.user_id is an auth bypass risk. Use req.user?.id from the authenticated session. If this is a target identifier (not the actor), add // safe: target-identifier",
+        },
+        {
+          selector: "MemberExpression[object.object.name='req'][object.property.name='query'][property.name='userId']",
+          message: "req.query.userId used as actor identity is an auth bypass risk. Use req.user?.id from the authenticated session.",
+        },
+      ],
     },
   },
   {
