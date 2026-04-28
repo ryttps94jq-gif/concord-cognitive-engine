@@ -35,6 +35,7 @@ import cors from "cors";
 import crypto from "crypto";
 import fs from "fs";
 import path from "path";
+import zlib from "zlib";
 import { spawnSync } from "child_process";
 import { Worker } from "node:worker_threads";
 import { initAll as initLoaf } from "./loaf/index.js";
@@ -5431,6 +5432,19 @@ function createBackup(name = null) {
     };
 
     fs.writeFileSync(backupPath, JSON.stringify(backup, null, 2));
+
+    // Rotate: keep only the 24 most recent JSON state backups (~48 hours at 2h interval)
+    try {
+      const MAX_STATE_BACKUPS = 24;
+      const allBackups = fs.readdirSync(BACKUP_DIR)
+        .filter(f => f.endsWith(".json") && !f.startsWith("."))
+        .sort();
+      while (allBackups.length > MAX_STATE_BACKUPS) {
+        const oldest = allBackups.shift();
+        try { fs.unlinkSync(path.join(BACKUP_DIR, oldest)); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
+      }
+    } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
+
     structuredLog("info", "backup_created", { path: backupPath });
     return { ok: true, path: backupPath, name: backupName, size: fs.statSync(backupPath).size };
   } catch (e) {
@@ -25852,6 +25866,7 @@ if (db) {
 
   app.use("/api", createTransparencyRouter({ db, adminOnly: economyAdminOnly }));
   const backupScheduler = createBackupScheduler(db, { dataDir: DATA_DIR });
+  backupScheduler.start();
   registerBackupRoutes(app, { requireRole, backupScheduler, db });
   registerCodeEngineRoutes(app, { db, requireAuth });
   structuredLog("info", "db_routes_registered", { count: 9, routes: ["account","consent","disputes","legal","repair-enhanced","initiative","transparency","backup","code-engine"] });
@@ -61430,11 +61445,13 @@ function runBackup() {
         JSON.stringify(STATE.globalThread?.councilQueue || []));
     } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
-    // Backup SQLite DB if exists
+    // Backup SQLite DB if exists — gzip compressed to avoid ballooning pod storage
     try {
       const dbPath = "/data/db/concord.db";
       if (fs.existsSync(dbPath)) {
-        fs.copyFileSync(dbPath, `${backupDir}/concord.db`);
+        const raw = fs.readFileSync(dbPath);
+        const compressed = zlib.gzipSync(raw, { level: 6 });
+        fs.writeFileSync(`${backupDir}/concord.db.gz`, compressed);
       }
     } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
 
