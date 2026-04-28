@@ -28226,7 +28226,42 @@ app.get("/api/marketplace/browse", asyncHandler(async (req, res) => res.json(awa
 // Legacy alias — some frontend code still calls /api/marketplace/dtu_browse.
 // Route it to the same macro so both URLs work during deprecation.
 app.get("/api/marketplace/dtu_browse", asyncHandler(async (req, res) => res.json(await runMacro("marketplace", "browse", { category: req.query.category, search: req.query.search, sort: req.query.sort, page: req.query.page, pageSize: req.query.pageSize }, makeCtx(req)))));
-app.post("/api/marketplace/submit", validate("marketplaceSubmit"), asyncHandler(async (req, res) => res.json(await runMacro("marketplace", "submit", req.body, makeCtx(req)))));
+app.post("/api/marketplace/submit", requireAuth(), (req, res) => {
+  try {
+    const userId = req.user?.id;
+    const { dtuId, price } = req.body;
+    const dtu = STATE.dtus.get(dtuId);
+    if (!dtu) return res.status(404).json({ ok: false, error: "DTU not found" });
+    if (dtu.ownerId !== userId) return res.status(403).json({ ok: false, error: "Not your DTU" });
+    if (dtu.scope !== "personal") return res.status(400).json({ ok: false, error: "Can only list personal DTUs" });
+
+    const listing = {
+      id: uid("listing"),
+      sourceDtuId: dtuId,
+      sellerId: userId,
+      scope: "marketplace",
+      title: dtu.title,
+      domain: dtu.domain,
+      description: dtu.human?.summary || "",
+      artifact: dtu.artifact ? { ...dtu.artifact } : null,
+      qualityTier: dtu.meta?.qualityTier,
+      qualityScore: dtu.meta?.qualityScore,
+      price: Number(price || 0),
+      currency: "concord_coin",
+      listedAt: nowISO(),
+      downloads: 0,
+      ratings: [],
+      status: "active",
+    };
+
+    if (!STATE.marketplaceListings) STATE.marketplaceListings = new Map();
+    STATE.marketplaceListings.set(listing.id, listing);
+    saveStateDebounced();
+    res.json({ ok: true, listing });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
+});
 app.post("/api/marketplace/install", validate("marketplaceInstall"), asyncHandler(async (req, res) => res.json(await runMacro("marketplace", "install", req.body, makeCtx(req)))));
 app.post("/api/marketplace/review", asyncHandler(async (req, res) => res.json(await runMacro("marketplace", "review", req.body, makeCtx(req)))));
 app.get("/api/marketplace/installed", asyncHandler(async (req, res) => res.json(await runMacro("marketplace", "installed", {}, makeCtx(req)))));
@@ -34969,46 +35004,6 @@ app.get("/api/sovereignty/status", requireAuth(), async (req, res) => {
   });
 });
 
-// ── Marketplace Scope Rules ─────────────────────────────────────────────────
-
-app.post("/api/marketplace/submit", requireAuth(), (req, res) => {
-  try {
-    const userId = req.user?.id || req.actor?.userId;
-    if (!userId) return res.status(401).json({ ok: false, error: "Auth required" });
-
-    const { dtuId, price } = req.body;
-    const dtu = STATE.dtus.get(dtuId);
-    if (!dtu) return res.status(404).json({ ok: false, error: "DTU not found" });
-    if (dtu.ownerId !== userId) return res.status(403).json({ ok: false, error: "Not your DTU" });
-    if (dtu.scope !== "personal") return res.status(400).json({ ok: false, error: "Can only list personal DTUs" });
-
-    const listing = {
-      id: uid("listing"),
-      sourceDtuId: dtuId,
-      sellerId: userId,
-      scope: "marketplace",
-      title: dtu.title,
-      domain: dtu.domain,
-      description: dtu.human?.summary || "",
-      artifact: dtu.artifact ? { ...dtu.artifact } : null,
-      qualityTier: dtu.meta?.qualityTier,
-      qualityScore: dtu.meta?.qualityScore,
-      price: Number(price || 0),
-      currency: "concord_coin",
-      listedAt: nowISO(),
-      downloads: 0,
-      ratings: [],
-      status: "active",
-    };
-
-    if (!STATE.marketplaceListings) STATE.marketplaceListings = new Map();
-    STATE.marketplaceListings.set(listing.id, listing);
-    saveStateDebounced();
-    res.json({ ok: true, listing });
-  } catch (e) {
-    res.status(500).json({ ok: false, error: String(e?.message || e) });
-  }
-});
 
 // ============================================================================
 // 12 NEW CAPABILITIES: Pipeline Registry, Predictive Substrate, Teaching,
@@ -39012,10 +39007,6 @@ const swaggerUIHtml = `<!DOCTYPE html>
 </body>
 </html>`;
 
-app.get("/api/docs", (req, res) => {
-  // Serve Swagger UI
-  res.type("text/html").send(swaggerUIHtml);
-});
 
 app.get("/api/docs/openapi.json", (req, res) => {
   // Try to load YAML spec, fall back to generated spec
@@ -41320,9 +41311,6 @@ app.post("/api/sovereign/repair/acknowledge", async (req, res) => {
 });
 
 // Sovereignty/audit
-app.get("/api/sovereignty/status", (req, res) => {
-  res.json({ ok: true, sovereign: true, dataLocal: true, federationEnabled: false });
-});
 
 app.post("/api/sovereignty/audit", asyncHandler(async (req, res) => {
   try {
@@ -41342,7 +41330,7 @@ app.post("/api/sovereignty/audit", asyncHandler(async (req, res) => {
 
 // Finance - backed by real economic state
 app.get("/api/finance/portfolio", (req, res) => {
-  const userId = req.user?.id || req.query.odId;
+  const userId = req.user?.id;
   ensureEconomicState();
   const wallet = userId ? getWallet(userId) : { balance: 0, purchases: [] };
   const listings = Array.from(STATE.economic?.listings?.values() || []).filter(l => l.seller === userId);
@@ -41358,7 +41346,7 @@ app.get("/api/finance/portfolio", (req, res) => {
 
 app.get("/api/finance/transactions", (req, res) => {
   ensureEconomicState();
-  const userId = req.user?.id || req.query.odId;
+  const userId = req.user?.id;
   const limit = clamp(Number(req.query.limit || 50), 1, 200);
   const allTx = Array.from(STATE.economic?.transactions?.values() || []);
   const userTx = userId ? allTx.filter(t => t.buyer === userId || t.seller === userId) : allTx;
@@ -42546,7 +42534,7 @@ app.get("/api/social/following/:userId", (req, res) => {
 });
 
 app.get("/api/social/feed", (req, res) => {
-  try { res.json(getFeed(STATE, req.query.userId || req.user?.id, { limit: Number(req.query.limit || 30), offset: Number(req.query.offset || 0) })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  try { res.json(getFeed(STATE, req.user?.id || req.query.userId, { limit: Number(req.query.limit || 30), offset: Number(req.query.offset || 0) })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
 app.get("/api/social/trending", (req, res) => {
@@ -42556,7 +42544,7 @@ app.get("/api/social/trending", (req, res) => {
 // Social analytics + trending extensions
 app.get("/api/social/analytics/creator", (req, res) => {
   try {
-    const userId = req.query.userId || req.user?.id || req.actor?.userId || "anon";
+    const userId = req.user?.id || req.query.userId || "anon";
     const profile = getProfile(STATE, userId);
     const dtus = dtusArray().filter(d => d.createdBy === userId || d.userId === userId);
     res.json({ ok: true, creator: { userId, totalDTUs: dtus.length, profile, engagement: { views: dtus.reduce((s, d) => s + (d.views || 0), 0), votes: dtus.reduce((s, d) => s + (d.votes || 0), 0) } } });
@@ -42680,7 +42668,7 @@ app.post("/api/social/react", requireAuth(), (req, res) => {
 
 app.get("/api/social/reactions/:postId", (req, res) => {
   try {
-    const currentUserId = req.query.userId || req.user?.id || req.actor?.userId || null;
+    const currentUserId = req.user?.id || req.query.userId || null;
     res.json(socialGetReactions(STATE, req.params.postId, currentUserId));
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
@@ -42889,11 +42877,6 @@ app.delete("/api/social/notifications/:id", (req, res) => {
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
-// ---- Social Groups (DB-backed) ----
-if (db) {
-  const { default: createSocialGroupRoutes } = await import("./routes/social-groups.js");
-  app.use("/api/social", createSocialGroupRoutes({ db, requireAuth }));
-}
 
 // ---- Collaboration ----
 app.post("/api/collab/workspace", requireAuth(), (req, res) => {
@@ -43054,21 +43037,8 @@ app.get("/api/analytics/atlas-domains", (req, res) => {
   try { res.json(getAtlasDomainAnalytics(STATE)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
-// ---- Public API & Webhooks ----
-app.post("/api/webhooks", (req, res) => {
-  try { res.json(registerWh(STATE, { ...req.body, ownerId: req.body?.ownerId || req.user?.id })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
-});
-
-app.get("/api/webhooks", (req, res) => {
-  try { res.json(listWebhooks(STATE, req.query.ownerId || req.user?.id)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
-});
-
 app.get("/api/webhooks/:id", (req, res) => {
   try { res.json(getWebhook(STATE, req.params.id)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
-});
-
-app.delete("/api/webhooks/:id", (req, res) => {
-  try { res.json(deleteWebhook(STATE, req.params.id)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
 app.post("/api/webhooks/:id/deactivate", (req, res) => {
@@ -43559,10 +43529,6 @@ app.get("/api/dtus/:id/connections", asyncHandler(async (req, res) => {
   res.json({ ok: true, dtuId: id, connections });
 }));
 
-// Semantic cache stats
-app.get("/api/cache/stats", asyncHandler(async (_req, res) => {
-  res.json({ ok: true, ...getCacheStats() });
-}));
 
 // Record cache satisfaction (thumbs up/down)
 app.post("/api/cache/satisfaction", asyncHandler(async (req, res) => {
@@ -44022,11 +43988,6 @@ try {
 }
 
 // ---- Three-Brain Cognitive Architecture API ----
-
-// Brain status endpoint — monitoring dashboard data
-app.get("/api/brain/status", asyncHandler(async (_req, res) => {
-  res.json(getBrainStatus());
-}));
 
 // Utility brain endpoint — lens-specific AI tasks
 app.post("/api/utility/call", asyncHandler(async (req, res) => {
