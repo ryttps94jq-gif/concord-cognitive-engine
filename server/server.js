@@ -25721,6 +25721,15 @@ try { app.use("/api/social", createSocialEngagementRoutes({ db, requireAuth }));
 import createChannelsRouter from "./routes/channels.js";
 try { app.use("/api/channels", createChannelsRouter({ STATE, requireAuth, realtimeEmit })); } catch (e) { structuredLog("warn", "channels_routes_skip", { error: e.message }); }
 
+import createAgentsRouter from "./routes/agents.js";
+try { app.use("/api/agents", createAgentsRouter({ db, requireAuth, STATE })); } catch (e) { structuredLog("warn", "agents_routes_skip", { error: e.message }); }
+
+import createArtifactsRouter from "./routes/artifacts.js";
+try { app.use("/api/artifacts", createArtifactsRouter({ db, requireAuth, STATE })); } catch (e) { structuredLog("warn", "artifacts_routes_skip", { error: e.message }); }
+
+import createStudioRouter from "./routes/studio.js";
+try { app.use("/api/studio", createStudioRouter({ db, requireAuth })); } catch (e) { structuredLog("warn", "studio_routes_skip", { error: e.message }); }
+
 import createFeedRoutes from "./routes/feeds.js";
 try { app.use("/api/feeds", createFeedRoutes({ requireAuth })); } catch (e) { structuredLog("warn", "feed_routes_skip", { error: e.message }); }
 
@@ -43100,9 +43109,9 @@ app.get("/api/atlas/invariants/log", (req, res) => {
 // Chat sits ABOVE Atlas — fast retrieval, no governance, no DTU writes.
 // Escalation ("Save as DTU", "Publish to Global", "List on Marketplace") is explicit.
 
-app.get("/api/atlas/chat/retrieve", (req, res) => {
+app.post("/api/atlas/chat/retrieve", (req, res) => {
   try {
-    const { q, limit, policy, minConfidence, domainType, sessionId } = req.query;
+    const { q, limit, policy, minConfidence, domainType, sessionId } = { ...req.body, ...req.query };
     const result = chatRetrieve(STATE, q, {
       limit: limit ? Number(limit) : undefined,
       policy,
@@ -43177,9 +43186,9 @@ app.get("/api/atlas/chat/metrics", (req, res) => {
 
 // ── Atlas v2: Rights & Citation Endpoints ───────────────────────────────────
 
-app.get("/api/atlas/rights/check", (req, res) => {
+app.post("/api/atlas/rights/check", (req, res) => {
   try {
-    const { userId, artifactId, action } = req.query;
+    const { userId, artifactId, action } = { ...req.body, ...req.query };
     if (!userId || !artifactId || !action) return res.status(400).json({ ok: false, error: "userId, artifactId, and action required" });
     res.json(canUse(STATE, userId, artifactId, action));
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
