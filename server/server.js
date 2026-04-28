@@ -6362,7 +6362,14 @@ async function tryInitNativeWebSockets(server) {
     return { ok: true, sent, dropped, skipped };
   };
 
+  const WS_MAX_CLIENTS = 10_000; // soft connection ceiling — reject above this
+
   wss.on("connection", (ws, _req) => {
+    if (REALTIME.clients.size >= WS_MAX_CLIENTS) {
+      try { ws.send(JSON.stringify({ type: "error", code: "server_full", ts: nowISO() })); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
+      ws.close(1013, "server_full");
+      return;
+    }
     const clientId = uid("ws");
     REALTIME.clients.set(clientId, { ws, sessionId: "", orgId: "", createdAt: nowISO() });
 
