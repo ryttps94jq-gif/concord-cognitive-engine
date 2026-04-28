@@ -124,6 +124,44 @@ export default function registerSystemRoutes(app, {
     });
   });
 
+  // ---- Structured health sub-endpoints ----
+
+  // Alias /api/health → /health for monitoring tools expecting /api/ prefix
+  app.get("/api/health", (req, res) => res.redirect(307, "/health"));
+
+  app.get("/api/health/db", (req, res) => {
+    const checks = {};
+    let status = "healthy";
+    if (db) {
+      try {
+        const row = db.prepare("SELECT 1 AS ok").get();
+        checks.sqlite = { status: row?.ok ? "healthy" : "unhealthy", connected: Boolean(row?.ok) };
+        if (!row?.ok) status = "unhealthy";
+      } catch (e) {
+        checks.sqlite = { status: "unhealthy", connected: false, error: e.message };
+        status = "unhealthy";
+      }
+    } else {
+      checks.sqlite = { status: "healthy", connected: false, note: "in-memory-mode" };
+    }
+    const dbStatus = typeof getDbStatus === "function" ? getDbStatus() : {};
+    checks.postgres = { status: dbStatus.pgPool ? "healthy" : "not_configured", connected: !!dbStatus.pgPool };
+    checks.redis = { status: dbStatus.redisClient ? "healthy" : "not_configured", connected: !!dbStatus.redisClient };
+    res.status(status === "healthy" ? 200 : 503).json({ status, checks });
+  });
+
+  app.get("/api/health/ws", (req, res) => {
+    const REALTIME = globalThis._concordREALTIME || {};
+    const clientCount = REALTIME.clients?.size ?? REALTIME.io?.sockets?.size ?? 0;
+    const ready = REALTIME.ready === true;
+    res.status(ready ? 200 : 503).json({
+      status: ready ? "healthy" : "degraded",
+      details: { ready, connectedClients: clientCount },
+    });
+  });
+
+  app.get("/api/health/brain", (req, res) => res.redirect(307, "/api/brain/health"));
+
   app.get("/metrics", asyncHandler(async (req, res) => {
     // Prometheus-compatible plain text metrics for Concord system
     const lines = [];

@@ -5960,6 +5960,7 @@ async function tryInitWebSockets(server) {
 
   REALTIME.io = io;
   REALTIME.ready = true;
+  globalThis._concordREALTIME = REALTIME;
 
   // SECURITY: Socket.IO authentication middleware
   io.use((socket, next) => {
