@@ -513,11 +513,13 @@ async function commitFeedDTU(item, feedSource) {
   const now = new Date().toISOString();
   const dtuId = `feed_${randomUUID().replace(/-/g, "").slice(0, 16)}`;
 
+  const _lensId = feedSource.lensId || feedSource.domain;
   const tags = [
     ...(feedSource.tags || []),
     ...(Array.isArray(item.categories) ? item.categories.slice(0, 5) : []),
     "feed",
     "live",
+    ...(_lensId ? [`lens:${_lensId}`, _lensId] : []),
   ].map(t => String(t).toLowerCase().trim()).filter(Boolean);
   const uniqueTags = [...new Set(tags)].slice(0, 15);
 
@@ -538,6 +540,7 @@ async function commitFeedDTU(item, feedSource) {
     },
     meta: {
       feedId: feedSource.id,
+      lensId: feedSource.lensId || feedSource.domain,
       fetchedAt: now,
       via: "feed-manager",
       sourceUrl: item.sourceUrl || "",
@@ -606,6 +609,7 @@ async function tickFeed(feedId) {
           _deps.realtimeEmit("feed:new-dtu", {
             dtuId: result.dtuId,
             feedId: feedSource.id,
+            lensId: feedSource.lensId || feedSource.domain,
             domain: feedSource.domain,
             title: item.title,
             sourceUrl: item.sourceUrl,
@@ -746,6 +750,7 @@ export function registerFeed(source) {
     id: source.id,
     name: source.name || source.id,
     domain: source.domain || "general",
+    lensId: source.lensId || source.domain || "general",
     type: source.type || "rss",
     url: source.url,
     interval: source.interval || 60000,
