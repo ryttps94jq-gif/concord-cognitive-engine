@@ -1,0 +1,14 @@
+#!/usr/bin/env sh
+# Run lint-staged on frontend files and syntax-check server on every commit.
+
+cd "$(git rev-parse --show-toplevel)"
+
+# Frontend: lint + format staged files
+if [ -d "concord-frontend" ]; then
+  cd concord-frontend && npx lint-staged && cd ..
+fi
+
+# Server: quick syntax check
+if [ -f "server/server.js" ]; then
+  node --check server/server.js
+fi

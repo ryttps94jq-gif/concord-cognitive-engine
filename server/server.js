@@ -379,6 +379,27 @@ try { helmet = (await import("helmet")).default; } catch (e) {
 try { compression = (await import("compression")).default; } catch (_e) { logger.debug('server', 'optional in all envs', { error: _e?.message }); }
 try { Database = (await import("better-sqlite3")).default; } catch (_e) { logger.debug('server', 'optional - falls back to JSON', { error: _e?.message }); }
 
+// Sentry — only activates when SENTRY_DSN is set; completely no-op otherwise
+if (process.env.SENTRY_DSN) {
+  try {
+    const Sentry = await import("@sentry/node");
+    Sentry.init({
+      dsn: process.env.SENTRY_DSN,
+      tracesSampleRate: 0,
+      sendDefaultPii: false,
+      environment: process.env.NODE_ENV || "development",
+      beforeSend(event) {
+        delete event.user;
+        if (event.request) { delete event.request.cookies; delete event.request.headers?.cookie; }
+        return event;
+      },
+    });
+    // Store reference for error handler registration after routes
+    globalThis.__sentry = Sentry;
+    console.log("[Sentry] Backend error monitoring initialized.");
+  } catch (_e) { console.warn("[Sentry] Failed to initialize:", _e?.message); }
+}
+
 // CRITICAL: Refuse to start in production without security dependencies
 if (_isProduction && _securityLoadErrors.length > 0) {
   console.error("\n[FATAL] Security dependencies failed to load in production:");
@@ -4358,13 +4379,82 @@ const _TOKEN_BLACKLIST = {
 setInterval(() => _TOKEN_BLACKLIST.cleanup(), 3600000);
 
 // ---- Refresh Token Family Tracking (detects token theft via reuse) ----
-const _REFRESH_FAMILIES = new Map(); // family -> { userId, currentJti, rotatedAt }
+// SQLite-backed so theft detection survives server restarts.
+// Falls back to a plain Map if DB is unavailable (e.g. test environments).
+class SqliteRefreshFamilies {
+  constructor(database) {
+    this._db = database;
+    if (this._db) {
+      this._db.exec(`
+        CREATE TABLE IF NOT EXISTS refresh_families (
+          family      TEXT PRIMARY KEY,
+          user_id     TEXT NOT NULL,
+          current_jti TEXT NOT NULL,
+          rotated_at  INTEGER NOT NULL,
+          expires_at  INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_rf_user ON refresh_families (user_id);
+        CREATE INDEX IF NOT EXISTS idx_rf_expires ON refresh_families (expires_at);
+      `);
+      this._get = this._db.prepare("SELECT * FROM refresh_families WHERE family = ?");
+      this._set = this._db.prepare(
+        `INSERT OR REPLACE INTO refresh_families (family, user_id, current_jti, rotated_at, expires_at)
+         VALUES (?, ?, ?, ?, ?)`
+      );
+      this._del = this._db.prepare("DELETE FROM refresh_families WHERE family = ?");
+      this._delUser = this._db.prepare("DELETE FROM refresh_families WHERE user_id = ?");
+      this._all = this._db.prepare("SELECT family, user_id, current_jti, rotated_at FROM refresh_families WHERE expires_at > ?");
+      this._purge = this._db.prepare("DELETE FROM refresh_families WHERE expires_at < ?");
+    } else {
+      this._fallback = new Map();
+    }
+  }
+  get(family) {
+    if (!this._db) return this._fallback.get(family);
+    const row = this._get.get(family);
+    if (!row) return undefined;
+    return { userId: row.user_id, currentJti: row.current_jti, rotatedAt: row.rotated_at };
+  }
+  set(family, { userId, currentJti, rotatedAt }) {
+    if (!this._db) { this._fallback.set(family, { userId, currentJti, rotatedAt }); return; }
+    const expiresAt = (rotatedAt || Date.now()) + 30 * 24 * 60 * 60 * 1000;
+    this._set.run(family, userId, currentJti, rotatedAt || Date.now(), expiresAt);
+  }
+  delete(family) {
+    if (!this._db) { this._fallback.delete(family); return; }
+    this._del.run(family);
+  }
+  has(family) {
+    return this.get(family) !== undefined;
+  }
+  deleteAllForUser(userId) {
+    if (!this._db) {
+      for (const [k, v] of this._fallback) { if (v.userId === userId) this._fallback.delete(k); }
+      return;
+    }
+    this._delUser.run(userId);
+  }
+  [Symbol.iterator]() {
+    if (!this._db) return this._fallback[Symbol.iterator]();
+    const rows = this._all.all(Date.now());
+    return rows.map(r => [r.family, { userId: r.user_id, currentJti: r.current_jti, rotatedAt: r.rotated_at }])[Symbol.iterator]();
+  }
+  cleanup() {
+    if (!this._db) return;
+    this._purge.run(Date.now());
+  }
+}
 
-// Cleanup stale refresh families (no rotation in 30 days) — prevents unbounded growth
+const _REFRESH_FAMILIES = new SqliteRefreshFamilies(db);
+
+// Cleanup expired refresh families every 6 hours
 setInterval(() => {
+  _REFRESH_FAMILIES.cleanup();
   const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
-  for (const [key, family] of _REFRESH_FAMILIES) {
-    if (!family.rotatedAt || family.rotatedAt < cutoff) _REFRESH_FAMILIES.delete(key);
+  if (_REFRESH_FAMILIES._fallback) {
+    for (const [key, family] of _REFRESH_FAMILIES._fallback) {
+      if (!family.rotatedAt || family.rotatedAt < cutoff) _REFRESH_FAMILIES._fallback.delete(key);
+    }
   }
 }, 6 * 60 * 60 * 1000); // every 6 hours
 
@@ -5838,11 +5928,28 @@ async function tryInitWebSockets(server) {
   }
   if (!Server) return { ok: false, reason: "socketio_import_failed" };
 
+  const _wsAllowedOrigins = process.env.ALLOWED_ORIGINS
+    ? process.env.ALLOWED_ORIGINS.split(",").map(o => o.trim())
+    : (NODE_ENV !== "production" ? ["http://localhost:3000", "http://127.0.0.1:3000"] : null);
+  if (NODE_ENV === "production" && !process.env.ALLOWED_ORIGINS) {
+    console.warn("[Socket.IO] WARNING: ALLOWED_ORIGINS not set — WebSocket CORS will use same-host matching. Set ALLOWED_ORIGINS for production.");
+  }
   const io = new Server(server, {
     cors: {
-      origin: NODE_ENV === "production"
-        ? (process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(",").map(o => o.trim()) : [])
-        : ["http://localhost:3000", "http://127.0.0.1:3000"],
+      origin: _wsAllowedOrigins !== null
+        ? _wsAllowedOrigins
+        : (origin, callback) => {
+            // same-host fallback when ALLOWED_ORIGINS is not configured in production
+            if (!origin) return callback(null, true);
+            try {
+              const serverHost = process.env.SERVER_HOST || process.env.HOSTNAME || process.env.DOMAIN || "";
+              const originHost = new URL(origin).hostname;
+              if (serverHost && originHost === serverHost) return callback(null, true);
+              const apiUrl = process.env.NEXT_PUBLIC_API_URL || process.env.API_URL || "";
+              if (apiUrl && new URL(apiUrl).hostname === originHost) return callback(null, true);
+            } catch { /* invalid origin */ }
+            return callback(new Error("Origin not allowed"));
+          },
       methods: ["GET", "POST"],
       credentials: true
     },
@@ -37551,6 +37658,34 @@ app.get("/api/perf/metrics", asyncHandler(async (req, res) => res.json(await run
 app.post("/api/perf/gc", asyncHandler(async (req, res) => res.json(await runMacro("perf", "gc", {}, makeCtx(req)))));
 app.get("/api/backpressure/status", asyncHandler(async (req, res) => res.json(await runMacro("backpressure", "status", {}, makeCtx(req)))));
 
+// Web Vitals ingest — receives anonymous performance metrics from the frontend (no user data)
+const _webVitals = { LCP: [], FID: [], CLS: [], TTFB: [], INP: [] };
+app.post("/api/metrics/vitals", (req, res) => {
+  try {
+    const { name, value, kind } = req.body || {};
+    if (typeof name !== "string" || typeof value !== "number") {
+      return res.status(400).json({ ok: false, error: "name and value required" });
+    }
+    const bucket = _webVitals[name];
+    if (bucket) {
+      bucket.push(value);
+      if (bucket.length > 500) bucket.shift(); // rolling window
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+app.get("/api/metrics/vitals", requireAuth(), (req, res) => {
+  const summary = {};
+  for (const [metric, values] of Object.entries(_webVitals)) {
+    if (!values.length) continue;
+    const sorted = [...values].sort((a, b) => a - b);
+    summary[metric] = { count: values.length, p50: sorted[Math.floor(sorted.length * 0.5)], p75: sorted[Math.floor(sorted.length * 0.75)], p95: sorted[Math.floor(sorted.length * 0.95)] };
+  }
+  res.json({ ok: true, vitals: summary });
+});
+
 // ---- Observability & Cost Endpoints (Categories 5+6) ----
 app.get("/api/observability/latency", (req, res) => {
   res.json({ ok: true, latency: _LATENCY.stats() });
@@ -50177,6 +50312,11 @@ try { await initStateSync(STATE); } catch (e) {
   structuredLog("warn", "state_sync_init_failed", { error: String(e?.message || e) });
 }
 startAllIntervals(structuredLog);
+
+// Sentry error handler — must be registered after all routes but before listen
+if (globalThis.__sentry) {
+  app.use(globalThis.__sentry.Handlers.errorHandler());
+}
 
 const SHOULD_LISTEN = (String(process.env.CONCORD_NO_LISTEN || "").toLowerCase() !== "true") && (String(process.env.NODE_ENV || "").toLowerCase() !== "test");
 

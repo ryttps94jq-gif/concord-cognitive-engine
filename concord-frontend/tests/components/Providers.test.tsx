@@ -29,6 +29,18 @@ vi.mock('@/components/common/PermissionGate', () => ({
   ),
 }));
 
+vi.mock('@/components/common/ErrorBoundary', () => ({
+  ErrorBoundary: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+}));
+
+vi.mock('@/components/providers/I18nProvider', () => ({
+  I18nProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+}));
+
+vi.mock('@/components/media/GlobalMediaController', () => ({
+  GlobalMediaController: () => null,
+}));
+
 vi.mock('@/store/ui', () => ({
   useUIStore: Object.assign(
     () => ({ addToast: vi.fn() }),

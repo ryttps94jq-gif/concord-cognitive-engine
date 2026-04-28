@@ -383,9 +383,6 @@ export const LENS_REGISTRY: LensEntry[] = [
   { id: 'mental-health', name: 'Mental Health', icon: Heart, description: 'Mental wellness & therapy tools', category: 'superlens', showInSidebar: false, showInCommandPalette: true, path: '/lenses/mental-health', order: 371, keywords: ['therapy', 'wellness', 'anxiety', 'counseling'] },
   { id: 'projects', name: 'Projects', icon: Layout, description: 'Project management & tracking', category: 'superlens', showInSidebar: false, showInCommandPalette: true, path: '/lenses/projects', order: 372, keywords: ['project', 'task', 'milestone', 'gantt'] },
 
-  // ── The Answers (STSVK + Concord meta-framework) ───────────────
-  { id: 'answers', name: 'The Answers', icon: Sparkles, description: 'How STSVK + Concord solve the hardest problems in existence', category: 'knowledge', showInSidebar: false, showInCommandPalette: true, path: '/lenses/answers', order: 365, keywords: ['answers', 'stsvk', 'oracle', 'hard problems', 'fixed points', 'constraints', 'meta'] },
-
   // ── Command Center (sovereign dashboard) ───────────────────────
   { id: 'command-center', name: 'Command Center', icon: Shield, description: 'Sovereign command center — brains, repair, attention, forgetting, promotions', category: 'system', showInSidebar: true, showInCommandPalette: true, path: '/lenses/command-center', order: 6, keywords: ['sovereign', 'admin', 'control', 'command', 'center', 'brains', 'repair'] },
 ];
