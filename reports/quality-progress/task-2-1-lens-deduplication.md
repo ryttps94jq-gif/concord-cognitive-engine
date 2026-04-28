@@ -69,7 +69,7 @@ if (isError) return <ErrorState error={error?.message} onRetry={refetch} />;
 
 ---
 
-## Migration Executed: 15 Lens Pages
+## Migration Executed: 23 Lens Pages (ongoing)
 
 ### Batch 1 — Trades/Simple Lenses (10 pages)
 
@@ -96,7 +96,20 @@ if (isError) return <ErrorState error={error?.message} onRetry={refetch} />;
 | desert | ~55 | Complex with MapView |
 | ethics | ~50 | Knowledge lens pattern |
 
-**Total removed: ~752 lines of identical boilerplate across 15 pages**
+### Batch 3 — Mixed Lenses (8 pages)
+
+| Lens | Lines Removed | Notes |
+|------|--------------|-------|
+| diy | ~46 | Trades scaffold pattern |
+| emergency-services | ~71 | Professional pattern |
+| law-enforcement | ~71 | Professional pattern |
+| questmarket | ~50 | Gamification lens |
+| telecommunications | ~71 | Professional pattern |
+| temporal | ~46 | Knowledge lens |
+| urban-planning | ~71 | Professional pattern |
+| veterinary | ~71 | Professional pattern |
+
+**Total removed: ~1,104 lines of identical boilerplate across 23 pages**
 
 ---
 
@@ -122,13 +135,13 @@ if (isError) return <ErrorState error={error?.message} onRetry={refetch} />;
 
 ## Duplication Reduction Estimate
 
-| Metric | Before | After 15 migrations |
+| Metric | Before | After 23 migrations |
 |--------|--------|---------------------|
-| Pages using LensPageShell | 0/176 (0%) | 15/176 (8.5%) |
-| Boilerplate lines eliminated | 0 | ~752 |
-| Estimated jscpd reduction | 11.97% | ~9-10% (projected) |
+| Pages using LensPageShell | 0/176 (0%) | 23/176 (13%) |
+| Boilerplate lines eliminated | 0 | ~1,104 |
+| Estimated jscpd reduction | 11.97% | ~8-9% (projected) |
 
-**Note:** To reach the <7% target, ~80-100 more pages need migration. The pattern is established; remaining migrations are mechanical (same transformation applied to each page). Blocked only by time and linting verification.
+**Note:** To reach the <7% target, ~60-80 more pages need migration. The pattern is established; remaining migrations are mechanical (same transformation applied to each page). Blocked only by time and linting verification.
 
 ---
 

@@ -3,7 +3,7 @@
 import { useState, useMemo, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import dynamic from 'next/dynamic';
-import { useLensNav } from '@/hooks/useLensNav';
+import { LensPageShell } from '@/components/lens/LensPageShell';
 import { useLensData, LensItem } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { ds } from '@/lib/design-system';
@@ -48,17 +48,10 @@ import {
   Clipboard,
   Minus,
   Zap,
-  Layers,
   Map,
 } from 'lucide-react';
 
 const MapView = dynamic(() => import('@/components/common/MapView'), { ssr: false });
-import { ErrorState } from '@/components/common/EmptyState';
-import { useRealtimeLens } from '@/hooks/useRealtimeLens';
-import { LiveIndicator } from '@/components/lens/LiveIndicator';
-import { DTUExportButton } from '@/components/lens/DTUExportButton';
-import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
-import { LensFeaturePanel } from '@/components/lens/LensFeaturePanel';
 import { LensFeedPanel } from '@/components/feeds/LensFeedPanel';
 
 /* ------------------------------------------------------------------ */
@@ -429,15 +422,6 @@ const seedData: Record<
 /* ------------------------------------------------------------------ */
 
 export default function EnvironmentLensPage() {
-  useLensNav('environment');
-  const {
-    latestData: realtimeData,
-    isLive,
-    lastUpdated,
-    insights,
-  } = useRealtimeLens('environment');
-
-  const [showFeatures, setShowFeatures] = useState(true);
   const [mode, setMode] = useState<ModeTab>('Sites');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -3319,45 +3303,18 @@ export default function EnvironmentLensPage() {
   /*  Main Render                                                      */
   /* ================================================================ */
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-full p-8">
-        <div className="text-center space-y-3">
-          <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-sm text-gray-400">Loading ecosystem data...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (isError) {
-    return (
-      <div className="flex items-center justify-center h-full p-8">
-        <ErrorState error={error?.message} onRetry={refetch} />
-      </div>
-    );
-  }
-
   return (
-    <div className={ds.pageContainer}>
-      {/* Header */}
-      <header className={ds.sectionHeader}>
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-green-500/20 flex items-center justify-center">
-            <TreePine className="w-6 h-6 text-green-400" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className={ds.heading1}>Environmental Monitoring</h1>
-              <LiveIndicator isLive={isLive} lastUpdated={lastUpdated} />
-            </div>
-            <p className={ds.textMuted}>
-              Sites, species tracking, sampling, trail assets, waste management & compliance
-            </p>
-          </div>
-        </div>
+    <LensPageShell
+      domain="environment"
+      title="Environmental Monitoring"
+      description="Sites, species tracking, sampling, trail assets, waste management & compliance"
+      headerIcon={<TreePine className="w-6 h-6 text-green-400" />}
+      isLoading={isLoading}
+      isError={isError}
+      error={error}
+      onRetry={refetch}
+      actions={
         <div className="flex items-center gap-2">
-          <DTUExportButton domain="environment" data={{}} compact />
           <button
             className={cn(view === 'library' ? ds.btnPrimary : ds.btnSecondary)}
             onClick={() => setView('library')}
@@ -3384,8 +3341,8 @@ export default function EnvironmentLensPage() {
             <Download className="w-4 h-4" />
           </button>
         </div>
-      </header>
-
+      }
+    >
       {/* AI Actions */}
       <UniversalActions domain="environment" artifactId={siteItems[0]?.id} compact />
       {/* Navigation Tabs */}
@@ -3687,16 +3644,6 @@ export default function EnvironmentLensPage() {
               </div>
             </div>
           </div>
-
-          {/* Real-time Data Panel */}
-          <RealtimeDataPanel
-            domain="environment"
-            data={realtimeData}
-            isLive={isLive}
-            lastUpdated={lastUpdated}
-            insights={insights}
-            compact
-          />
         </div>
       )}
 
@@ -3730,27 +3677,6 @@ export default function EnvironmentLensPage() {
       <div className="px-4 mb-2">
         <LensFeedPanel lensId="environment" />
       </div>
-
-      {/* Lens Features */}
-      <div className="border-t border-white/10">
-        <button
-          onClick={() => setShowFeatures(!showFeatures)}
-          className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
-        >
-          <span className="flex items-center gap-2">
-            <Layers className="w-4 h-4" />
-            Lens Features & Capabilities
-          </span>
-          <ChevronDown
-            className={`w-4 h-4 transition-transform ${showFeatures ? 'rotate-180' : ''}`}
-          />
-        </button>
-        {showFeatures && (
-          <div className="px-4 pb-4">
-            <LensFeaturePanel lensId="environment" />
-          </div>
-        )}
-      </div>
-    </div>
+    </LensPageShell>
   );
 }
