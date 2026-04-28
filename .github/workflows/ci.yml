@@ -386,6 +386,12 @@ jobs:
           API_BASE: http://localhost:5050
         run: node --test tests/edge-cases-critical-paths.test.js
 
+      - name: Run error path tests (degraded mode)
+        working-directory: ./server
+        env:
+          API_BASE: http://localhost:5050
+        run: node --test tests/error-paths.test.js
+
       - name: Stop server
         if: always()
         working-directory: ./server
