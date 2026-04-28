@@ -1,14 +1,9 @@
-#!/usr/bin/env sh
-# Run lint-staged on frontend files and syntax-check server on every commit.
+#!/bin/sh
+# Pre-commit checks — runs on every commit
+# To skip in an emergency: git commit --no-verify
 
-cd "$(git rev-parse --show-toplevel)"
+# Frontend: lint-staged (ESLint + Prettier on staged files)
+(cd concord-frontend && npx lint-staged) || exit 1
 
-# Frontend: lint + format staged files
-if [ -d "concord-frontend" ]; then
-  cd concord-frontend && npx lint-staged && cd ..
-fi
-
-# Server: quick syntax check
-if [ -f "server/server.js" ]; then
-  node --check server/server.js
-fi
+# Backend: syntax check of the server entry point
+(cd server && node --check server.js) || exit 1
