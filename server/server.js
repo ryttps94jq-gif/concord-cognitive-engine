@@ -38752,13 +38752,13 @@ app.post("/api/dtus/:id/share", (req, res) => {
 });
 
 // POST /api/dtus/:id/sync-lens — sync a DTU into a specific lens as an artifact
-app.post("/api/dtus/:id/sync-lens", (req, res) => {
+app.post("/api/dtus/:id/sync-lens", requireAuth(), (req, res) => {
   try {
     const dtu = STATE.dtus?.get?.(req.params.id);
     if (!dtu) return res.status(404).json({ ok: false, error: "DTU not found" });
     const lens = req.body?.lens || req.body?.domain;
     if (!lens) return res.status(400).json({ ok: false, error: "lens/domain required" });
-    const userId = req.user?.id || "anon";
+    const userId = req.user.id;
 
     // Create a lens artifact from this DTU
     const artifactId = uid("lart");
@@ -38787,11 +38787,11 @@ app.post("/api/dtus/:id/sync-lens", (req, res) => {
 });
 
 // POST /api/dtus/:id/fork — fork/clone a DTU into the user's substrate
-app.post("/api/dtus/:id/fork", (req, res) => {
+app.post("/api/dtus/:id/fork", requireAuth(), (req, res) => {
   try {
     const sourceDtu = STATE.dtus?.get?.(req.params.id);
     if (!sourceDtu) return res.status(404).json({ ok: false, error: "DTU not found" });
-    const userId = req.user?.id || req.body?.userId || "anon";
+    const userId = req.user.id;
     const forkedDtu = {
       ...structuredClone(sourceDtu),
       id: uid("dtu"),
@@ -38872,12 +38872,19 @@ app.post("/api/lens/:domain/:id/pull", (req, res) => {
 });
 
 // POST /api/dtus/:id/vote — up/down vote a DTU (forum)
-app.post("/api/dtus/:id/vote", validate("dtuVote"), (req, res) => {
+app.post("/api/dtus/:id/vote", requireAuth(), validate("dtuVote"), (req, res) => {
   try {
     const dtu = STATE.dtus?.get?.(req.params.id) || (Array.isArray(STATE.dtuList) ? STATE.dtuList.find(d => d.id === req.params.id) : null);
     if (!dtu) return res.status(404).json({ ok: false, error: "DTU not found" });
+    const userId = req.user?.id;
     const vote = Number(req.body?.vote) || 0;
     if (!dtu.meta) dtu.meta = {};
+    if (!dtu.meta.voters) dtu.meta.voters = {};
+    // Prevent duplicate votes from the same user
+    if (userId && dtu.meta.voters[userId] !== undefined) {
+      return res.json({ ok: true, score: dtu.meta.score, votes: dtu.meta.votes, alreadyVoted: true });
+    }
+    if (userId) dtu.meta.voters[userId] = vote;
     dtu.meta.score = (dtu.meta.score || 0) + vote;
     dtu.meta.votes = (dtu.meta.votes || 0) + 1;
     res.json({ ok: true, score: dtu.meta.score, votes: dtu.meta.votes });
@@ -38887,11 +38894,18 @@ app.post("/api/dtus/:id/vote", validate("dtuVote"), (req, res) => {
 });
 
 // POST /api/dtus/:id/like — like a DTU (feed/timeline)
-app.post("/api/dtus/:id/like", (req, res) => {
+app.post("/api/dtus/:id/like", requireAuth(), (req, res) => {
   try {
     const dtu = STATE.dtus?.get?.(req.params.id) || (Array.isArray(STATE.dtuList) ? STATE.dtuList.find(d => d.id === req.params.id) : null);
     if (!dtu) return res.status(404).json({ ok: false, error: "DTU not found" });
+    const userId = req.user?.id;
     if (!dtu.meta) dtu.meta = {};
+    if (!dtu.meta.likedBy) dtu.meta.likedBy = [];
+    // Prevent duplicate likes from the same user
+    if (userId && dtu.meta.likedBy.includes(userId)) {
+      return res.json({ ok: true, likes: dtu.meta.likes, alreadyLiked: true });
+    }
+    if (userId) dtu.meta.likedBy.push(userId);
     dtu.meta.likes = (dtu.meta.likes || 0) + 1;
     res.json({ ok: true, likes: dtu.meta.likes });
   } catch (e) {
@@ -42514,12 +42528,12 @@ app.get("/api/social/profiles", (req, res) => {
   try { res.json(listProfiles(STATE, { sortBy: req.query.sortBy, limit: Number(req.query.limit || 50) })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
-app.post("/api/social/follow", (req, res) => {
-  try { res.json(followUser(STATE, req.body?.followerId || req.user?.id, req.body?.followedId)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+app.post("/api/social/follow", requireAuth(), (req, res) => {
+  try { res.json(followUser(STATE, req.user?.id, req.body?.followedId)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
-app.post("/api/social/unfollow", (req, res) => {
-  try { res.json(unfollowUser(STATE, req.body?.followerId || req.user?.id, req.body?.followedId)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+app.post("/api/social/unfollow", requireAuth(), (req, res) => {
+  try { res.json(unfollowUser(STATE, req.user?.id, req.body?.followedId)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
 app.get("/api/social/followers/:userId", (req, res) => {
@@ -42632,9 +42646,9 @@ app.get("/api/social/metrics", (req, res) => {
 });
 
 // ---- Social Posts CRUD ----
-app.post("/api/social/post", (req, res) => {
+app.post("/api/social/post", requireAuth(), (req, res) => {
   try {
-    const userId = req.body?.userId || req.user?.id || req.actor?.userId || "anon";
+    const userId = req.user?.id || req.actor?.userId || "anon";
     const result = socialCreatePost(STATE, { userId, ...req.body });
     res.json(result);
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
@@ -42644,9 +42658,9 @@ app.get("/api/social/post/:postId", (req, res) => {
   try { res.json(socialGetPost(STATE, req.params.postId)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
-app.delete("/api/social/post/:postId", (req, res) => {
+app.delete("/api/social/post/:postId", requireAuth(), (req, res) => {
   try {
-    const userId = req.body?.userId || req.user?.id || req.actor?.userId || "anon";
+    const userId = req.user?.id || req.actor?.userId || "anon";
     res.json(socialDeletePost(STATE, { userId, postId: req.params.postId }));
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
@@ -42656,9 +42670,9 @@ app.get("/api/social/posts/user/:userId", (req, res) => {
 });
 
 // ---- Social Reactions ----
-app.post("/api/social/react", (req, res) => {
+app.post("/api/social/react", requireAuth(), (req, res) => {
   try {
-    const userId = req.body?.userId || req.user?.id || req.actor?.userId || "anon";
+    const userId = req.user?.id || req.actor?.userId || "anon";
     res.json(socialAddReaction(STATE, { userId, postId: req.body?.postId, type: req.body?.type || "like" }));
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
@@ -42671,16 +42685,16 @@ app.get("/api/social/reactions/:postId", (req, res) => {
 });
 
 // ---- Social Comments ----
-app.post("/api/social/comment", (req, res) => {
+app.post("/api/social/comment", requireAuth(), (req, res) => {
   try {
-    const userId = req.body?.userId || req.user?.id || req.actor?.userId || "anon";
+    const userId = req.user?.id || req.actor?.userId || "anon";
     res.json(socialAddComment(STATE, { userId, postId: req.body?.postId, content: req.body?.content, parentCommentId: req.body?.parentCommentId }));
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
-app.delete("/api/social/comment/:postId/:commentId", (req, res) => {
+app.delete("/api/social/comment/:postId/:commentId", requireAuth(), (req, res) => {
   try {
-    const userId = req.body?.userId || req.user?.id || req.actor?.userId || "anon";
+    const userId = req.user?.id || req.actor?.userId || "anon";
     res.json(socialDeleteComment(STATE, { userId, postId: req.params.postId, commentId: req.params.commentId }));
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
@@ -42690,9 +42704,9 @@ app.get("/api/social/comments/:postId", (req, res) => {
 });
 
 // ---- Social Shares ----
-app.post("/api/social/share", (req, res) => {
+app.post("/api/social/share", requireAuth(), (req, res) => {
   try {
-    const userId = req.body?.userId || req.user?.id || req.actor?.userId || "anon";
+    const userId = req.user?.id || req.actor?.userId || "anon";
     res.json(socialSharePost(STATE, { userId, postId: req.body?.postId, commentary: req.body?.commentary }));
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
@@ -42702,9 +42716,9 @@ app.get("/api/social/shares/:postId", (req, res) => {
 });
 
 // ---- Social Bookmarks ----
-app.post("/api/social/bookmark", (req, res) => {
+app.post("/api/social/bookmark", requireAuth(), (req, res) => {
   try {
-    const userId = req.body?.userId || req.user?.id || req.actor?.userId || "anon";
+    const userId = req.user?.id || req.actor?.userId || "anon";
     res.json(socialBookmarkPost(STATE, { userId, postId: req.body?.postId }));
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
@@ -42738,35 +42752,35 @@ app.get("/api/social/feed/explore", (req, res) => {
 });
 
 // ---- Social DMs ----
-app.post("/api/social/dm", (req, res) => {
+app.post("/api/social/dm", requireAuth(), (req, res) => {
   try {
-    const fromUserId = req.body?.fromUserId || req.user?.id || req.actor?.userId || "anon";
+    const fromUserId = req.user?.id || req.actor?.userId || "anon";
     res.json(socialSendMessage(STATE, { fromUserId, toUserId: req.body?.toUserId, content: req.body?.content, mediaUrl: req.body?.mediaUrl }));
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
-app.get("/api/social/dm/conversations", (req, res) => {
+app.get("/api/social/dm/conversations", requireAuth(), (req, res) => {
   try {
-    const userId = req.query.userId || req.user?.id || req.actor?.userId || "anon";
+    const userId = req.user?.id || req.actor?.userId || "anon";
     res.json(socialGetConversations(STATE, userId));
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
-app.get("/api/social/dm/:conversationId", (req, res) => {
+app.get("/api/social/dm/:conversationId", requireAuth(), (req, res) => {
   try { res.json(socialGetMessages(STATE, req.params.conversationId, { limit: Number(req.query.limit || 50), offset: Number(req.query.offset || 0) })); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
-app.post("/api/social/dm/read", (req, res) => {
+app.post("/api/social/dm/read", requireAuth(), (req, res) => {
   try {
-    const userId = req.body?.userId || req.user?.id || req.actor?.userId || "anon";
+    const userId = req.user?.id || req.actor?.userId || "anon";
     res.json(socialMarkMessagesRead(STATE, { userId, conversationId: req.body?.conversationId }));
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
 // Param-path variant: frontend calls POST /api/social/dm/:conversationId/read
-app.post("/api/social/dm/:conversationId/read", (req, res) => {
+app.post("/api/social/dm/:conversationId/read", requireAuth(), (req, res) => {
   try {
-    const userId = req.body?.userId || req.user?.id || req.actor?.userId || "anon";
+    const userId = req.user?.id || req.actor?.userId || "anon";
     res.json(socialMarkMessagesRead(STATE, { userId, conversationId: req.params.conversationId }));
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
