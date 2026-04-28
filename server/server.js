@@ -25715,6 +25715,12 @@ try { app.use("/api/moderation", createModerationRouter({ db, requireAuth, requi
 import createSocialGroupRoutes from "./routes/social-groups.js";
 try { app.use("/api/social", createSocialGroupRoutes({ db, requireAuth })); } catch (e) { structuredLog("warn", "social_groups_routes_skip", { error: e.message }); }
 
+import createSocialEngagementRoutes from "./routes/social-engagement.js";
+try { app.use("/api/social", createSocialEngagementRoutes({ db, requireAuth })); } catch (e) { structuredLog("warn", "social_engagement_routes_skip", { error: e.message }); }
+
+import createChannelsRouter from "./routes/channels.js";
+try { app.use("/api/channels", createChannelsRouter({ STATE, requireAuth, realtimeEmit })); } catch (e) { structuredLog("warn", "channels_routes_skip", { error: e.message }); }
+
 import createFeedRoutes from "./routes/feeds.js";
 try { app.use("/api/feeds", createFeedRoutes({ requireAuth })); } catch (e) { structuredLog("warn", "feed_routes_skip", { error: e.message }); }
 
@@ -42545,6 +42551,14 @@ app.post("/api/social/dm/read", (req, res) => {
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
+// Param-path variant: frontend calls POST /api/social/dm/:conversationId/read
+app.post("/api/social/dm/:conversationId/read", (req, res) => {
+  try {
+    const userId = req.body?.userId || req.user?.id || req.actor?.userId || "anon";
+    res.json(socialMarkMessagesRead(STATE, { userId, conversationId: req.params.conversationId }));
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
 // ---- Social Stories ----
 app.get("/api/social/stories", (req, res) => {
   try {
@@ -42557,6 +42571,14 @@ app.post("/api/social/stories/view", (req, res) => {
   try {
     const userId = req.body?.userId || req.user?.id || req.actor?.userId || "anon";
     res.json(socialViewStory(STATE, { userId, storyId: req.body?.storyId }));
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// Param-path variant: frontend calls POST /api/social/stories/:storyId/view
+app.post("/api/social/stories/:storyId/view", (req, res) => {
+  try {
+    const userId = req.body?.userId || req.user?.id || req.actor?.userId || "anon";
+    res.json(socialViewStory(STATE, { userId, storyId: req.params.storyId }));
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 

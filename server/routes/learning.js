@@ -284,6 +284,34 @@ export default function createLearningRouter(opts = {}) {
   });
 
   // ------------------------------------------------------------------
+  // GET /api/learning/credential/me/:domain
+  // Shorthand — uses the authenticated caller's identity as studentId.
+  // Must be declared BEFORE /:studentId/:domain so "me" isn't captured
+  // as a param value.
+  // ------------------------------------------------------------------
+  router.get("/credential/me/:domain", async (req, res) => {
+    try {
+      const studentId = getCallerId(req);
+      if (!studentId || studentId === "anonymous") {
+        return res.json({ ok: false, error: "authentication_required" });
+      }
+      const { domain } = req.params;
+      const creds = getCredentials();
+      const economics = await getEconomics();
+      let charge = null;
+      try {
+        charge = await economics.chargeCredentialGeneration(studentId);
+      } catch (_err) {
+        charge = { ok: false, error: "charge_failed" };
+      }
+      const credential = await creds.generateCredential(studentId, domain);
+      return res.json({ ok: true, credential, charge });
+    } catch (err) {
+      return res.json({ ok: false, error: String((err && err.message) || err) });
+    }
+  });
+
+  // ------------------------------------------------------------------
   // GET /api/learning/credential/:studentId/:domain
   // Generate a credential (charges credentialGeneration).
   // ------------------------------------------------------------------
@@ -917,6 +945,172 @@ export default function createLearningRouter(opts = {}) {
     }
     return _cohortMod;
   }
+
+  // ------------------------------------------------------------------
+  // GET /api/learning/submissions/mine
+  // List proof-by-citation submissions made by the calling user.
+  // ------------------------------------------------------------------
+  router.get("/submissions/mine", async (req, res) => {
+    try {
+      const studentId = getCallerId(req);
+      if (!studentId || studentId === "anonymous") {
+        return res.json({ ok: false, error: "authentication_required" });
+      }
+      const pbc = getPBC();
+      const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 100);
+      const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+      let submissions = [];
+      try {
+        if (typeof pbc.listSubmissions === "function") {
+          submissions = await pbc.listSubmissions(studentId, { limit, offset });
+        } else if (typeof pbc.getStats === "function") {
+          const stats = pbc.getStats();
+          submissions = (stats?.recentSubmissions || []).filter(
+            (s) => s.studentId === studentId
+          ).slice(offset, offset + limit);
+        }
+      } catch (_err) { /* non-fatal */ }
+      return res.json({ ok: true, studentId, submissions, count: submissions.length });
+    } catch (err) {
+      return res.json({ ok: false, error: String((err && err.message) || err) });
+    }
+  });
+
+  // ------------------------------------------------------------------
+  // GET /api/learning/dtus/search
+  // Query: { q, domain?, limit? }
+  // Full-text search across DTU titles and descriptions.
+  // ------------------------------------------------------------------
+  router.get("/dtus/search", async (req, res) => {
+    try {
+      const q = String(req.query.q || "").trim();
+      if (!q || q.length < 2) {
+        return res.json({ ok: false, error: "q must be at least 2 characters" });
+      }
+      const domain = req.query.domain ? String(req.query.domain).toLowerCase() : null;
+      const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 100);
+
+      const store = resolveDtuStore();
+      const results = [];
+      const qLower = q.toLowerCase();
+
+      if (store && typeof store.values === "function") {
+        for (const dtu of store.values()) {
+          if (!dtu || typeof dtu !== "object") continue;
+          if (domain) {
+            const dtuDomain = (dtu.domain || dtu.lens || (dtu.core && dtu.core.domain) || "").toLowerCase();
+            if (dtuDomain !== domain) continue;
+          }
+          const title = String(dtu.title || (dtu.core && dtu.core.title) || dtu.id || "").toLowerCase();
+          const desc = String(dtu.description || (dtu.core && dtu.core.description) || "").toLowerCase();
+          const tags = (Array.isArray(dtu.tags) ? dtu.tags : []).join(" ").toLowerCase();
+          if (title.includes(qLower) || desc.includes(qLower) || tags.includes(qLower)) {
+            results.push({
+              id: dtu.id,
+              title: dtu.title || (dtu.core && dtu.core.title) || dtu.id,
+              domain: dtu.domain || dtu.lens || (dtu.core && dtu.core.domain) || null,
+              tags: Array.isArray(dtu.tags) ? dtu.tags : [],
+            });
+            if (results.length >= limit) break;
+          }
+        }
+      }
+
+      return res.json({ ok: true, q, results, count: results.length });
+    } catch (err) {
+      return res.json({ ok: false, error: String((err && err.message) || err) });
+    }
+  });
+
+  /**
+   * GET /api/learning/cohort/match
+   * Finds a suitable existing cohort for the calling student, or suggests
+   * forming one, based on the caller's knowledge genome and domain interests.
+   * Declared BEFORE /cohort/:id so "match" is not captured as an id param.
+   */
+  router.get("/cohort/match", async (req, res) => {
+    try {
+      const studentId = getCallerId(req);
+      if (!studentId || studentId === "anonymous") {
+        return res.json({ ok: false, error: "authentication_required" });
+      }
+      const domain = req.query.domain ? String(req.query.domain).toLowerCase() : null;
+
+      const mod = await loadCohortMod();
+      if (!mod || typeof mod.getDefaultLearningCohorts !== "function") {
+        return res.json({
+          ok: true,
+          fallback: true,
+          match: null,
+          suggestion: { action: "form", studentIds: [studentId], domain: domain || "general" },
+        });
+      }
+
+      const cohorts = await mod.getDefaultLearningCohorts();
+
+      // If the cohort module exposes matchStudent, use it
+      if (typeof cohorts.matchStudent === "function") {
+        const out = await cohorts.matchStudent(studentId, { domain });
+        return res.json(out);
+      }
+
+      // Fallback: find cohorts the student is already in for this domain
+      const mine = await cohorts.listCohortsForStudent(studentId);
+      const domainMatch = domain
+        ? (mine.cohorts || []).find((c) => c.domain === domain)
+        : (mine.cohorts || [])[0] || null;
+
+      return res.json({
+        ok: true,
+        match: domainMatch || null,
+        suggestion: domainMatch
+          ? null
+          : { action: "form", studentIds: [studentId], domain: domain || "general" },
+      });
+    } catch (err) {
+      return res.json({ ok: false, error: String((err && err.message) || err) });
+    }
+  });
+
+  /**
+   * POST /api/learning/cohort/teach
+   * Alias for /cohort/peer-teach — same semantics, matches the frontend
+   * route name. Body: { teacherId?, learnerId, dtuId }
+   */
+  router.post("/cohort/teach", async (req, res) => {
+    try {
+      const body = req.body || {};
+      const { learnerId, dtuId } = body;
+      const teacherId = body.teacherId || getCallerId(req);
+      if (!teacherId || !learnerId || !dtuId) {
+        return res.json({
+          ok: false,
+          error: "teacherId, learnerId, and dtuId are required",
+        });
+      }
+      const mod = await loadCohortMod();
+      if (!mod || typeof mod.getDefaultLearningCohorts !== "function") {
+        return res.json({
+          ok: true,
+          fallback: true,
+          teacherMasteryDelta: 0.6,
+          learnerMasteryDelta: 0.1,
+          creditsPaid: 0,
+        });
+      }
+      const cohorts = await mod.getDefaultLearningCohorts();
+      const out = await cohorts.peerTeach(teacherId, learnerId, dtuId);
+      return res.json(out);
+    } catch (err) {
+      return res.json({
+        ok: false,
+        teacherMasteryDelta: 0,
+        learnerMasteryDelta: 0,
+        creditsPaid: 0,
+        error: String((err && err.message) || err),
+      });
+    }
+  });
 
   /**
    * POST /api/learning/cohort/form

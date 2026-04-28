@@ -1760,4 +1760,160 @@ export function registerEconomyRoutes(app, db, opts = {}) {
 
     }
   });
+
+  // ── Invoice ────────────────────────────────────────────────────────────────
+  // Generate a printable invoice record for a specific purchase or a set of
+  // recent transactions. Stores nothing — builds the invoice from the
+  // existing ledger data and returns it for the frontend to render/download.
+
+  app.post("/api/economy/invoice", (req, res) => {
+    try {
+      const userId = req.user?.id;
+      if (!userId) return res.status(401).json({ ok: false, error: "unauthorized" });
+
+      const { purchaseId, transactionIds, periodStart, periodEnd } = req.body || {};
+
+      let items = [];
+
+      if (purchaseId) {
+        // Single purchase invoice
+        const purchase = getPurchase(db, purchaseId);
+        if (!purchase) {
+          return res.status(404).json({ ok: false, error: "purchase_not_found" });
+        }
+        if (purchase.userId !== userId) {
+          return res.status(403).json({ ok: false, error: "forbidden" });
+        }
+        items = [{
+          id: purchase.id,
+          description: purchase.metadata?.description || purchase.type || "Purchase",
+          amount: purchase.amount,
+          currency: "CC",
+          date: purchase.createdAt,
+          status: purchase.status,
+        }];
+      } else {
+        // Multi-transaction or period invoice
+        const limit = 200;
+        const txResult = getTransactions(db, userId, { limit, offset: 0 });
+        let txns = txResult.transactions || [];
+
+        if (transactionIds && Array.isArray(transactionIds)) {
+          const idSet = new Set(transactionIds);
+          txns = txns.filter((t) => idSet.has(t.id));
+        } else if (periodStart || periodEnd) {
+          const start = periodStart ? new Date(periodStart).getTime() : 0;
+          const end = periodEnd ? new Date(periodEnd).getTime() : Date.now();
+          txns = txns.filter((t) => {
+            const ts = new Date(t.createdAt || t.created_at || 0).getTime();
+            return ts >= start && ts <= end;
+          });
+        } else {
+          // Default: last 30 days
+          const cutoff = Date.now() - 30 * 86400 * 1000;
+          txns = txns.filter((t) => new Date(t.createdAt || t.created_at || 0).getTime() >= cutoff);
+        }
+
+        items = txns.map((t) => ({
+          id: t.id,
+          description: t.metadata?.description || t.type || "Transaction",
+          amount: t.amount,
+          currency: "CC",
+          date: t.createdAt || t.created_at,
+          type: t.type,
+        }));
+      }
+
+      const total = items.reduce((s, item) => s + (item.amount || 0), 0);
+      const invoiceId = `INV-${Date.now().toString(36).toUpperCase()}-${userId.slice(0, 6).toUpperCase()}`;
+
+      res.json({
+        ok: true,
+        invoice: {
+          invoiceId,
+          userId,
+          issuedAt: new Date().toISOString(),
+          currency: "CC",
+          items,
+          total,
+          itemCount: items.length,
+        },
+      });
+    } catch (err) {
+      log("error", "economy_invoice_failed", { error: err.message });
+      res.status(500).json({ ok: false, error: "invoice_generation_failed" });
+    }
+  });
+
+  // ── Tax Summary ────────────────────────────────────────────────────────────
+  // Aggregate the calling user's transactions by type for a given fiscal
+  // period (defaults to the current calendar year). Returns income, spending,
+  // and a breakdown by transaction type — enough for a user to self-report.
+
+  app.post("/api/economy/tax-summary", (req, res) => {
+    try {
+      const userId = req.user?.id;
+      if (!userId) return res.status(401).json({ ok: false, error: "unauthorized" });
+
+      const { year, periodStart, periodEnd } = req.body || {};
+
+      let start, end;
+      if (periodStart && periodEnd) {
+        start = new Date(periodStart).getTime();
+        end = new Date(periodEnd).getTime();
+      } else {
+        const y = parseInt(year, 10) || new Date().getFullYear();
+        start = new Date(`${y}-01-01T00:00:00Z`).getTime();
+        end = new Date(`${y}-12-31T23:59:59Z`).getTime();
+      }
+
+      const txResult = getTransactions(db, userId, { limit: 10000, offset: 0 });
+      const txns = (txResult.transactions || []).filter((t) => {
+        const ts = new Date(t.createdAt || t.created_at || 0).getTime();
+        return ts >= start && ts <= end;
+      });
+
+      const byType = {};
+      let totalIncome = 0;
+      let totalSpending = 0;
+
+      for (const t of txns) {
+        const type = t.type || "other";
+        if (!byType[type]) byType[type] = { count: 0, total: 0 };
+        byType[type].count++;
+        byType[type].total += t.amount || 0;
+
+        // Income types: royalty payouts, withdrawals received, earnings
+        const isIncome = ["royalty", "earning", "reward", "peer_teach_credit"].includes(type);
+        if (isIncome) {
+          totalIncome += Math.abs(t.amount || 0);
+        } else {
+          totalSpending += Math.abs(t.amount || 0);
+        }
+      }
+
+      const periodLabel = periodStart && periodEnd
+        ? `${periodStart} to ${periodEnd}`
+        : `${new Date(start).getFullYear()}`;
+
+      res.json({
+        ok: true,
+        taxSummary: {
+          userId,
+          period: periodLabel,
+          periodStartIso: new Date(start).toISOString(),
+          periodEndIso: new Date(end).toISOString(),
+          currency: "CC",
+          totalIncome,
+          totalSpending,
+          netPosition: totalIncome - totalSpending,
+          transactionCount: txns.length,
+          byType,
+        },
+      });
+    } catch (err) {
+      log("error", "economy_tax_summary_failed", { error: err.message });
+      res.status(500).json({ ok: false, error: "tax_summary_failed" });
+    }
+  });
 }
