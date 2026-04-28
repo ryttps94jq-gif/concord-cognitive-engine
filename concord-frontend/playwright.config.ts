@@ -32,6 +32,13 @@ export default defineConfig({
       name: 'mobile-chrome',
       use: { ...devices['Pixel 5'] },
     },
+    {
+      name: 'lens-smoke',
+      testDir: './tests/lens-e2e',
+      use: { ...devices['Desktop Chrome'] },
+      retries: 1,
+      workers: 2,
+    },
   ],
 
   webServer: {

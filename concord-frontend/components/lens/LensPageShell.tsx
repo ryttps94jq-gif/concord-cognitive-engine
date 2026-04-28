@@ -141,7 +141,11 @@ export function LensPageShell({
   }
 
   return (
-    <div data-lens-theme={domain} className={`px-3 py-4 sm:p-6 space-y-4 sm:space-y-6 ${className ?? ''}`}>
+    <div
+      data-testid="lens-shell"
+      data-lens-theme={domain}
+      className={`px-3 py-4 sm:p-6 space-y-4 sm:space-y-6 ${className ?? ''}`}
+    >
       {/* Header */}
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -149,9 +153,7 @@ export function LensPageShell({
           <div>
             <h1 className="text-xl font-bold">{title}</h1>
             <LiveIndicator isLive={isLive} lastUpdated={lastUpdated} />
-            {description && (
-              <p className="text-sm text-gray-400">{description}</p>
-            )}
+            {description && <p className="text-sm text-gray-400">{description}</p>}
           </div>
         </div>
         {actions && <div className="flex items-center gap-2">{actions}</div>}
@@ -170,9 +172,7 @@ export function LensPageShell({
       )}
 
       {/* DTU Export */}
-      {showExport && (
-        <DTUExportButton domain={domain} data={exportData ?? {}} compact />
-      )}
+      {showExport && <DTUExportButton domain={domain} data={exportData ?? {}} compact />}
 
       {/* Domain-specific content */}
       {typeof children === 'function' ? children(realtimeProps) : children}
