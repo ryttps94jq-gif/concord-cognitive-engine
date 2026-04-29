@@ -50,6 +50,7 @@ interface ConcordiaSceneProps {
   districtId: string;
   quality?: QualityPreset;
   theme?: import('@/lib/world-lens/concordia-theme').ConcordiaThemeId;
+  renderStyle?: 'pbr' | 'toon';
   onBuildingClick?: (buildingId: string, intersection: unknown) => void;
   onTerrainClick?: (position: { x: number; y: number; z: number }) => void;
   width?: number | string;
@@ -130,6 +131,7 @@ export default function ConcordiaScene({
   districtId,
   quality: initialQuality = 'medium',
   theme: themeProp = 'neon-punk',
+  renderStyle = 'pbr',
   onBuildingClick,
   onTerrainClick,
   width = '100%',
@@ -219,9 +221,8 @@ export default function ConcordiaScene({
       rendererRef.current = renderer;
 
       // ── Post-Processing ─────────────────────────────────────────
-      // Use Three.js EffectComposer with quality-gated passes.
-      // Bloom: portals + neon accents glow. SAO: contact shadows.
-      // Vignette: cinematic framing via custom ShaderPass.
+      // Bloom disabled in toon mode (toon + bloom conflicts visually).
+      // Vignette always on for medium+.
       if (quality !== 'low') {
         try {
           const [{ EffectComposer }, { RenderPass }, { UnrealBloomPass }, { ShaderPass }] = await Promise.all([
@@ -232,14 +233,17 @@ export default function ConcordiaScene({
           ]);
           const composer = new EffectComposer(renderer);
           composer.addPass(new RenderPass(scene, camera));
-          const bloom = new UnrealBloomPass(
-            new THREE.Vector2(canvas!.clientWidth, canvas!.clientHeight),
-            quality === 'high' || quality === 'ultra' ? 1.2 : 0.7,  // strength
-            0.4,   // radius
-            0.3,   // threshold — only bright areas glow
-          );
-          composer.addPass(bloom);
-          // Vignette via inline shader
+          // Bloom: PBR only — toon shading looks wrong with bloom
+          if (renderStyle !== 'toon') {
+            const bloom = new UnrealBloomPass(
+              new THREE.Vector2(canvas!.clientWidth, canvas!.clientHeight),
+              quality === 'high' || quality === 'ultra' ? 1.2 : 0.7,
+              0.4,
+              0.3,
+            );
+            composer.addPass(bloom);
+          }
+          // Vignette: always on for cinematic framing
           const vignetteShader = {
             uniforms: { tDiffuse: { value: null }, darkness: { value: 0.55 }, offset: { value: 0.5 } },
             vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
@@ -305,20 +309,18 @@ export default function ConcordiaScene({
       sun.shadow.camera.bottom = -300;
       scene.add(sun);
 
-      // ── Portal glow lights (indigo, one per portal building) ────
-      const PORTAL_POSITIONS = [
-        [8,4],[4,6],[12,3],[2,8],[16,7],[6,10],[0,5],[14,5],[10,4],
-        [18,5],[9,6],[20,8],[7,2],[8,6],[15,2],
-      ];
+      // ── Portal glow lights — 5 retained (was 15); intensity +30% to compensate ──
+      // Removed lights rely on building emissive (0.08) beyond 15m — imperceptible
+      const PORTAL_POSITIONS = [[8,4],[4,6],[12,3],[2,8],[16,7]];
       for (const [px, pz] of PORTAL_POSITIONS) {
-        const pl = new THREE.PointLight(activeTheme.portalGlow, 2, 15);
+        const pl = new THREE.PointLight(activeTheme.portalGlow, 2.6, 15);
         pl.position.set(px, 2, pz);
         scene.add(pl);
       }
-      // ── Street lamp point lights ────────────────────────────────
-      const LAMP_POSITIONS = [[3,3],[7,7],[11,2],[15,8],[1,6],[13,6],[5,1],[9,9]];
+      // ── Street lamp point lights — 3 retained (was 8); intensity +30% ──
+      const LAMP_POSITIONS = [[3,3],[7,7],[11,2]];
       for (const [lx, lz] of LAMP_POSITIONS) {
-        const lamp = new THREE.PointLight(activeTheme.streetLamp, 1.5, 20);
+        const lamp = new THREE.PointLight(activeTheme.streetLamp, 1.95, 20);
         lamp.position.set(lx, 4, lz);
         scene.add(lamp);
       }
@@ -470,7 +472,7 @@ export default function ConcordiaScene({
       buildingMap.clear();
       setIsReady(false);
     };
-  }, [districtId, quality, themeProp, onBuildingClick, onTerrainClick]);
+  }, [districtId, quality, themeProp, renderStyle, onBuildingClick, onTerrainClick]);
 
   // ── Scene API ──────────────────────────────────────────────────
 

@@ -661,6 +661,7 @@ export default function WorldLensPage() {
   // 3D Explore mode state
   const [cameraMode, setCameraMode] = useState<'isometric' | 'follow' | 'free' | 'interior' | 'cinematic'>('follow');
   const [concordiaTheme, setConcordiaTheme] = useState<'neon-punk' | 'classic' | 'minimal'>('neon-punk');
+  const [concordiaRenderStyle, setConcordiaRenderStyle] = useState<'pbr' | 'toon'>('pbr');
   const [showPanel, setShowPanel] = useState<'none' | 'inventory' | 'quests' | 'chat' | 'map' | 'crafting' | 'players' | 'profile' | 'collaboration' | 'livecollab' | 'events' | 'socialproof' | 'notifications' | 'smartnotify' | 'moderation' | 'ownership' | 'federation' | 'voice' | 'voiceassist' | 'combat' | 'skills' | 'modes' | 'guild' | 'season' | 'npcshop' | 'leaderboard' | 'worldevents' | 'arena' | 'jobs' | 'lore'>('none');
   // Local player avatar — mutable so moves update it in place. On
   // first mount we ask the server for saved state (via player:load)
@@ -1398,6 +1399,7 @@ export default function WorldLensPage() {
             districtId={activeDistrict.id}
             quality="medium"
             theme={concordiaTheme}
+            renderStyle={concordiaRenderStyle}
             onBuildingClick={(id) => {
               const b = activeDistrict.buildings.find(b => b.id === id);
               if (b) setSelectedBuilding(b);
@@ -1406,7 +1408,7 @@ export default function WorldLensPage() {
             width="100%"
             height="100%"
           />
-          {/* Theme picker — 3 swatches top-right */}
+          {/* Theme picker — 3 swatches + PBR/Toon toggle top-right */}
           <div className="absolute top-4 right-4 z-20 flex items-center gap-1.5 bg-black/50 border border-white/10 rounded-xl px-2 py-1.5 pointer-events-auto">
             {([
               { id: 'neon-punk' as const, swatch: '#6366f1', label: 'Neon Punk' },
@@ -1421,6 +1423,14 @@ export default function WorldLensPage() {
                 style={{ backgroundColor: t.swatch }}
               />
             ))}
+            <div className="w-px h-4 bg-white/20 mx-0.5" />
+            <button
+              onClick={() => setConcordiaRenderStyle(s => s === 'pbr' ? 'toon' : 'pbr')}
+              title={concordiaRenderStyle === 'pbr' ? 'Switch to Toon (cel shading)' : 'Switch to PBR (realistic)'}
+              className={`px-2 py-0.5 text-[10px] font-bold rounded-md transition-colors ${concordiaRenderStyle === 'toon' ? 'bg-indigo-500/70 text-white' : 'bg-white/10 text-white/60 hover:bg-white/20 hover:text-white'}`}
+            >
+              {concordiaRenderStyle === 'pbr' ? 'PBR' : 'Toon'}
+            </button>
           </div>
           {/* 3D scene rendering layers */}
           <TerrainRenderer

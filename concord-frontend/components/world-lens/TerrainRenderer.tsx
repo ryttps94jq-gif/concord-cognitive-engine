@@ -335,9 +335,11 @@ export default function TerrainRenderer({
             flatShading: segments < 32,
           });
 
-          // Vertex color splatting for zone boundaries
+          // Vertex color splatting + AO baking (valleys dark, hilltops bright — Skyrim style)
           const colors = new Float32Array(posAttr.count * 3);
           const _baseColor = new THREE.Color(matConfig.color);
+          const AO_RADIUS = 2;
+          const AO_OFFSETS = [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]] as const;
           for (let i = 0; i < posAttr.count; i++) {
             const vx = posAttr.getX(i) + chunkWorldX;
             const vz = posAttr.getZ(i) + chunkWorldZ;
@@ -349,9 +351,21 @@ export default function TerrainRenderer({
             const vZone = zoneList[vZoneIdx] || 'wild_grass';
             const vColor = new THREE.Color(ZONE_MATERIALS[vZone].color);
 
-            colors[i * 3] = vColor.r;
-            colors[i * 3 + 1] = vColor.g;
-            colors[i * 3 + 2] = vColor.b;
+            // AO: vertices lower than their 8 neighbors are concave — darken up to 40%
+            const thisH = hmData[iz2 * hmW + ix2];
+            let neighborSum = 0;
+            for (const [ox, oz] of AO_OFFSETS) {
+              const nx3 = Math.max(0, Math.min(hmW - 1, ix2 + ox * AO_RADIUS));
+              const nz3 = Math.max(0, Math.min(hmH - 1, iz2 + oz * AO_RADIUS));
+              neighborSum += hmData[nz3 * hmW + nx3];
+            }
+            const avgNeighborH = neighborSum / AO_OFFSETS.length;
+            const aoFactor = Math.max(0, Math.min(1, (avgNeighborH - thisH) / 8));
+            const aoScale = 1 - aoFactor * 0.4;
+
+            colors[i * 3]     = vColor.r * aoScale;
+            colors[i * 3 + 1] = vColor.g * aoScale;
+            colors[i * 3 + 2] = vColor.b * aoScale;
           }
           geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
           material.vertexColors = true;

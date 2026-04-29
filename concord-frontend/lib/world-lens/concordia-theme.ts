@@ -18,6 +18,8 @@ export interface ConcordiaTheme {
   streetLamp: number; // hex color for street lamp point lights
   skyTop: number;
   skyHorizon: number;
+  /** Toon shading 3-stop gradient: [shadow, mid, highlight] */
+  toonGradient: [string, string, string];
 }
 
 export const CONCORDIA_THEMES: Record<ConcordiaThemeId, ConcordiaTheme> = {
@@ -32,6 +34,7 @@ export const CONCORDIA_THEMES: Record<ConcordiaThemeId, ConcordiaTheme> = {
     streetLamp:   0xffd580,
     skyTop:       0x050510,
     skyHorizon:   0x1a0a2e,
+    toonGradient: ['#0d0d2a', '#3a3a6a', '#8888cc'],
   },
   'classic': {
     id: 'classic',
@@ -44,6 +47,7 @@ export const CONCORDIA_THEMES: Record<ConcordiaThemeId, ConcordiaTheme> = {
     streetLamp:   0xffa040,
     skyTop:       0x87ceeb,
     skyHorizon:   0xf0e8c8,
+    toonGradient: ['#4a3820', '#8a6a40', '#f0d890'],
   },
   'minimal': {
     id: 'minimal',
@@ -56,6 +60,7 @@ export const CONCORDIA_THEMES: Record<ConcordiaThemeId, ConcordiaTheme> = {
     streetLamp:   0xe2e8f0,
     skyTop:       0xdbeafe,
     skyHorizon:   0xf8fafc,
+    toonGradient: ['#cccccc', '#e8e8e8', '#ffffff'],
   },
 };
 

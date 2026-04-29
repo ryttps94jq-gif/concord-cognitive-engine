@@ -60,6 +60,8 @@ interface BuildingRenderer3DProps {
   materials?: Record<string, BuildingMaterialType>;
   validationData?: ValidationData[];
   viewMode: ViewMode;
+  renderStyle?: 'pbr' | 'toon';
+  toonGradient?: [string, string, string];
   onBuildingClick?: (buildingId: string) => void;
 }
 
@@ -127,6 +129,8 @@ export default function BuildingRenderer3D({
   buildings,
   validationData,
   viewMode,
+  renderStyle = 'pbr',
+  toonGradient = ['#1a1a2e', '#3a3a5a', '#8888bb'],
   onBuildingClick,
 }: BuildingRenderer3DProps) {
   const buildingGroupRef = useRef<unknown>(null);
@@ -147,12 +151,21 @@ export default function BuildingRenderer3D({
     const matType = dtu.material;
     const matConfig = PBR_MATERIAL_CONFIG[matType];
 
-    // Base material (may be overridden for validation/heatmap modes)
-    // emissiveIntensity: 0.08 gives a subtle ambient window warmth in all lighting.
+    // normalScale per material type — brick joints deep, glass barely perceptible
+    const NORMAL_SCALE: Record<BuildingMaterialType, [number, number]> = {
+      brick:    [1.0, 1.0],
+      stone:    [0.8, 0.8],
+      concrete: [0.8, 0.8],
+      usb:      [0.6, 0.6],
+      wood:     [0.5, 0.5],
+      steel:    [0.4, 0.4],
+      glass:    [0.2, 0.2],
+    };
+
     const getProceduralTextures = (type: BuildingMaterialType) => {
       try {
         let pair;
-        if (type === 'brick')    pair = TextureForge.getBrick('red');
+        if (type === 'brick')         pair = TextureForge.getBrick('red');
         else if (type === 'stone')    pair = TextureForge.getConcrete(0.3);
         else if (type === 'concrete') pair = TextureForge.getConcrete(0.6);
         else if (type === 'usb')      pair = TextureForge.getConcrete(0.15);
@@ -160,16 +173,52 @@ export default function BuildingRenderer3D({
         else if (type === 'steel')    pair = TextureForge.getMetal('brushed');
         else if (type === 'glass')    pair = TextureForge.getGlass('#aaddff');
         if (!pair) return {};
+        const [ns0, ns1] = NORMAL_SCALE[type];
         return {
           map: new THREE.CanvasTexture(pair.map),
           roughnessMap: new THREE.CanvasTexture(pair.roughnessMap),
+          normalMap: new THREE.CanvasTexture(pair.normalMap),
+          normalScale: new THREE.Vector2(ns0, ns1),
         };
       } catch {
         return {};
       }
     };
+
+    // Toon gradient map: 1×3 DataTexture with NearestFilter (required by MeshToonMaterial)
+    const createToonGradientMap = () => {
+      const data = new Uint8Array(3 * 4);
+      const stops = toonGradient.map(hex => {
+        const n = parseInt(hex.replace('#', ''), 16);
+        return [(n >> 16) & 0xff, (n >> 8) & 0xff, n & 0xff];
+      });
+      for (let i = 0; i < 3; i++) {
+        data[i * 4]     = stops[i][0];
+        data[i * 4 + 1] = stops[i][1];
+        data[i * 4 + 2] = stops[i][2];
+        data[i * 4 + 3] = 255;
+      }
+      const tex = new THREE.DataTexture(data, 1, 3);
+      tex.minFilter = THREE.NearestFilter;
+      tex.magFilter = THREE.NearestFilter;
+      tex.needsUpdate = true;
+      return tex;
+    };
+
     const createMaterial = (overrides?: Partial<typeof matConfig>) => {
       const cfg = { ...matConfig, ...overrides };
+
+      if (renderStyle === 'toon' && !overrides) {
+        return new THREE.MeshToonMaterial({
+          color: cfg.color,
+          transparent: cfg.transparent,
+          opacity: cfg.opacity,
+          emissive: new THREE.Color(0xffcc88),
+          emissiveIntensity: 0.05,
+          gradientMap: createToonGradientMap(),
+        });
+      }
+
       const textures = overrides ? {} : getProceduralTextures(matType);
       return new THREE.MeshStandardMaterial({
         color: cfg.color,
