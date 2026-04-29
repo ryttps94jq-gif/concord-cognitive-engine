@@ -111,6 +111,13 @@ class SkillRegistry {
       names: [...this.skillPaths.keys()],
     };
   }
+
+  /**
+   * Alias for initialize() — backward compat with server.js call sites.
+   */
+  scan() {
+    return this.initialize();
+  }
 }
 
 // Singleton registry — shared across the process
