@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   X, Package, Hammer, Gem, Cpu, ScrollText, FlaskConical,
   Trophy, ArrowUpDown, Search, ChevronDown, Info,
@@ -99,7 +99,7 @@ const TOTAL_SLOTS = 24;
 /* ── Component ─────────────────────────────────────────────────── */
 
 export default function InventoryPanel({
-  items = DEMO_ITEMS,
+  items: itemsProp,
   equipped = DEMO_EQUIPPED,
   onEquip,
   onUnequip,
@@ -112,6 +112,31 @@ export default function InventoryPanel({
   const [search, setSearch] = useState('');
   const [hoveredItem, setHoveredItem] = useState<InventoryItem | null>(null);
   const [showStorage, setShowStorage] = useState(false);
+  const [fetchedItems, setFetchedItems] = useState<InventoryItem[] | null>(null);
+
+  // Fetch real inventory on mount; fall back to prop/demo if unavailable
+  useEffect(() => {
+    fetch('/api/player-inventory')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (!data?.items) return;
+        const mapped: InventoryItem[] = data.items.map((row: Record<string, unknown>) => ({
+          id:           String(row.id ?? ''),
+          name:         String(row.item_name ?? row.name ?? 'Unknown'),
+          category:     (row.item_type as ItemCategory) ?? 'materials',
+          description:  String(row.description ?? ''),
+          quantity:     Number(row.quantity ?? 1),
+          stats:        row.quality ? { quality: Number(row.quality) } : undefined,
+          dateAcquired: row.acquired_at
+            ? new Date(Number(row.acquired_at) * 1000).toISOString().slice(0, 10)
+            : new Date().toISOString().slice(0, 10),
+        }));
+        setFetchedItems(mapped);
+      })
+      .catch(() => {});
+  }, []);
+
+  const items = fetchedItems ?? itemsProp ?? DEMO_ITEMS;
 
   /* Filtering & sorting */
   const filtered = items

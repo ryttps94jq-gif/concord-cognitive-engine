@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useSoundscape } from '@/components/world-lens/SoundscapeEngine';
 
 interface GatheringMinigameProps {
   toolTier: number;       // 0-4 — determines zone width
@@ -21,6 +22,7 @@ export function GatheringMinigame({ toolTier, resourceName, onComplete, onCancel
   const [zonePos, setZonePos] = useState(80);
   const [showHit, setShowHit] = useState<'hit' | 'miss' | null>(null);
   const [done, setDone] = useState(false);
+  const { triggerSFX } = useSoundscape();
 
   const dirRef = useRef(1);
   const posRef = useRef(0);
@@ -59,6 +61,7 @@ export function GatheringMinigame({ toolTier, resourceName, onComplete, onCancel
     const newHits = hits + (inZone ? 1 : 0);
     const newClicks = clicks + 1;
 
+    triggerSFX(inZone ? 'gather-success' : 'gather-miss');
     setShowHit(inZone ? 'hit' : 'miss');
     setTimeout(() => setShowHit(null), 600);
     setHits(newHits);
@@ -67,6 +70,7 @@ export function GatheringMinigame({ toolTier, resourceName, onComplete, onCancel
 
     if (newClicks >= TOTAL_CLICKS) {
       setDone(true);
+      if (newHits === TOTAL_CLICKS) triggerSFX('gather-full');
       setTimeout(() => onComplete(newHits), 700);
     }
   }, [done, hits, clicks, zonePos, zoneWidth, repositionZone, onComplete]);

@@ -25940,6 +25940,7 @@ app.use("/api/world", createWorldRoutes({ requireAuth, db }));
 import createWorldsRouter from "./routes/worlds.js";
 import { seedWorlds } from "./lib/world-seed.js";
 import { seedToolRecipes } from "./lib/tool-tree.js";
+import { seedLensPortals } from "./lib/lens-portal-registry.js";
 import { simulators as npcSimulators, NPCSimulator } from "./lib/npc-simulator.js";
 import { selectBrain as _selectBrainForNpc } from "./lib/inference/router.js";
 import { startPatternDetection } from "./lib/substrate-diffusion.js";
@@ -25950,6 +25951,7 @@ if (db) {
   try {
     seedWorlds(db);
     seedToolRecipes(db);
+    seedLensPortals(db, "concordia-hub");
     // Start an NPC simulator for each seeded world
     const worldRows = db.prepare("SELECT id FROM worlds WHERE status = 'active'").all();
     for (const { id } of worldRows) {
@@ -25975,6 +25977,16 @@ app.use("/api/tools", createToolsRouter({ requireAuth, db }));
 app.use("/api/blueprints", createBlueprintsRouter({ requireAuth, db }));
 app.use("/api/wagers", createWagersRouter({ requireAuth, db, realtimeEmit }));
 app.use("/api/npc-shop", createNPCShopRouter({ requireAuth, db }));
+
+// ===== CONCORDIA LIVING WORLD (portals, player inventory, arena, leaderboards) =====
+import createLensPortalsRouter from "./routes/lens-portals.js";
+import createPlayerInventoryRouter from "./routes/player-inventory.js";
+import createArenaRouter from "./routes/arena.js";
+import createLeaderboardsRouter from "./routes/leaderboards.js";
+app.use("/api/lens-portals",      createLensPortalsRouter({ requireAuth, db }));
+app.use("/api/player-inventory",  createPlayerInventoryRouter({ requireAuth, db }));
+app.use("/api/arena",             createArenaRouter({ requireAuth, db, realtimeEmit }));
+app.use("/api/leaderboards",      createLeaderboardsRouter({ db }));
 
 // ===== CONNECTIVE TISSUE (economy wiring, DTU pipeline, CRETI, compression, fork, preview, search, emergent/bot auth) =====
 import createConnectiveTissueRouter from "./routes/connective-tissue.js";

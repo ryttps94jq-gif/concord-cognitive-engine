@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Search, Quote, ShieldCheck } from 'lucide-react';
 import type { MarketplaceEntry, ComponentCategory } from '@/lib/world-lens/types';
 
@@ -78,9 +78,38 @@ export default function MarketplacePalette({
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<string>('citations');
   const [categoryFilter, setCategoryFilter] = useState<string>(filterCategory || 'all');
+  const [liveEntries, setLiveEntries] = useState<MarketplaceEntry[] | null>(null);
+
+  // Fetch real marketplace listings; fall back to seed data if unavailable
+  useEffect(() => {
+    fetch('/api/creative-marketplace?limit=50')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (!data?.listings?.length) return;
+        const mapped: MarketplaceEntry[] = data.listings.map((l: Record<string, unknown>) => ({
+          dtuId:            String(l.id ?? l.dtu_id ?? ''),
+          name:             String(l.title ?? l.name ?? 'Untitled'),
+          category:         (l.artifact_type ?? 'component') as ComponentCategory,
+          creator:          `@${l.creator_handle ?? l.creator ?? 'unknown'}`,
+          creatorHandle:    String(l.creator_handle ?? ''),
+          validationStatus: 'validated' as const,
+          citationCount:    Number(l.download_count ?? l.citations ?? 0),
+          performanceSpecs: {},
+          materialRefs:     [],
+          thumbnail:        String(l.thumbnail_url ?? ''),
+          royaltyRate:      0.02,
+          publishedAt:      l.created_at ? new Date(Number(l.created_at) * 1000).toISOString().slice(0, 10) : '',
+          tags:             Array.isArray(l.tags) ? l.tags : [],
+        }));
+        setLiveEntries(mapped);
+      })
+      .catch(() => {});
+  }, []);
+
+  const baseEntries = liveEntries ?? SEED_MARKETPLACE;
 
   const filtered = useMemo(() => {
-    let items = [...SEED_MARKETPLACE];
+    let items = [...baseEntries];
 
     if (categoryFilter !== 'all') {
       items = items.filter(i => i.category === categoryFilter);
@@ -99,12 +128,12 @@ export default function MarketplacePalette({
     else items.sort((a, b) => a.name.localeCompare(b.name));
 
     return items;
-  }, [search, sort, categoryFilter]);
+  }, [baseEntries, search, sort, categoryFilter]);
 
   const categories = useMemo(() => {
-    const cats = new Set(SEED_MARKETPLACE.map(i => i.category));
+    const cats = new Set(baseEntries.map(i => i.category));
     return ['all', ...Array.from(cats)];
-  }, []);
+  }, [baseEntries]);
 
   return (
     <div className={`${panel} p-3 space-y-3`}>

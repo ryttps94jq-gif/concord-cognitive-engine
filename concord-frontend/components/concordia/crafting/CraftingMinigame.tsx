@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useSoundscape } from '@/components/world-lens/SoundscapeEngine';
 
 interface CraftingMinigameProps {
   skillLevel: number;     // 1-500+ — determines sweet spot width
@@ -36,6 +37,7 @@ export function CraftingMinigame({ skillLevel, itemName, onComplete, onCancel }:
   const [holding, setHolding] = useState(false);
   const [released, setReleased] = useState(false);
   const [multiplier, setMultiplier] = useState<number | null>(null);
+  const { triggerSFX } = useSoundscape();
 
   const fillRef = useRef(0);
   const holdingRef = useRef(false);
@@ -76,6 +78,7 @@ export function CraftingMinigame({ skillLevel, itemName, onComplete, onCancel }:
 
     const m = Math.round(computeMultiplier(fillRef.current, spotTop, spotHeight) * 10) / 10;
     setMultiplier(m);
+    triggerSFX(m >= 1.0 ? 'craft-release-good' : 'craft-release-bad');
     setTimeout(() => onComplete(m), 900);
   }, [released, spotTop, spotHeight, onComplete]);
 

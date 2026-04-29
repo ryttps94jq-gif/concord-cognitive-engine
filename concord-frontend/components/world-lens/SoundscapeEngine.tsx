@@ -1,37 +1,16 @@
 'use client';
 
-import { createContext, useCallback, useContext, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 
 /* ── Types ─────────────────────────────────────────────────────── */
 
 type DistrictName =
-  | 'forge'
-  | 'academy'
-  | 'docks'
-  | 'commons'
-  | 'exchange'
-  | 'observatory'
-  | 'grid'
-  | 'arena'
-  | 'nexus'
-  | 'frontier'
-  | 'silent';
+  | 'forge' | 'academy' | 'docks' | 'commons' | 'exchange'
+  | 'observatory' | 'grid' | 'arena' | 'nexus' | 'frontier' | 'silent'
+  | 'arts' | 'civic' | 'industrial' | 'tech' | 'market';
 
 type TimeOfDay = 'dawn' | 'day' | 'dusk' | 'night';
-
 type WeatherType = 'clear' | 'rain' | 'storm' | 'wind' | 'snow';
-
-interface AmbientBed {
-  label: string;
-  layers: string[];
-  timeVariants: Record<TimeOfDay, { volumeScale: number; pitchShift: number; extraLayers: string[] }>;
-}
-
-interface WeatherLayer {
-  label: string;
-  layers: string[];
-  intensityRange: [number, number];
-}
 
 interface SoundscapeState {
   currentDistrict: DistrictName;
@@ -44,174 +23,139 @@ interface SoundscapeState {
 }
 
 interface SoundscapeAPI {
-  setDistrict: (district: string) => void;
-  setTimeOfDay: (time: TimeOfDay) => void;
-  setInterior: (interior: boolean) => void;
-  setWeather: (weather: WeatherType, intensity?: number) => void;
+  setDistrict:   (district: string) => void;
+  setTimeOfDay:  (time: TimeOfDay) => void;
+  setInterior:   (interior: boolean) => void;
+  setWeather:    (weather: WeatherType, intensity?: number) => void;
+  triggerSFX:    (sfxId: string) => void;
+  playMusicTrack:(url: string) => void;
+  stopMusicTrack:() => void;
 }
 
-/* ── Ambient beds per district ────────────────────────────────── */
+/* ── District ambient config (base freq + texture) ────────────── */
 
-const AMBIENT_BEDS: Record<DistrictName, AmbientBed> = {
-  forge: {
-    label: 'The Forge',
-    layers: ['hammering-rhythmic', 'furnace-roar', 'metal-clang', 'steam-hiss'],
-    timeVariants: {
-      dawn: { volumeScale: 0.4, pitchShift: 0, extraLayers: ['morning-bell'] },
-      day: { volumeScale: 1.0, pitchShift: 0, extraLayers: ['busy-chatter'] },
-      dusk: { volumeScale: 0.7, pitchShift: -0.1, extraLayers: ['cooling-metal'] },
-      night: { volumeScale: 0.2, pitchShift: -0.2, extraLayers: ['ember-crackle', 'night-guard'] },
-    },
-  },
-  academy: {
-    label: 'The Academy',
-    layers: ['pages-turning', 'murmuring-scholars', 'chalk-writing', 'songbird'],
-    timeVariants: {
-      dawn: { volumeScale: 0.3, pitchShift: 0, extraLayers: ['dawn-chorus'] },
-      day: { volumeScale: 1.0, pitchShift: 0, extraLayers: ['lecture-distant'] },
-      dusk: { volumeScale: 0.6, pitchShift: 0, extraLayers: ['evening-bells'] },
-      night: { volumeScale: 0.15, pitchShift: -0.1, extraLayers: ['owl-hoot', 'candle-flicker'] },
-    },
-  },
-  docks: {
-    label: 'The Docks',
-    layers: ['waves-lapping', 'wood-creaking', 'seagulls-cry', 'pulleys-chain'],
-    timeVariants: {
-      dawn: { volumeScale: 0.5, pitchShift: 0, extraLayers: ['foghorn-distant'] },
-      day: { volumeScale: 1.0, pitchShift: 0, extraLayers: ['dock-workers', 'cargo-loading'] },
-      dusk: { volumeScale: 0.7, pitchShift: 0, extraLayers: ['sunset-gulls'] },
-      night: { volumeScale: 0.3, pitchShift: -0.15, extraLayers: ['buoy-bell', 'gentle-waves'] },
-    },
-  },
-  commons: {
-    label: 'The Commons',
-    layers: ['gentle-wind', 'children-playing', 'fountain-splash', 'conversation-murmur'],
-    timeVariants: {
-      dawn: { volumeScale: 0.4, pitchShift: 0, extraLayers: ['rooster-crow', 'dew-drip'] },
-      day: { volumeScale: 1.0, pitchShift: 0, extraLayers: ['market-bustle'] },
-      dusk: { volumeScale: 0.6, pitchShift: 0, extraLayers: ['cricket-chirp'] },
-      night: { volumeScale: 0.15, pitchShift: -0.1, extraLayers: ['night-insects', 'distant-music'] },
-    },
-  },
-  exchange: {
-    label: 'The Exchange',
-    layers: ['crowd-chatter', 'coins-clinking', 'paper-shuffle', 'footsteps-marble'],
-    timeVariants: {
-      dawn: { volumeScale: 0.3, pitchShift: 0, extraLayers: ['opening-bell'] },
-      day: { volumeScale: 1.0, pitchShift: 0, extraLayers: ['shouting-traders', 'abacus-clicks'] },
-      dusk: { volumeScale: 0.5, pitchShift: 0, extraLayers: ['closing-bell'] },
-      night: { volumeScale: 0.1, pitchShift: -0.1, extraLayers: ['guard-patrol', 'vault-hum'] },
-    },
-  },
-  observatory: {
-    label: 'The Observatory',
-    layers: ['high-wind', 'equipment-hum', 'owl-distant', 'telescope-gears'],
-    timeVariants: {
-      dawn: { volumeScale: 0.5, pitchShift: 0, extraLayers: ['sunrise-chime'] },
-      day: { volumeScale: 0.6, pitchShift: 0, extraLayers: ['calibration-clicks'] },
-      dusk: { volumeScale: 0.8, pitchShift: 0, extraLayers: ['dome-opening'] },
-      night: { volumeScale: 1.0, pitchShift: 0, extraLayers: ['star-tracker-whir', 'night-sky-ambience'] },
-    },
-  },
-  grid: {
-    label: 'The Grid',
-    layers: ['electrical-hum', 'machinery-rhythm', 'water-flow-pipes', 'transformer-buzz'],
-    timeVariants: {
-      dawn: { volumeScale: 0.7, pitchShift: 0, extraLayers: ['generator-startup'] },
-      day: { volumeScale: 1.0, pitchShift: 0, extraLayers: ['maintenance-crew'] },
-      dusk: { volumeScale: 0.9, pitchShift: 0, extraLayers: ['load-shift-hum'] },
-      night: { volumeScale: 0.6, pitchShift: -0.05, extraLayers: ['night-cycle-low'] },
-    },
-  },
-  arena: {
-    label: 'The Arena',
-    layers: ['crowd-murmur', 'metal-clash-distant', 'banner-flap', 'horn-blast'],
-    timeVariants: {
-      dawn: { volumeScale: 0.2, pitchShift: 0, extraLayers: ['groundskeeper'] },
-      day: { volumeScale: 1.0, pitchShift: 0, extraLayers: ['cheering', 'announcer'] },
-      dusk: { volumeScale: 0.7, pitchShift: 0, extraLayers: ['torch-lighting'] },
-      night: { volumeScale: 0.3, pitchShift: -0.1, extraLayers: ['echo-empty-arena'] },
-    },
-  },
-  nexus: {
-    label: 'The Nexus',
-    layers: ['discussion-murmur', 'gavel-tap', 'paper-rustle', 'pen-scratch'],
-    timeVariants: {
-      dawn: { volumeScale: 0.3, pitchShift: 0, extraLayers: ['morning-tea'] },
-      day: { volumeScale: 1.0, pitchShift: 0, extraLayers: ['heated-debate', 'vote-call'] },
-      dusk: { volumeScale: 0.5, pitchShift: 0, extraLayers: ['session-closing'] },
-      night: { volumeScale: 0.1, pitchShift: -0.1, extraLayers: ['archive-silence'] },
-    },
-  },
-  frontier: {
-    label: 'The Frontier',
-    layers: ['open-wind', 'construction-distant', 'frontier-birds', 'gravel-crunch'],
-    timeVariants: {
-      dawn: { volumeScale: 0.5, pitchShift: 0, extraLayers: ['camp-wakeup'] },
-      day: { volumeScale: 1.0, pitchShift: 0, extraLayers: ['surveyor-calls', 'scaffold-hammer'] },
-      dusk: { volumeScale: 0.6, pitchShift: 0, extraLayers: ['campfire-crackle'] },
-      night: { volumeScale: 0.2, pitchShift: -0.15, extraLayers: ['coyote-howl', 'tent-rustle'] },
-    },
-  },
-  silent: {
-    label: 'Silent',
-    layers: [],
-    timeVariants: {
-      dawn: { volumeScale: 0, pitchShift: 0, extraLayers: [] },
-      day: { volumeScale: 0, pitchShift: 0, extraLayers: [] },
-      dusk: { volumeScale: 0, pitchShift: 0, extraLayers: [] },
-      night: { volumeScale: 0, pitchShift: 0, extraLayers: [] },
-    },
-  },
+interface DistrictAudio {
+  freq:    number;    // base drone frequency (Hz), 0 = silence
+  type:    OscillatorType;
+  noise:   number;    // 0-1 noise texture mix
+  volume:  number;    // master volume 0-1
+}
+
+const DISTRICT_AUDIO: Record<DistrictName, DistrictAudio> = {
+  forge:       { freq: 55,   type: 'sawtooth', noise: 0.4,  volume: 0.07 },
+  industrial:  { freq: 55,   type: 'sawtooth', noise: 0.4,  volume: 0.07 },
+  academy:     { freq: 528,  type: 'sine',     noise: 0.05, volume: 0.04 },
+  docks:       { freq: 80,   type: 'sine',     noise: 0.5,  volume: 0.05 },
+  commons:     { freq: 220,  type: 'sine',     noise: 0.1,  volume: 0.04 },
+  exchange:    { freq: 330,  type: 'triangle', noise: 0.2,  volume: 0.04 },
+  market:      { freq: 330,  type: 'triangle', noise: 0.2,  volume: 0.04 },
+  observatory: { freq: 440,  type: 'sine',     noise: 0.02, volume: 0.03 },
+  tech:        { freq: 440,  type: 'sine',     noise: 0.02, volume: 0.03 },
+  grid:        { freq: 120,  type: 'square',   noise: 0.3,  volume: 0.05 },
+  arena:       { freq: 70,   type: 'triangle', noise: 0.6,  volume: 0.06 },
+  nexus:       { freq: 256,  type: 'sine',     noise: 0.05, volume: 0.03 },
+  civic:       { freq: 256,  type: 'sine',     noise: 0.05, volume: 0.03 },
+  frontier:    { freq: 0,    type: 'sine',     noise: 0.7,  volume: 0.05 },
+  arts:        { freq: 396,  type: 'sine',     noise: 0.1,  volume: 0.04 },
+  silent:      { freq: 0,    type: 'sine',     noise: 0,    volume: 0   },
 };
 
-const WEATHER_LAYERS: Record<WeatherType, WeatherLayer> = {
-  clear: { label: 'Clear', layers: [], intensityRange: [0, 0] },
-  rain: { label: 'Rain', layers: ['rain-light', 'rain-medium', 'rain-heavy', 'rain-on-roof'], intensityRange: [0.1, 1.0] },
-  storm: { label: 'Storm', layers: ['rain-heavy', 'thunder-rumble', 'thunder-crack', 'wind-howl'], intensityRange: [0.5, 1.0] },
-  wind: { label: 'Wind', layers: ['wind-gentle', 'wind-strong', 'wind-gust', 'leaves-rustle'], intensityRange: [0.2, 0.9] },
-  snow: { label: 'Snow', layers: ['snow-quiet', 'muffled-ambience', 'icicle-drip'], intensityRange: [0.1, 0.5] },
+/* ── SFX synthesizer config ───────────────────────────────────── */
+
+interface SFXDef { freq: number; type: OscillatorType; duration: number; attack: number; decay: number; semitones?: number[] }
+
+const SFX_MAP: Record<string, SFXDef> = {
+  'ascending-chime':   { freq: 523,  type: 'sine',     duration: 0.5,  attack: 0.01, decay: 0.4,  semitones: [0, 4, 7] },
+  'low-thud':          { freq: 80,   type: 'triangle', duration: 0.3,  attack: 0.01, decay: 0.25 },
+  'snap-click':        { freq: 1200, type: 'sine',     duration: 0.08, attack: 0.001, decay: 0.07 },
+  'coin-clink':        { freq: 1046, type: 'triangle', duration: 0.4,  attack: 0.001, decay: 0.35, semitones: [0, 7] },
+  'notification-glow': { freq: 660,  type: 'sine',     duration: 0.6,  attack: 0.02, decay: 0.5 },
+  'fanfare-short':     { freq: 523,  type: 'square',   duration: 0.8,  attack: 0.01, decay: 0.6,  semitones: [0, 4, 7, 12] },
+  'rumble':            { freq: 40,   type: 'sawtooth', duration: 0.8,  attack: 0.1,  decay: 0.6 },
+  'build-finish':      { freq: 440,  type: 'sine',     duration: 0.5,  attack: 0.01, decay: 0.4,  semitones: [0, 7, 12] },
+  'victory-sting':     { freq: 659,  type: 'square',   duration: 1.0,  attack: 0.01, decay: 0.8,  semitones: [0, 4, 7, 12, 16] },
+  // gathering / crafting SFX
+  'gather-tick':       { freq: 880,  type: 'sine',     duration: 0.08, attack: 0.001, decay: 0.07 },
+  'gather-success':    { freq: 698,  type: 'sine',     duration: 0.4,  attack: 0.01, decay: 0.35, semitones: [0, 5, 9] },
+  'gather-miss':       { freq: 120,  type: 'triangle', duration: 0.2,  attack: 0.01, decay: 0.18 },
+  'gather-full':       { freq: 523,  type: 'sine',     duration: 0.7,  attack: 0.01, decay: 0.6,  semitones: [0, 4, 7, 12] },
+  'craft-hold':        { freq: 220,  type: 'sine',     duration: 0.3,  attack: 0.05, decay: 0.2 },
+  'craft-release-good':{ freq: 784,  type: 'sine',     duration: 0.4,  attack: 0.01, decay: 0.35, semitones: [0, 4] },
+  'craft-release-bad': { freq: 110,  type: 'sawtooth', duration: 0.25, attack: 0.01, decay: 0.22 },
+  // level up / xp
+  'xp-tick':           { freq: 1320, type: 'sine',     duration: 0.15, attack: 0.001, decay: 0.14 },
+  'level-up':          { freq: 523,  type: 'triangle', duration: 1.2,  attack: 0.01, decay: 0.9,  semitones: [0, 4, 7, 12, 19] },
 };
 
 const DISTRICT_ALIAS: Record<string, DistrictName> = {
-  forge: 'forge',
-  'the-forge': 'forge',
-  academy: 'academy',
-  'the-academy': 'academy',
-  docks: 'docks',
-  'the-docks': 'docks',
-  commons: 'commons',
-  'the-commons': 'commons',
-  exchange: 'exchange',
-  'the-exchange': 'exchange',
-  observatory: 'observatory',
-  'the-observatory': 'observatory',
-  grid: 'grid',
-  'the-grid': 'grid',
-  arena: 'arena',
-  'the-arena': 'arena',
-  nexus: 'nexus',
-  'the-nexus': 'nexus',
-  frontier: 'frontier',
-  'the-frontier': 'frontier',
+  forge: 'forge', 'the-forge': 'forge', industrial: 'industrial',
+  academy: 'academy', 'the-academy': 'academy',
+  docks: 'docks', 'the-docks': 'docks',
+  commons: 'commons', 'the-commons': 'commons',
+  exchange: 'exchange', 'the-exchange': 'exchange',
+  observatory: 'observatory', 'the-observatory': 'observatory',
+  grid: 'grid', 'the-grid': 'grid',
+  arena: 'arena', 'the-arena': 'arena',
+  nexus: 'nexus', 'the-nexus': 'nexus',
+  frontier: 'frontier', 'the-frontier': 'frontier',
+  arts: 'arts', civic: 'civic', tech: 'tech', market: 'market',
 };
 
-const CROSSFADE_MS = 200;
+const CROSSFADE_MS = 400;
 
-/* ── Context & Hook ───────────────────────────────────────────── */
+/* ── Context ────────────────────────────────────────────────────── */
 
 const SoundscapeContext = createContext<SoundscapeAPI>({
-  setDistrict: () => {},
-  setTimeOfDay: () => {},
-  setInterior: () => {},
-  setWeather: () => {},
+  setDistrict:    () => {},
+  setTimeOfDay:   () => {},
+  setInterior:    () => {},
+  setWeather:     () => {},
+  triggerSFX:     () => {},
+  playMusicTrack: () => {},
+  stopMusicTrack: () => {},
 });
 
 export function useSoundscape(): SoundscapeAPI {
   return useContext(SoundscapeContext);
 }
 
-/* ── Component (renders nothing visible) ──────────────────────── */
+/* ── Web Audio helpers ──────────────────────────────────────────── */
+
+function getOrCreateAudioContext(ref: React.MutableRefObject<AudioContext | null>): AudioContext | null {
+  if (typeof window === 'undefined') return null;
+  if (!ref.current || ref.current.state === 'closed') {
+    try { ref.current = new AudioContext(); } catch { return null; }
+  }
+  if (ref.current.state === 'suspended') {
+    ref.current.resume().catch(() => {});
+  }
+  return ref.current;
+}
+
+function playToneSequence(ctx: AudioContext, def: SFXDef, masterGain: GainNode): void {
+  const freqs = def.semitones
+    ? def.semitones.map(s => def.freq * Math.pow(2, s / 12))
+    : [def.freq];
+
+  const now = ctx.currentTime;
+  const stepDuration = def.duration / freqs.length;
+
+  freqs.forEach((freq, i) => {
+    const osc  = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type      = def.type;
+    osc.frequency.setValueAtTime(freq, now + i * stepDuration);
+    gain.gain.setValueAtTime(0, now + i * stepDuration);
+    gain.gain.linearRampToValueAtTime(0.25, now + i * stepDuration + def.attack);
+    gain.gain.linearRampToValueAtTime(0, now + i * stepDuration + def.decay);
+    osc.connect(gain);
+    gain.connect(masterGain);
+    osc.start(now + i * stepDuration);
+    osc.stop(now + i * stepDuration + def.decay + 0.05);
+  });
+}
+
+/* ── Component ──────────────────────────────────────────────────── */
 
 interface SoundscapeEngineProps {
   children?: React.ReactNode;
@@ -234,78 +178,159 @@ export default function SoundscapeEngine({
     crossfading: false,
   });
 
-  const crossfadeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const crossfadeTimer  = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const audioCtxRef     = useRef<AudioContext | null>(null);
+  const masterGainRef   = useRef<GainNode | null>(null);
+  const droneOscRef     = useRef<OscillatorNode | null>(null);
+  const droneGainRef    = useRef<GainNode | null>(null);
+  const noiseGainRef    = useRef<GainNode | null>(null);
+  const musicElRef      = useRef<HTMLAudioElement | null>(null);
+
+  // Lazy-init audio on first user gesture
+  const initAudio = useCallback(() => {
+    const ctx = getOrCreateAudioContext(audioCtxRef);
+    if (!ctx) return null;
+    if (!masterGainRef.current) {
+      masterGainRef.current = ctx.createGain();
+      masterGainRef.current.gain.setValueAtTime(0.6, ctx.currentTime);
+      masterGainRef.current.connect(ctx.destination);
+    }
+    return ctx;
+  }, []);
+
+  // Build district ambient drone whenever district changes
+  useEffect(() => {
+    const districtCfg = DISTRICT_AUDIO[state.currentDistrict] ?? DISTRICT_AUDIO.silent;
+    if (districtCfg.volume === 0) {
+      // Stop any existing drone
+      try { droneOscRef.current?.stop(); } catch { /* already stopped */ }
+      droneOscRef.current = null;
+      if (droneGainRef.current) {
+        droneGainRef.current.gain.setValueAtTime(0, audioCtxRef.current?.currentTime ?? 0);
+      }
+      return;
+    }
+
+    const ctx = initAudio();
+    if (!ctx || !masterGainRef.current) return;
+
+    // Stop previous drone
+    const prevOsc = droneOscRef.current;
+    const prevGain = droneGainRef.current;
+    if (prevGain) {
+      prevGain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.5);
+    }
+    setTimeout(() => { try { prevOsc?.stop(); } catch { /* ok */ } }, 600);
+
+    // Time-of-day volume scale
+    const timeScale: Record<TimeOfDay, number> = { dawn: 0.5, day: 1.0, dusk: 0.7, night: 0.3 };
+    const interiorScale = state.isInterior ? 0.5 : 1.0;
+    const targetVol = districtCfg.volume * (timeScale[state.timeOfDay] ?? 1) * interiorScale;
+
+    // Start new drone oscillator
+    if (districtCfg.freq > 0) {
+      const osc  = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = districtCfg.type;
+      osc.frequency.setValueAtTime(districtCfg.freq, ctx.currentTime);
+      gain.gain.setValueAtTime(0, ctx.currentTime);
+      gain.gain.linearRampToValueAtTime(targetVol * (1 - districtCfg.noise), ctx.currentTime + 0.5);
+      osc.connect(gain);
+      gain.connect(masterGainRef.current);
+      osc.start();
+      droneOscRef.current = osc;
+      droneGainRef.current = gain;
+    }
+
+    // Noise layer
+    if (districtCfg.noise > 0) {
+      const bufferSize = ctx.sampleRate * 2;
+      const buffer     = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+      const data       = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+      const noiseSource = ctx.createBufferSource();
+      noiseSource.buffer = buffer;
+      noiseSource.loop   = true;
+      const filter = ctx.createBiquadFilter();
+      filter.type            = 'bandpass';
+      filter.frequency.value = districtCfg.freq || 400;
+      filter.Q.value         = 0.5;
+      const noiseGain = ctx.createGain();
+      noiseGain.gain.setValueAtTime(0, ctx.currentTime);
+      noiseGain.gain.linearRampToValueAtTime(targetVol * districtCfg.noise, ctx.currentTime + 0.5);
+      noiseSource.connect(filter);
+      filter.connect(noiseGain);
+      noiseGain.connect(masterGainRef.current);
+      noiseSource.start();
+      noiseGainRef.current = noiseGain;
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.currentDistrict, state.timeOfDay, state.isInterior]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      try { droneOscRef.current?.stop(); } catch { /* ok */ }
+      musicElRef.current?.pause();
+    };
+  }, []);
+
+  /* ── API ─────────────────────────────────────────────────────── */
 
   const setDistrict = useCallback((district: string) => {
     const target = DISTRICT_ALIAS[district.toLowerCase()] ?? 'silent';
-
-    setState((prev) => {
+    setState(prev => {
       if (target === prev.currentDistrict) return prev;
-
-      // Begin crossfade
       if (crossfadeTimer.current) clearTimeout(crossfadeTimer.current);
-
-      const transitioning = { ...prev, previousDistrict: prev.currentDistrict, crossfading: true };
-
       crossfadeTimer.current = setTimeout(() => {
-        setState((p) => ({
-          ...p,
-          currentDistrict: target,
-          previousDistrict: null,
-          crossfading: false,
-        }));
+        setState(p => ({ ...p, currentDistrict: target, previousDistrict: null, crossfading: false }));
       }, CROSSFADE_MS);
-
-      return transitioning;
+      return { ...prev, previousDistrict: prev.currentDistrict, crossfading: true };
     });
   }, []);
 
   const setTimeOfDay = useCallback((time: TimeOfDay) => {
-    setState((prev) => ({ ...prev, timeOfDay: time }));
+    setState(prev => ({ ...prev, timeOfDay: time }));
   }, []);
 
   const setInterior = useCallback((interior: boolean) => {
-    // In production: applies low-pass filter + reverb for interior spaces
-    // and crossfades ambient volume down by ~40%
-    setState((prev) => ({ ...prev, isInterior: interior }));
+    setState(prev => ({ ...prev, isInterior: interior }));
   }, []);
 
   const setWeather = useCallback((weather: WeatherType, intensity?: number) => {
-    const layer = WEATHER_LAYERS[weather];
-    const clampedIntensity = intensity !== undefined
-      ? Math.max(layer.intensityRange[0], Math.min(layer.intensityRange[1], intensity))
-      : layer.intensityRange[1] * 0.5;
-
-    setState((prev) => ({ ...prev, weather, weatherIntensity: clampedIntensity }));
+    setState(prev => ({ ...prev, weather, weatherIntensity: intensity ?? 0.5 }));
   }, []);
 
-  const api: SoundscapeAPI = { setDistrict, setTimeOfDay, setInterior, setWeather };
+  const triggerSFX = useCallback((sfxId: string) => {
+    const def = SFX_MAP[sfxId];
+    if (!def) return;
+    const ctx = initAudio();
+    if (!ctx || !masterGainRef.current) return;
+    playToneSequence(ctx, def, masterGainRef.current);
+  }, [initAudio]);
 
-  // Compute active layers for debugging / potential future UI
-  const _bed = AMBIENT_BEDS[state.currentDistrict];
-  const _timeVariant = _bed.timeVariants[state.timeOfDay];
-  const _weatherLayer = WEATHER_LAYERS[state.weather];
-  const _activeLayers = [
-    ..._bed.layers.map((l) => ({ layer: l, volume: _timeVariant.volumeScale * (state.isInterior ? 0.6 : 1.0) })),
-    ..._timeVariant.extraLayers.map((l) => ({ layer: l, volume: _timeVariant.volumeScale * 0.5 })),
-    ..._weatherLayer.layers.map((l) => ({ layer: l, volume: state.weatherIntensity * (state.isInterior ? 0.3 : 1.0) })),
-  ];
+  const playMusicTrack = useCallback((url: string) => {
+    musicElRef.current?.pause();
+    const el = new Audio(url);
+    el.loop   = false;
+    el.volume = 0.5;
+    el.play().catch(() => {});
+    musicElRef.current = el;
+  }, []);
 
-  // Store active layers on a ref for external consumption if needed
-  const layersRef = useRef(_activeLayers);
-  layersRef.current = _activeLayers;
+  const stopMusicTrack = useCallback(() => {
+    musicElRef.current?.pause();
+    musicElRef.current = null;
+  }, []);
+
+  const api: SoundscapeAPI = {
+    setDistrict, setTimeOfDay, setInterior, setWeather,
+    triggerSFX, playMusicTrack, stopMusicTrack,
+  };
 
   return (
     <SoundscapeContext.Provider value={api}>
       {children}
-      {/* This component renders nothing visible -- it manages audio state.
-          In production, active layers would be:
-          District: {_bed.label} ({state.timeOfDay})
-          Layers: {_activeLayers.map(l => l.layer).join(', ')}
-          Weather: {_weatherLayer.label} @ {state.weatherIntensity.toFixed(2)}
-          Interior: {state.isInterior ? 'yes' : 'no'}
-          Crossfading: {state.crossfading ? 'yes' : 'no'}
-      */}
     </SoundscapeContext.Provider>
   );
 }

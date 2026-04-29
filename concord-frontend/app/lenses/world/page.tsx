@@ -99,7 +99,12 @@ const CraftingBench         = dynamic(() => import('@/components/concordia/craft
 const GuildPanel            = dynamic(() => import('@/components/concordia/social/GuildPanel').then(m => ({ default: m.GuildPanel })), { ssr: false });
 const SeasonPassPanel       = dynamic(() => import('@/components/concordia/world/SeasonPassPanel').then(m => ({ default: m.SeasonPassPanel })), { ssr: false });
 const SeasonBanner          = dynamic(() => import('@/components/concordia/world/SeasonBanner').then(m => ({ default: m.SeasonBanner })), { ssr: false });
+const LeaderboardPanel      = dynamic(() => import('@/components/concordia/world/LeaderboardPanel').then(m => ({ default: m.LeaderboardPanel })), { ssr: false });
+const WorldEventsPanel      = dynamic(() => import('@/components/concordia/world/WorldEventsPanel').then(m => ({ default: m.WorldEventsPanel })), { ssr: false });
+const ArenaPanel            = dynamic(() => import('@/components/concordia/world/ArenaPanel').then(m => ({ default: m.ArenaPanel })), { ssr: false });
+const JobsBoardPanel        = dynamic(() => import('@/components/concordia/world/JobsBoardPanel').then(m => ({ default: m.JobsBoardPanel })), { ssr: false });
 
+import { LensPortalMarker } from '@/components/concordia/world/LensPortalMarker';
 import { modeManager, startLensTimeTick, stopLensTimeTick } from '@/lib/concordia/mode-manager';
 import { MODE_TO_HUD } from '@/lib/concordia/modes';
 import type { InputMode } from '@/lib/concordia/modes';
@@ -125,7 +130,7 @@ import {
   Wrench, Package, Code2, Terminal, Diff, BookOpen, BoxSelect,
   FileCode, GitBranch, Activity, Gauge, ShoppingCart,
   Award, Stamp, FlaskConical, History, Clapperboard, ChevronRight,
-  Swords, Cpu, Gamepad2,
+  Swords, Cpu, Gamepad2, Trophy, Briefcase,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '@/lib/api/client';
@@ -654,7 +659,7 @@ export default function WorldLensPage() {
 
   // 3D Explore mode state
   const [cameraMode, setCameraMode] = useState<'isometric' | 'follow' | 'free' | 'interior' | 'cinematic'>('follow');
-  const [showPanel, setShowPanel] = useState<'none' | 'inventory' | 'quests' | 'chat' | 'map' | 'crafting' | 'players' | 'profile' | 'collaboration' | 'livecollab' | 'events' | 'socialproof' | 'notifications' | 'smartnotify' | 'moderation' | 'ownership' | 'federation' | 'voice' | 'voiceassist' | 'combat' | 'skills' | 'modes' | 'guild' | 'season' | 'npcshop'>('none');
+  const [showPanel, setShowPanel] = useState<'none' | 'inventory' | 'quests' | 'chat' | 'map' | 'crafting' | 'players' | 'profile' | 'collaboration' | 'livecollab' | 'events' | 'socialproof' | 'notifications' | 'smartnotify' | 'moderation' | 'ownership' | 'federation' | 'voice' | 'voiceassist' | 'combat' | 'skills' | 'modes' | 'guild' | 'season' | 'npcshop' | 'leaderboard' | 'worldevents' | 'arena' | 'jobs'>('none');
   // Local player avatar — mutable so moves update it in place. On
   // first mount we ask the server for saved state (via player:load)
   // and land back wherever the user logged off.
@@ -692,6 +697,17 @@ export default function WorldLensPage() {
     rotation: 0,
     currentAnimation: 'idle',
   });
+  // Lens portal buildings loaded from server
+  const [portals, setPortals] = useState<Array<{
+    id: string; lens_id: string; label: string; x: number; y: number;
+    accessible: boolean; required_skill_level: number;
+    npc_name?: string; npc_title?: string;
+  }>>([]);
+  // When a portal is entered, overrides the LensWorkspace lensId
+  const [activeLensOverride, setActiveLensOverride] = useState<string | null>(null);
+  // Portal within E-press range
+  const [nearPortalId, setNearPortalId] = useState<string | null>(null);
+
   // Other players in the same chunk(s), updated via city:positions
   // socket broadcasts. The `currentAnimation` is typed to match the
   // AnimationClip union that AvatarSystem3D accepts; remote player
@@ -803,6 +819,39 @@ export default function WorldLensPage() {
   useEffect(() => {
     cacheMaterials(materials);
   }, [materials]);
+
+  // Fetch lens portal buildings for this world
+  useEffect(() => {
+    fetch('/api/lens-portals?worldId=concordia-hub')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.portals) setPortals(d.portals); })
+      .catch(() => {});
+  }, []);
+
+  // Proximity check: update nearPortalId whenever the player moves
+  useEffect(() => {
+    const near = portals.find(p =>
+      Math.hypot(p.x - playerAvatar.position.x, p.y - playerAvatar.position.y) < 3
+    );
+    setNearPortalId(near?.id ?? null);
+  }, [playerAvatar.position, portals]);
+
+  // E key: enter a nearby accessible portal
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'e' && e.key !== 'E') return;
+      const near = portals.find(p =>
+        Math.hypot(p.x - playerAvatar.position.x, p.y - playerAvatar.position.y) < 3
+      );
+      if (near?.accessible) {
+        setActiveLensOverride(near.lens_id);
+        modeManager.switchTo('lens_work', { push: true });
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [portals, playerAvatar.position]);
 
   // ── MMO multiplayer wiring ──────────────────────────────────────────
   // On mount: ask the server for our last-saved position, subscribe
@@ -1436,6 +1485,31 @@ export default function WorldLensPage() {
               }}
             />
           </div>
+          {/* Lens portal markers — rendered as 2D overlays */}
+          {portals.map(portal => {
+            const isNearby = nearPortalId === portal.id;
+            return (
+              <div
+                key={portal.id}
+                className="absolute pointer-events-auto"
+                style={{
+                  left: `calc(50% + ${(portal.x - playerAvatar.position.x) * 32}px)`,
+                  top: `calc(50% + ${(portal.y - playerAvatar.position.y) * 32}px)`,
+                  transform: 'translate(-50%, -50%)',
+                  zIndex: 15,
+                }}
+              >
+                <LensPortalMarker
+                  portal={{ ...portal, district: 'concordia', building_type: 'portal', description: undefined }}
+                  isNearby={isNearby}
+                  onEnter={(p) => {
+                    setActiveLensOverride(p.lens_id);
+                    modeManager.switchTo('lens_work', { push: true });
+                  }}
+                />
+              </div>
+            );
+          })}
           {/* Camera mode controls */}
           <div className="absolute top-4 right-4 z-20">
             <CameraControls
@@ -1501,9 +1575,12 @@ export default function WorldLensPage() {
           {inputMode === 'lens_work' && (
             <LensWorkspace
               lensId="world"
-              lensName="Concordia"
+              lensIdOverride={activeLensOverride ?? undefined}
+              lensName={activeLensOverride
+                ? activeLensOverride.charAt(0).toUpperCase() + activeLensOverride.slice(1).replace(/-/g, ' ')
+                : 'Concordia'}
               playerPosition={playerAvatar.position}
-              onClose={() => modeManager.pop()}
+              onClose={() => { modeManager.pop(); setActiveLensOverride(null); }}
             />
           )}
           {(inputMode === 'social' || inputMode === 'exploration') && (
@@ -1582,6 +1659,10 @@ export default function WorldLensPage() {
               { key: 'modes', label: 'Modes', icon: Gamepad2 },
               { key: 'guild', label: 'Guild', icon: Users },
               { key: 'season', label: 'Season', icon: Award },
+              { key: 'leaderboard', label: 'Board', icon: Trophy },
+              { key: 'worldevents', label: 'Events+', icon: CalendarDays },
+              { key: 'arena', label: 'Arena', icon: Swords },
+              { key: 'jobs', label: 'Jobs', icon: Briefcase },
             ] as const).map(({ key, label, icon: Icon }) => (
               <button
                 key={key}
@@ -1637,6 +1718,18 @@ export default function WorldLensPage() {
           )}
           {showPanel === 'season' && (
             <SeasonPassPanel onClose={() => setShowPanel('none')} />
+          )}
+          {showPanel === 'leaderboard' && (
+            <LeaderboardPanel currentUserId={playerAvatar.id} onClose={() => setShowPanel('none')} />
+          )}
+          {showPanel === 'worldevents' && (
+            <WorldEventsPanel worldId="concordia-hub" onClose={() => setShowPanel('none')} />
+          )}
+          {showPanel === 'arena' && (
+            <ArenaPanel playerId={playerAvatar.id} onClose={() => setShowPanel('none')} />
+          )}
+          {showPanel === 'jobs' && (
+            <JobsBoardPanel playerId={playerAvatar.id} onClose={() => setShowPanel('none')} />
           )}
           {showPanel === 'players' && (
             <div className="absolute top-4 left-4 z-20 w-80 max-h-[70vh] overflow-auto pointer-events-auto">
