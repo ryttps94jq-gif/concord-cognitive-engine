@@ -6,6 +6,8 @@ import { VATSState, BodyPart, createVATSState, queueVATSShot, exitVATS, regenAP 
 import { SPECIALStats, DEFAULT_SPECIAL } from '@/lib/concordia/player-stats';
 import { canHarm, makeEntity, type EntityTier } from '@/lib/concordia/entity-protection';
 import type { DomainType } from '@/lib/concordia/district-domains';
+import { emit } from '@/lib/realtime/socket';
+import { emitEvent } from '@/lib/realtime/event-bus';
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -72,6 +74,8 @@ export function useCombatState(
   const stateRef = useRef(state);
   stateRef.current = state;
 
+  const recentSkillIds = useRef<string[]>([]);
+
   const addLog = useCallback((entry: Omit<CombatLogEntry, 'id' | 'timestamp'>) => {
     setState(s => ({
       ...s,
@@ -118,6 +122,19 @@ export function useCombatState(
       },
     }));
     addLog({ text: `Used ${skill.name}`, type: 'hit' });
+
+    if (skill.dtuId) {
+      const prev = recentSkillIds.current.filter(id => id !== skill.dtuId);
+      recentSkillIds.current = [skill.dtuId, ...prev].slice(0, 5);
+      emit('skill:use', {
+        dtuId: skill.dtuId,
+        context: {
+          targetId: stateRef.current.target?.id,
+          recentSkillIds: prev.slice(0, 4),
+        },
+      });
+    }
+
     return true;
   }, [addLog]);
 

@@ -74,7 +74,7 @@ export function SpectatorControls({
     enabled,
   );
 
-  useMouseInput({ onMove: camera.rotate, onWheel: camera.zoom, enabled });
+  useMouseInput({ onMove: (delta) => camera.rotate(delta.x, delta.y), onWheel: camera.zoom, enabled });
 
   const formatTime = (s: number) => {
     const mins = Math.floor(s / 60);

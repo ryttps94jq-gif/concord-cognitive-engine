@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { CombatState } from '@/hooks/useCombatState';
-import { VATSTarget } from '@/lib/concordia/combat/vats';
+import { VATSTarget, BodyPart } from '@/lib/concordia/combat/vats';
 import { cooldownProgress } from '@/lib/concordia/combat/hotbar';
 import { useKeyboardInput } from '@/hooks/useKeyboardInput';
 
@@ -88,7 +88,7 @@ function VATSOverlay({
   targets: VATSTarget[];
   apCurrent: number;
   apMax: number;
-  onSelectPart: (targetId: string, part: string, apCost: number) => void;
+  onSelectPart: (targetId: string, part: BodyPart, apCost: number) => void;
   onExit: () => void;
 }) {
   return (
@@ -135,7 +135,7 @@ interface CombatHUDProps {
   onDodge: () => void;
   onBlock: (held: boolean) => void;
   onToggleVATS: () => void;
-  onQueueShot: (targetId: string, part: string, apCost: number) => void;
+  onQueueShot: (targetId: string, part: BodyPart, apCost: number) => void;
 }
 
 export function CombatHUD({

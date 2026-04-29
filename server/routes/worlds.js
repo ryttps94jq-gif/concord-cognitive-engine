@@ -288,6 +288,46 @@ export default function createWorldsRouter({ requireAuth, db }) {
     }
   });
 
+  // GET /api/worlds/skills/mine — player's own skills with progression data
+  router.get("/skills/mine", requireAuth, async (req, res) => {
+    try {
+      const worldId = getActiveWorldForPlayer(db, req.user.id) || "concordia-hub";
+      const skills = db.prepare(
+        "SELECT * FROM dtus WHERE creator_id = ? AND type = 'skill' ORDER BY skill_level DESC"
+      ).all(req.user.id);
+
+      const { getMasteryMarkers } = await import("../lib/skill-progression.js");
+      const { evaluateSkillInWorld } = await import("../lib/skill-effectiveness.js");
+      const world = loadWorld(db, worldId);
+
+      const shaped = skills.map(s => ({
+        ...s,
+        mastery: getMasteryMarkers(s),
+        effectivenessInCurrentWorld: world ? evaluateSkillInWorld(s, world).effectiveness : null,
+      }));
+      res.json({ skills: shaped, worldId });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // GET /api/worlds/:worldId/leaderboard — top skills in a world by level
+  router.get("/:worldId/leaderboard", async (req, res) => {
+    try {
+      const rows = db.prepare(`
+        SELECT d.id, d.title, d.skill_level, d.creator_id, u.username
+        FROM dtus d
+        LEFT JOIN users u ON u.id = d.creator_id
+        WHERE d.world_id = ? AND d.type = 'skill' AND d.skill_level > 1
+        ORDER BY d.skill_level DESC
+        LIMIT 20
+      `).all(req.params.worldId);
+      res.json({ leaderboard: rows });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   // GET /api/substrate/patterns — substrate pattern feed
   router.get("/substrate/patterns", (req, res) => {
     try {

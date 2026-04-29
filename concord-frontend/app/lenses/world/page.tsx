@@ -87,6 +87,8 @@ const QuickMessageBar    = dynamic(() => import('@/components/concordia/social/Q
 const SpectatorControls  = dynamic(() => import('@/components/concordia/spectator/SpectatorControls').then(m => ({ default: m.SpectatorControls })), { ssr: false });
 const MobileControls     = dynamic(() => import('@/components/concordia/mobile/MobileControlsOverlay').then(m => ({ default: m.MobileControlsOverlay })), { ssr: false });
 const TutorialOverlay    = dynamic(() => import('@/components/concordia/onboarding/TutorialHint').then(m => ({ default: m.TutorialOverlay })), { ssr: false });
+const SkillsPanel        = dynamic(() => import('@/components/concordia/skills/SkillsPanel').then(m => ({ default: m.SkillsPanel })), { ssr: false });
+const XPToast            = dynamic(() => import('@/components/concordia/hud/XPToast').then(m => ({ default: m.XPToast })), { ssr: false });
 
 import { modeManager } from '@/lib/concordia/mode-manager';
 import { MODE_TO_HUD } from '@/lib/concordia/modes';
@@ -113,7 +115,7 @@ import {
   Wrench, Package, Code2, Terminal, Diff, BookOpen, BoxSelect,
   FileCode, GitBranch, Activity, Gauge, ShoppingCart,
   Award, Stamp, FlaskConical, History, Clapperboard, ChevronRight,
-  Swords,
+  Swords, Cpu,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '@/lib/api/client';
@@ -632,7 +634,7 @@ export default function WorldLensPage() {
 
   // 3D Explore mode state
   const [cameraMode, setCameraMode] = useState<'isometric' | 'follow' | 'free' | 'interior' | 'cinematic'>('follow');
-  const [showPanel, setShowPanel] = useState<'none' | 'inventory' | 'quests' | 'chat' | 'map' | 'crafting' | 'players' | 'profile' | 'collaboration' | 'livecollab' | 'events' | 'socialproof' | 'notifications' | 'smartnotify' | 'moderation' | 'ownership' | 'federation' | 'voice' | 'voiceassist' | 'combat'>('none');
+  const [showPanel, setShowPanel] = useState<'none' | 'inventory' | 'quests' | 'chat' | 'map' | 'crafting' | 'players' | 'profile' | 'collaboration' | 'livecollab' | 'events' | 'socialproof' | 'notifications' | 'smartnotify' | 'moderation' | 'ownership' | 'federation' | 'voice' | 'voiceassist' | 'combat' | 'skills'>('none');
   // Local player avatar — mutable so moves update it in place. On
   // first mount we ask the server for saved state (via player:load)
   // and land back wherever the user logged off.
@@ -1452,7 +1454,7 @@ export default function WorldLensPage() {
               onQueueShot={combatCtx.queueShot}
             />
           )}
-          {inputMode === 'driving' && vehicleCtx.state.active && (
+          {inputMode === 'driving' && vehicleCtx.state.occupied && (
             <VehicleHUD
               state={vehicleCtx.state}
               onExit={() => { vehicleCtx.exitVehicle(); modeManager.pop(); }}
@@ -1461,7 +1463,7 @@ export default function WorldLensPage() {
               onShiftDown={vehicleCtx.shiftDown}
             />
           )}
-          {inputMode === 'conversation' && dialogueCtx.state.open && (
+          {inputMode === 'conversation' && dialogueCtx.state.active && (
             <DialoguePanel
               state={dialogueCtx.state}
               special={DEFAULT_SPECIAL}
@@ -1508,7 +1510,7 @@ export default function WorldLensPage() {
           )}
           {inputMode === 'spectator' && (
             <SpectatorControls
-              camera={{ position: { x: 0, y: 10, z: 0 }, yaw: 0, pitch: -30, followingPlayerId: null }}
+              camera={{ moveForward: () => {}, moveBack: () => {}, moveLeft: () => {}, moveRight: () => {}, moveUp: () => {}, moveDown: () => {}, rotate: (_dx, _dy) => {}, zoom: (_d) => {} }}
               onFollowPlayer={() => {}}
               onTimeScrub={() => {}}
               availablePlayers={otherPlayers.map(p => ({ id: p.id, name: p.name }))}
@@ -1528,7 +1530,7 @@ export default function WorldLensPage() {
             onBrake={vehicleCtx.setBrake}
             onSteer={vehicleCtx.setSteering}
             onExitVehicle={() => { vehicleCtx.exitVehicle(); modeManager.pop(); }}
-            hotbarCount={combatCtx.state.hotbar.length}
+            hotbarCount={combatCtx.state.hotbar.slots.length}
             onHotbar={combatCtx.activateSkill}
           />
           {/* Tutorial overlay — always present, shows ? button */}
@@ -1556,6 +1558,7 @@ export default function WorldLensPage() {
               { key: 'voice', label: 'Voice', icon: Mic },
               { key: 'voiceassist', label: 'Assist', icon: AudioLines },
               { key: 'combat', label: 'Combat', icon: Swords },
+              { key: 'skills', label: 'Skills', icon: Cpu },
             ] as const).map(({ key, label, icon: Icon }) => (
               <button
                 key={key}
@@ -1717,6 +1720,12 @@ export default function WorldLensPage() {
               <VoiceAssistant />
             </div>
           )}
+          {showPanel === 'skills' && (
+            <div className="absolute top-4 right-4 z-20 w-96 max-h-[70vh] overflow-auto pointer-events-auto">
+              <SkillsPanel worldId={activeDistrict.id} onClose={() => setShowPanel('none')} />
+            </div>
+          )}
+          <XPToast />
           {/* Combat HUD — renders its own fixed-position overlays
               (health bar, target panel, floating damage numbers,
               combat log, death overlay). Surfaces whenever the

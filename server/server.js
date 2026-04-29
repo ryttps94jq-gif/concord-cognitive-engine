@@ -6292,6 +6292,44 @@ async function tryInitWebSockets(server) {
       }
     });
 
+    // ── Skill use → XP award + mastery milestone notifications ──────
+    socket.on("skill:use", async ({ dtuId, context = {} } = {}) => {
+      const userId = socket.data?.userId;
+      if (!userId || !dtuId) return;
+
+      const skill = db.prepare("SELECT * FROM dtus WHERE id = ?").get(dtuId);
+      if (!skill || skill.type !== "skill") return;
+
+      const { awardExperience, getMasteryMarkers } = await import("./lib/skill-progression.js");
+      const prevBadge = getMasteryMarkers(skill).badge;
+      const prevLevel = skill.skill_level || 1;
+      const worldId = context.worldId || "concordia-hub";
+      const ctx = { ...context, userId, worldId };
+
+      const result = await awardExperience(skill, context.meaningful ? "meaningful_application" : "practice", ctx, db);
+      const updated = db.prepare("SELECT * FROM dtus WHERE id = ?").get(dtuId);
+      const mastery = getMasteryMarkers(updated);
+      const leveledUp = Math.floor(updated.skill_level) > Math.floor(prevLevel);
+
+      socket.emit("skill:xp-awarded", { dtuId, ...result, mastery, leveledUp });
+
+      if (leveledUp && mastery.badge !== prevBadge) {
+        realtimeEmit("world:notification", {
+          userId,
+          message: `${skill.title} reached ${mastery.title}!`,
+          type: "milestone",
+        });
+      }
+
+      if (context.recentSkillIds?.length >= 1) {
+        const { detectSkillInteraction } = await import("./lib/skill-interaction.js");
+        const allSkills = [dtuId, ...context.recentSkillIds]
+          .map((id) => db.prepare("SELECT * FROM dtus WHERE id = ?").get(id))
+          .filter(Boolean);
+        detectSkillInteraction({ id: userId, worldId }, allSkills, ctx, db, _selectBrainForNpc).catch(() => {});
+      }
+    });
+
     // ── Combat: respawn at a district hub after death ──────────────
     socket.on("player:respawn", (data) => {
       const userId = socket.data?.userId;

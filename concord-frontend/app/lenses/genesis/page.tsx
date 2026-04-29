@@ -203,9 +203,10 @@ export default function GenesisLens() {
 
   // Live feed via WebSocket
   useEffect(() => {
-    const handleActivity = useCallback((data: FeedEvent) => {
+    const handleActivity = (...args: unknown[]) => {
+      const data = args[0] as FeedEvent;
       setFeed(prev => [data, ...prev].slice(0, 100));
-    }, []);
+    };
 
     on('emergent:activity', handleActivity);
     setIsLive(isConnected);

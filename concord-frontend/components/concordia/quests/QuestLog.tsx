@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import type { Quest, QuestReward } from '@/lib/concordia/quest-system';
 import { questTracker } from '@/lib/concordia/quest-system';
 
@@ -121,12 +121,60 @@ function QuestCard({ quest, onAccept, onAbandon }: {
 // ── Quest Log ─────────────────────────────────────────────────────────
 
 interface QuestLogProps {
-  quests: Quest[];
+  quests?: Quest[];
+  worldId?: string;
   onClose: () => void;
 }
 
-export function QuestLog({ quests, onClose }: QuestLogProps) {
+function normaliseServerQuest(raw: Record<string, unknown>): Quest {
+  return {
+    id: raw.id as string,
+    title: raw.title as string,
+    description: (raw.description as string) || '',
+    domain: (raw.domain as Quest['domain']) || 'mainland',
+    giverId: (raw.giver_npc_id as string) || 'world',
+    giverName: (raw.giver_npc_id as string) || 'World',
+    status: (raw.status as Quest['status']) || 'available',
+    objectives: Array.isArray(raw.objectives) ? raw.objectives as Quest['objectives'] : [],
+    reward: (raw.reward as Quest['reward']) || { cc: 0, xp: 0, karmaBonus: 0 },
+  };
+}
+
+export function QuestLog({ quests: propQuests, worldId, onClose }: QuestLogProps) {
   const [tab, setTab] = useState<'active' | 'available' | 'completed'>('active');
+  const [serverQuests, setServerQuests] = useState<Quest[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const fetchServerQuests = useCallback(async () => {
+    if (!worldId) return;
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/worlds/${worldId}/quests?status=all`);
+      if (!res.ok) return;
+      const data = await res.json();
+      setServerQuests((data.quests || []).map(normaliseServerQuest));
+    } finally {
+      setLoading(false);
+    }
+  }, [worldId]);
+
+  useEffect(() => { fetchServerQuests(); }, [fetchServerQuests]);
+
+  const handleAccept = useCallback(async (questId: string) => {
+    if (worldId) {
+      await fetch(`/api/worlds/${worldId}/quests/${questId}/accept`, { method: 'POST' });
+      fetchServerQuests();
+    } else {
+      questTracker.accept(questId);
+    }
+  }, [worldId, fetchServerQuests]);
+
+  const handleAbandon = useCallback((questId: string) => {
+    questTracker.abandon(questId);
+    if (worldId) fetchServerQuests();
+  }, [worldId, fetchServerQuests]);
+
+  const quests = worldId ? serverQuests : (propQuests || []);
 
   const filtered = quests.filter(q =>
     tab === 'active' ? q.status === 'active' :
@@ -165,7 +213,9 @@ export function QuestLog({ quests, onClose }: QuestLogProps) {
 
       {/* Quest list */}
       <div className="max-h-96 overflow-y-auto p-2 space-y-1.5">
-        {filtered.length === 0 ? (
+        {loading ? (
+          <p className="text-[11px] text-gray-600 text-center py-6">Loading quests…</p>
+        ) : filtered.length === 0 ? (
           <p className="text-[11px] text-gray-600 text-center py-6">
             {tab === 'available' ? 'No quests available — explore more of the district.' :
              tab === 'active' ? 'No active quests. Accept one from Available.' :
@@ -176,8 +226,8 @@ export function QuestLog({ quests, onClose }: QuestLogProps) {
             <QuestCard
               key={q.id}
               quest={q}
-              onAccept={q.status === 'available' ? () => questTracker.accept(q.id) : undefined}
-              onAbandon={q.status === 'active' ? () => questTracker.abandon(q.id) : undefined}
+              onAccept={q.status === 'available' ? () => handleAccept(q.id) : undefined}
+              onAbandon={q.status === 'active' ? () => handleAbandon(q.id) : undefined}
             />
           ))
         )}
