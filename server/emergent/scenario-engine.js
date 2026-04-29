@@ -245,7 +245,7 @@ export function runScenario(scenarioId, { steps = 10, relationships = {} } = {})
 
         // Apply relationships (simple linear propagation)
         for (const [targetVar, rel] of Object.entries(relationships)) {
-          if (!nextValues.hasOwnProperty(targetVar)) continue;
+          if (!Object.prototype.hasOwnProperty.call(nextValues, targetVar)) continue;
 
           if (rel.type === "proportional" && rel.source) {
             const sourceChange = (nextValues[rel.source] - baseState[rel.source]) / (baseState[rel.source] || 1);

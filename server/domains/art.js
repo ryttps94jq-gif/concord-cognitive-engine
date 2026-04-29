@@ -2,7 +2,15 @@
 // Domain actions for visual art: color harmony analysis, composition scoring,
 // palette generation, and style classification.
 
+import { callVision, callVisionUrl, visionPromptForDomain } from "../lib/vision-inference.js";
+
 export default function registerArtActions(registerLensAction) {
+  registerLensAction("art", "vision", async (ctx, artifact, _params) => {
+    const { imageB64, imageUrl } = artifact.data || {};
+    if (!imageB64 && !imageUrl) return { ok: false, error: "imageB64 or imageUrl required" };
+    const prompt = visionPromptForDomain("art");
+    return imageUrl ? callVisionUrl(imageUrl, prompt) : callVision(imageB64, prompt);
+  });
   // Color theory helpers
   function hexToRgb(hex) {
     const h = hex.replace("#", "");
@@ -310,13 +318,14 @@ export default function registerArtActions(registerLensAction) {
         }
         break;
       case "analogous":
-      default:
+      default: {
         const spread = 30;
         for (let i = 0; i < count; i++) {
           const offset = (i - Math.floor(count / 2)) * spread;
           addColor(hsl.h + offset, hsl.s, hsl.l + (i % 2 === 0 ? 0 : 5), i === Math.floor(count / 2) ? "base" : "analogous");
         }
         break;
+      }
     }
 
     return {

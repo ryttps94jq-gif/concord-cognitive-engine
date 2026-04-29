@@ -1,5 +1,13 @@
 // server/domains/filmstudios.js
+import { callVision, callVisionUrl, visionPromptForDomain } from "../lib/vision-inference.js";
+
 export default function registerFilmStudiosActions(registerLensAction) {
+  registerLensAction("film-studios", "vision", async (ctx, artifact, _params) => {
+    const { imageB64, imageUrl } = artifact.data || {};
+    if (!imageB64 && !imageUrl) return { ok: false, error: "imageB64 or imageUrl required" };
+    const prompt = visionPromptForDomain("filmstudios");
+    return imageUrl ? callVisionUrl(imageUrl, prompt) : callVision(imageB64, prompt);
+  });
   registerLensAction("film-studios", "budgetBreakdown", (ctx, artifact, _params) => {
     const data = artifact.data || {};
     const totalBudget = parseFloat(data.totalBudget) || 0;

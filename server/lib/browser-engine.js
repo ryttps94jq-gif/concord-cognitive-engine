@@ -1,3 +1,4 @@
+/* eslint-env browser */
 /**
  * Browser Engine — Playwright-Based Browser Automation for Concord
  *
@@ -206,6 +207,7 @@ export class BrowserEngine {
       const title = await page.title();
       const text = await page.evaluate(() => {
         // Remove script/style tags before extracting text
+        // eslint-disable-next-line no-undef
         const clone = document.body.cloneNode(true);
         for (const el of clone.querySelectorAll("script, style, noscript")) {
           el.remove();
@@ -440,6 +442,7 @@ export class BrowserEngine {
       const finalUrl = page.url();
       const title = await page.title();
       const text = await page.evaluate(() => {
+        // eslint-disable-next-line no-undef
         const clone = document.body.cloneNode(true);
         for (const el of clone.querySelectorAll("script, style, noscript")) {
           el.remove();
@@ -524,7 +527,9 @@ export class BrowserEngine {
 
         // Scroll to bottom
         const currentHeight = await page.evaluate(() => {
+          // eslint-disable-next-line no-undef
           window.scrollTo(0, document.body.scrollHeight);
+          // eslint-disable-next-line no-undef
           return document.body.scrollHeight;
         });
 
@@ -555,6 +560,7 @@ export class BrowserEngine {
       // If no item selector, grab full page text
       if (!options.itemSelector) {
         const fullText = await page.evaluate(() => {
+          // eslint-disable-next-line no-undef
           const clone = document.body.cloneNode(true);
           for (const el of clone.querySelectorAll("script, style, noscript")) {
             el.remove();

@@ -658,6 +658,7 @@ export default function registerEntityActions(registerLensAction) {
             expr = expr.replace(new RegExp(`\\b${f}\\b`, "g"), JSON.stringify(v));
           }
           // Safe-ish eval for simple comparisons
+          // eslint-disable-next-line no-new-func
           passed = Function(`"use strict"; return (${expr})`)();
         } else if (condition === "not_empty") {
           passed = ruleFields.every(f => fields[f] != null && fields[f] !== "");

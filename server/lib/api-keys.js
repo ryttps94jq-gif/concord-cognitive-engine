@@ -43,7 +43,7 @@ function hashKey(rawKey) {
  * @param {object} [rateLimit] - Custom rate limit overrides
  * @param {number} [rateLimit.requestsPerMinute=60]
  * @param {number} [rateLimit.requestsPerDay=10000]
- * @returns {{ ok: boolean, key?: object, rawKey?: string, error?: string }}
+ * @returns {{ ok: boolean, key?: object, rawKey?: string, error?: string, limit?: number }}
  */
 export function generateKey(userId, scopes = [], rateLimit = {}) {
   if (!userId) {
@@ -127,7 +127,7 @@ export function validateKey(rawKey) {
  *
  * @param {string} keyId - The key ID to revoke
  * @param {string} [userId] - Optional user ID for ownership verification
- * @returns {{ ok: boolean, error?: string }}
+ * @returns {{ ok: boolean, error?: string, keyId?: string, revokedAt?: string }}
  */
 export function revokeKey(keyId, userId) {
   const record = KEY_STORE.get(keyId);
@@ -156,7 +156,7 @@ export function revokeKey(keyId, userId) {
  * List all API keys for a user (hashes stripped).
  *
  * @param {string} userId
- * @returns {{ ok: boolean, keys: object[] }}
+ * @returns {{ ok: boolean, keys?: object[], error?: string }}
  */
 export function listKeys(userId) {
   if (!userId) {

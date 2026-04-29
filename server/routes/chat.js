@@ -46,7 +46,7 @@ export default function registerChatRoutes(app, {
       // - Accept: text/event-stream or ?stream=1 also forces streaming
       const accept = String(req.headers.accept || "");
       const wantsFull = (String(req.query.full || "") === "1") || accept.includes("application/json");
-      const wantsStream = (!wantsFull) ||
+      let wantsStream = (!wantsFull) ||
         String(req.query.stream || "") === "1" ||
         String(req.body.stream || "") === "1" ||
         accept.includes("text/event-stream");

@@ -26,7 +26,7 @@ before(async () => {
         const res = await fetch(`${API_BASE}/health`, { signal: AbortSignal.timeout(5_000) });
         if (res.ok) return;
       } catch { /* not ready */ }
-      await new Promise(r => setTimeout(r, 500));
+      await new Promise(r => { setTimeout(r, 500); });
     }
     throw new Error("External server not reachable within 30 seconds");
   }
@@ -48,6 +48,7 @@ before(async () => {
       const res = await fetch(`${API_BASE}/health`, { signal: AbortSignal.timeout(5_000) });
       if (res.ok) { serverProcess.unref(); return; }
     } catch { /* not ready */ }
+    // eslint-disable-next-line no-promise-executor-return
     await new Promise(r => setTimeout(r, 500));
   }
   throw new Error("Server failed to start within 60 seconds");

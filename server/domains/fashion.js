@@ -1,5 +1,13 @@
 // server/domains/fashion.js
+import { callVision, callVisionUrl, visionPromptForDomain } from "../lib/vision-inference.js";
+
 export default function registerFashionActions(registerLensAction) {
+  registerLensAction("fashion", "vision", async (ctx, artifact, _params) => {
+    const { imageB64, imageUrl } = artifact.data || {};
+    if (!imageB64 && !imageUrl) return { ok: false, error: "imageB64 or imageUrl required" };
+    const prompt = visionPromptForDomain("fashion");
+    return imageUrl ? callVisionUrl(imageUrl, prompt) : callVision(imageB64, prompt);
+  });
   registerLensAction("fashion", "styleProfile", (ctx, artifact, _params) => {
     const data = artifact.data || {};
     const preferences = data.preferences || {};

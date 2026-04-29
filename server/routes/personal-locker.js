@@ -1,0 +1,212 @@
+// server/routes/personal-locker.js
+// Personal DTU Locker routes — all require authentication.
+// Uploads are analyzed via LLaVA/Whisper, then AES-256-GCM encrypted with the
+// user's session-derived locker key before storage.
+
+import express from "express";
+import crypto from "node:crypto";
+import { encryptBlob, decryptBlob, SAFE_REVIVER } from "../lib/personal-locker/crypto.js";
+import { analyzeContent, buildPersonalDTUPayload, classifyMime } from "../lib/personal-locker/pipeline.js";
+import { loadUserContext, saveUserContext, updateContextOnUpload } from "../lib/personal-locker/user-context.js";
+import { assertSovereignty } from "../grc/sovereignty-invariants.js";
+import { createDTU } from "../economy/dtu-pipeline.js";
+
+const MAX_UPLOAD_BYTES = 100 * 1024 * 1024; // 100 MB
+
+export default function createPersonalLockerRouter({ db, getLockerKey, requireAuth }) {
+  const router = express.Router();
+
+  // All locker routes require authentication
+  router.use(requireAuth());
+
+  // ── Helper ────────────────────────────────────────────────────────────────
+
+  function checkLockerKey(req, res) {
+    const key = getLockerKey(req.user.id);
+    if (!key) {
+      res.status(403).json({ ok: false, error: "locker_locked", message: "Re-login to unlock your personal locker." });
+      return null;
+    }
+    return key;
+  }
+
+  // ── POST /api/personal-locker/upload ──────────────────────────────────────
+  // Body (JSON): { data: "<base64>", mimeType, originalname, title?, context? }
+
+  router.post("/upload", async (req, res) => {
+    try {
+      const key = checkLockerKey(req, res);
+      if (!key) return;
+
+      const { data, mimeType, originalname, title, context } = req.body || {};
+      if (!data || !mimeType) {
+        return res.status(400).json({ ok: false, error: "data (base64) and mimeType required" });
+      }
+
+      if (typeof data !== "string" || data.length > MAX_UPLOAD_BYTES * 1.4) {
+        return res.status(413).json({ ok: false, error: "Payload too large" });
+      }
+
+      const buffer = Buffer.from(data, "base64");
+      if (buffer.length > MAX_UPLOAD_BYTES) {
+        return res.status(413).json({ ok: false, error: "File too large (max 100 MB)" });
+      }
+
+      const file = { buffer, mimeType, originalname: originalname || "upload", title, size: buffer.length };
+      const analysis = await analyzeContent(buffer, mimeType);
+      const payload = buildPersonalDTUPayload(req.user.id, file, analysis);
+      if (context) payload.userContext = context;
+
+      const plaintext = Buffer.from(JSON.stringify(payload));
+      const { iv, ciphertext, authTag } = encryptBlob(plaintext, key);
+
+      const id = `pdtu_${crypto.randomBytes(10).toString("hex")}`;
+      db.prepare(`
+        INSERT INTO personal_dtus (id, user_id, lens_domain, content_type, title, encrypted_content, iv, auth_tag)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(id, req.user.id, analysis.lensHint, classifyMime(mimeType), payload.title, ciphertext, iv, authTag);
+
+      // Update user context model in background
+      updateContextOnUpload(req.user.id, { id, lensHint: analysis.lensHint, title: payload.title, contentType: classifyMime(mimeType), createdAt: payload.createdAt }, key, db);
+
+      return res.json({
+        ok: true,
+        dtu: { id, lensHint: analysis.lensHint, contentType: classifyMime(mimeType), title: payload.title, createdAt: payload.createdAt },
+      });
+    } catch (err) {
+      return res.status(500).json({ ok: false, error: err?.message || "Upload failed" });
+    }
+  });
+
+  // ── GET /api/personal-locker/dtus ─────────────────────────────────────────
+  // Returns metadata only (no encrypted content). Optional ?lens= filter.
+
+  router.get("/dtus", (req, res) => {
+    try {
+      const { lens } = req.query;
+      let rows;
+      if (lens) {
+        rows = db.prepare("SELECT id, user_id, created_at, lens_domain, content_type, title FROM personal_dtus WHERE user_id = ? AND lens_domain = ? ORDER BY created_at DESC").all(req.user.id, lens);
+      } else {
+        rows = db.prepare("SELECT id, user_id, created_at, lens_domain, content_type, title FROM personal_dtus WHERE user_id = ? ORDER BY created_at DESC").all(req.user.id);
+      }
+      return res.json({ ok: true, dtus: rows });
+    } catch (err) {
+      return res.status(500).json({ ok: false, error: err?.message });
+    }
+  });
+
+  // ── GET /api/personal-locker/dtus/:id ────────────────────────────────────
+
+  router.get("/dtus/:id", (req, res) => {
+    try {
+      const key = checkLockerKey(req, res);
+      if (!key) return;
+
+      const row = db.prepare("SELECT * FROM personal_dtus WHERE id = ? AND user_id = ?").get(req.params.id, req.user.id);
+      if (!row) return res.status(404).json({ ok: false, error: "Not found" });
+
+      assertSovereignty({ type: "dtu_read", dtu: { scope: "personal", ownerId: row.user_id }, requestingUser: req.user.id });
+
+      const plaintext = decryptBlob({ iv: row.iv, ciphertext: row.encrypted_content, authTag: row.auth_tag }, key);
+      const payload = JSON.parse(plaintext.toString("utf-8"), SAFE_REVIVER);
+
+      return res.json({ ok: true, dtu: { ...payload, id: row.id, lensHint: row.lens_domain, createdAt: row.created_at } });
+    } catch (err) {
+      if (err?.message?.includes("SOVEREIGNTY")) return res.status(403).json({ ok: false, error: "Access denied" });
+      return res.status(500).json({ ok: false, error: err?.message });
+    }
+  });
+
+  // ── DELETE /api/personal-locker/dtus/:id ─────────────────────────────────
+
+  router.delete("/dtus/:id", (req, res) => {
+    try {
+      const row = db.prepare("SELECT user_id FROM personal_dtus WHERE id = ?").get(req.params.id);
+      if (!row) return res.status(404).json({ ok: false, error: "Not found" });
+      if (row.user_id !== req.user.id) return res.status(403).json({ ok: false, error: "Access denied" });
+
+      db.prepare("DELETE FROM personal_dtus WHERE id = ?").run(req.params.id);
+      return res.json({ ok: true });
+    } catch (err) {
+      return res.status(500).json({ ok: false, error: err?.message });
+    }
+  });
+
+  // ── PUT /api/personal-locker/dtus/:id/publish ─────────────────────────────
+  // Promote personal DTU to public substrate via createDTU().
+
+  router.put("/dtus/:id/publish", async (req, res) => {
+    try {
+      const key = checkLockerKey(req, res);
+      if (!key) return;
+
+      const row = db.prepare("SELECT * FROM personal_dtus WHERE id = ? AND user_id = ?").get(req.params.id, req.user.id);
+      if (!row) return res.status(404).json({ ok: false, error: "Not found" });
+
+      assertSovereignty({ type: "dtu_read", dtu: { scope: "personal", ownerId: row.user_id }, requestingUser: req.user.id });
+
+      const plaintext = decryptBlob({ iv: row.iv, ciphertext: row.encrypted_content, authTag: row.auth_tag }, key);
+      const payload = JSON.parse(plaintext.toString("utf-8"), SAFE_REVIVER);
+
+      const publicDTU = createDTU(db, {
+        creatorId: req.user.id,
+        title: payload.title || "Personal DTU",
+        content: payload.analysis?.summary || "",
+        contentType: row.content_type,
+        tags: payload.analysis?.tags || [],
+        tier: "REGULAR",
+      });
+
+      if (req.body.deletePersonal) {
+        db.prepare("DELETE FROM personal_dtus WHERE id = ?").run(req.params.id);
+      }
+
+      return res.json({ ok: true, publicDTU });
+    } catch (err) {
+      if (err?.message?.includes("SOVEREIGNTY")) return res.status(403).json({ ok: false, error: "Access denied" });
+      return res.status(500).json({ ok: false, error: err?.message });
+    }
+  });
+
+  // ── GET /api/personal-locker/context ─────────────────────────────────────
+
+  router.get("/context", (req, res) => {
+    const key = checkLockerKey(req, res);
+    if (!key) return;
+    const ctx = loadUserContext(req.user.id, key, db);
+    return res.json({ ok: true, context: ctx });
+  });
+
+  // ── PUT /api/personal-locker/context/focus ────────────────────────────────
+
+  router.put("/context/focus", (req, res) => {
+    const key = checkLockerKey(req, res);
+    if (!key) return;
+    const { domains, intensity } = req.body || {};
+    const ctx = loadUserContext(req.user.id, key, db);
+    if (Array.isArray(domains)) ctx.currentFocus.domains = domains.slice(0, 10);
+    if (intensity && typeof intensity === "object" && !Array.isArray(intensity)) {
+      const safe = Object.create(null);
+      for (const [k, v] of Object.entries(intensity)) {
+        if (typeof k === "string" && k.length < 64 && typeof v === "number") safe[k] = v;
+      }
+      ctx.currentFocus.intensity = safe;
+    }
+    saveUserContext(req.user.id, ctx, key, db);
+    return res.json({ ok: true, context: ctx });
+  });
+
+  // ── DELETE /api/personal-locker/context ───────────────────────────────────
+
+  router.delete("/context", (req, res) => {
+    try {
+      db.prepare("DELETE FROM personal_dtus WHERE user_id = ? AND content_type = 'user_context'").run(req.user.id);
+      return res.json({ ok: true });
+    } catch (err) {
+      return res.status(500).json({ ok: false, error: err?.message });
+    }
+  });
+
+  return router;
+}

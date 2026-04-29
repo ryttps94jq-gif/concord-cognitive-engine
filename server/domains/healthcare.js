@@ -1,7 +1,15 @@
 // server/domains/healthcare.js
 // Domain actions for healthcare: drug interaction checks, protocol matching, patient summaries.
 
+import { callVision, callVisionUrl, visionPromptForDomain } from "../lib/vision-inference.js";
+
 export default function registerHealthcareActions(registerLensAction) {
+  registerLensAction("healthcare", "vision", async (ctx, artifact, _params) => {
+    const { imageB64, imageUrl } = artifact.data || {};
+    if (!imageB64 && !imageUrl) return { ok: false, error: "imageB64 or imageUrl required" };
+    const prompt = visionPromptForDomain("healthcare");
+    return imageUrl ? callVisionUrl(imageUrl, prompt) : callVision(imageB64, prompt);
+  });
   /**
    * checkInteractions
    * Cross-reference the patient's current prescriptions for known drug-drug

@@ -310,9 +310,9 @@ export async function executeCompute(key, inputData, opts = {}) {
     const result = timeoutMs > 0
       ? await Promise.race([
         invocation,
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error(`compute timeout after ${timeoutMs}ms`)), timeoutMs)
-        ),
+        new Promise((_, reject) => {
+          setTimeout(() => reject(new Error(`compute timeout after ${timeoutMs}ms`)), timeoutMs);
+        }),
       ])
       : await invocation;
 
