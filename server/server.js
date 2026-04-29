@@ -99,6 +99,7 @@ const infrastructureConfig = _require("./config/infrastructure.cjs");
 // ---- Route modules (ESM) ----
 import registerSystemRoutes from "./routes/system.js";
 import createAuthRouter from "./routes/auth.js";
+import createPersonalLockerRouter from "./routes/personal-locker.js";
 import registerChatRoutes from "./routes/chat.js";
 import registerDomainRoutes from "./routes/domain.js";
 import registerDtuRoutes from "./routes/dtus.js";
@@ -4447,6 +4448,14 @@ class SqliteRefreshFamilies {
 }
 
 const _REFRESH_FAMILIES = new SqliteRefreshFamilies(db);
+
+// Personal locker keys: userId → Buffer(32 bytes).
+// Populated at login (derived from plaintext password + locker_salt), cleared at logout.
+// Never written to disk — key only lives in memory during an active session.
+const _LOCKER_KEYS = new Map();
+function setLockerKey(userId, keyBuf) { _LOCKER_KEYS.set(userId, keyBuf); }
+function clearLockerKey(userId) { _LOCKER_KEYS.delete(userId); }
+function getLockerKey(userId) { return _LOCKER_KEYS.get(userId) || null; }
 
 // Cleanup expired refresh families every 6 hours
 setInterval(() => {
@@ -18715,6 +18724,8 @@ let localReply = formatCrispResponse({
       prompt,
       lens: mode,
       userId: ctx?.actor?.userId,
+      lockerKey: getLockerKey(ctx?.actor?.userId),
+      db,
       workingSetDtus: _enrichedFocus,
     });
 
@@ -24084,6 +24095,16 @@ app.use("/api/auth", createAuthRouter({
   // location cache and the feed picks up the new region / nation
   // without waiting for the 30s TTL.
   invalidateViewerLocation,
+  // Personal locker key lifecycle
+  setLockerKey,
+  clearLockerKey,
+}));
+
+// Personal DTU Locker
+app.use("/api/personal-locker", createPersonalLockerRouter({
+  db,
+  getLockerKey,
+  requireAuth,
 }));
 
 // ---- OAuth Endpoints (Google & Apple Sign-In) ----
@@ -44083,16 +44104,31 @@ app.post("/api/brain/conscious", asyncHandler(async (req, res) => {
 
 // Conscious brain endpoint — direct conscious chat (bypasses normal chat pipeline)
 app.post("/api/brain/conscious/chat", asyncHandler(async (req, res) => {
-  const { message, lens } = req.body || {};
+  const { message, lens, imageB64, imageUrl } = req.body || {};
   if (!message) {
     return res.status(400).json({ ok: false, error: "message is required" });
   }
-  const result = await consciousChat(message, lens);
+
+  // Vision pre-processing: if image is attached, describe it via LLaVA
+  // and prepend the description so the conscious brain reasons with full visual context.
+  let enrichedMessage = message;
+  if (imageB64 || imageUrl) {
+    try {
+      const { callVision: _cv, callVisionUrl: _cvu } = await import("./lib/vision-inference.js");
+      const visionResult = imageUrl ? await _cvu(imageUrl) : await _cv(imageB64);
+      if (visionResult.ok && visionResult.content) {
+        enrichedMessage = `[Visual context from attached image: ${visionResult.content}]\n\n${message}`;
+      }
+    } catch (_ve) { /* non-fatal — continue with text-only */ }
+  }
+
+  const result = await consciousChat(enrichedMessage, lens, { userId: req.user?.id });
   res.json({
     ok: result.ok, reply: result.content || null, error: result.error || null,
     source: result.source, model: result.model,
     sources: result.sources || undefined,
     webAugmented: result.webAugmented || false,
+    visionEnriched: enrichedMessage !== message,
   });
 }));
 

@@ -1,7 +1,15 @@
 // server/domains/food.js
 // Domain actions for food service: recipe scaling, plate costing, spoilage, pour cost.
 
+import { callVision, callVisionUrl, visionPromptForDomain } from "../lib/vision-inference.js";
+
 export default function registerFoodActions(registerLensAction) {
+  registerLensAction("food", "vision", async (ctx, artifact, _params) => {
+    const { imageB64, imageUrl } = artifact.data || {};
+    if (!imageB64 && !imageUrl) return { ok: false, error: "imageB64 or imageUrl required" };
+    const prompt = visionPromptForDomain("food");
+    return imageUrl ? callVisionUrl(imageUrl, prompt) : callVision(imageB64, prompt);
+  });
   /**
    * scaleRecipe
    * Recalculate ingredients for a different yield.

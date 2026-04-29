@@ -1,5 +1,5 @@
 // lib/brain-config.js
-// Four-Brain Cognitive Architecture — Configuration
+// Five-Brain Cognitive Architecture — Configuration
 //
 // Each brain has a dedicated Ollama instance, model, temperature profile,
 // timeout, priority, and concurrency limit. The repair brain always runs
@@ -50,6 +50,17 @@ export const BRAIN_CONFIG = Object.freeze({
     contextWindow: 4096,
     maxTokens: 500,    // GPU: 1.5B can actually articulate error analysis now
   },
+  multimodal: {
+    url: process.env.BRAIN_MULTIMODAL_URL || process.env.OLLAMA_URL || process.env.OLLAMA_HOST || "http://ollama-multimodal:11434",
+    model: process.env.OLLAMA_VISION_MODEL || "llava",
+    role: "vision analysis, image understanding, document layout, visual reasoning",
+    temperature: 0.1,
+    timeout: 60000,
+    priority: 2,
+    maxConcurrent: 2,
+    contextWindow: 4096,
+    maxTokens: 1000,
+  },
 });
 
 /**
@@ -81,6 +92,12 @@ export const SYSTEM_TO_BRAIN = Object.freeze({
   repair_cortex: "repair",
   repair_diagnosis: "repair",
   chat_consistency: "repair",
+
+  // Multimodal brain — vision, image analysis, visual reasoning
+  "multimodal.vision_analyze": "multimodal",
+  "multimodal.vision_describe": "multimodal",
+  personal_locker_vision: "multimodal",
+  lens_vision: "multimodal",
 });
 
 /**

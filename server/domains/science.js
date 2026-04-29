@@ -1,4 +1,12 @@
+import { callVision, callVisionUrl, visionPromptForDomain } from "../lib/vision-inference.js";
+
 export default function registerScienceActions(registerLensAction) {
+  registerLensAction("science", "vision", async (ctx, artifact, _params) => {
+    const { imageB64, imageUrl } = artifact.data || {};
+    if (!imageB64 && !imageUrl) return { ok: false, error: "imageB64 or imageUrl required" };
+    const prompt = visionPromptForDomain("science");
+    return imageUrl ? callVisionUrl(imageUrl, prompt) : callVision(imageB64, prompt);
+  });
   registerLensAction("science", "chainOfCustody", (ctx, artifact, _params) => {
     const custodyLog = artifact.data?.chainOfCustody || [];
     let intact = true;

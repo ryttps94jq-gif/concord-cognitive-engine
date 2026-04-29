@@ -1,5 +1,13 @@
 // server/domains/whiteboard.js
+import { callVision, callVisionUrl, visionPromptForDomain } from "../lib/vision-inference.js";
+
 export default function registerWhiteboardActions(registerLensAction) {
+  registerLensAction("whiteboard", "vision", async (ctx, artifact, _params) => {
+    const { imageB64, imageUrl } = artifact.data || {};
+    if (!imageB64 && !imageUrl) return { ok: false, error: "imageB64 or imageUrl required" };
+    const prompt = visionPromptForDomain("whiteboard");
+    return imageUrl ? callVisionUrl(imageUrl, prompt) : callVision(imageB64, prompt);
+  });
   registerLensAction("whiteboard", "shapeDetect", (ctx, artifact, _params) => {
     const elements = artifact.data?.elements || [];
     if (elements.length === 0) return { ok: true, result: { message: "Add whiteboard elements to analyze shapes." } };

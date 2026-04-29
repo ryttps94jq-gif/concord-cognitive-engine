@@ -21,6 +21,7 @@
 
 import { getSummaryText } from "./conversation-summarizer.js";
 import { filterByEmergentConsent } from "./consent.js";
+import { decryptBlob } from "./personal-locker/crypto.js";
 
 // ── Hardware Detection ───────────────────────────────────────────────────────
 
@@ -261,6 +262,53 @@ export function consolidateMegaHypers(workingSet, STATE) {
  * @param {Array} [opts.workingSetDtus] - DTUs already in working set
  * @returns {{ ok, sources, entityState, conversationSummary, consolidatedWorkingSet, hardwareTier }}
  */
+/**
+ * Fetch and decrypt the user's personal DTUs most relevant to the query.
+ * Returns [] if locker is locked or user has no personal DTUs.
+ * @param {string} userId
+ * @param {Buffer|null} lockerKey
+ * @param {string} queryText
+ * @param {object} db - better-sqlite3 instance
+ * @returns {object[]} Up to 5 decrypted personal DTU summaries
+ */
+export function fetchPersonalSubstrate(userId, lockerKey, queryText, db) {
+  if (!userId || !lockerKey || !db) return [];
+  try {
+    const rows = db.prepare("SELECT * FROM personal_dtus WHERE user_id = ? ORDER BY created_at DESC LIMIT 50").all(userId);
+    if (!rows.length) return [];
+
+    const queryLower = (queryText || "").toLowerCase();
+    const queryWords = new Set(queryLower.match(/\b[a-z]{3,}\b/g) || []);
+
+    const scored = rows.map((row) => {
+      try {
+        const plain = decryptBlob({ iv: row.iv, ciphertext: row.encrypted_content, authTag: row.auth_tag }, lockerKey);
+        const payload = JSON.parse(plain.toString("utf-8"));
+        const text = `${payload.title || ""} ${payload.analysis?.summary || ""} ${payload.analysis?.extractedText || ""}`.toLowerCase();
+        const textWords = new Set(text.match(/\b[a-z]{3,}\b/g) || []);
+        let overlap = 0;
+        for (const w of queryWords) { if (textWords.has(w)) overlap++; }
+        const score = queryWords.size > 0 ? overlap / queryWords.size : 0;
+        return { score, payload, row };
+      } catch { return null; }
+    }).filter(Boolean);
+
+    return scored
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 5)
+      .map(({ payload, row }) => ({
+        id: row.id,
+        scope: "personal",
+        title: payload.title,
+        lensHint: row.lens_domain,
+        contentType: row.content_type,
+        createdAt: row.created_at,
+        summary: payload.analysis?.summary || "",
+        tags: payload.analysis?.tags || [],
+      }));
+  } catch { return []; }
+}
+
 export function runContextHarvest(STATE, opts = {}) {
   const { sessionId, prompt } = opts;
   const hardwareTier = detectHardwareTier();
@@ -285,6 +333,14 @@ export function runContextHarvest(STATE, opts = {}) {
   // Source D: MEGA/HYPER consolidation
   const { consolidated, removedCount } = consolidateMegaHypers(semanticDtus, STATE);
 
+  // Source E: Personal substrate (user's private encrypted DTUs)
+  const personalSubstrate = (opts.userId && opts.lockerKey && opts.db)
+    ? fetchPersonalSubstrate(opts.userId, opts.lockerKey, prompt || "", opts.db)
+    : [];
+
+  // Prepend personal DTUs — user's own context is highest relevance
+  const fullWorkingSet = [...personalSubstrate, ...consolidated].slice(0, maxN);
+
   return {
     ok: true,
     sources: {
@@ -292,11 +348,13 @@ export function runContextHarvest(STATE, opts = {}) {
       semanticSearch: semanticDtus.length,
       entityState: entityResult.ok ? "available" : "unavailable",
       megaHyperConsolidation: removedCount,
+      personalSubstrate: personalSubstrate.length,
     },
     conversationSummary,
     entityState,
     entityStateBlock,
-    consolidatedWorkingSet: consolidated.slice(0, maxN),
+    personalSubstrate,
+    consolidatedWorkingSet: fullWorkingSet,
     hardwareTier,
     maxWorkingSet: maxN,
     totalCandidates: semanticDtus.length,

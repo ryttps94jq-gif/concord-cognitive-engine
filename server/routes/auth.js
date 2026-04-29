@@ -6,6 +6,7 @@ import express from "express";
 import crypto from "crypto";
 import logger from '../logger.js';
 import { isEmailBanned, scanUsername as scanUsernameGuard } from "../lib/content-guard.js";
+import { deriveLockerKey, generateLockerSalt } from "../lib/personal-locker/crypto.js";
 
 // ── Auth rate limiters (defense-in-depth) ────────────────────────────────────
 // Two independent buckets:
@@ -91,6 +92,8 @@ export default function createAuthRouter({
   structuredLog,
   saveAuthData,
   invalidateViewerLocation,
+  setLockerKey,
+  clearLockerKey,
 }) {
   const router = express.Router();
 
@@ -296,6 +299,22 @@ export default function createAuthRouter({
       userAgent: req.headers["user-agent"]
     });
 
+    // Derive personal locker key from plaintext password (available only at login).
+    // Run async in background — does not block the login response.
+    if (setLockerKey && db) {
+      (async () => {
+        try {
+          let lockerSalt = user.locker_salt;
+          if (!lockerSalt) {
+            lockerSalt = generateLockerSalt();
+            db.prepare("UPDATE users SET locker_salt = ? WHERE id = ?").run(lockerSalt, user.id);
+          }
+          const key = await deriveLockerKey(password, user.id, lockerSalt);
+          setLockerKey(user.id, key);
+        } catch (_e) { /* non-fatal — locker simply stays locked */ }
+      })();
+    }
+
     res.json({
       ok: true,
       user: { id: user.id, username: user.username, email: user.email, role: user.role },
@@ -465,6 +484,9 @@ export default function createAuthRouter({
         userAgent: req.headers["user-agent"]
       });
     }
+
+    // Clear personal locker key from memory
+    if (clearLockerKey && req.user?.id) clearLockerKey(req.user.id);
 
     // Clear auth cookies
     clearAuthCookie(res);
