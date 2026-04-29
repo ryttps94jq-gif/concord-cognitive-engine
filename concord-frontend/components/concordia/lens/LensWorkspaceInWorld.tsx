@@ -20,15 +20,19 @@ interface LensWorkspaceInWorldProps {
   lensName?: string;
   playerPosition: { x: number; y: number; z: number };
   onClose?: () => void;
+  /** When set, overrides lensId — used by the GameModeOrchestrator lens cycler */
+  lensIdOverride?: string;
   /** When true renders as a canvas Html element (needs @react-three/drei Html wrapper in parent) */
   inCanvas?: boolean;
 }
 
 export function LensWorkspaceInWorld({
-  lensId,
+  lensId: lensIdProp,
+  lensIdOverride,
   lensName,
   onClose,
 }: LensWorkspaceInWorldProps) {
+  const lensId = lensIdOverride ?? lensIdProp;
   const [messages, setMessages] = useState<LensMessage[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);

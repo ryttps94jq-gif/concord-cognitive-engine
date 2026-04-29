@@ -3,6 +3,7 @@
 import React, { useState, useCallback, useRef } from 'react';
 import { api } from '@/lib/api/client';
 import { modeManager } from '@/lib/concordia/mode-manager';
+import { emitEvent } from '@/lib/realtime/event-bus';
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -174,6 +175,11 @@ export function CreationWorkshop({
       setPreview(newPreview);
       setValidation(newValidation);
       setStep('preview');
+      emitEvent('creation:preview-generated', {
+        score: newValidation.score,
+        suggestions: newValidation.suggestions,
+        derivedFrom: newValidation.derivedFrom,
+      });
     } catch (err) {
       setError(String(err));
     } finally {
@@ -201,6 +207,7 @@ export function CreationWorkshop({
       });
       const dtu = res.data?.dtu ?? res.data;
       if (dtu?.id) {
+        emitEvent('creation:placed', { dtuId: dtu.id, score: validation.score });
         onPlaced?.(dtu.id);
         modeManager.pop();
         onClose();

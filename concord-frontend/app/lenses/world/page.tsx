@@ -93,6 +93,8 @@ const NemesisAlert          = dynamic(() => import('@/components/concordia/hud/N
 const LegendaryAnnouncement = dynamic(() => import('@/components/concordia/world/LegendaryAnnouncement').then(m => ({ default: m.LegendaryAnnouncement })), { ssr: false });
 const HybridReveal          = dynamic(() => import('@/components/concordia/skills/HybridReveal').then(m => ({ default: m.HybridReveal })), { ssr: false });
 const CrisisBanner          = dynamic(() => import('@/components/concordia/world/CrisisBanner').then(m => ({ default: m.CrisisBanner })), { ssr: false });
+const GameModeHUD           = dynamic(() => import('@/components/concordia/game-modes/GameModeHUD').then(m => ({ default: m.GameModeHUD })), { ssr: false });
+const GameModePicker        = dynamic(() => import('@/components/concordia/game-modes/GameModePicker').then(m => ({ default: m.GameModePicker })), { ssr: false });
 
 import { modeManager } from '@/lib/concordia/mode-manager';
 import { MODE_TO_HUD } from '@/lib/concordia/modes';
@@ -119,7 +121,7 @@ import {
   Wrench, Package, Code2, Terminal, Diff, BookOpen, BoxSelect,
   FileCode, GitBranch, Activity, Gauge, ShoppingCart,
   Award, Stamp, FlaskConical, History, Clapperboard, ChevronRight,
-  Swords, Cpu,
+  Swords, Cpu, Gamepad2,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '@/lib/api/client';
@@ -638,7 +640,7 @@ export default function WorldLensPage() {
 
   // 3D Explore mode state
   const [cameraMode, setCameraMode] = useState<'isometric' | 'follow' | 'free' | 'interior' | 'cinematic'>('follow');
-  const [showPanel, setShowPanel] = useState<'none' | 'inventory' | 'quests' | 'chat' | 'map' | 'crafting' | 'players' | 'profile' | 'collaboration' | 'livecollab' | 'events' | 'socialproof' | 'notifications' | 'smartnotify' | 'moderation' | 'ownership' | 'federation' | 'voice' | 'voiceassist' | 'combat' | 'skills'>('none');
+  const [showPanel, setShowPanel] = useState<'none' | 'inventory' | 'quests' | 'chat' | 'map' | 'crafting' | 'players' | 'profile' | 'collaboration' | 'livecollab' | 'events' | 'socialproof' | 'notifications' | 'smartnotify' | 'moderation' | 'ownership' | 'federation' | 'voice' | 'voiceassist' | 'combat' | 'skills' | 'modes'>('none');
   // Local player avatar — mutable so moves update it in place. On
   // first mount we ask the server for saved state (via player:load)
   // and land back wherever the user logged off.
@@ -1563,6 +1565,7 @@ export default function WorldLensPage() {
               { key: 'voiceassist', label: 'Assist', icon: AudioLines },
               { key: 'combat', label: 'Combat', icon: Swords },
               { key: 'skills', label: 'Skills', icon: Cpu },
+              { key: 'modes', label: 'Modes', icon: Gamepad2 },
             ] as const).map(({ key, label, icon: Icon }) => (
               <button
                 key={key}
@@ -1734,6 +1737,8 @@ export default function WorldLensPage() {
           <LegendaryAnnouncement />
           <HybridReveal />
           <CrisisBanner />
+          <GameModeHUD />
+          <GameModePicker open={showPanel === 'modes'} onClose={() => setShowPanel('none')} />
           {/* Combat HUD — renders its own fixed-position overlays
               (health bar, target panel, floating damage numbers,
               combat log, death overlay). Surfaces whenever the

@@ -19,6 +19,8 @@ export interface CombatSkill {
   targetType: 'single' | 'aoe' | 'self';
   animationClip: string;
   derivedFrom: string[];    // lineage DTU ids
+  /** Control scheme ID — overrides inference when set (e.g. 'karate', 'firearm_pistol') */
+  controlScheme?: string;
   // runtime state
   lastUsedAt: number;
 }
@@ -48,7 +50,7 @@ export async function createCombatSkill(
   try {
     // Validate technique via subconscious brain
     const validationRes = await api.post('/api/chat', {
-      message: `Validate this combat technique for use in Concordia. Return JSON with fields: passed (bool), reason (string), computedCooldownMs (number), computedStaminaCost (number), computedApCost (number), computedDamageMin (number), computedDamageMax (number), derivedFrom (string[]), animationClip (string). Technique: ${spec.description}`,
+      message: `Validate this combat technique for use in Concordia. Return JSON with fields: passed (bool), reason (string), computedCooldownMs (number), computedStaminaCost (number), computedApCost (number), computedDamageMin (number), computedDamageMax (number), derivedFrom (string[]), animationClip (string), controlSchemeId (one of: bare_hands, boxer, karate, firearm_pistol, firearm_rifle, blade, magic_channel, stealth — pick the most fitting). Technique: ${spec.description}`,
       lensContext: { lens: 'game', intent: 'combat-skill-validation' },
       brainOverride: 'subconscious',
     });
@@ -64,6 +66,7 @@ export async function createCombatSkill(
       computedDamageMax: number;
       derivedFrom: string[];
       animationClip: string;
+      controlSchemeId?: string;
     };
 
     try {
@@ -90,6 +93,7 @@ export async function createCombatSkill(
         damageRange: [validation.computedDamageMin, validation.computedDamageMax],
         animationClip: validation.animationClip ?? 'attack',
         derivedFrom: validation.derivedFrom ?? [],
+        controlScheme: validation.controlSchemeId,
       },
     });
 
@@ -108,6 +112,7 @@ export async function createCombatSkill(
       targetType: 'single',
       animationClip: validation.animationClip ?? 'attack',
       derivedFrom: validation.derivedFrom ?? [],
+      controlScheme: validation.controlSchemeId,
       lastUsedAt: 0,
     };
 
@@ -148,6 +153,7 @@ export async function loadHotbarFromSubstrate(
           targetType: 'single',
           animationClip: (m.animationClip as string) ?? 'attack',
           derivedFrom: (m.derivedFrom as string[]) ?? [],
+          controlScheme: (m.controlScheme as string | undefined),
           lastUsedAt: 0,
         };
       });

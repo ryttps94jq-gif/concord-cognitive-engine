@@ -456,6 +456,59 @@ export default function createWorldsRouter({ requireAuth, db }) {
   });
 
   // GET /api/substrate/patterns — substrate pattern feed
+  // ── Expedition routes ─────────────────────────────────────────────────────
+
+  // POST /api/worlds/expedition/progress — record world visited
+  router.post("/expedition/progress", requireAuth, (req, res) => {
+    const { worldId } = req.body ?? {};
+    if (!worldId) return res.status(400).json({ error: "worldId required" });
+    try {
+      db.prepare(
+        `INSERT OR IGNORE INTO expedition_progress (player_id, world_id, visited_at)
+         VALUES (?, ?, ?)`
+      ).run(req.user.id, worldId, Date.now());
+      const visited = db.prepare(
+        "SELECT world_id FROM expedition_progress WHERE player_id = ?"
+      ).all(req.user.id).map(r => r.world_id);
+      res.json({ visited });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // POST /api/worlds/expedition/complete — award World Walker achievement
+  router.post("/expedition/complete", requireAuth, (req, res) => {
+    try {
+      db.prepare(
+        `INSERT OR IGNORE INTO player_achievements (player_id, achievement_id, earned_at)
+         VALUES (?, 'world_walker', ?)`
+      ).run(req.user.id, Date.now());
+      res.json({ achievement: 'world_walker', awarded: true });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ── Nemesis location ──────────────────────────────────────────────────────
+
+  // GET /api/worlds/:worldId/nemesis/location — current zone of nemesis NPC
+  router.get("/:worldId/nemesis/location", requireAuth, (req, res) => {
+    try {
+      const record = db.prepare(
+        "SELECT * FROM nemesis_records WHERE player_id = ? AND world_id = ?"
+      ).get(req.user.id, req.params.worldId);
+      if (!record) return res.json({ location: null });
+
+      const npc = db.prepare(
+        "SELECT state_json FROM world_npcs WHERE id = ?"
+      ).get(record.npc_id);
+      const state = npc ? _tryParseJSON(npc.state_json, {}) : {};
+      res.json({ location: state.zone ?? null, npcId: record.npc_id, title: record.npc_title });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   router.get("/substrate/patterns", (req, res) => {
     try {
       const patterns = db.prepare(
