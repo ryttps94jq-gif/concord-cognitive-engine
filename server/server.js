@@ -4749,6 +4749,8 @@ function authMiddleware(req, res, next) {
     // Atlas & Signal Cortex
     "/api/atlas",
     "/api/atlas/signals", "/api/atlas/privacy",
+    // Competitive parity modules
+    "/api/messaging", "/api/sandbox",
     // Plugins & extensions
     "/api/plugins", "/api/macros",
     // Growth & entities
@@ -7866,7 +7868,9 @@ async function runMacro(domain, name, input, ctx) {
     reasoning: new Set(["chains", "steps", "status"]),
     reflection: new Set(["status", "list"]),
     temporal: new Set(["status", "get"]),
-    inference: new Set(["status"]),
+    inference: new Set(["status", "traces", "spans", "threads", "checkpoints", "sandboxes", "costs", "query"]),
+    messaging: new Set(["status", "bindings", "connect", "verify", "messages"]),
+    sandbox: new Set(["create", "status", "action", "list", "pause", "resume"]),
     collab: new Set(["comments", "revisions", "workspace", "edit-session", "create", "update", "delete", "join"]),
     social: new Set(["profile", "followers", "following", "discover", "cited-by", "post", "react", "share", "comment", "follow", "unfollow"]),
     economy: new Set(["status", "balance", "transactions", "withdrawals", "transfer", "tip"]),
@@ -8011,9 +8015,20 @@ async function runMacro(domain, name, input, ctx) {
     // Gate consistency: paths from Gate 1 that were missing in Gate 3
     "/api/macros", "/api/automations", "/api/webhooks-metrics",
     "/api/notion", "/api/undo", "/api/reseed", "/api/context",
+    // Competitive parity additions
+    "/api/messaging", "/api/sandbox",
   ];
   // Safe POST paths: chat and brain endpoints that must bypass Chicken2 for unauthenticated users
-  const _safePostPaths = ["/api/chat", "/api/brain/conscious", "/api/repair", "/api/creative/registry", "/api/lens", "/api/forge", "/api/ask", "/api/dtus", "/api/social", "/api/economy", "/api/marketplace", "/api/collab", "/api/goals", "/api/media"];
+  const _safePostPaths = ["/api/chat", "/api/brain/conscious", "/api/repair", "/api/creative/registry", "/api/lens", "/api/forge", "/api/ask", "/api/dtus", "/api/social", "/api/economy", "/api/marketplace", "/api/collab", "/api/goals", "/api/media",
+    // Messaging webhooks (have own signature verification)
+    "/api/messaging/whatsapp/webhook", "/api/messaging/telegram/webhook",
+    "/api/messaging/discord/interactions", "/api/messaging/signal/webhook",
+    "/api/messaging/slack/events", "/api/messaging/imessage/webhook",
+    // Inference debug queries
+    "/api/inference/spans/query",
+    // Voice session turns
+    "/api/voice/session/turn", "/api/voice/session/create", "/api/voice/session/barge-in",
+  ];
   const safeReadBypass =
     _domainNameAllowed ||
     (_method === "GET" && _safeReadPaths.some(p => _path.startsWith(p))) ||
@@ -25950,6 +25965,26 @@ app.use("/api/lens-features", createLensFeatureRouter(db, LENS_FEATURES));
 // ===== WORLD ENGINE (districts, jobs, businesses, events, progression) =====
 import createWorldRoutes from "./routes/world.js";
 app.use("/api/world", createWorldRoutes({ requireAuth, db }));
+
+// ── Competitive Parity: External Messaging ──────────────────────────────────
+import { createMessagingRouter } from "./routes/messaging.js";
+import { infer as inferFn } from "./lib/inference/index.js";
+app.use("/api/messaging", createMessagingRouter({ db, infer: inferFn, contentGuard: null }));
+
+// ── Competitive Parity: Inference Debug / Traces / Threads / Cost ───────────
+import { createInferenceDebugRouter } from "./routes/inference-debug.js";
+app.use("/api/inference", createInferenceDebugRouter({ db }));
+
+// ── Competitive Parity: Voice Agent Sessions ────────────────────────────────
+import { createVoiceAgentRouter } from "./routes/voice-agent.js";
+app.use("/api/voice/session", createVoiceAgentRouter({ runMacro, infer: inferFn, makeCtx }));
+
+// ── Competitive Parity: OTel initialisation ─────────────────────────────────
+import "./lib/inference/otel-exporter.js";
+
+// ── Competitive Parity: Span persistence to SQLite ──────────────────────────
+import { wireSpanPersistence } from "./lib/inference/thread-manager.js";
+if (db) { try { wireSpanPersistence(db); } catch {} }
 
 // ===== CONCORDIA MULTI-WORLD (worlds, transit, substrate, skill commerce) =====
 import createWorldsRouter from "./routes/worlds.js";
