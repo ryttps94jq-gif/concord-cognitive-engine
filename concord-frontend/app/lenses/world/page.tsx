@@ -87,8 +87,12 @@ const QuickMessageBar    = dynamic(() => import('@/components/concordia/social/Q
 const SpectatorControls  = dynamic(() => import('@/components/concordia/spectator/SpectatorControls').then(m => ({ default: m.SpectatorControls })), { ssr: false });
 const MobileControls     = dynamic(() => import('@/components/concordia/mobile/MobileControlsOverlay').then(m => ({ default: m.MobileControlsOverlay })), { ssr: false });
 const TutorialOverlay    = dynamic(() => import('@/components/concordia/onboarding/TutorialHint').then(m => ({ default: m.TutorialOverlay })), { ssr: false });
-const SkillsPanel        = dynamic(() => import('@/components/concordia/skills/SkillsPanel').then(m => ({ default: m.SkillsPanel })), { ssr: false });
-const XPToast            = dynamic(() => import('@/components/concordia/hud/XPToast').then(m => ({ default: m.XPToast })), { ssr: false });
+const SkillsPanel           = dynamic(() => import('@/components/concordia/skills/SkillsPanel').then(m => ({ default: m.SkillsPanel })), { ssr: false });
+const XPToast               = dynamic(() => import('@/components/concordia/hud/XPToast').then(m => ({ default: m.XPToast })), { ssr: false });
+const NemesisAlert          = dynamic(() => import('@/components/concordia/hud/NemesisAlert').then(m => ({ default: m.NemesisAlert })), { ssr: false });
+const LegendaryAnnouncement = dynamic(() => import('@/components/concordia/world/LegendaryAnnouncement').then(m => ({ default: m.LegendaryAnnouncement })), { ssr: false });
+const HybridReveal          = dynamic(() => import('@/components/concordia/skills/HybridReveal').then(m => ({ default: m.HybridReveal })), { ssr: false });
+const CrisisBanner          = dynamic(() => import('@/components/concordia/world/CrisisBanner').then(m => ({ default: m.CrisisBanner })), { ssr: false });
 
 import { modeManager } from '@/lib/concordia/mode-manager';
 import { MODE_TO_HUD } from '@/lib/concordia/modes';
@@ -1726,6 +1730,10 @@ export default function WorldLensPage() {
             </div>
           )}
           <XPToast />
+          <NemesisAlert />
+          <LegendaryAnnouncement />
+          <HybridReveal />
+          <CrisisBanner />
           {/* Combat HUD — renders its own fixed-position overlays
               (health bar, target panel, floating damage numbers,
               combat log, death overlay). Surfaces whenever the

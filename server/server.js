@@ -6288,6 +6288,45 @@ async function tryInitWebSockets(server) {
             attackerId: userId,
             targetId: data.targetId,
           });
+
+          // Death stakes: drop 20% of the killed player's gathered materials
+          const targetUserId = db.prepare("SELECT id FROM users WHERE id = ?").get(String(data.targetId || ""))?.id;
+          if (targetUserId) {
+            import("./lib/nemesis.js").then(async ({ onNPCKilledPlayer }) => {
+              // NPC nemesis check: did this NPC just get killed and is it someone's nemesis?
+            }).catch(() => {});
+
+            const materials = db.prepare(`
+              SELECT id, title FROM dtus
+              WHERE creator_id = ? AND type = 'material' LIMIT 20
+            `).all(targetUserId);
+            if (materials.length > 0) {
+              const dropCount = Math.max(1, Math.floor(materials.length * 0.2));
+              const dropped = materials.slice(0, dropCount);
+              const nodeId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2);
+              const pos = cityPresence?.getPlayerPosition?.(targetUserId) || { x: 0, y: 0, z: 0 };
+              try {
+                db.prepare(`
+                  INSERT INTO loot_nodes (id, world_id, x, y, z, contents, created_at, expires_at, killer_id)
+                  VALUES (?, 'concordia-hub', ?, ?, ?, ?, ?, ?, ?)
+                `).run(nodeId, pos.x || 0, pos.y || 0, pos.z || 0,
+                  JSON.stringify(dropped), Date.now(), Date.now() + 300_000, userId);
+                realtimeEmit("world:loot-node", { id: nodeId, x: pos.x, y: pos.y, z: pos.z, itemCount: dropped.length });
+              } catch (_) {}
+            }
+          }
+
+          // Nemesis: check if attacker killed their nemesis, or if NPC killed the attacker
+          import("./lib/nemesis.js").then(async ({ onPlayerKilledNemesis, onNPCKilledPlayer }) => {
+            const targetId = String(data.targetId || "");
+            const isNPC = !!db.prepare("SELECT id FROM world_npcs WHERE id = ?").get(targetId);
+            if (isNPC) {
+              const killed = await onPlayerKilledNemesis(db, userId, targetId, realtimeEmit);
+              if (killed) {
+                socket.emit("nemesis:defeated", { npcId: targetId });
+              }
+            }
+          }).catch(() => {});
         }
       }
     });
@@ -6306,6 +6345,7 @@ async function tryInitWebSockets(server) {
       const worldId = context.worldId || "concordia-hub";
       const ctx = { ...context, userId, worldId };
 
+      db.prepare("UPDATE dtus SET last_used_at = ? WHERE id = ?").run(Date.now(), dtuId);
       const result = await awardExperience(skill, context.meaningful ? "meaningful_application" : "practice", ctx, db);
       const updated = db.prepare("SELECT * FROM dtus WHERE id = ?").get(dtuId);
       const mastery = getMasteryMarkers(updated);
@@ -6319,6 +6359,24 @@ async function tryInitWebSockets(server) {
           message: `${skill.title} reached ${mastery.title}!`,
           type: "milestone",
         });
+
+        // Legendary / Mythic — broadcast to entire world + add chronicle entry
+        if (mastery.legendaryStatus || mastery.mythicStatus) {
+          const username = db.prepare("SELECT username FROM users WHERE id = ?").get(userId)?.username || "Unknown";
+          realtimeEmit("world:legendary-achievement", {
+            playerName: username,
+            skillTitle: skill.title,
+            masteryTitle: mastery.title,
+            worldId,
+          });
+          import("../emergent/history-engine.js").then(({ recordEvent }) => {
+            recordEvent("breakthrough", {
+              actorId: userId,
+              description: `${username} achieved ${mastery.title} in ${skill.title}.`,
+              significance: "legendary_mastery",
+            });
+          }).catch(() => {});
+        }
       }
 
       if (context.recentSkillIds?.length >= 1) {
@@ -25832,6 +25890,8 @@ import { seedWorlds } from "./lib/world-seed.js";
 import { simulators as npcSimulators, NPCSimulator } from "./lib/npc-simulator.js";
 import { selectBrain as _selectBrainForNpc } from "./lib/inference/router.js";
 import { startPatternDetection } from "./lib/substrate-diffusion.js";
+import { startAtrophyCycle } from "./lib/skill-atrophy.js";
+import { startCrisisWatch } from "./lib/world-crisis.js";
 app.use("/api/worlds", createWorldsRouter({ requireAuth, db }));
 if (db) {
   try {
@@ -25845,6 +25905,10 @@ if (db) {
     }
     // Start daily substrate pattern detection
     startPatternDetection(db, _selectBrainForNpc);
+    // Start nightly skill atrophy cycle
+    startAtrophyCycle(db);
+    // Start hourly crisis watch (auto-expires + auto-triggers knowledge_extinction)
+    startCrisisWatch(db, realtimeEmit);
   } catch (e) { console.warn("[worlds] startup failed:", e.message); }
 }
 

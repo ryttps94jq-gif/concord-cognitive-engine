@@ -328,6 +328,133 @@ export default function createWorldsRouter({ requireAuth, db }) {
     }
   });
 
+  // GET /api/worlds/skills/legendary — Legendary+ skill holders across all worlds
+  router.get("/skills/legendary", async (req, res) => {
+    try {
+      const rows = db.prepare(`
+        SELECT d.id, d.title, d.skill_level, d.creator_id, u.username, d.world_id
+        FROM dtus d LEFT JOIN users u ON u.id = d.creator_id
+        WHERE d.type = 'skill' AND d.skill_level >= 500
+        ORDER BY d.skill_level DESC LIMIT 20
+      `).all();
+      res.json({ legends: rows });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  // GET /api/worlds/crises — active civilization crises
+  router.get("/crises", async (req, res) => {
+    try {
+      const { getActiveCrises } = await import("../lib/world-crisis.js");
+      res.json({ crises: getActiveCrises(db) });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  // POST /api/worlds/crises/:id/respond — player contributes to crisis resolution
+  router.post("/crises/:id/respond", requireAuth, async (req, res) => {
+    try {
+      const { resolveCrisis } = await import("../lib/world-crisis.js");
+      // For now: any response contributes to resolution
+      const result = await resolveCrisis(db, req.params.id, {
+        resolvedBy: req.user.id,
+        outcome: req.body.outcome || "Resolved by player intervention.",
+      }, () => {});
+      res.json(result);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  // POST /api/worlds/loot/:nodeId — claim a loot node
+  router.post("/loot/:nodeId/claim", requireAuth, (req, res) => {
+    try {
+      const node = db.prepare("SELECT * FROM loot_nodes WHERE id = ?").get(req.params.nodeId);
+      if (!node) return res.status(404).json({ error: "Loot node not found or expired" });
+      if (node.claimed_by) return res.status(409).json({ error: "Already claimed" });
+      if (node.expires_at < Date.now()) return res.status(410).json({ error: "Loot node expired" });
+
+      const now = Date.now();
+      // Killer priority window: first 2 minutes
+      if (node.killer_id && node.killer_id !== req.user.id && now < node.created_at + 120_000) {
+        return res.status(403).json({ error: "Killer priority window active" });
+      }
+
+      db.prepare("UPDATE loot_nodes SET claimed_by = ?, claimed_at = ? WHERE id = ?")
+        .run(req.user.id, now, node.id);
+
+      const contents = JSON.parse(node.contents || "[]");
+      res.json({ ok: true, contents });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  // GET /api/worlds/:worldId/nemesis — get the caller's nemesis in a world
+  router.get("/:worldId/nemesis", requireAuth, (req, res) => {
+    try {
+      const record = db.prepare("SELECT * FROM nemesis_records WHERE player_id = ?").get(req.user.id);
+      res.json({ nemesis: record || null });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  // GET /api/worlds/:worldId/difficulty — player's effective resistance curve
+  router.get("/:worldId/difficulty", requireAuth, async (req, res) => {
+    try {
+      const { evaluateSkillInWorld } = await import("../lib/skill-effectiveness.js");
+      const { loadWorld } = await import("../lib/world-loader.js");
+      const world = loadWorld(db, req.params.worldId);
+      if (!world) return res.status(404).json({ error: "World not found" });
+
+      const playerSkills = db.prepare(
+        "SELECT skill_level FROM dtus WHERE creator_id = ? AND type = 'skill'"
+      ).all(req.user.id);
+      const avgLevel = playerSkills.length
+        ? playerSkills.reduce((s, r) => s + (r.skill_level || 1), 0) / playerSkills.length
+        : 1;
+
+      const populationAvg = db.prepare(`
+        SELECT AVG(d.skill_level) as avg FROM dtus d
+        INNER JOIN users u ON u.id = d.creator_id
+        WHERE d.type = 'skill' AND d.world_id = ?
+      `).get(req.params.worldId)?.avg || 1;
+
+      const scalingFactor = Math.min(2.0, avgLevel / Math.max(1, populationAvg));
+      res.json({ worldId: req.params.worldId, playerAvgLevel: avgLevel, populationAvg, scalingFactor });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  // POST /api/worlds/:worldId/prestige — reset skills for prestige badge
+  router.post("/:worldId/prestige", requireAuth, async (req, res) => {
+    try {
+      const PRESTIGE_THRESHOLD = 200;
+      const playerSkills = db.prepare(
+        "SELECT id, skill_level, title FROM dtus WHERE creator_id = ? AND type = 'skill' AND world_id = ?"
+      ).all(req.user.id, req.params.worldId);
+
+      if (playerSkills.length === 0) return res.status(400).json({ error: "No skills in this world" });
+      const avgLevel = playerSkills.reduce((s, r) => s + (r.skill_level || 1), 0) / playerSkills.length;
+      if (avgLevel < PRESTIGE_THRESHOLD) {
+        return res.status(400).json({ error: `Need average skill level ${PRESTIGE_THRESHOLD}. Current: ${avgLevel.toFixed(1)}` });
+      }
+
+      // Reset skill levels, preserve lineage for royalty cascade
+      for (const skill of playerSkills) {
+        const prestigenMeta = JSON.stringify({ prestige_from_level: skill.skill_level, world: req.params.worldId });
+        db.prepare("UPDATE dtus SET skill_level = 1, total_experience = 0, practice_count = 0 WHERE id = ?").run(skill.id);
+        db.prepare("UPDATE dtus SET meta = json_patch(COALESCE(meta, '{}'), ?) WHERE id = ?")
+          .run(prestigenMeta, skill.id);
+      }
+
+      // Chronicle entry
+      try {
+        const { recordEvent } = await import("../emergent/history-engine.js");
+        const username = db.prepare("SELECT username FROM users WHERE id = ?").get(req.user.id)?.username || "Unknown";
+        recordEvent("breakthrough", {
+          actorId: req.user.id,
+          description: `${username} has prestiged in ${req.params.worldId} after reaching avg level ${avgLevel.toFixed(1)}.`,
+          significance: "prestige",
+        });
+      } catch (_) {}
+
+      res.json({ ok: true, prestigedSkills: playerSkills.length, fromAvgLevel: avgLevel.toFixed(1) });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
   // GET /api/substrate/patterns — substrate pattern feed
   router.get("/substrate/patterns", (req, res) => {
     try {
