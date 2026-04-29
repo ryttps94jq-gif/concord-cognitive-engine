@@ -43,3 +43,25 @@ export * from './infra-tools-types';
 
 // ── Frontier Features (16 modules) ────────────────────────────────
 export * from './frontier-features-types';
+
+// ── AAA Rendering & Gameplay Systems ──────────────────────────────
+export * from './skin-sss-shader';
+export * from './pcss-shadows';
+export * from './terrain-pom';
+export * from './reflection-probes';
+export * from './ssgi';
+export * from './spatial-audio';
+// world-deformation: explicit exports to avoid name collisions with renderer-types
+export {
+  type DeformationRecord,
+  DeformationStore,
+  replayDeformations,
+  applyDeformationRecord,
+  createDeformation,
+  type WeatherState,
+  type WeatherPhysicsModifiers,
+  computeWeatherModifiers,
+  WeatherTransitionSystem,
+  type SurfaceMaterial,
+  surfaceFriction,
+} from './world-deformation';

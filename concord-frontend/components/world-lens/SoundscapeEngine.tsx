@@ -214,13 +214,20 @@ interface SoundscapeEngineProps {
   initialDistrict?: string;
   initialTime?: TimeOfDay;
   playerPosition?: ListenerPosition;
+  weatherOverride?: { type: string; intensity: number };
 }
+
+const WEATHER_TYPE_MAP: Record<string, WeatherType> = {
+  clear: 'clear', overcast: 'clear', rain: 'rain', heavy_rain: 'rain',
+  storm: 'storm', snow: 'snow', blizzard: 'snow', fog: 'clear', sandstorm: 'wind',
+};
 
 export default function SoundscapeEngine({
   children,
   initialDistrict = 'silent',
   initialTime = 'day',
   playerPosition,
+  weatherOverride,
 }: SoundscapeEngineProps) {
   const [state, setState] = useState<SoundscapeState>({
     currentDistrict: DISTRICT_ALIAS[initialDistrict.toLowerCase()] ?? 'silent',
@@ -231,6 +238,12 @@ export default function SoundscapeEngine({
     weatherIntensity: 0,
     crossfading: false,
   });
+
+  useEffect(() => {
+    if (!weatherOverride) return;
+    const mapped = WEATHER_TYPE_MAP[weatherOverride.type] ?? 'clear';
+    setState(prev => ({ ...prev, weather: mapped, weatherIntensity: weatherOverride.intensity }));
+  }, [weatherOverride?.type, weatherOverride?.intensity]);
 
   const crossfadeTimer  = useRef<ReturnType<typeof setTimeout> | null>(null);
   const audioCtxRef     = useRef<AudioContext | null>(null);

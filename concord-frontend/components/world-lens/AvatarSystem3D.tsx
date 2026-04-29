@@ -17,6 +17,34 @@ import {
   lerpStyleConfigs,
   resolveNPCStyle,
 } from '@/lib/concordia/movement-styles';
+import {
+  synthesizeGait,
+  synthesizeIdle,
+  advanceGaitPhase,
+  applyGaitPose,
+  type GaitParams,
+  type BodyType,
+} from '@/lib/concordia/gait-synthesis';
+import {
+  buildLeftLegChain,
+  buildRightLegChain,
+  solveFABRIK,
+  applyFABRIKToSkeleton,
+} from '@/lib/concordia/fabrik-ik';
+import {
+  computeCenterOfMass,
+  computeBalanceAdjustment,
+  getFootPositions,
+  applyBalanceAdjustment,
+} from '@/lib/concordia/com-balance';
+import {
+  SecondaryPhysicsManager,
+  buildHairChain,
+} from '@/lib/concordia/secondary-physics';
+import {
+  FacialController,
+  resolveNPCEmotion,
+} from '@/lib/concordia/facial-blend-shapes';
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -86,6 +114,8 @@ interface AvatarSystem3DProps {
   onMove?:        (position: { x: number; y: number; z: number }, rotation: number) => void;
   onEmote?:       (emote: AnimationClip) => void;
   onStaminaChange?: (stamina: number, max: number) => void;
+  weatherModifiers?: import('@/lib/world-lens/world-deformation').WeatherPhysicsModifiers;
+  quality?: import('@/components/world-lens/ConcordiaScene').QualityPreset;
 }
 
 // ── Constants ─────────────────────────────────────────────────────
@@ -137,6 +167,8 @@ export default function AvatarSystem3D({
   onMove,
   onEmote,
   onStaminaChange,
+  weatherModifiers,
+  quality = 'medium',
 }: AvatarSystem3DProps) {
   const avatarGroupRef  = useRef<unknown>(null);
   const playerMeshRef   = useRef<unknown>(null);
@@ -150,8 +182,19 @@ export default function AvatarSystem3D({
   const physicsRef    = useRef<CharacterPhysicsProfile>({ ...defaultProfile(), ...physicsPropOverride });
   const styleRef      = useRef<MovementStyle>(movementStyle);
   const styleBlendRef = useRef({ current: movementStyle, target: movementStyle, t: 1.0 });
+  // Tracks stride phase in [0,1) — advances by distance covered, not elapsed time.
+  // This prevents leg sliding: at any speed the feet track real ground displacement.
+  const stridePhaseRef = useRef(0);
   // Terrain elevation sampler — set when concordia:terrain-ready fires
   const elevationRef  = useRef<((x: number, z: number) => number) | null>(null);
+
+  // Secondary physics + facial controllers
+  const secondaryPhysicsRef = useRef<SecondaryPhysicsManager | null>(null);
+  const facialControllersRef = useRef<Map<string, FacialController>>(new Map());
+
+  // Keep weather modifiers ref in sync so the game loop closure sees latest value
+  const weatherModifiersRef = useRef(weatherModifiers);
+  useEffect(() => { weatherModifiersRef.current = weatherModifiers; }, [weatherModifiers]);
 
   // Keep refs in sync with props
   useEffect(() => { physicsRef.current = { ...defaultProfile(), ...physicsPropOverride }; }, [physicsPropOverride]);
@@ -549,6 +592,36 @@ export default function AvatarSystem3D({
       playerMeshRef.current = playerMesh;
       avatarGroup.add(playerMesh);
 
+      // ── Secondary physics: hair chain ──────────────────────
+      {
+        const spm = new SecondaryPhysicsManager();
+        const headBone = playerMesh.getObjectByName('head');
+        if (headBone) {
+          const headWorld = new THREE.Vector3();
+          headBone.getWorldPosition(headWorld);
+          const hairChain = buildHairChain(headWorld, 3, 0.06, ['head', 'neck']);
+          spm.addChain('playerHair', hairChain);
+        }
+        secondaryPhysicsRef.current = spm;
+      }
+
+      // ── Facial controller: player ───────────────────────────
+      {
+        const headMesh = playerMesh.getObjectByName('head') as
+          (InstanceType<typeof import('three').Mesh> & { morphTargetDictionary?: Record<string, number> }) | undefined;
+        if (headMesh?.morphTargetDictionary) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          facialControllersRef.current.set('player', new FacialController(headMesh as any));
+        }
+      }
+
+      // ── Skin SSS (quality ≥ high) ───────────────────────────
+      if (quality === 'high' || quality === 'ultra') {
+        import('@/lib/world-lens/skin-sss-shader').then(({ applySSSTOAvatar }) => {
+          applySSSTOAvatar(playerMesh as unknown as InstanceType<typeof import('three').Group>, new THREE.Color(playerAvatar.appearance.skinColor));
+        }).catch(() => { /* SSS optional */ });
+      }
+
       // Player name tag
       const playerTag = createNameTag(
         playerAvatar.name,
@@ -616,6 +689,16 @@ export default function AvatarSystem3D({
         tag.position.y = npcDims.totalHeight + 0.3;
         mesh.add(tag);
 
+        // NPC facial controller
+        {
+          const npcHead = mesh.getObjectByName('head') as
+            (InstanceType<typeof import('three').Mesh> & { morphTargetDictionary?: Record<string, number> }) | undefined;
+          if (npcHead?.morphTargetDictionary) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            facialControllersRef.current.set(npc.id, new FacialController(npcHead as any));
+          }
+        }
+
         avatarGroup.add(mesh);
         npcMeshes.set(npc.id, {
           mesh,
@@ -634,6 +717,9 @@ export default function AvatarSystem3D({
       }
       window.addEventListener('keydown', handleKeyDown);
       window.addEventListener('keyup', handleKeyUp);
+
+      // Per-NPC stride phases — keyed by NPC id, captured in closure.
+      const npcStridePhases = new Map<string, number>();
 
       // ── Update loop (called by parent scene's game loop) ───
 
@@ -657,10 +743,15 @@ export default function AvatarSystem3D({
         const isRunning = keys.has('shift');
         const physics   = physicsRef.current;
 
-        // Stamina-driven speed
-        const staminaScale = computeMoveSpeed(physics.currentStamina, physics.maxStamina);
-        const baseSpeed    = isRunning ? RUN_SPEED : MOVE_SPEED;
-        const speed        = baseSpeed * staminaScale * styleCfg.walkCycleSpeed;
+        // Stamina-driven speed (weather scales applied from physics modifiers)
+        const wMods = weatherModifiersRef.current;
+        const weatherSpeedScale = wMods?.moveSpeedScale ?? 1.0;
+        const weatherFriction   = wMods?.groundFriction  ?? 1.0;
+        const staminaScale  = computeMoveSpeed(physics.currentStamina, physics.maxStamina);
+        const baseSpeed     = isRunning ? RUN_SPEED : MOVE_SPEED;
+        const physicsSpeed  = baseSpeed * staminaScale * weatherSpeedScale; // raw m/s for gait synthesis
+        const speed         = physicsSpeed * styleCfg.walkCycleSpeed; // style-adjusted for position delta
+        const speedNorm     = Math.min(physicsSpeed / 12, 1);      // 0–1 for balance/gait tuning
 
         // Drain / recover stamina
         if (isRunning) {
@@ -687,9 +778,10 @@ export default function AvatarSystem3D({
           pos.x += moveX * speed * delta;
           pos.z += moveZ * speed * delta;
 
-          // Momentum overshoot on sharp direction change
+          // Momentum overshoot on sharp direction change (ice/wet = more slide)
           if (!isRunning) {
-            const overshoot = computeMomentumOvershoot(physics.mass, speed);
+            const frictionScale = 1 / Math.max(0.1, weatherFriction);
+            const overshoot = computeMomentumOvershoot(physics.mass, speed) * frictionScale;
             if (overshoot > 0.01) {
               // Nudge position slightly in previous direction — subtle slide
               pos.x += Math.cos(playerRotationRef.current) * overshoot * 0.05;
@@ -714,45 +806,80 @@ export default function AvatarSystem3D({
             pm.position.set(pos.x, pos.y, pos.z);
             pm.rotation.y = playerRotationRef.current;
 
-            // ── Movement style bone animation ──────────────
-            // Hip sway
-            const hips = pm.getObjectByName('hips');
-            if (hips) {
-              hips.rotation.z = Math.sin(elapsed * styleCfg.walkCycleSpeed * 4) * styleCfg.hipSwayAmplitude;
-            }
-            // Arm swing (opposite phase to legs)
-            const lArm = pm.getObjectByName('leftUpperArm');
-            const rArm = pm.getObjectByName('rightUpperArm');
-            if (lArm && rArm) {
-              const phase = elapsed * styleCfg.walkCycleSpeed * 4;
-              lArm.rotation.x =  Math.sin(phase) * styleCfg.armSwingAmplitude;
-              rArm.rotation.x = -Math.sin(phase) * styleCfg.armSwingAmplitude;
-            }
-            // Head bob
-            const head = pm.getObjectByName('head');
-            if (head) {
-              head.position.y = Math.abs(Math.sin(elapsed * styleCfg.headBobFrequency * 4)) * 0.015;
-            }
-            // Combat lean
-            const spine = pm.getObjectByName('spine');
-            if (spine) spine.rotation.x = styleCfg.combatStanceOffset;
+            // ── Procedural gait synthesis ──────────────────
+            // Measure terrain slope ahead for uphill/downhill lean
+            const slopeAhead = elevationRef.current
+              ? (elevationRef.current(
+                  pos.x + Math.sin(playerRotationRef.current) * 0.5,
+                  pos.z - Math.cos(playerRotationRef.current) * 0.5,
+                ) - elevationRef.current(
+                  pos.x - Math.sin(playerRotationRef.current) * 0.5,
+                  pos.z + Math.cos(playerRotationRef.current) * 0.5,
+                )) / 1.0
+              : 0;
 
-            // ── Foot IK ────────────────────────────────────
+            stridePhaseRef.current = advanceGaitPhase(
+              stridePhaseRef.current,
+              physicsSpeed,
+              playerAvatar.appearance.bodyType as BodyType,
+              delta,
+            );
+
+            const gaitParams: GaitParams = {
+              speed:     physicsSpeed,
+              direction: 0,
+              slope:     Math.atan(slopeAhead),
+              load:      physics.mass > 70 ? (physics.mass - 70) * 0.1 : 0,
+              fatigue:   physics.currentStamina / physics.maxStamina,
+              bodyType:  playerAvatar.appearance.bodyType as BodyType,
+              style:     styleCfg,
+            };
+
+            const gaitPose = synthesizeGait(gaitParams, stridePhaseRef.current);
+            applyGaitPose(gaitPose, (name) => pm.getObjectByName(name) ?? undefined);
+
+            // ── FABRIK foot IK — plant feet on actual terrain ──
             if (elevationRef.current) {
-              const leftFoot  = pm.getObjectByName('leftFoot');
-              const rightFoot = pm.getObjectByName('rightFoot');
-              if (leftFoot && rightFoot) {
-                const wL = leftFoot.getWorldPosition(new THREE.Vector3());
-                const wR = rightFoot.getWorldPosition(new THREE.Vector3());
-                const hL = elevationRef.current(wL.x, wL.z);
-                const hR = elevationRef.current(wR.x, wR.z);
-                // Adjust foot local Y relative to terrain delta
-                const baseY = elevation;
-                leftFoot.position.y  += (hL - baseY) * 0.5;
-                rightFoot.position.y += (hR - baseY) * 0.5;
-                // Hip roll toward higher foot
-                const hipRoll = (hL - hR) / 2 * 0.1;
-                if (hips) hips.rotation.z += hipRoll;
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const boneMap = pm.userData.boneMap as Map<string, any> | undefined;
+              if (boneMap) {
+                const dims       = BODY_DIMENSIONS[playerAvatar.appearance.bodyType];
+                const leftChain  = buildLeftLegChain(boneMap, dims);
+                const rightChain = buildRightLegChain(boneMap, dims);
+
+                const leftFootBone  = boneMap.get('leftFoot');
+                const rightFootBone = boneMap.get('rightFoot');
+
+                if (leftFootBone && rightFootBone) {
+                  const wL = new THREE.Vector3();
+                  const wR = new THREE.Vector3();
+                  leftFootBone.getWorldPosition(wL);
+                  rightFootBone.getWorldPosition(wR);
+
+                  const targetL = new THREE.Vector3(wL.x, elevationRef.current(wL.x, wL.z), wL.z);
+                  const targetR = new THREE.Vector3(wR.x, elevationRef.current(wR.x, wR.z), wR.z);
+
+                  const resultL = solveFABRIK(leftChain,  targetL);
+                  const resultR = solveFABRIK(rightChain, targetR);
+                  applyFABRIKToSkeleton(leftChain,  resultL, boneMap);
+                  applyFABRIKToSkeleton(rightChain, resultR, boneMap);
+                }
+              }
+            }
+
+            // ── Center-of-mass balance correction ──────────────
+            {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const boneMap = pm.userData.boneMap as Map<string, any> | undefined;
+              if (boneMap) {
+                const com  = computeCenterOfMass(boneMap);
+                const feet = getFootPositions(boneMap);
+                if (feet) {
+                  const balance = computeBalanceAdjustment(
+                    com, feet.footL, feet.footR, isMoving, speedNorm,
+                  );
+                  applyBalanceAdjustment(balance, (name) => pm.getObjectByName(name) ?? undefined);
+                }
               }
             }
           }
@@ -762,36 +889,102 @@ export default function AvatarSystem3D({
 
           onMove?.(pos, playerRotationRef.current);
         } else {
-          // Idle breathing
+          // Idle — synthesize breathing + postural sway
           const pm = playerMeshRef.current as InstanceType<typeof import('three').Group>;
           if (pm) {
+            const idlePose = synthesizeIdle(elapsed, styleCfg, physics.currentStamina / physics.maxStamina);
+            applyGaitPose(idlePose, (name) => pm.getObjectByName(name) ?? undefined);
+            // Subtle chest scale breath (complements hipOffset from synthesizeIdle)
             const chest = pm.getObjectByName('chest');
-            if (chest) {
-              chest.scale.y = 1 + Math.sin(elapsed * 0.8) * 0.01 * styleCfg.idleBreathScale;
-            }
+            if (chest) chest.scale.y = 1 + Math.sin(elapsed * 0.8) * 0.004 * styleCfg.idleBreathScale;
           }
           if (activeAnimation !== 'idle' && !['sit', 'build', 'inspect', 'craft'].includes(activeAnimation)) {
             setActiveAnimation('idle');
           }
         }
 
-        // ── NPC movement style application ────────────────────
+        // ── Secondary physics: hair chain (runs AFTER FABRIK IK) ──
+        {
+          const spm = secondaryPhysicsRef.current;
+          const pm = playerMeshRef.current as InstanceType<typeof import('three').Group> | null;
+          if (spm && pm) {
+            const rootPositions = new Map<string, InstanceType<typeof import('three').Vector3>>();
+            const headBone = pm.getObjectByName('head');
+            if (headBone) {
+              const wp = new THREE.Vector3();
+              (headBone as InstanceType<typeof import('three').Object3D>).getWorldPosition(wp);
+              rootPositions.set('playerHair', wp);
+            }
+            const wm = weatherModifiersRef.current;
+            if (wm) {
+              // Derive wind intensity from lateralDamping reduction (lower damping = more wind)
+              const windX = Math.max(0, (12 - wm.lateralDamping) / 12) * 3;
+              spm.setWind(new THREE.Vector3(windX, 0, 0));
+            }
+            spm.update(rootPositions, delta, (name) => {
+              const obj = pm.getObjectByName(name);
+              return obj ?? undefined;
+            });
+          }
+        }
+
+        // ── Facial blend shapes ─────────────────────────────────
+        {
+          const pm = playerMeshRef.current as InstanceType<typeof import('three').Group> | null;
+          if (pm) {
+            const fcs = facialControllersRef.current;
+            const playerFC = fcs.get('player');
+            if (playerFC) {
+              const fatigue = physics.currentStamina / physics.maxStamina;
+              if (exhausted) playerFC.setEmotion('exhausted', 1.5);
+              else if (isMoving && isRunning) playerFC.setEmotion('determined', 2.0);
+              else if (!isMoving) playerFC.setEmotion('neutral', 2.0);
+              playerFC.update(delta, fatigue);
+            }
+            for (const [npcId] of npcMeshes) {
+              const fc = fcs.get(npcId);
+              if (!fc) continue;
+              const emotion = resolveNPCEmotion({
+                health: 1, stamina: 1, threatLevel: 0,
+                isInCombat: false, recentDamage: 0, relationship: 0,
+              });
+              fc.setEmotion(emotion);
+              fc.update(delta, 1);
+            }
+          }
+        }
+
+        // ── NPC gait synthesis (per-NPC stride phase, style-driven) ──
         for (const [npcId, data] of npcMeshes) {
           const npcData = npcs.find(n => n.id === npcId);
           if (!npcData) continue;
-          const npcStyle = resolveNPCStyle(npcData.occupation, 'idle');
-          const npcCfg   = MOVEMENT_STYLE_CONFIGS[npcStyle] ?? MOVEMENT_STYLE_CONFIGS.merchant;
-          const isNpcMoving = data.mesh.position.distanceTo(data.targetPos) > 0.05;
-          if (isNpcMoving) {
-            const npcHips = data.mesh.getObjectByName?.('hips');
-            if (npcHips) npcHips.rotation.z = Math.sin(elapsed * npcCfg.walkCycleSpeed * 4) * npcCfg.hipSwayAmplitude;
-            const npcLArm = data.mesh.getObjectByName?.('leftUpperArm');
-            const npcRArm = data.mesh.getObjectByName?.('rightUpperArm');
-            if (npcLArm && npcRArm) {
-              const p = elapsed * npcCfg.walkCycleSpeed * 4;
-              npcLArm.rotation.x  =  Math.sin(p) * npcCfg.armSwingAmplitude;
-              npcRArm.rotation.x  = -Math.sin(p) * npcCfg.armSwingAmplitude;
-            }
+          const npcStyle   = resolveNPCStyle(npcData.occupation, 'idle');
+          const npcCfg     = MOVEMENT_STYLE_CONFIGS[npcStyle] ?? MOVEMENT_STYLE_CONFIGS.merchant;
+          const npcSpeed   = data.mesh.position.distanceTo(data.targetPos) > 0.05
+            ? MOVE_SPEED * npcCfg.walkCycleSpeed
+            : 0;
+
+          const prevPhase = npcStridePhases.get(npcId) ?? 0;
+          const newPhase  = advanceGaitPhase(
+            prevPhase, npcSpeed, npcData.appearance.bodyType as BodyType, delta,
+          );
+          npcStridePhases.set(npcId, newPhase);
+
+          const getMesh = (name: string) => data.mesh.getObjectByName?.(name) ?? undefined;
+
+          if (npcSpeed > 0) {
+            const npcParams: GaitParams = {
+              speed:     npcSpeed,
+              direction: 0,
+              slope:     0,
+              load:      0,
+              fatigue:   1,
+              bodyType:  npcData.appearance.bodyType as BodyType,
+              style:     npcCfg,
+            };
+            applyGaitPose(synthesizeGait(npcParams, newPhase), getMesh);
+          } else {
+            applyGaitPose(synthesizeIdle(elapsed, npcCfg, 1), getMesh);
           }
         }
 

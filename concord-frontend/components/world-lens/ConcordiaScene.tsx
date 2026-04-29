@@ -54,6 +54,8 @@ interface ConcordiaSceneProps {
   questObjectives?: import('@/components/world-lens/QuestMarker3D').QuestObjective[];
   onBuildingClick?: (buildingId: string, intersection: unknown) => void;
   onTerrainClick?: (position: { x: number; y: number; z: number }) => void;
+  onWeatherModifiers?: (modifiers: import('@/lib/world-lens/world-deformation').WeatherPhysicsModifiers) => void;
+  onSceneReady?: (lookup: (entityId: string) => { visible: boolean; userData: Record<string, unknown> } | undefined) => void;
   width?: number | string;
   height?: number | string;
 }
@@ -136,6 +138,8 @@ export default function ConcordiaScene({
   questObjectives = [],
   onBuildingClick,
   onTerrainClick,
+  onWeatherModifiers,
+  onSceneReady,
   width = '100%',
   height = '100%',
 }: ConcordiaSceneProps) {
@@ -150,6 +154,13 @@ export default function ConcordiaScene({
   const clockRef = useRef<unknown>(null);
   const raycasterRef = useRef<unknown>(null);
   const buildingMapRef = useRef<Map<string, unknown>>(new Map());
+  const weatherSysRef = useRef<import('@/lib/world-lens/world-deformation').WeatherTransitionSystem | null>(null);
+  const ssgiPassRef = useRef<{ dispose: () => void; setSize: (w: number, h: number) => void; render: (t: null) => void } | null>(null);
+  const probeManagerRef = useRef<import('@/lib/world-lens/reflection-probes').ReflectionProbeManager | null>(null);
+  const onWeatherModifiersRef = useRef(onWeatherModifiers);
+  const onSceneReadyRef = useRef(onSceneReady);
+  useEffect(() => { onWeatherModifiersRef.current = onWeatherModifiers; }, [onWeatherModifiers]);
+  useEffect(() => { onSceneReadyRef.current = onSceneReady; }, [onSceneReady]);
 
   const [quality, setQuality] = useState<QualityPreset>(initialQuality);
   const [showFps, setShowFps] = useState(false);
@@ -347,10 +358,57 @@ export default function ConcordiaScene({
         scene.add(lamp);
       }
 
+      // ── PCSS soft shadows (quality ≥ medium) ────────────────────
+      if (quality !== 'low') {
+        try {
+          const { upgradeShadowMap, configurePCSSLight, applyPCSSToScene } =
+            await import('@/lib/world-lens/pcss-shadows');
+          upgradeShadowMap(renderer);
+          configurePCSSLight(sun, settings.shadowMapSize, 200);
+          if (!disposed) applyPCSSToScene(scene);
+        } catch { /* PCSS optional — silently skip if shader compile fails */ }
+      }
+
+      // ── Reflection probes (quality ≥ high) ─────────────────────
+      if (quality === 'high' || quality === 'ultra') {
+        try {
+          const { ReflectionProbeManager, placeCityProbes } =
+            await import('@/lib/world-lens/reflection-probes');
+          const pm = new ReflectionProbeManager(renderer, scene);
+          placeCityProbes(pm, new THREE.Vector3(0, 0, 0), 400, 3, 8);
+          probeManagerRef.current = pm;
+        } catch { /* probes optional */ }
+      }
+
+      // ── SSGI (quality = ultra) ──────────────────────────────────
+      if (quality === 'ultra') {
+        try {
+          const { SSGIPass } = await import('@/lib/world-lens/ssgi');
+          ssgiPassRef.current = new SSGIPass(
+            renderer, scene, camera,
+            canvas!.clientWidth, canvas!.clientHeight,
+            { intensity: 0.4, numSamples: 8, temporalBlend: 0.1 },
+          );
+        } catch { /* SSGI optional */ }
+      }
+
+      // ── WeatherTransitionSystem ─────────────────────────────────
+      const { WeatherTransitionSystem } = await import('@/lib/world-lens/world-deformation');
+      const weatherSys = new WeatherTransitionSystem({
+        type: 'clear', intensity: 0, windSpeed: 0, windDir: 0, temperature: 20, visibility: 500,
+      });
+      weatherSysRef.current = weatherSys;
+
       // Notify QuestMarker3D and other overlays that scene + camera are ready
       window.dispatchEvent(new CustomEvent('concordia:scene-ready', {
         detail: { scene, camera },
       }));
+
+      // Expose building lookup for deformation replay
+      onSceneReadyRef.current?.((entityId: string) => {
+        const obj = buildingMapRef.current.get(entityId);
+        return obj as { visible: boolean; userData: Record<string, unknown> } | undefined;
+      });
 
       setIsReady(true);
 
@@ -364,6 +422,16 @@ export default function ConcordiaScene({
         // Step physics simulation
         physicsRef.current?.step(delta);
 
+        // Update weather transition + emit modifiers
+        weatherSys.update(delta);
+        onWeatherModifiersRef.current?.(weatherSys.getModifiers());
+
+        // Update reflection probes (round-robin LOD)
+        if (probeManagerRef.current) {
+          probeManagerRef.current.updateLOD(camera.position);
+          probeManagerRef.current.update(renderer, []);
+        }
+
         // Update avatars / NPCs / weather / particles per layer
         for (const name of LAYER_NAMES) {
           const group = layers[name];
@@ -372,8 +440,10 @@ export default function ConcordiaScene({
           }
         }
 
-        // Render (use EffectComposer when available, plain renderer otherwise)
-        if (composerRef.current) {
+        // Render: SSGI > EffectComposer > plain renderer
+        if (ssgiPassRef.current) {
+          ssgiPassRef.current.render(null);
+        } else if (composerRef.current) {
           composerRef.current.render(delta);
         } else {
           renderer.render(scene, camera);
@@ -419,6 +489,7 @@ export default function ConcordiaScene({
         c.updateProjectionMatrix();
         r.setSize(w, h);
         composerRef.current?.setSize(w, h);
+        ssgiPassRef.current?.setSize(w, h);
       }
     }
     window.addEventListener('resize', handleResize);
@@ -490,6 +561,12 @@ export default function ConcordiaScene({
         });
       }
 
+      ssgiPassRef.current?.dispose();
+      ssgiPassRef.current = null;
+      probeManagerRef.current?.dispose();
+      probeManagerRef.current = null;
+      weatherSysRef.current = null;
+
       if (rendererRef.current) {
         (rendererRef.current as { dispose: () => void }).dispose();
       }
@@ -527,11 +604,14 @@ export default function ConcordiaScene({
   }, []);
 
   const setWeather = useCallback((type: string, intensity: number) => {
-    const weatherGroup = layersRef.current['weather'] as { userData: Record<string, unknown> } | undefined;
-    if (weatherGroup) {
-      weatherGroup.userData.weatherType = type;
-      weatherGroup.userData.weatherIntensity = intensity;
-    }
+    weatherSysRef.current?.transitionTo({
+      type: type as import('@/lib/world-lens/world-deformation').WeatherType,
+      intensity,
+      windSpeed: intensity * 8,
+      windDir: 0,
+      temperature: 15,
+      visibility: Math.max(10, 500 - intensity * 450),
+    }, 15);
   }, []);
 
   const setTimeOfDay = useCallback((hour: number) => {

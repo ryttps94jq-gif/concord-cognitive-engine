@@ -23,6 +23,14 @@ import OnboardingTutorial from '@/components/world-lens/OnboardingTutorial';
 
 import dynamic from 'next/dynamic';
 import { DEMO_DISTRICT } from '@/lib/world-lens/district-seed';
+import {
+  DeformationStore,
+  replayDeformations,
+  applyDeformationRecord,
+  type DeformationRecord,
+  type WeatherPhysicsModifiers,
+} from '@/lib/world-lens/world-deformation';
+import { encodeDelta, type CharState } from '@/lib/concordia/netcode';
 
 const ConcordiaScene = dynamic(() => import('@/components/world-lens/ConcordiaScene'), { ssr: false });
 const AvatarSystem3D = dynamic(() => import('@/components/world-lens/AvatarSystem3D'), { ssr: false });
@@ -770,6 +778,14 @@ export default function WorldLensPage() {
   });
   const combatLogIdRef = useRef(0);
   const dmgNumIdRef = useRef(0);
+
+  // AAA systems: deformation store, combat music, delta compression, weather modifiers
+  const deformStoreRef = useRef(new DeformationStore());
+  const deformLookupRef = useRef<((id: string) => { visible: boolean; userData: Record<string, unknown> } | undefined) | null>(null);
+  const combatMusicRef = useRef<{ onCombatEvent: (intensity: number) => void; update: (delta: number, inCombat: boolean) => void; dispose: () => void } | null>(null);
+  const prevCharStateRef = useRef<CharState | null>(null);
+  const [weatherData, setWeatherData] = useState<{ type: string; intensity: number } | null>(null);
+  const [weatherModifiers, setWeatherModifiers] = useState<WeatherPhysicsModifiers | null>(null);
   // Live mirror so socket handlers can read the current target / stamina
   // without stale closures. Updated below via useEffect.
   const combatStateRef = useRef<typeof combatState>({
@@ -868,7 +884,11 @@ export default function WorldLensPage() {
     worldSocket.emit('player:load');
 
     const handleLoadAck = (msg: unknown) => {
-      const data = msg as { ok: boolean; state?: { x: number; y: number; z: number; rotation?: number; currentAnimation?: string } | null };
+      const data = msg as {
+        ok: boolean;
+        state?: { x: number; y: number; z: number; rotation?: number; currentAnimation?: string } | null;
+        deformations?: DeformationRecord[];
+      };
       if (data?.ok && data.state) {
         setPlayerAvatar((prev) => ({
           ...prev,
@@ -876,6 +896,12 @@ export default function WorldLensPage() {
           rotation: data.state!.rotation ?? 0,
           currentAnimation: (data.state!.currentAnimation as typeof prev.currentAnimation) ?? 'idle',
         }));
+      }
+      if (data?.deformations?.length) {
+        deformStoreRef.current.hydrate(data.deformations);
+        if (deformLookupRef.current) {
+          replayDeformations(deformStoreRef.current, deformLookupRef.current);
+        }
       }
     };
 
@@ -1006,6 +1032,8 @@ export default function WorldLensPage() {
         `You hit ${targetName} for ${data.damage} damage${data.isCrit ? ' (crit)' : ''}.`,
         'damage-dealt',
       );
+      combatMusicRef.current?.onCombatEvent(1.0);
+
       if (data.targetKilled) {
         pushCombatLog(`${targetName} defeated!`, 'death');
         // Clear the killed target; the server will despawn it.
@@ -1112,6 +1140,20 @@ export default function WorldLensPage() {
       }
     };
 
+    const handleWeatherUpdate = (msg: unknown) => {
+      const data = msg as { type?: string; intensity?: number };
+      if (data?.type) {
+        setWeatherData({ type: data.type, intensity: data.intensity ?? 0.5 });
+      }
+    };
+
+    const handleWorldDeformation = (msg: unknown) => {
+      const rec = msg as DeformationRecord;
+      if (!rec?.id) return;
+      deformStoreRef.current.apply(rec);
+      if (deformLookupRef.current) applyDeformationRecord(rec, deformLookupRef.current);
+    };
+
     worldSocket.on('player:load:ack', handleLoadAck);
     worldSocket.on('city:positions', handleCityPositions);
     worldSocket.on('player:move:ack', handleMoveAck);
@@ -1122,6 +1164,8 @@ export default function WorldLensPage() {
     worldSocket.on('player:respawn:ack', handleRespawnAck);
     worldSocket.on('world:notification', handleWorldNotification);
     worldSocket.on('world:action', handleWorldAction);
+    worldSocket.on('weather:update', handleWeatherUpdate);
+    worldSocket.on('world:deformation', handleWorldDeformation);
 
     return () => {
       worldSocket.off('player:load:ack', handleLoadAck);
@@ -1134,6 +1178,8 @@ export default function WorldLensPage() {
       worldSocket.off('player:respawn:ack', handleRespawnAck);
       worldSocket.off('world:notification', handleWorldNotification);
       worldSocket.off('world:action', handleWorldAction);
+      worldSocket.off('weather:update', handleWeatherUpdate);
+      worldSocket.off('world:deformation', handleWorldDeformation);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [worldSocket.isConnected, activeDistrict.id]);
@@ -1150,6 +1196,25 @@ export default function WorldLensPage() {
     if (!visited) {
       setShowOnboarding(true);
     }
+  }, []);
+
+  // Init CombatMusicSystem on first user gesture (AudioContext requires interaction)
+  useEffect(() => {
+    const initCombatMusic = () => {
+      if (combatMusicRef.current) return;
+      import('@/lib/world-lens/spatial-audio').then(({ CombatMusicSystem }) => {
+        const ctx = new AudioContext();
+        const cms = new CombatMusicSystem(ctx);
+        cms.start();
+        combatMusicRef.current = cms;
+      }).catch(() => { /* optional */ });
+    };
+    window.addEventListener('pointerdown', initCombatMusic, { once: true });
+    return () => {
+      window.removeEventListener('pointerdown', initCombatMusic);
+      combatMusicRef.current?.dispose();
+      combatMusicRef.current = null;
+    };
   }, []);
 
   // DTU persistence
@@ -1405,6 +1470,11 @@ export default function WorldLensPage() {
               if (b) setSelectedBuilding(b);
             }}
             onTerrainClick={() => {}}
+            onWeatherModifiers={(mods) => setWeatherModifiers(mods)}
+            onSceneReady={(lookup) => {
+              deformLookupRef.current = lookup;
+              replayDeformations(deformStoreRef.current, lookup);
+            }}
             width="100%"
             height="100%"
           />
@@ -1463,7 +1533,16 @@ export default function WorldLensPage() {
             weather={null}
             active={false}
           />
-          <SoundscapeEngine />
+          <SoundscapeEngine
+            playerPosition={{
+              x: playerAvatar.position.x,
+              y: playerAvatar.position.y,
+              z: playerAvatar.position.z,
+              forwardX: Math.sin(playerAvatar.rotation),
+              forwardZ: -Math.cos(playerAvatar.rotation),
+            }}
+            weatherOverride={weatherData ?? undefined}
+          />
           <AnimationManager><></></AnimationManager>
           <GameJuice><></></GameJuice>
           <LoadingTransitions
@@ -1477,6 +1556,8 @@ export default function WorldLensPage() {
               playerAvatar={playerAvatar}
               otherPlayers={otherPlayers}
               npcs={[]}
+              weatherModifiers={weatherModifiers ?? undefined}
+              quality="medium"
               onMove={(pos, rotation) => {
                 // Update local avatar immediately for snappy
                 // response, then emit to the server so other players
@@ -1494,6 +1575,15 @@ export default function WorldLensPage() {
                     action: 'walk',
                     currentAnimation: 'walk',
                   });
+                  // Delta-compressed binary move alongside JSON (server ignores until handler added)
+                  const nextState: CharState = {
+                    seq: 0, position: pos, velocity: { x: 0, y: 0, z: 0 },
+                    onGround: true, health: 100, stamina: 100,
+                  };
+                  if (prevCharStateRef.current) {
+                    worldSocket.emit('player:move:delta', encodeDelta(prevCharStateRef.current, nextState));
+                  }
+                  prevCharStateRef.current = nextState;
                 }
               }}
               onEmote={(emote) => {
