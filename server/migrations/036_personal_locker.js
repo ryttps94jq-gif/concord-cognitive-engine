@@ -4,7 +4,11 @@
 export function up(db) {
   // Each user gets a unique random salt for locker key derivation.
   // The key itself is never stored — derived at login from password + salt.
-  db.prepare("ALTER TABLE users ADD COLUMN locker_salt TEXT").run();
+  try {
+    db.prepare("ALTER TABLE users ADD COLUMN locker_salt TEXT").run();
+  } catch (e) {
+    if (!e?.message?.includes("duplicate column")) throw e;
+  }
   db.prepare("UPDATE users SET locker_salt = hex(randomblob(32)) WHERE locker_salt IS NULL").run();
 
   db.prepare(`

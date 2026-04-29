@@ -65,7 +65,7 @@ async function analyzeAudio(buffer, mimeType) {
   // Write to temp file for whisper.cpp (it reads from disk)
   const tmpFile = path.join(os.tmpdir(), `concord-audio-${crypto.randomBytes(6).toString("hex")}.wav`);
   try {
-    fs.writeFileSync(tmpFile, buffer);
+    fs.writeFileSync(tmpFile, buffer, { mode: 0o600 });
     // Call whisper via the existing voice.transcribe path through spawn
     const { spawnSync } = await import("node:child_process");
     const whisperBin = process.env.WHISPER_CPP_BIN || "";
@@ -124,8 +124,8 @@ async function analyzeVideo(buffer, mimeType) {
   const tmpDir = path.join(os.tmpdir(), `concord-frames-${crypto.randomBytes(6).toString("hex")}`);
 
   try {
-    fs.writeFileSync(tmpInput, buffer);
-    fs.mkdirSync(tmpDir, { recursive: true });
+    fs.writeFileSync(tmpInput, buffer, { mode: 0o600 });
+    fs.mkdirSync(tmpDir, { recursive: true, mode: 0o700 });
 
     const ffmpeg = await getFFmpeg();
     if (!ffmpeg) {
@@ -212,9 +212,14 @@ function extractTags(text) {
     .map(([w]) => w);
 }
 
-function extractVisibleText(visionDescription) {
-  const match = visionDescription?.match(/(?:text|reads?|says?|written|caption)[:\s]+["']?([^"'\n.]{10,})/i);
-  return match ? match[1].trim() : "";
+function extractVisibleText(desc) {
+  if (!desc) return "";
+  const lower = desc.toLowerCase();
+  for (const kw of ["text:", "reads:", "says:", "written:", "caption:"]) {
+    const idx = lower.indexOf(kw);
+    if (idx !== -1) return desc.slice(idx + kw.length, idx + kw.length + 200).trim().replace(/^["']/, "");
+  }
+  return "";
 }
 
 function guessLensFromSummary(summary, fallback) {

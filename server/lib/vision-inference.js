@@ -4,6 +4,7 @@
 // Does NOT require session multimodalOptIn — this is a server-side pipeline helper.
 
 import { BRAIN_CONFIG } from "./brain-config.js";
+import { validateSafeFetchUrl, fetchWithPinnedIp } from "./ssrf-guard.js";
 
 const DEFAULT_PROMPT = "Describe this image in detail. Extract key entities, topics, any visible text, and overall context.";
 
@@ -52,7 +53,9 @@ export async function callVision(imageB64, prompt = DEFAULT_PROMPT, opts = {}) {
  */
 export async function callVisionUrl(imageUrl, prompt = DEFAULT_PROMPT, opts = {}) {
   try {
-    const res = await fetch(imageUrl, { signal: AbortSignal.timeout(10000) });
+    const check = await validateSafeFetchUrl(imageUrl);
+    if (!check.ok) return { ok: false, error: `Blocked URL: ${check.error}`, source: "ssrf_guard" };
+    const res = await fetchWithPinnedIp(check, { signal: AbortSignal.timeout(10000) });
     if (!res.ok) return { ok: false, error: `Failed to fetch image: HTTP ${res.status}` };
     const buf = await res.arrayBuffer();
     const imageB64 = Buffer.from(buf).toString("base64");

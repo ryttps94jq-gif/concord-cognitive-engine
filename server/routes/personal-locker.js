@@ -5,7 +5,7 @@
 
 import express from "express";
 import crypto from "node:crypto";
-import { encryptBlob, decryptBlob } from "../lib/personal-locker/crypto.js";
+import { encryptBlob, decryptBlob, SAFE_REVIVER } from "../lib/personal-locker/crypto.js";
 import { analyzeContent, buildPersonalDTUPayload, classifyMime } from "../lib/personal-locker/pipeline.js";
 import { loadUserContext, saveUserContext, updateContextOnUpload } from "../lib/personal-locker/user-context.js";
 import { assertSovereignty } from "../grc/sovereignty-invariants.js";
@@ -41,6 +41,10 @@ export default function createPersonalLockerRouter({ db, getLockerKey, requireAu
       const { data, mimeType, originalname, title, context } = req.body || {};
       if (!data || !mimeType) {
         return res.status(400).json({ ok: false, error: "data (base64) and mimeType required" });
+      }
+
+      if (typeof data !== "string" || data.length > MAX_UPLOAD_BYTES * 1.4) {
+        return res.status(413).json({ ok: false, error: "Payload too large" });
       }
 
       const buffer = Buffer.from(data, "base64");
@@ -105,7 +109,7 @@ export default function createPersonalLockerRouter({ db, getLockerKey, requireAu
       assertSovereignty({ type: "dtu_read", dtu: { scope: "personal", ownerId: row.user_id }, requestingUser: req.user.id });
 
       const plaintext = decryptBlob({ iv: row.iv, ciphertext: row.encrypted_content, authTag: row.auth_tag }, key);
-      const payload = JSON.parse(plaintext.toString("utf-8"));
+      const payload = JSON.parse(plaintext.toString("utf-8"), SAFE_REVIVER);
 
       return res.json({ ok: true, dtu: { ...payload, id: row.id, lensHint: row.lens_domain, createdAt: row.created_at } });
     } catch (err) {
@@ -143,7 +147,7 @@ export default function createPersonalLockerRouter({ db, getLockerKey, requireAu
       assertSovereignty({ type: "dtu_read", dtu: { scope: "personal", ownerId: row.user_id }, requestingUser: req.user.id });
 
       const plaintext = decryptBlob({ iv: row.iv, ciphertext: row.encrypted_content, authTag: row.auth_tag }, key);
-      const payload = JSON.parse(plaintext.toString("utf-8"));
+      const payload = JSON.parse(plaintext.toString("utf-8"), SAFE_REVIVER);
 
       const publicDTU = createDTU(db, {
         creatorId: req.user.id,
@@ -182,7 +186,13 @@ export default function createPersonalLockerRouter({ db, getLockerKey, requireAu
     const { domains, intensity } = req.body || {};
     const ctx = loadUserContext(req.user.id, key, db);
     if (Array.isArray(domains)) ctx.currentFocus.domains = domains.slice(0, 10);
-    if (intensity && typeof intensity === "object") ctx.currentFocus.intensity = intensity;
+    if (intensity && typeof intensity === "object" && !Array.isArray(intensity)) {
+      const safe = Object.create(null);
+      for (const [k, v] of Object.entries(intensity)) {
+        if (typeof k === "string" && k.length < 64 && typeof v === "number") safe[k] = v;
+      }
+      ctx.currentFocus.intensity = safe;
+    }
     saveUserContext(req.user.id, ctx, key, db);
     return res.json({ ok: true, context: ctx });
   });

@@ -61,3 +61,9 @@ export function decryptBlob({ iv, ciphertext, authTag }, key) {
   decipher.setAuthTag(Buffer.from(authTag));
   return Buffer.concat([decipher.update(Buffer.from(ciphertext)), decipher.final()]);
 }
+
+/**
+ * Safe JSON reviver that blocks prototype pollution attempts.
+ * Use with JSON.parse on any locker-encrypted data.
+ */
+export const SAFE_REVIVER = (k, v) => (k === "__proto__" || k === "constructor") ? undefined : v;

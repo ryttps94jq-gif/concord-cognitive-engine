@@ -3,7 +3,7 @@
 // Stored as an encrypted personal DTU with content_type = "user_context".
 
 import crypto from "node:crypto";
-import { encryptBlob, decryptBlob } from "./crypto.js";
+import { encryptBlob, decryptBlob, SAFE_REVIVER } from "./crypto.js";
 
 const CONTEXT_CONTENT_TYPE = "user_context";
 
@@ -26,7 +26,7 @@ export function loadUserContext(userId, lockerKey, db) {
     ).get(userId, CONTEXT_CONTENT_TYPE);
     if (!row) return EMPTY_CONTEXT();
     const plain = decryptBlob({ iv: row.iv, ciphertext: row.encrypted_content, authTag: row.auth_tag }, lockerKey);
-    return JSON.parse(plain.toString("utf-8"));
+    return JSON.parse(plain.toString("utf-8"), SAFE_REVIVER);
   } catch { return EMPTY_CONTEXT(); }
 }
 
