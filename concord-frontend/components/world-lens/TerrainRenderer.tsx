@@ -427,7 +427,14 @@ export default function TerrainRenderer({
       // Dispatch custom event so parent scene can pick up the terrain group
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('concordia:terrain-ready', {
-          detail: { terrainGroup, getElevationAt },
+          detail: {
+            terrainGroup,
+            getElevationAt,
+            // Physics heightfield data
+            hmData,
+            hmWidth: hmWidthRef.current,
+            hmHeight: hmHeightRef.current,
+          },
         }));
       }
     }

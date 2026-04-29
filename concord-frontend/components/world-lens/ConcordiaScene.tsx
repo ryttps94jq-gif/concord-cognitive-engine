@@ -51,6 +51,7 @@ interface ConcordiaSceneProps {
   quality?: QualityPreset;
   theme?: import('@/lib/world-lens/concordia-theme').ConcordiaThemeId;
   renderStyle?: 'pbr' | 'toon';
+  questObjectives?: import('@/components/world-lens/QuestMarker3D').QuestObjective[];
   onBuildingClick?: (buildingId: string, intersection: unknown) => void;
   onTerrainClick?: (position: { x: number; y: number; z: number }) => void;
   width?: number | string;
@@ -132,12 +133,14 @@ export default function ConcordiaScene({
   quality: initialQuality = 'medium',
   theme: themeProp = 'neon-punk',
   renderStyle = 'pbr',
+  questObjectives = [],
   onBuildingClick,
   onTerrainClick,
   width = '100%',
   height = '100%',
 }: ConcordiaSceneProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const physicsRef = useRef<{ step: (dt: number) => void; destroy: () => void } | null>(null);
   const rendererRef = useRef<unknown>(null);
   const sceneRef = useRef<unknown>(null);
   const cameraRef = useRef<unknown>(null);
@@ -184,6 +187,25 @@ export default function ConcordiaScene({
     async function init() {
       THREE = await import('three');
       if (disposed) return;
+
+      // Physics world — init Rapier WASM, terrain collider registered via event
+      const { physicsWorld } = await import('@/lib/world-lens/physics-world');
+      await physicsWorld.init();
+      physicsRef.current = physicsWorld;
+      if (disposed) { physicsWorld.destroy(); physicsRef.current = null; return; }
+
+      // Listen for terrain-ready to register heightfield collider
+      function onTerrainPhysics(e: Event) {
+        const { hmData, hmWidth, hmHeight } = (e as CustomEvent).detail ?? {};
+        if (hmData) {
+          physicsWorld.createHeightfieldCollider(hmData, hmWidth, hmHeight, {
+            x: 2000,   // TERRAIN_SIZE
+            y: 80,     // maxElevation
+            z: 2000,
+          });
+        }
+      }
+      window.addEventListener('concordia:terrain-ready', onTerrainPhysics);
 
       const settings = QUALITY_SETTINGS[quality];
 
@@ -325,6 +347,11 @@ export default function ConcordiaScene({
         scene.add(lamp);
       }
 
+      // Notify QuestMarker3D and other overlays that scene + camera are ready
+      window.dispatchEvent(new CustomEvent('concordia:scene-ready', {
+        detail: { scene, camera },
+      }));
+
       setIsReady(true);
 
       // ── Game loop ───────────────────────────────────────────────
@@ -334,8 +361,10 @@ export default function ConcordiaScene({
         const delta = clock.getDelta();
         const elapsed = clock.getElapsedTime();
 
-        // Update physics / avatars / NPCs / weather / particles
-        // Each layer group can have a userData.update callback
+        // Step physics simulation
+        physicsRef.current?.step(delta);
+
+        // Update avatars / NPCs / weather / particles per layer
         for (const name of LAYER_NAMES) {
           const group = layers[name];
           if (group && (group.userData as { update?: (d: number, e: number) => void }).update) {
@@ -464,6 +493,8 @@ export default function ConcordiaScene({
       if (rendererRef.current) {
         (rendererRef.current as { dispose: () => void }).dispose();
       }
+      physicsRef.current?.destroy();
+      physicsRef.current = null;
 
       rendererRef.current = null;
       sceneRef.current = null;
@@ -550,14 +581,34 @@ export default function ConcordiaScene({
 
   // ── Render ─────────────────────────────────────────────────────
 
+  // ── Quest marker container ref ──────────────────────────────────
+  const containerRef = useRef<HTMLDivElement>(null);
+  // Lazy import QuestMarker3D to avoid SSR issues
+  const [QuestMarker3DComp, setQuestMarker3DComp] = React.useState<React.ComponentType<{
+    objectives: import('@/components/world-lens/QuestMarker3D').QuestObjective[];
+    containerEl: HTMLElement | null;
+  }> | null>(null);
+  useEffect(() => {
+    import('@/components/world-lens/QuestMarker3D').then(m => {
+      setQuestMarker3DComp(() => m.default as typeof QuestMarker3DComp);
+    });
+  }, []);
+
   return (
     <ConcordiaSceneContext.Provider value={sceneAPI}>
-      <div className="relative" style={{ width, height }}>
+      <div ref={containerRef} className="relative" style={{ width, height }}>
         <canvas
           ref={canvasRef}
           className="w-full h-full block"
           style={{ touchAction: 'none' }}
         />
+        {/* 3D quest objective markers — CSS2DRenderer overlay */}
+        {QuestMarker3DComp && questObjectives.length > 0 && (
+          <QuestMarker3DComp
+            objectives={questObjectives}
+            containerEl={containerRef.current}
+          />
+        )}
 
         {/* Loading overlay */}
         {!isReady && (

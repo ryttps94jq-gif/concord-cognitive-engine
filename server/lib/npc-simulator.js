@@ -9,6 +9,48 @@ import {
   npcEvaluateNearbyCreation,
   npcObserveSkillUse,
 } from "./npc-behaviors.js";
+import { NavGrid } from "./nav-grid.js";
+
+// ── Heightmap generation (mirrors TerrainRenderer.tsx deterministic algo) ──
+// Resolution kept low (128) for server — A* is the bottleneck, not sample count.
+const HM_RES = 128;
+
+function _generateHeightmap(res) {
+  const data = new Float32Array(res * res);
+  for (let z = 0; z < res; z++) {
+    for (let x = 0; x < res; x++) {
+      const nx = x / res; const nz = z / res;
+      let elev = 0;
+      if (nx < 0.1)      elev = 2 + nx * 30;
+      else if (nx < 0.2) elev = 5 + Math.pow((nx - 0.1) / 0.1, 2) * 35;
+      else if (nx < 0.6) elev = 40 + Math.sin(nx * Math.PI * 3) * 5;
+      else               {
+        elev = 45 + (nx - 0.6) * 80;
+        elev += Math.sin(nx * 12 + nz * 8) * 6 + Math.sin(nx * 7 - nz * 5) * 4;
+      }
+      const creekCenterX = 0.35 + nz * 0.15;
+      const distFromCreek = Math.abs(nx - creekCenterX);
+      if (distFromCreek < 0.04) elev -= 12 * (1 - distFromCreek / 0.04);
+      elev += Math.sin(nx * 47.3 + nz * 31.7) * 0.5 + Math.sin(nx * 97.1 + nz * 73.3) * 0.3;
+      data[z * res + x] = Math.max(0, Math.min(80, elev)) / 80;
+    }
+  }
+  return data;
+}
+
+// Shared NavGrid — built once, reused across all NPC agents
+let _navGrid = null;
+function getNavGrid() {
+  if (!_navGrid) {
+    const hm = _generateHeightmap(HM_RES);
+    _navGrid  = new NavGrid(hm, HM_RES, HM_RES, 2000 / HM_RES); // cellSize ≈ 15.6m
+    _navGrid.buildGrid();
+  }
+  return _navGrid;
+}
+
+const NPC_WALK_SPEED   = 1.4;  // m/s
+const WAYPOINT_REACH_M = 2.0;  // metres — consider waypoint reached
 
 // Map of worldId → NPCSimulator instance
 export const simulators = new Map();
@@ -32,12 +74,45 @@ export class NPCAgent {
     this._selectBrain = selectBrain;
   }
 
-  async tick() {
+  async tick(dtMs = 3000) {
     this._updateNeeds();
-    const action = await this._chooseAction();
-    await this._executeAction(action);
+    // Advance along active path first (position update each tick)
+    this._tickPath(dtMs / 1000);
+    // Only choose a new action if not currently walking
+    if (!this.state.currentPath || this.state.pathIndex >= (this.state.currentPath?.length ?? 0)) {
+      const action = await this._chooseAction();
+      await this._executeAction(action);
+    }
     await this._maybeEvaluateCreations();
     this._persistState();
+  }
+
+  _tickPath(dtSec) {
+    const path  = this.state.currentPath;
+    if (!path || !path.length) return;
+    let   idx   = this.state.pathIndex ?? 0;
+    if (idx >= path.length) { this.state.currentPath = null; return; }
+
+    // Walk toward current waypoint at NPC_WALK_SPEED
+    let remaining = NPC_WALK_SPEED * dtSec; // metres this tick
+    while (remaining > 0 && idx < path.length) {
+      const wp  = path[idx];
+      const dx  = wp.x - this.location.x;
+      const dz  = wp.z - this.location.z;
+      const d   = Math.sqrt(dx * dx + dz * dz);
+      if (d <= WAYPOINT_REACH_M || d < remaining) {
+        this.location.x = wp.x;
+        this.location.z = wp.z;
+        remaining      -= d;
+        idx++;
+      } else {
+        this.location.x += (dx / d) * remaining;
+        this.location.z += (dz / d) * remaining;
+        remaining = 0;
+      }
+    }
+    this.state.pathIndex = idx;
+    if (idx >= path.length) this.state.currentPath = null;
   }
 
   _updateNeeds() {
@@ -108,13 +183,21 @@ Choose one action for this NPC. Return JSON only:
         this.needs.purpose = Math.min(1, this.needs.purpose + 0.1);
         break;
       }
-      case "travel":
-        this.location = {
-          x: this.location.x + (Math.random() - 0.5) * 20,
-          y: this.location.y + (Math.random() - 0.5) * 20,
-          z: 0,
-        };
+      case "travel": {
+        // NavGrid A* pathfinding — pick a destination 30-80m away, walk there
+        const angle   = Math.random() * Math.PI * 2;
+        const dist    = 30 + Math.random() * 50;
+        const goalX   = this.location.x + Math.cos(angle) * dist;
+        const goalZ   = this.location.z + Math.sin(angle) * dist;
+        const navGrid = getNavGrid();
+        const path    = navGrid.findPath(this.location.x, this.location.z, goalX, goalZ);
+        if (path.length > 0) {
+          this.state.currentPath  = path;
+          this.state.pathIndex    = 0;
+          this.state.pathGoal     = { x: goalX, z: goalZ };
+        }
         break;
+      }
       case "trade":
         this.needs.social   = Math.min(1, this.needs.social   + 0.1);
         this.needs.purpose  = Math.min(1, this.needs.purpose  + 0.1);

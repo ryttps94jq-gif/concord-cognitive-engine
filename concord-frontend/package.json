@@ -21,6 +21,7 @@
   },
   "dependencies": {
     "@conform-to/zod": "^1.0.0",
+    "@dimforge/rapier3d-compat": "^0.19.3",
     "@excalidraw/excalidraw": "^0.18.0",
     "@monaco-editor/react": "^4.7.0",
     "@radix-ui/react-alert-dialog": "^1.0.5",

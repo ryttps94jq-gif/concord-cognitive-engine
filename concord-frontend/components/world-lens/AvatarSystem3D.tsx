@@ -2,6 +2,21 @@
 
 import React, { useEffect, useRef, useCallback, useState } from 'react';
 import { maybeUpdateMode, buildContext, type NearbyEntity, type ZoneType } from '@/lib/concordia/context-detection';
+import {
+  type CharacterPhysicsProfile,
+  defaultProfile,
+  computeMoveSpeed,
+  computeMomentumOvershoot,
+  drainStamina,
+  recoverStamina,
+  isExhausted,
+} from '@/lib/concordia/character-physics';
+import {
+  type MovementStyle,
+  MOVEMENT_STYLE_CONFIGS,
+  lerpStyleConfigs,
+  resolveNPCStyle,
+} from '@/lib/concordia/movement-styles';
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -63,11 +78,14 @@ export interface NPCData {
 }
 
 interface AvatarSystem3DProps {
-  playerAvatar: PlayerAvatarConfig;
-  otherPlayers: OtherPlayerData[];
-  npcs: NPCData[];
-  onMove?: (position: { x: number; y: number; z: number }, rotation: number) => void;
-  onEmote?: (emote: AnimationClip) => void;
+  playerAvatar:   PlayerAvatarConfig;
+  otherPlayers:   OtherPlayerData[];
+  npcs:           NPCData[];
+  movementStyle?: MovementStyle;
+  physicsProfile?: Partial<CharacterPhysicsProfile>;
+  onMove?:        (position: { x: number; y: number; z: number }, rotation: number) => void;
+  onEmote?:       (emote: AnimationClip) => void;
+  onStaminaChange?: (stamina: number, max: number) => void;
 }
 
 // ── Constants ─────────────────────────────────────────────────────
@@ -114,16 +132,48 @@ export default function AvatarSystem3D({
   playerAvatar,
   otherPlayers,
   npcs,
+  movementStyle = 'warrior',
+  physicsProfile: physicsPropOverride,
   onMove,
   onEmote,
+  onStaminaChange,
 }: AvatarSystem3DProps) {
-  const avatarGroupRef = useRef<unknown>(null);
-  const playerMeshRef = useRef<unknown>(null);
-  const mixersRef = useRef<Map<string, unknown>>(new Map());
-  const keysRef = useRef<Set<string>>(new Set());
+  const avatarGroupRef  = useRef<unknown>(null);
+  const playerMeshRef   = useRef<unknown>(null);
+  const mixersRef       = useRef<Map<string, unknown>>(new Map());
+  const keysRef         = useRef<Set<string>>(new Set());
   const playerPositionRef = useRef({ ...playerAvatar.position });
   const playerRotationRef = useRef(playerAvatar.rotation);
   const [activeAnimation, setActiveAnimation] = useState<AnimationClip>(playerAvatar.currentAnimation);
+
+  // Character physics + movement style refs (updated each prop change)
+  const physicsRef    = useRef<CharacterPhysicsProfile>({ ...defaultProfile(), ...physicsPropOverride });
+  const styleRef      = useRef<MovementStyle>(movementStyle);
+  const styleBlendRef = useRef({ current: movementStyle, target: movementStyle, t: 1.0 });
+  // Terrain elevation sampler — set when concordia:terrain-ready fires
+  const elevationRef  = useRef<((x: number, z: number) => number) | null>(null);
+
+  // Keep refs in sync with props
+  useEffect(() => { physicsRef.current = { ...defaultProfile(), ...physicsPropOverride }; }, [physicsPropOverride]);
+  useEffect(() => {
+    const sb = styleBlendRef.current;
+    if (movementStyle !== sb.target) {
+      sb.current = sb.target;
+      sb.target  = movementStyle;
+      sb.t       = 0;
+    }
+    styleRef.current = movementStyle;
+  }, [movementStyle]);
+
+  // Listen for terrain elevation function
+  useEffect(() => {
+    function onTerrainReady(e: Event) {
+      const { getElevationAt } = (e as CustomEvent).detail ?? {};
+      if (typeof getElevationAt === 'function') elevationRef.current = getElevationAt;
+    }
+    window.addEventListener('concordia:terrain-ready', onTerrainReady);
+    return () => window.removeEventListener('concordia:terrain-ready', onTerrainReady);
+  }, []);
 
   // Suppress unused warning for onEmote
   void onEmote;
@@ -587,56 +637,162 @@ export default function AvatarSystem3D({
 
       // ── Update loop (called by parent scene's game loop) ───
 
-      avatarGroup.userData.update = (delta: number, _elapsed: number) => {
+      avatarGroup.userData.update = (delta: number, elapsed: number) => {
         // Update all animation mixers
         for (const mixer of mixersRef.current.values()) {
           (mixer as { update: (d: number) => void }).update(delta);
         }
 
-        // ── Player movement (WASD + shift to run) ───────────
-        const keys = keysRef.current;
-        const isRunning = keys.has('shift');
-        const speed = isRunning ? RUN_SPEED : MOVE_SPEED;
-        let moveX = 0;
-        let moveZ = 0;
+        // ── Movement style blend (0.4s transition) ─────────
+        const sb = styleBlendRef.current;
+        if (sb.t < 1) {
+          sb.t = Math.min(1, sb.t + delta / 0.4);
+        }
+        const styleA = MOVEMENT_STYLE_CONFIGS[sb.current] ?? MOVEMENT_STYLE_CONFIGS.warrior;
+        const styleB = MOVEMENT_STYLE_CONFIGS[sb.target]  ?? MOVEMENT_STYLE_CONFIGS.warrior;
+        const styleCfg = sb.t >= 1 ? styleB : lerpStyleConfigs(styleA, styleB, sb.t);
 
+        // ── Player movement (WASD + shift to run) ───────────
+        const keys      = keysRef.current;
+        const isRunning = keys.has('shift');
+        const physics   = physicsRef.current;
+
+        // Stamina-driven speed
+        const staminaScale = computeMoveSpeed(physics.currentStamina, physics.maxStamina);
+        const baseSpeed    = isRunning ? RUN_SPEED : MOVE_SPEED;
+        const speed        = baseSpeed * staminaScale * styleCfg.walkCycleSpeed;
+
+        // Drain / recover stamina
+        if (isRunning) {
+          drainStamina(physics, 'sprint', 0, delta);
+        } else {
+          recoverStamina(physics, delta, false, false);
+        }
+        onStaminaChange?.(physics.currentStamina, physics.maxStamina);
+
+        let moveX = 0; let moveZ = 0;
         if (keys.has('w')) moveZ -= 1;
         if (keys.has('s')) moveZ += 1;
         if (keys.has('a')) moveX -= 1;
         if (keys.has('d')) moveX += 1;
 
         const isMoving = moveX !== 0 || moveZ !== 0;
+        const exhausted = isExhausted(physics);
 
         if (isMoving) {
           const len = Math.sqrt(moveX * moveX + moveZ * moveZ);
-          moveX /= len;
-          moveZ /= len;
+          moveX /= len; moveZ /= len;
 
           const pos = playerPositionRef.current;
           pos.x += moveX * speed * delta;
           pos.z += moveZ * speed * delta;
+
+          // Momentum overshoot on sharp direction change
+          if (!isRunning) {
+            const overshoot = computeMomentumOvershoot(physics.mass, speed);
+            if (overshoot > 0.01) {
+              // Nudge position slightly in previous direction — subtle slide
+              pos.x += Math.cos(playerRotationRef.current) * overshoot * 0.05;
+              pos.z += Math.sin(playerRotationRef.current) * overshoot * 0.05;
+            }
+          }
+
+          // Terrain elevation — clamp Y to ground
+          const elevation = elevationRef.current?.(pos.x, pos.z) ?? pos.y;
+          pos.y = elevation;
 
           // Auto-face movement direction with smooth rotation
           const targetRot = Math.atan2(moveX, -moveZ);
           let rotDiff = targetRot - playerRotationRef.current;
           while (rotDiff > Math.PI) rotDiff -= Math.PI * 2;
           while (rotDiff < -Math.PI) rotDiff += Math.PI * 2;
-          playerRotationRef.current += rotDiff * Math.min(1, ROTATION_SPEED * delta);
+          const turnSpeed = ROTATION_SPEED * (0.5 + styleCfg.turnAnimationBlend * 0.5);
+          playerRotationRef.current += rotDiff * Math.min(1, turnSpeed * delta);
 
           const pm = playerMeshRef.current as InstanceType<typeof import('three').Group>;
           if (pm) {
             pm.position.set(pos.x, pos.y, pos.z);
             pm.rotation.y = playerRotationRef.current;
+
+            // ── Movement style bone animation ──────────────
+            // Hip sway
+            const hips = pm.getObjectByName('hips');
+            if (hips) {
+              hips.rotation.z = Math.sin(elapsed * styleCfg.walkCycleSpeed * 4) * styleCfg.hipSwayAmplitude;
+            }
+            // Arm swing (opposite phase to legs)
+            const lArm = pm.getObjectByName('leftUpperArm');
+            const rArm = pm.getObjectByName('rightUpperArm');
+            if (lArm && rArm) {
+              const phase = elapsed * styleCfg.walkCycleSpeed * 4;
+              lArm.rotation.x =  Math.sin(phase) * styleCfg.armSwingAmplitude;
+              rArm.rotation.x = -Math.sin(phase) * styleCfg.armSwingAmplitude;
+            }
+            // Head bob
+            const head = pm.getObjectByName('head');
+            if (head) {
+              head.position.y = Math.abs(Math.sin(elapsed * styleCfg.headBobFrequency * 4)) * 0.015;
+            }
+            // Combat lean
+            const spine = pm.getObjectByName('spine');
+            if (spine) spine.rotation.x = styleCfg.combatStanceOffset;
+
+            // ── Foot IK ────────────────────────────────────
+            if (elevationRef.current) {
+              const leftFoot  = pm.getObjectByName('leftFoot');
+              const rightFoot = pm.getObjectByName('rightFoot');
+              if (leftFoot && rightFoot) {
+                const wL = leftFoot.getWorldPosition(new THREE.Vector3());
+                const wR = rightFoot.getWorldPosition(new THREE.Vector3());
+                const hL = elevationRef.current(wL.x, wL.z);
+                const hR = elevationRef.current(wR.x, wR.z);
+                // Adjust foot local Y relative to terrain delta
+                const baseY = elevation;
+                leftFoot.position.y  += (hL - baseY) * 0.5;
+                rightFoot.position.y += (hR - baseY) * 0.5;
+                // Hip roll toward higher foot
+                const hipRoll = (hL - hR) / 2 * 0.1;
+                if (hips) hips.rotation.z += hipRoll;
+              }
+            }
           }
 
-          const newAnim = isRunning ? 'run' : 'walk';
-          if (activeAnimation !== newAnim) {
-            setActiveAnimation(newAnim as AnimationClip);
-          }
+          const newAnim = exhausted ? 'walk' : isRunning ? 'run' : 'walk';
+          if (activeAnimation !== newAnim) setActiveAnimation(newAnim as AnimationClip);
 
           onMove?.(pos, playerRotationRef.current);
-        } else if (activeAnimation !== 'idle' && !['sit', 'build', 'inspect', 'craft'].includes(activeAnimation)) {
-          setActiveAnimation('idle');
+        } else {
+          // Idle breathing
+          const pm = playerMeshRef.current as InstanceType<typeof import('three').Group>;
+          if (pm) {
+            const chest = pm.getObjectByName('chest');
+            if (chest) {
+              chest.scale.y = 1 + Math.sin(elapsed * 0.8) * 0.01 * styleCfg.idleBreathScale;
+            }
+          }
+          if (activeAnimation !== 'idle' && !['sit', 'build', 'inspect', 'craft'].includes(activeAnimation)) {
+            setActiveAnimation('idle');
+          }
+        }
+
+        // ── NPC movement style application ────────────────────
+        for (const [npcId, data] of npcMeshes) {
+          const npcData = npcs.find(n => n.id === npcId);
+          if (!npcData) continue;
+          const npcStyle = resolveNPCStyle(npcData.occupation, 'idle');
+          const npcCfg   = MOVEMENT_STYLE_CONFIGS[npcStyle] ?? MOVEMENT_STYLE_CONFIGS.merchant;
+          const isNpcMoving = data.mesh.position.distanceTo(data.targetPos) > 0.05;
+          if (isNpcMoving) {
+            const npcHips = data.mesh.getObjectByName?.('hips');
+            if (npcHips) npcHips.rotation.z = Math.sin(elapsed * npcCfg.walkCycleSpeed * 4) * npcCfg.hipSwayAmplitude;
+            const npcLArm = data.mesh.getObjectByName?.('leftUpperArm');
+            const npcRArm = data.mesh.getObjectByName?.('rightUpperArm');
+            if (npcLArm && npcRArm) {
+              const p = elapsed * npcCfg.walkCycleSpeed * 4;
+              npcLArm.rotation.x  =  Math.sin(p) * npcCfg.armSwingAmplitude;
+              npcRArm.rotation.x  = -Math.sin(p) * npcCfg.armSwingAmplitude;
+            }
+          }
         }
 
         // ── Context-aware mode switching (10 Hz) ─────────────

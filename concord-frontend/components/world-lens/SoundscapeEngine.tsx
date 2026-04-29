@@ -22,14 +22,20 @@ interface SoundscapeState {
   crossfading: boolean;
 }
 
+export interface ListenerPosition {
+  x: number; y: number; z: number;
+  forwardX: number; forwardZ: number;
+}
+
 interface SoundscapeAPI {
-  setDistrict:   (district: string) => void;
-  setTimeOfDay:  (time: TimeOfDay) => void;
-  setInterior:   (interior: boolean) => void;
-  setWeather:    (weather: WeatherType, intensity?: number) => void;
-  triggerSFX:    (sfxId: string) => void;
-  playMusicTrack:(url: string) => void;
-  stopMusicTrack:() => void;
+  setDistrict:     (district: string) => void;
+  setTimeOfDay:    (time: TimeOfDay) => void;
+  setInterior:     (interior: boolean) => void;
+  setWeather:      (weather: WeatherType, intensity?: number) => void;
+  triggerSFX:      (sfxId: string) => void;
+  playSpatialSFX:  (sfxId: string, worldPos: { x: number; y: number; z: number }) => void;
+  playMusicTrack:  (url: string) => void;
+  stopMusicTrack:  () => void;
 }
 
 /* ── District ambient config (base freq + texture) ────────────── */
@@ -103,6 +109,51 @@ const DISTRICT_ALIAS: Record<string, DistrictName> = {
 
 const CROSSFADE_MS = 400;
 
+/* ── Spatial SFX helper ─────────────────────────────────────────── */
+
+function playToneSpatial(
+  ctx: AudioContext,
+  def: SFXDef,
+  masterGain: GainNode,
+  worldPos: { x: number; y: number; z: number },
+): void {
+  const panner = ctx.createPanner();
+  panner.panningModel  = 'HRTF';
+  panner.distanceModel = 'inverse';
+  panner.rolloffFactor = 1.0;
+  panner.maxDistance   = 50;
+  panner.refDistance   = 1;
+  panner.positionX.value = worldPos.x;
+  panner.positionY.value = worldPos.y;
+  panner.positionZ.value = worldPos.z;
+  panner.connect(masterGain);
+
+  const freqs = def.semitones
+    ? def.semitones.map(s => def.freq * Math.pow(2, s / 12))
+    : [def.freq];
+
+  const now = ctx.currentTime;
+  const stepDuration = def.duration / freqs.length;
+  const totalDuration = def.duration + 0.1;
+
+  freqs.forEach((freq, i) => {
+    const osc  = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = def.type;
+    osc.frequency.setValueAtTime(freq, now + i * stepDuration);
+    gain.gain.setValueAtTime(0, now + i * stepDuration);
+    gain.gain.linearRampToValueAtTime(0.25, now + i * stepDuration + def.attack);
+    gain.gain.linearRampToValueAtTime(0, now + i * stepDuration + def.decay);
+    osc.connect(gain);
+    gain.connect(panner);
+    osc.start(now + i * stepDuration);
+    osc.stop(now + i * stepDuration + def.decay + 0.05);
+  });
+
+  // Disconnect panner after all tones finish
+  setTimeout(() => { try { panner.disconnect(); } catch { /* ok */ } }, totalDuration * 1000 + 200);
+}
+
 /* ── Context ────────────────────────────────────────────────────── */
 
 const SoundscapeContext = createContext<SoundscapeAPI>({
@@ -111,6 +162,7 @@ const SoundscapeContext = createContext<SoundscapeAPI>({
   setInterior:    () => {},
   setWeather:     () => {},
   triggerSFX:     () => {},
+  playSpatialSFX: () => {},
   playMusicTrack: () => {},
   stopMusicTrack: () => {},
 });
@@ -161,12 +213,14 @@ interface SoundscapeEngineProps {
   children?: React.ReactNode;
   initialDistrict?: string;
   initialTime?: TimeOfDay;
+  playerPosition?: ListenerPosition;
 }
 
 export default function SoundscapeEngine({
   children,
   initialDistrict = 'silent',
   initialTime = 'day',
+  playerPosition,
 }: SoundscapeEngineProps) {
   const [state, setState] = useState<SoundscapeState>({
     currentDistrict: DISTRICT_ALIAS[initialDistrict.toLowerCase()] ?? 'silent',
@@ -267,6 +321,25 @@ export default function SoundscapeEngine({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.currentDistrict, state.timeOfDay, state.isInterior]);
 
+  // Update Web Audio listener position when player moves (spatial audio)
+  useEffect(() => {
+    if (!playerPosition) return;
+    const ctx = audioCtxRef.current;
+    if (!ctx || ctx.state === 'closed') return;
+    const { x, y, z, forwardX, forwardZ } = playerPosition;
+    try {
+      ctx.listener.positionX.setValueAtTime(x, ctx.currentTime);
+      ctx.listener.positionY.setValueAtTime(y, ctx.currentTime);
+      ctx.listener.positionZ.setValueAtTime(z, ctx.currentTime);
+      ctx.listener.forwardX.setValueAtTime(forwardX, ctx.currentTime);
+      ctx.listener.forwardY.setValueAtTime(0, ctx.currentTime);
+      ctx.listener.forwardZ.setValueAtTime(forwardZ, ctx.currentTime);
+      ctx.listener.upX.setValueAtTime(0, ctx.currentTime);
+      ctx.listener.upY.setValueAtTime(1, ctx.currentTime);
+      ctx.listener.upZ.setValueAtTime(0, ctx.currentTime);
+    } catch { /* older Safari may not support AudioParam on listener */ }
+  }, [playerPosition]);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -309,6 +382,14 @@ export default function SoundscapeEngine({
     playToneSequence(ctx, def, masterGainRef.current);
   }, [initAudio]);
 
+  const playSpatialSFX = useCallback((sfxId: string, worldPos: { x: number; y: number; z: number }) => {
+    const def = SFX_MAP[sfxId];
+    if (!def) return;
+    const ctx = initAudio();
+    if (!ctx || !masterGainRef.current) return;
+    playToneSpatial(ctx, def, masterGainRef.current, worldPos);
+  }, [initAudio]);
+
   const playMusicTrack = useCallback((url: string) => {
     musicElRef.current?.pause();
     const el = new Audio(url);
@@ -325,7 +406,7 @@ export default function SoundscapeEngine({
 
   const api: SoundscapeAPI = {
     setDistrict, setTimeOfDay, setInterior, setWeather,
-    triggerSFX, playMusicTrack, stopMusicTrack,
+    triggerSFX, playSpatialSFX, playMusicTrack, stopMusicTrack,
   };
 
   return (
