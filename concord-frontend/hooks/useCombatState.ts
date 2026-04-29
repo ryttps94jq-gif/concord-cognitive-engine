@@ -4,6 +4,8 @@ import { useState, useCallback, useRef } from 'react';
 import { CombatSkill, HotbarState, isOnCooldown } from '@/lib/concordia/combat/hotbar';
 import { VATSState, BodyPart, createVATSState, queueVATSShot, exitVATS, regenAP } from '@/lib/concordia/combat/vats';
 import { SPECIALStats, DEFAULT_SPECIAL } from '@/lib/concordia/player-stats';
+import { canHarm, makeEntity, type EntityTier } from '@/lib/concordia/entity-protection';
+import type { DomainType } from '@/lib/concordia/district-domains';
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -49,7 +51,10 @@ export interface CombatState {
 
 // ── Hook ─────────────────────────────────────────────────────────────
 
-export function useCombatState(special: SPECIALStats = DEFAULT_SPECIAL) {
+export function useCombatState(
+  special: SPECIALStats = DEFAULT_SPECIAL,
+  domain: DomainType = 'mainland',
+) {
   const [state, setState] = useState<CombatState>(() => ({
     active: false,
     health: 100 + special.endurance * 20,
@@ -77,7 +82,21 @@ export function useCombatState(special: SPECIALStats = DEFAULT_SPECIAL) {
     }));
   }, []);
 
-  const activateSkill = useCallback((slot: number): boolean => {
+  const activateSkill = useCallback((slot: number, targetTier: EntityTier = 'ambient'): boolean => {
+    // Entity protection check — enforced before any skill resolves
+    const target = stateRef.current.target;
+    if (target) {
+      const result = canHarm({
+        attacker: { tier: 'player', pvpConsented: false },
+        target: makeEntity(target.id, target.name, targetTier),
+        domain,
+      });
+      if (!result.allowed) {
+        addLog({ text: result.reason ?? 'Cannot attack this target.', type: 'info' });
+        return false;
+      }
+    }
+
     const skill: CombatSkill | null = stateRef.current.hotbar.slots[slot] ?? null;
     if (!skill) return false;
     if (isOnCooldown(skill)) {
