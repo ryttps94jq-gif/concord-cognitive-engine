@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef, useCallback } from 'react';
+import { TextureForge } from '@/lib/world-lens/texture-forge';
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -147,14 +148,38 @@ export default function BuildingRenderer3D({
     const matConfig = PBR_MATERIAL_CONFIG[matType];
 
     // Base material (may be overridden for validation/heatmap modes)
+    // emissiveIntensity: 0.08 gives a subtle ambient window warmth in all lighting.
+    const getProceduralTextures = (type: BuildingMaterialType) => {
+      try {
+        let pair;
+        if (type === 'brick')    pair = TextureForge.getBrick('red');
+        else if (type === 'stone')    pair = TextureForge.getConcrete(0.3);
+        else if (type === 'concrete') pair = TextureForge.getConcrete(0.6);
+        else if (type === 'usb')      pair = TextureForge.getConcrete(0.15);
+        else if (type === 'wood')     pair = TextureForge.getWood('oak');
+        else if (type === 'steel')    pair = TextureForge.getMetal('brushed');
+        else if (type === 'glass')    pair = TextureForge.getGlass('#aaddff');
+        if (!pair) return {};
+        return {
+          map: new THREE.CanvasTexture(pair.map),
+          roughnessMap: new THREE.CanvasTexture(pair.roughnessMap),
+        };
+      } catch {
+        return {};
+      }
+    };
     const createMaterial = (overrides?: Partial<typeof matConfig>) => {
       const cfg = { ...matConfig, ...overrides };
+      const textures = overrides ? {} : getProceduralTextures(matType);
       return new THREE.MeshStandardMaterial({
         color: cfg.color,
         roughness: cfg.roughness,
         metalness: cfg.metalness,
         transparent: cfg.transparent,
         opacity: cfg.opacity,
+        emissive: new THREE.Color(0xffcc88),
+        emissiveIntensity: 0.08,
+        ...textures,
       });
     };
 

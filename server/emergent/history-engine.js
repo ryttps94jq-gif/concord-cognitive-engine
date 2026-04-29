@@ -546,6 +546,13 @@ export function recordEvent(type, data = {}) {
     // Check for era transition triggered by this event
     const eraResult = checkEraTransitionInternal();
 
+    // Every 20 events trigger a background lore synthesis
+    if (_civilizationTick % 20 === 0) {
+      import("../routes/world-narrative.js")
+        .then(m => m.buildLore("concordia-hub"))
+        .catch(() => {}); // fire-and-forget; errors logged inside buildLore
+    }
+
     const result = { ok: true, event };
     if (eraResult && eraResult.transitioned) {
       result.eraTransition = eraResult;

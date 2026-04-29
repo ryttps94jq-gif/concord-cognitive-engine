@@ -5985,6 +5985,21 @@ async function tryInitWebSockets(server) {
   REALTIME.ready = true;
   globalThis._concordREALTIME = REALTIME;
 
+  // Horizontal scaling: attach Redis pub/sub adapter when REDIS_URL is set
+  if (process.env.REDIS_URL) {
+    try {
+      const { createAdapter } = await import("@socket.io/redis-adapter");
+      const { createClient } = await import("redis");
+      const pubClient = createClient({ url: process.env.REDIS_URL });
+      const subClient = pubClient.duplicate();
+      await Promise.all([pubClient.connect(), subClient.connect()]);
+      io.adapter(createAdapter(pubClient, subClient));
+      console.info("[Socket.IO] Redis adapter active —", process.env.REDIS_URL);
+    } catch (err) {
+      console.warn("[Socket.IO] Redis adapter failed, falling back to in-memory:", err.message);
+    }
+  }
+
   // SECURITY: Socket.IO authentication middleware
   io.use((socket, next) => {
     // Parse cookies from handshake
@@ -25987,6 +26002,14 @@ app.use("/api/lens-portals",      createLensPortalsRouter({ requireAuth, db }));
 app.use("/api/player-inventory",  createPlayerInventoryRouter({ requireAuth, db }));
 app.use("/api/arena",             createArenaRouter({ requireAuth, db, realtimeEmit }));
 app.use("/api/leaderboards",      createLeaderboardsRouter({ db }));
+
+// ===== WORLD NARRATIVE (Oracle brain: lore synthesis, quest chains, dialogue) =====
+import createWorldNarrativeRouter, { buildLore } from "./routes/world-narrative.js";
+app.use("/api/world/narrative", createWorldNarrativeRouter({ requireAuth, requireRole }));
+// Synthesize lore every 10 minutes in the background
+setInterval(() => {
+  buildLore("concordia-hub").catch(e => logger.warn({ err: e.message }, "lore_interval_failed"));
+}, 10 * 60 * 1000);
 
 // ===== CONNECTIVE TISSUE (economy wiring, DTU pipeline, CRETI, compression, fork, preview, search, emergent/bot auth) =====
 import createConnectiveTissueRouter from "./routes/connective-tissue.js";

@@ -103,6 +103,7 @@ const LeaderboardPanel      = dynamic(() => import('@/components/concordia/world
 const WorldEventsPanel      = dynamic(() => import('@/components/concordia/world/WorldEventsPanel').then(m => ({ default: m.WorldEventsPanel })), { ssr: false });
 const ArenaPanel            = dynamic(() => import('@/components/concordia/world/ArenaPanel').then(m => ({ default: m.ArenaPanel })), { ssr: false });
 const JobsBoardPanel        = dynamic(() => import('@/components/concordia/world/JobsBoardPanel').then(m => ({ default: m.JobsBoardPanel })), { ssr: false });
+const LorePanel             = dynamic(() => import('@/components/concordia/world/LorePanel').then(m => ({ default: m.LorePanel })), { ssr: false });
 
 import { LensPortalMarker } from '@/components/concordia/world/LensPortalMarker';
 import { modeManager, startLensTimeTick, stopLensTimeTick } from '@/lib/concordia/mode-manager';
@@ -659,7 +660,8 @@ export default function WorldLensPage() {
 
   // 3D Explore mode state
   const [cameraMode, setCameraMode] = useState<'isometric' | 'follow' | 'free' | 'interior' | 'cinematic'>('follow');
-  const [showPanel, setShowPanel] = useState<'none' | 'inventory' | 'quests' | 'chat' | 'map' | 'crafting' | 'players' | 'profile' | 'collaboration' | 'livecollab' | 'events' | 'socialproof' | 'notifications' | 'smartnotify' | 'moderation' | 'ownership' | 'federation' | 'voice' | 'voiceassist' | 'combat' | 'skills' | 'modes' | 'guild' | 'season' | 'npcshop' | 'leaderboard' | 'worldevents' | 'arena' | 'jobs'>('none');
+  const [concordiaTheme, setConcordiaTheme] = useState<'neon-punk' | 'classic' | 'minimal'>('neon-punk');
+  const [showPanel, setShowPanel] = useState<'none' | 'inventory' | 'quests' | 'chat' | 'map' | 'crafting' | 'players' | 'profile' | 'collaboration' | 'livecollab' | 'events' | 'socialproof' | 'notifications' | 'smartnotify' | 'moderation' | 'ownership' | 'federation' | 'voice' | 'voiceassist' | 'combat' | 'skills' | 'modes' | 'guild' | 'season' | 'npcshop' | 'leaderboard' | 'worldevents' | 'arena' | 'jobs' | 'lore'>('none');
   // Local player avatar — mutable so moves update it in place. On
   // first mount we ask the server for saved state (via player:load)
   // and land back wherever the user logged off.
@@ -1395,6 +1397,7 @@ export default function WorldLensPage() {
           <ConcordiaScene
             districtId={activeDistrict.id}
             quality="medium"
+            theme={concordiaTheme}
             onBuildingClick={(id) => {
               const b = activeDistrict.buildings.find(b => b.id === id);
               if (b) setSelectedBuilding(b);
@@ -1403,6 +1406,22 @@ export default function WorldLensPage() {
             width="100%"
             height="100%"
           />
+          {/* Theme picker — 3 swatches top-right */}
+          <div className="absolute top-4 right-4 z-20 flex items-center gap-1.5 bg-black/50 border border-white/10 rounded-xl px-2 py-1.5 pointer-events-auto">
+            {([
+              { id: 'neon-punk' as const, swatch: '#6366f1', label: 'Neon Punk' },
+              { id: 'classic'  as const, swatch: '#e8c97a', label: 'Classic' },
+              { id: 'minimal'  as const, swatch: '#94a3b8', label: 'Minimal' },
+            ]).map(t => (
+              <button
+                key={t.id}
+                onClick={() => setConcordiaTheme(t.id)}
+                title={t.label}
+                className={`w-5 h-5 rounded-full border-2 transition-transform ${concordiaTheme === t.id ? 'border-white scale-110' : 'border-transparent hover:scale-105'}`}
+                style={{ backgroundColor: t.swatch }}
+              />
+            ))}
+          </div>
           {/* 3D scene rendering layers */}
           <TerrainRenderer
             districts={[]}
@@ -1663,6 +1682,7 @@ export default function WorldLensPage() {
               { key: 'worldevents', label: 'Events+', icon: CalendarDays },
               { key: 'arena', label: 'Arena', icon: Swords },
               { key: 'jobs', label: 'Jobs', icon: Briefcase },
+              { key: 'lore', label: 'Lore', icon: BookOpen },
             ] as const).map(({ key, label, icon: Icon }) => (
               <button
                 key={key}
@@ -1730,6 +1750,9 @@ export default function WorldLensPage() {
           )}
           {showPanel === 'jobs' && (
             <JobsBoardPanel playerId={playerAvatar.id} onClose={() => setShowPanel('none')} />
+          )}
+          {showPanel === 'lore' && (
+            <LorePanel worldId="concordia-hub" onClose={() => setShowPanel('none')} />
           )}
           {showPanel === 'players' && (
             <div className="absolute top-4 left-4 z-20 w-80 max-h-[70vh] overflow-auto pointer-events-auto">

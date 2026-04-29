@@ -49,6 +49,7 @@ export interface ConcordiaSceneAPI {
 interface ConcordiaSceneProps {
   districtId: string;
   quality?: QualityPreset;
+  theme?: import('@/lib/world-lens/concordia-theme').ConcordiaThemeId;
   onBuildingClick?: (buildingId: string, intersection: unknown) => void;
   onTerrainClick?: (position: { x: number; y: number; z: number }) => void;
   width?: number | string;
@@ -128,6 +129,7 @@ const panel = 'bg-black/80 backdrop-blur-sm border border-white/10 rounded-lg';
 export default function ConcordiaScene({
   districtId,
   quality: initialQuality = 'medium',
+  theme: themeProp = 'neon-punk',
   onBuildingClick,
   onTerrainClick,
   width = '100%',
@@ -137,6 +139,7 @@ export default function ConcordiaScene({
   const rendererRef = useRef<unknown>(null);
   const sceneRef = useRef<unknown>(null);
   const cameraRef = useRef<unknown>(null);
+  const composerRef = useRef<{ render: (delta: number) => void; setSize: (w: number, h: number) => void } | null>(null);
   const layersRef = useRef<Record<string, unknown>>({});
   const frameIdRef = useRef<number>(0);
   const clockRef = useRef<unknown>(null);
@@ -215,9 +218,51 @@ export default function ConcordiaScene({
       renderer.outputColorSpace = THREE.SRGBColorSpace;
       rendererRef.current = renderer;
 
+      // ── Post-Processing ─────────────────────────────────────────
+      // Use Three.js EffectComposer with quality-gated passes.
+      // Bloom: portals + neon accents glow. SAO: contact shadows.
+      // Vignette: cinematic framing via custom ShaderPass.
+      if (quality !== 'low') {
+        try {
+          const [{ EffectComposer }, { RenderPass }, { UnrealBloomPass }, { ShaderPass }] = await Promise.all([
+            import('three/examples/jsm/postprocessing/EffectComposer.js'),
+            import('three/examples/jsm/postprocessing/RenderPass.js'),
+            import('three/examples/jsm/postprocessing/UnrealBloomPass.js'),
+            import('three/examples/jsm/postprocessing/ShaderPass.js'),
+          ]);
+          const composer = new EffectComposer(renderer);
+          composer.addPass(new RenderPass(scene, camera));
+          const bloom = new UnrealBloomPass(
+            new THREE.Vector2(canvas!.clientWidth, canvas!.clientHeight),
+            quality === 'high' || quality === 'ultra' ? 1.2 : 0.7,  // strength
+            0.4,   // radius
+            0.3,   // threshold — only bright areas glow
+          );
+          composer.addPass(bloom);
+          // Vignette via inline shader
+          const vignetteShader = {
+            uniforms: { tDiffuse: { value: null }, darkness: { value: 0.55 }, offset: { value: 0.5 } },
+            vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+            fragmentShader: `uniform sampler2D tDiffuse; uniform float darkness; uniform float offset; varying vec2 vUv;
+              void main() {
+                vec4 color = texture2D(tDiffuse, vUv);
+                vec2 uv = (vUv - vec2(0.5)) * vec2(offset);
+                float vignette = clamp(dot(uv, uv) * darkness * 4.0, 0.0, 1.0);
+                gl_FragColor = vec4(mix(color.rgb, vec3(0.0), vignette), color.a);
+              }`,
+          };
+          composer.addPass(new ShaderPass(vignetteShader));
+          composerRef.current = composer;
+        } catch (ppErr) {
+          console.warn('[ConcordiaScene] Post-processing unavailable:', ppErr);
+        }
+      }
+
       // ── Scene ───────────────────────────────────────────────────
+      const { CONCORDIA_THEMES } = await import('@/lib/world-lens/concordia-theme');
+      const activeTheme = CONCORDIA_THEMES[themeProp] || CONCORDIA_THEMES['neon-punk'];
       scene = new THREE.Scene();
-      scene.fog = new THREE.FogExp2(0x8899bb, 0.0008);
+      scene.fog = new THREE.Fog(activeTheme.fog.color, activeTheme.fog.near, activeTheme.fog.far);
       sceneRef.current = scene;
 
       // ── Camera ──────────────────────────────────────────────────
@@ -244,10 +289,10 @@ export default function ConcordiaScene({
       raycasterRef.current = raycaster;
 
       // ── Ambient + default directional light ─────────────────────
-      const ambient = new THREE.AmbientLight(0x405070, 0.5);
+      const ambient = new THREE.AmbientLight(activeTheme.ambientLight.color, activeTheme.ambientLight.intensity);
       scene.add(ambient);
 
-      const sun = new THREE.DirectionalLight(0xfff4e0, 1.2);
+      const sun = new THREE.DirectionalLight(activeTheme.sunLight.color, activeTheme.sunLight.intensity);
       sun.position.set(100, 200, 80);
       sun.castShadow = true;
       sun.shadow.mapSize.width = settings.shadowMapSize;
@@ -259,6 +304,24 @@ export default function ConcordiaScene({
       sun.shadow.camera.top = 300;
       sun.shadow.camera.bottom = -300;
       scene.add(sun);
+
+      // ── Portal glow lights (indigo, one per portal building) ────
+      const PORTAL_POSITIONS = [
+        [8,4],[4,6],[12,3],[2,8],[16,7],[6,10],[0,5],[14,5],[10,4],
+        [18,5],[9,6],[20,8],[7,2],[8,6],[15,2],
+      ];
+      for (const [px, pz] of PORTAL_POSITIONS) {
+        const pl = new THREE.PointLight(activeTheme.portalGlow, 2, 15);
+        pl.position.set(px, 2, pz);
+        scene.add(pl);
+      }
+      // ── Street lamp point lights ────────────────────────────────
+      const LAMP_POSITIONS = [[3,3],[7,7],[11,2],[15,8],[1,6],[13,6],[5,1],[9,9]];
+      for (const [lx, lz] of LAMP_POSITIONS) {
+        const lamp = new THREE.PointLight(activeTheme.streetLamp, 1.5, 20);
+        lamp.position.set(lx, 4, lz);
+        scene.add(lamp);
+      }
 
       setIsReady(true);
 
@@ -278,8 +341,12 @@ export default function ConcordiaScene({
           }
         }
 
-        // Render
-        renderer.render(scene, camera);
+        // Render (use EffectComposer when available, plain renderer otherwise)
+        if (composerRef.current) {
+          composerRef.current.render(delta);
+        } else {
+          renderer.render(scene, camera);
+        }
 
         // Performance budget monitoring
         const info = renderer.info;
@@ -320,6 +387,7 @@ export default function ConcordiaScene({
         c.aspect = w / h;
         c.updateProjectionMatrix();
         r.setSize(w, h);
+        composerRef.current?.setSize(w, h);
       }
     }
     window.addEventListener('resize', handleResize);
@@ -402,7 +470,7 @@ export default function ConcordiaScene({
       buildingMap.clear();
       setIsReady(false);
     };
-  }, [districtId, quality, onBuildingClick, onTerrainClick]);
+  }, [districtId, quality, themeProp, onBuildingClick, onTerrainClick]);
 
   // ── Scene API ──────────────────────────────────────────────────
 
