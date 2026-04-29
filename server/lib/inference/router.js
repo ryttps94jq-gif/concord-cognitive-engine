@@ -6,13 +6,18 @@ import { BRAIN_CONFIG } from "../brain-config.js";
 import { isBrainAvailable, makeBrainHandle } from "./ollama-client.js";
 
 // Role → ordered list of brains to try (primary first, then fallback)
+// IMPORTANT: conscious role for chat callers has NO fallback chain.
+// Chat is conscious-only. If 14B is unavailable, we fail explicitly.
 const ROLE_CHAIN = {
-  conscious:    ["conscious", "subconscious"],
+  conscious:    ["conscious"],      // chat uses conscious ONLY — no silent downgrade
   subconscious: ["subconscious", "utility"],
   utility:      ["utility", "repair"],
   repair:       ["repair"],
   multimodal:   ["multimodal"],
 };
+
+// CallerIds that require strict conscious-only routing (no fallback under any circumstances)
+const CHAT_CALLER_PREFIXES = ["chat", "chat-conscious", "conscious-chat"];
 
 // Reachability cache — refreshed on first miss or after TTL
 const _available = new Map(); // brainName → { ok, expiresAt }
@@ -42,6 +47,24 @@ export async function selectBrain(role, opts = {}) {
     };
   }
 
+  // Enforce conscious-only for chat callers — no silent fallback to other brains
+  const callerId = opts.callerId || "";
+  const isChatCaller = CHAT_CALLER_PREFIXES.some(prefix => callerId.startsWith(prefix));
+  if ((role === "conscious" || isChatCaller) && !opts.skipAvailabilityCheck) {
+    const available = await checkAvailability("conscious");
+    if (!available) {
+      const err = new Error(
+        "Conscious brain required for chat is currently unavailable. " +
+        "Service will resume when the conscious brain is back online."
+      );
+      err.code = "conscious_brain_unavailable";
+      err.role = role;
+      err.callerId = callerId;
+      throw err;
+    }
+    return { handle: makeBrainHandle("conscious"), fallbacksUsed: [] };
+  }
+
   const chain = ROLE_CHAIN[role] || ROLE_CHAIN.conscious;
   const fallbacksUsed = [];
 
@@ -49,7 +72,6 @@ export async function selectBrain(role, opts = {}) {
     const brainName = chain[i];
     if (!BRAIN_CONFIG[brainName]) continue;
 
-    // Skip availability check in tests or when explicitly requested
     if (opts.skipAvailabilityCheck) {
       return { handle: makeBrainHandle(brainName), fallbacksUsed };
     }

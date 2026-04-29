@@ -24618,6 +24618,19 @@ startJobWorker();
 // startup banner
 structuredLog("info", "server_starting", { version: VERSION, port: PORT, dotenvLoaded: DOTENV.loaded, dotenvPath: DOTENV.path, llmReady: LLM_READY, authMode: AUTH_MODE, jwt: AUTH_USES_JWT, apikey: AUTH_USES_APIKEY });
 
+// ── Agentic infrastructure init ───────────────────────────────────────────────
+import { skillRegistry } from "./lib/agentic/skills.js";
+skillRegistry.scan().catch(err => structuredLog("warn", "skill_scan_failed", { error: err.message }));
+
+import { register as registerHook } from "./lib/agentic/hooks.js";
+import { checkSovereigntyInvariants } from "./grc/sovereignty-invariants.js";
+registerHook("before_tool", async (ctx) => {
+  if (ctx.tool?.type === "dtu_read") {
+    const result = checkSovereigntyInvariants(ctx.tool);
+    if (!result.pass) return { abort: true, reason: result.violations[0]?.invariant };
+  }
+}, { priority: 100, name: "constitutional-guard" });
+
 // Root, status, LLM pipeline, quality-pipeline, time, weather, state/latest — extracted to routes/system.js
 
 
@@ -25944,6 +25957,15 @@ try { app.use("/api/channels", createChannelsRouter({ STATE, requireAuth, realti
 
 import createAgentsRouter from "./routes/agents.js";
 try { app.use("/api/agents", createAgentsRouter({ db, requireAuth, STATE })); } catch (e) { structuredLog("warn", "agents_routes_skip", { error: e.message }); }
+
+import { createA2ARouter } from "./lib/agentic/a2a-server.js";
+try {
+  app.use("/a2a", createA2ARouter({
+    emergentsIndex: STATE.emergents || STATE.__emergents || {},
+    db,
+    requireApiKey: true,
+  }));
+} catch (e) { structuredLog("warn", "a2a_routes_skip", { error: e.message }); }
 
 import createArtifactsRouter from "./routes/artifacts.js";
 try { app.use("/api/artifacts", createArtifactsRouter({ db, requireAuth, STATE })); } catch (e) { structuredLog("warn", "artifacts_routes_skip", { error: e.message }); }
