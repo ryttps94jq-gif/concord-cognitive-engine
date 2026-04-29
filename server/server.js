@@ -4751,6 +4751,8 @@ function authMiddleware(req, res, next) {
     "/api/atlas/signals", "/api/atlas/privacy",
     // Competitive parity modules
     "/api/messaging", "/api/sandbox",
+    // Production integrity
+    "/api/inference/slos", "/api/audit/provenance",
     // Plugins & extensions
     "/api/plugins", "/api/macros",
     // Growth & entities
@@ -8017,6 +8019,8 @@ async function runMacro(domain, name, input, ctx) {
     "/api/notion", "/api/undo", "/api/reseed", "/api/context",
     // Competitive parity additions
     "/api/messaging", "/api/sandbox",
+    // Production integrity
+    "/api/inference/slos", "/api/audit/provenance",
   ];
   // Safe POST paths: chat and brain endpoints that must bypass Chicken2 for unauthenticated users
   const _safePostPaths = ["/api/chat", "/api/brain/conscious", "/api/repair", "/api/creative/registry", "/api/lens", "/api/forge", "/api/ask", "/api/dtus", "/api/social", "/api/economy", "/api/marketplace", "/api/collab", "/api/goals", "/api/media",
@@ -25985,6 +25989,23 @@ import "./lib/inference/otel-exporter.js";
 // ── Competitive Parity: Span persistence to SQLite ──────────────────────────
 import { wireSpanPersistence } from "./lib/inference/thread-manager.js";
 if (db) { try { wireSpanPersistence(db); } catch {} }
+
+// ── Production Integrity: SLO monitoring ────────────────────────────────────
+import { wireInferenceToSLO, getSLODashboard } from "./lib/monitoring/slo.js";
+wireInferenceToSLO();
+app.get("/api/inference/slos", (req, res) => res.json(getSLODashboard()));
+
+// ── Production Integrity: Provenance audit ──────────────────────────────────
+import { registerConcordClaims, preLaunchVerification } from "./lib/audit/provenance.js";
+registerConcordClaims({ db });
+app.get("/api/audit/provenance", async (req, res) => {
+  const { provenance } = await import("./lib/audit/provenance.js");
+  res.json(provenance.getReport());
+});
+app.post("/api/audit/provenance/verify", async (req, res) => {
+  const result = await preLaunchVerification();
+  res.status(result.ok ? 200 : 422).json(result);
+});
 
 // ===== CONCORDIA MULTI-WORLD (worlds, transit, substrate, skill commerce) =====
 import createWorldsRouter from "./routes/worlds.js";

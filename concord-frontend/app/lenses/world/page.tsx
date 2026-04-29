@@ -30,7 +30,7 @@ import {
   type DeformationRecord,
   type WeatherPhysicsModifiers,
 } from '@/lib/world-lens/world-deformation';
-import { encodeDelta, type CharState } from '@/lib/concordia/netcode';
+import { encodeDelta, ReconciliationBuffer, type CharState, type ServerStateMsg } from '@/lib/concordia/netcode';
 
 const ConcordiaScene = dynamic(() => import('@/components/world-lens/ConcordiaScene'), { ssr: false });
 const AvatarSystem3D = dynamic(() => import('@/components/world-lens/AvatarSystem3D'), { ssr: false });
@@ -784,6 +784,28 @@ export default function WorldLensPage() {
   const deformLookupRef = useRef<((id: string) => { visible: boolean; userData: Record<string, unknown> } | undefined) | null>(null);
   const combatMusicRef = useRef<{ onCombatEvent: (intensity: number) => void; update: (delta: number, inCombat: boolean) => void; dispose: () => void } | null>(null);
   const prevCharStateRef = useRef<CharState | null>(null);
+  const inputSeqRef = useRef(0);
+  const reconRef = useRef<ReconciliationBuffer | null>(null);
+  // Lazily initialise on first move so the physics sim closure is cheap
+  function getRecon(): ReconciliationBuffer {
+    if (!reconRef.current) {
+      reconRef.current = new ReconciliationBuffer((state, input) => {
+        // Minimal KCC sim: apply velocity from input flags, same constants as AvatarSystem3D
+        const WALK = 5.0; const RUN = 12.0;
+        const spd = input.sprint ? RUN : WALK;
+        return {
+          ...state,
+          seq: input.seq,
+          position: {
+            x: state.position.x + input.strafe  * spd * input.delta,
+            y: state.position.y,
+            z: state.position.z + input.forward * spd * input.delta,
+          },
+        };
+      });
+    }
+    return reconRef.current;
+  }
   const [weatherData, setWeatherData] = useState<{ type: string; intensity: number } | null>(null);
   const [weatherModifiers, setWeatherModifiers] = useState<WeatherPhysicsModifiers | null>(null);
   // Live mirror so socket handlers can read the current target / stamina
@@ -967,17 +989,55 @@ export default function WorldLensPage() {
     // ── Anti-cheat / move-rejection reconciliation ─────────────────
     // The server validates every player:move and rejects speed-hacks,
     // teleports, and rate-floods. When that happens it sends back the
-    // player's last known good position; we snap the local avatar
-    // back so the client can't silently drift out of sync.
+    // server's authoritative state (seq + position). We first try to
+    // re-simulate from that state using unacknowledged inputs via
+    // ReconciliationBuffer.reconcile(). If the error is too large
+    // (> SNAP_THRESHOLD) or no recon buffer exists, fall back to a
+    // hard snap so the client can't silently drift out of sync.
     const handleMoveNack = (msg: unknown) => {
       const data = msg as {
         reason?: string;
         prev?: { x: number; y: number; z: number };
+        seq?: number;
       };
       if (!data?.prev) return;
+
+      const serverMsg: ServerStateMsg = {
+        seq:   data.seq ?? 0,
+        tick:  0,
+        state: {
+          seq:      data.seq ?? 0,
+          position: { x: data.prev.x, y: data.prev.y, z: data.prev.z },
+          velocity: { x: 0, y: 0, z: 0 },
+          onGround: true,
+          health:   combatStateRef.current.health,
+          stamina:  combatStateRef.current.stamina,
+        },
+      };
+
+      // Attempt smooth reconciliation
+      let reconPos = serverMsg.state.position;
+      if (reconRef.current) {
+        const reconState = reconRef.current.reconcile(serverMsg);
+        const err = Math.hypot(
+          reconState.position.x - (prevCharStateRef.current?.position.x ?? reconState.position.x),
+          reconState.position.z - (prevCharStateRef.current?.position.z ?? reconState.position.z),
+        );
+        if (err < ReconciliationBuffer.SNAP_THRESHOLD) {
+          reconPos = reconState.position;
+          prevCharStateRef.current = reconState;
+        } else {
+          // Large error — hard snap and clear history
+          reconRef.current.clearHistory();
+          prevCharStateRef.current = serverMsg.state;
+        }
+      } else {
+        prevCharStateRef.current = serverMsg.state;
+      }
+
       setPlayerAvatar((prev) => ({
         ...prev,
-        position: { x: data.prev!.x, y: data.prev!.y, z: data.prev!.z },
+        position: { x: reconPos.x, y: reconPos.y, z: reconPos.z },
       }));
       if (data.reason === 'speed_hack_detected' || data.reason === 'teleport_detected') {
         pushCombatLog(`Movement rejected: ${data.reason.replace(/_/g, ' ')}`, 'info');
@@ -1215,6 +1275,28 @@ export default function WorldLensPage() {
       combatMusicRef.current?.dispose();
       combatMusicRef.current = null;
     };
+  }, []);
+
+  // ── CombatMusicSystem per-frame update ────────────────────────────
+  // Drives stem-gain decay / attack each frame and must be called even
+  // when there is no combat event, so intensity decays back to 0.
+  useEffect(() => {
+    let rafId: number;
+    let lastT = performance.now();
+
+    function musicFrame(now: number) {
+      const delta = Math.min((now - lastT) / 1000, 0.1); // cap at 100 ms
+      lastT = now;
+      const cms = combatMusicRef.current;
+      if (cms) {
+        const inCombat = !!(combatStateRef.current.target && !combatStateRef.current.isDead);
+        cms.update(delta, inCombat);
+      }
+      rafId = requestAnimationFrame(musicFrame);
+    }
+
+    rafId = requestAnimationFrame(musicFrame);
+    return () => cancelAnimationFrame(rafId);
   }, []);
 
   // DTU persistence
@@ -1559,9 +1641,8 @@ export default function WorldLensPage() {
               weatherModifiers={weatherModifiers ?? undefined}
               quality="medium"
               onMove={(pos, rotation) => {
-                // Update local avatar immediately for snappy
-                // response, then emit to the server so other players
-                // see us move. The server rate-limits to ~30Hz.
+                // Update local avatar immediately for snappy response,
+                // then emit to the server so other players see us move.
                 setPlayerAvatar((prev) => ({ ...prev, position: pos, rotation }));
                 if (worldSocket.isConnected) {
                   worldSocket.emit('player:move', {
@@ -1575,15 +1656,37 @@ export default function WorldLensPage() {
                     action: 'walk',
                     currentAnimation: 'walk',
                   });
-                  // Delta-compressed binary move alongside JSON (server ignores until handler added)
-                  const nextState: CharState = {
-                    seq: 0, position: pos, velocity: { x: 0, y: 0, z: 0 },
-                    onGround: true, health: 100, stamina: 100,
+
+                  // ── ReconciliationBuffer: client-side prediction ────────────
+                  // Build an InputFrame from the position delta vs last state,
+                  // run it through the buffer's predict() so unacknowledged
+                  // inputs are stored for re-simulation if the server rejects.
+                  const seq = ++inputSeqRef.current;
+                  const prev = prevCharStateRef.current;
+                  const dt = 1 / 60; // nominal; AvatarSystem3D owns real delta
+                  const dx = prev ? pos.x - prev.position.x : 0;
+                  const dz = prev ? pos.z - prev.position.z : 0;
+                  const len = Math.sqrt(dx * dx + dz * dz) || 1;
+                  const inputFrame = {
+                    seq,
+                    delta: dt,
+                    forward: dz / len,
+                    strafe:  dx / len,
+                    jump: false,
+                    sprint: false,
+                    yaw: rotation,
                   };
-                  if (prevCharStateRef.current) {
-                    worldSocket.emit('player:move:delta', encodeDelta(prevCharStateRef.current, nextState));
+                  const currentState: CharState = prev ?? {
+                    seq: 0, position: pos, velocity: { x: 0, y: 0, z: 0 },
+                    onGround: true, health: combatState.health, stamina: combatState.stamina,
+                  };
+                  const predicted = getRecon().predict(currentState, inputFrame);
+
+                  // Delta-compressed binary move alongside JSON
+                  if (prev) {
+                    worldSocket.emit('player:move:delta', encodeDelta(prev, predicted));
                   }
-                  prevCharStateRef.current = nextState;
+                  prevCharStateRef.current = predicted;
                 }
               }}
               onEmote={(emote) => {
