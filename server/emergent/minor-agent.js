@@ -10,6 +10,7 @@ import { shouldProduceArtifact, createAttributedArtifact } from "./artifacts.js"
 import { runIdleBehavior } from "./idle-behavior.js";
 import { processCommunicationTask } from "./communication.js";
 import { emitFeedEvent } from "./feed.js";
+import { runQualityPipeline } from "../lib/emergents/quality/orchestrator.js";
 
 export class EmergentMinorAgent {
   /**
@@ -114,14 +115,27 @@ export class EmergentMinorAgent {
       this._markCompleted(task.id, result);
       this._recordObservation(task, result);
       if (shouldProduceArtifact(task, result)) {
-        const artifact = createAttributedArtifact(this.identity, task, result, this.db);
-        if (artifact) {
-          emitFeedEvent({
-            type: "artifact_created",
-            emergentId: this.emergentId,
-            emergent: this.identity,
-            data: { dtu_id: artifact.id, dtu_title: artifact.title, lens: artifact.lens, type: artifact.type },
-          }, this.db, this.realtimeEmit);
+        const quality = await runQualityPipeline({
+          emergentId: this.emergentId,
+          identity: this.identity,
+          task,
+          result,
+          db: this.db,
+          parentInferenceId: task.id,
+        });
+        if (quality.approved) {
+          const finalResult = quality.finalDraft
+            ? { ...result, finalText: quality.finalDraft.body }
+            : result;
+          const artifact = createAttributedArtifact(this.identity, task, finalResult, this.db);
+          if (artifact) {
+            emitFeedEvent({
+              type: "artifact_created",
+              emergentId: this.emergentId,
+              emergent: this.identity,
+              data: { dtu_id: artifact.id, dtu_title: artifact.title, lens: artifact.lens, type: artifact.type },
+            }, this.db, this.realtimeEmit);
+          }
         }
       }
       emitFeedEvent({
