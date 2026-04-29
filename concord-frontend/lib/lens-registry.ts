@@ -248,6 +248,7 @@ export const LENS_REGISTRY: LensEntry[] = [
   { id: 'neuro', name: 'Neuro', icon: Network, description: 'Neuroscience tools', category: 'science', showInSidebar: false, showInCommandPalette: true, path: '/lenses/neuro', order: 135, keywords: ['brain', 'neuroscience', 'neural'] },
 
   // ── Extensions: AI & Cognition ──────────────────────────────────
+  { id: 'genesis', name: 'Genesis', icon: Zap, description: 'Real-time emergent activity — named entities, artifacts, inter-emergent communications, and the live substrate feed', category: 'ai', showInSidebar: true, showInCommandPalette: true, path: '/lenses/genesis', order: 139, keywords: ['emergents', 'genesis', 'entities', 'feed', 'activity', 'naming', 'artifacts', 'communications'] },
   { id: 'ml', name: 'ML', icon: Brain, description: 'Machine learning tools', category: 'ai', showInSidebar: false, showInCommandPalette: true, path: '/lenses/ml', order: 140, keywords: ['machine learning', 'training', 'models'] },
   { id: 'agents', name: 'Agents', icon: Cpu, description: 'AI agent management', category: 'ai', showInSidebar: false, showInCommandPalette: true, path: '/lenses/agents', order: 141, keywords: ['autonomous', 'bot', 'agent'] },
   { id: 'reasoning', name: 'Reasoning', icon: Lightbulb, description: 'Reasoning chain builder', category: 'ai', showInSidebar: false, showInCommandPalette: true, path: '/lenses/reasoning', order: 142, keywords: ['logic', 'inference', 'chain'] },

@@ -24622,6 +24622,21 @@ structuredLog("info", "server_starting", { version: VERSION, port: PORT, dotenvL
 import { skillRegistry } from "./lib/agentic/skills.js";
 skillRegistry.scan().catch(err => structuredLog("warn", "skill_scan_failed", { error: err.message }));
 
+import { minorAgentScheduler } from "./emergent/minor-agent-scheduler.js";
+minorAgentScheduler.db = db;
+minorAgentScheduler.realtimeEmit = realtimeEmit;
+// Initialize agents for existing emergents after a short delay to avoid blocking boot
+setTimeout(async () => {
+  try {
+    const emergentsMap = STATE?.__emergent?.emergents;
+    await minorAgentScheduler.initialize(emergentsMap);
+    minorAgentScheduler.start();
+    structuredLog("info", "minor_agent_scheduler_started", { agents: minorAgentScheduler.size });
+  } catch (e) {
+    structuredLog("warn", "minor_agent_scheduler_failed", { error: e.message });
+  }
+}, 5000);
+
 import { register as registerHook } from "./lib/agentic/hooks.js";
 import { checkSovereigntyInvariants } from "./grc/sovereignty-invariants.js";
 registerHook("before_tool", async (ctx) => {
@@ -25966,6 +25981,11 @@ try {
     requireApiKey: true,
   }));
 } catch (e) { structuredLog("warn", "a2a_routes_skip", { error: e.message }); }
+
+import { createEmergentVisibilityRouter } from "./routes/emergent-visibility.js";
+try {
+  app.use("/api/emergents", createEmergentVisibilityRouter({ db, requireAuth, STATE }));
+} catch (e) { structuredLog("warn", "emergent_visibility_routes_skip", { error: e.message }); }
 
 import createArtifactsRouter from "./routes/artifacts.js";
 try { app.use("/api/artifacts", createArtifactsRouter({ db, requireAuth, STATE })); } catch (e) { structuredLog("warn", "artifacts_routes_skip", { error: e.message }); }
