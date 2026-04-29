@@ -37,6 +37,14 @@ import {
   getFootPositions,
   applyBalanceAdjustment,
 } from '@/lib/concordia/com-balance';
+import {
+  SecondaryPhysicsManager,
+  buildHairChain,
+} from '@/lib/concordia/secondary-physics';
+import {
+  FacialController,
+  resolveNPCEmotion,
+} from '@/lib/concordia/facial-blend-shapes';
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -106,6 +114,8 @@ interface AvatarSystem3DProps {
   onMove?:        (position: { x: number; y: number; z: number }, rotation: number) => void;
   onEmote?:       (emote: AnimationClip) => void;
   onStaminaChange?: (stamina: number, max: number) => void;
+  weatherModifiers?: import('@/lib/world-lens/world-deformation').WeatherPhysicsModifiers;
+  quality?: import('@/components/world-lens/ConcordiaScene').QualityPreset;
 }
 
 // ── Constants ─────────────────────────────────────────────────────
@@ -157,6 +167,8 @@ export default function AvatarSystem3D({
   onMove,
   onEmote,
   onStaminaChange,
+  weatherModifiers,
+  quality = 'medium',
 }: AvatarSystem3DProps) {
   const avatarGroupRef  = useRef<unknown>(null);
   const playerMeshRef   = useRef<unknown>(null);
@@ -175,6 +187,14 @@ export default function AvatarSystem3D({
   const stridePhaseRef = useRef(0);
   // Terrain elevation sampler — set when concordia:terrain-ready fires
   const elevationRef  = useRef<((x: number, z: number) => number) | null>(null);
+
+  // Secondary physics + facial controllers
+  const secondaryPhysicsRef = useRef<SecondaryPhysicsManager | null>(null);
+  const facialControllersRef = useRef<Map<string, FacialController>>(new Map());
+
+  // Keep weather modifiers ref in sync so the game loop closure sees latest value
+  const weatherModifiersRef = useRef(weatherModifiers);
+  useEffect(() => { weatherModifiersRef.current = weatherModifiers; }, [weatherModifiers]);
 
   // Keep refs in sync with props
   useEffect(() => { physicsRef.current = { ...defaultProfile(), ...physicsPropOverride }; }, [physicsPropOverride]);
@@ -572,6 +592,36 @@ export default function AvatarSystem3D({
       playerMeshRef.current = playerMesh;
       avatarGroup.add(playerMesh);
 
+      // ── Secondary physics: hair chain ──────────────────────
+      {
+        const spm = new SecondaryPhysicsManager();
+        const headBone = playerMesh.getObjectByName('head');
+        if (headBone) {
+          const headWorld = new THREE.Vector3();
+          headBone.getWorldPosition(headWorld);
+          const hairChain = buildHairChain(headWorld, 3, 0.06, ['head', 'neck']);
+          spm.addChain('playerHair', hairChain);
+        }
+        secondaryPhysicsRef.current = spm;
+      }
+
+      // ── Facial controller: player ───────────────────────────
+      {
+        const headMesh = playerMesh.getObjectByName('head') as
+          (InstanceType<typeof import('three').Mesh> & { morphTargetDictionary?: Record<string, number> }) | undefined;
+        if (headMesh?.morphTargetDictionary) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          facialControllersRef.current.set('player', new FacialController(headMesh as any));
+        }
+      }
+
+      // ── Skin SSS (quality ≥ high) ───────────────────────────
+      if (quality === 'high' || quality === 'ultra') {
+        import('@/lib/world-lens/skin-sss-shader').then(({ applySSSTOAvatar }) => {
+          applySSSTOAvatar(playerMesh as unknown as InstanceType<typeof import('three').Group>, new THREE.Color(playerAvatar.appearance.skinColor));
+        }).catch(() => { /* SSS optional */ });
+      }
+
       // Player name tag
       const playerTag = createNameTag(
         playerAvatar.name,
@@ -639,6 +689,16 @@ export default function AvatarSystem3D({
         tag.position.y = npcDims.totalHeight + 0.3;
         mesh.add(tag);
 
+        // NPC facial controller
+        {
+          const npcHead = mesh.getObjectByName('head') as
+            (InstanceType<typeof import('three').Mesh> & { morphTargetDictionary?: Record<string, number> }) | undefined;
+          if (npcHead?.morphTargetDictionary) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            facialControllersRef.current.set(npc.id, new FacialController(npcHead as any));
+          }
+        }
+
         avatarGroup.add(mesh);
         npcMeshes.set(npc.id, {
           mesh,
@@ -683,10 +743,13 @@ export default function AvatarSystem3D({
         const isRunning = keys.has('shift');
         const physics   = physicsRef.current;
 
-        // Stamina-driven speed
+        // Stamina-driven speed (weather scales applied from physics modifiers)
+        const wMods = weatherModifiersRef.current;
+        const weatherSpeedScale = wMods?.moveSpeedScale ?? 1.0;
+        const weatherFriction   = wMods?.groundFriction  ?? 1.0;
         const staminaScale  = computeMoveSpeed(physics.currentStamina, physics.maxStamina);
         const baseSpeed     = isRunning ? RUN_SPEED : MOVE_SPEED;
-        const physicsSpeed  = baseSpeed * staminaScale;            // raw m/s for gait synthesis
+        const physicsSpeed  = baseSpeed * staminaScale * weatherSpeedScale; // raw m/s for gait synthesis
         const speed         = physicsSpeed * styleCfg.walkCycleSpeed; // style-adjusted for position delta
         const speedNorm     = Math.min(physicsSpeed / 12, 1);      // 0–1 for balance/gait tuning
 
@@ -715,9 +778,10 @@ export default function AvatarSystem3D({
           pos.x += moveX * speed * delta;
           pos.z += moveZ * speed * delta;
 
-          // Momentum overshoot on sharp direction change
+          // Momentum overshoot on sharp direction change (ice/wet = more slide)
           if (!isRunning) {
-            const overshoot = computeMomentumOvershoot(physics.mass, speed);
+            const frictionScale = 1 / Math.max(0.1, weatherFriction);
+            const overshoot = computeMomentumOvershoot(physics.mass, speed) * frictionScale;
             if (overshoot > 0.01) {
               // Nudge position slightly in previous direction — subtle slide
               pos.x += Math.cos(playerRotationRef.current) * overshoot * 0.05;
@@ -836,6 +900,57 @@ export default function AvatarSystem3D({
           }
           if (activeAnimation !== 'idle' && !['sit', 'build', 'inspect', 'craft'].includes(activeAnimation)) {
             setActiveAnimation('idle');
+          }
+        }
+
+        // ── Secondary physics: hair chain (runs AFTER FABRIK IK) ──
+        {
+          const spm = secondaryPhysicsRef.current;
+          const pm = playerMeshRef.current as InstanceType<typeof import('three').Group> | null;
+          if (spm && pm) {
+            const rootPositions = new Map<string, InstanceType<typeof import('three').Vector3>>();
+            const headBone = pm.getObjectByName('head');
+            if (headBone) {
+              const wp = new THREE.Vector3();
+              (headBone as InstanceType<typeof import('three').Object3D>).getWorldPosition(wp);
+              rootPositions.set('playerHair', wp);
+            }
+            const wm = weatherModifiersRef.current;
+            if (wm) {
+              // Derive wind intensity from lateralDamping reduction (lower damping = more wind)
+              const windX = Math.max(0, (12 - wm.lateralDamping) / 12) * 3;
+              spm.setWind(new THREE.Vector3(windX, 0, 0));
+            }
+            spm.update(rootPositions, delta, (name) => {
+              const obj = pm.getObjectByName(name);
+              return obj ?? undefined;
+            });
+          }
+        }
+
+        // ── Facial blend shapes ─────────────────────────────────
+        {
+          const pm = playerMeshRef.current as InstanceType<typeof import('three').Group> | null;
+          if (pm) {
+            const fcs = facialControllersRef.current;
+            const playerFC = fcs.get('player');
+            if (playerFC) {
+              const fatigue = physics.currentStamina / physics.maxStamina;
+              if (exhausted) playerFC.setEmotion('exhausted', 1.5);
+              else if (isMoving && isRunning) playerFC.setEmotion('determined', 2.0);
+              else if (!isMoving) playerFC.setEmotion('neutral', 2.0);
+              playerFC.update(delta, fatigue);
+            }
+            for (const [npcId] of npcMeshes) {
+              const fc = fcs.get(npcId);
+              if (!fc) continue;
+              const emotion = resolveNPCEmotion({
+                health: 1, stamina: 1, threatLevel: 0,
+                isInCombat: false, recentDamage: 0, relationship: 0,
+              });
+              fc.setEmotion(emotion);
+              fc.update(delta, 1);
+            }
           }
         }
 

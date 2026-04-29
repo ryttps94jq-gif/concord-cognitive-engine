@@ -87,14 +87,14 @@ const PCSS_GLSL = /* glsl */`
     if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) return 1.0;
 
     // Blocker search radius proportional to light size / depth
-    float searchRadius = lightSize * (compareDepth - 0.1) / compareDepth;
+    float searchRadius = lightSize * (max(compareDepth, 0.001) - 0.1) / max(compareDepth, 0.001);
     searchRadius = clamp(searchRadius, 0.001, 0.02);
 
     float avgBlockerDepth = findBlockerDistance(shadowMap, uv, compareDepth, searchRadius);
     if (avgBlockerDepth < 0.0) return 1.0; // No blocker found
 
     // Penumbra width scales with distance between blocker and receiver
-    float penumbra = (compareDepth - avgBlockerDepth) / avgBlockerDepth * lightSize;
+    float penumbra = (compareDepth - avgBlockerDepth) / max(avgBlockerDepth, 0.001) * lightSize;
     penumbra = clamp(penumbra, 0.0005, 0.03);
 
     return pcssFilter(shadowMap, uv, compareDepth, penumbra);

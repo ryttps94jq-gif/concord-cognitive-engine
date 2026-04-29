@@ -107,7 +107,7 @@ export class ReflectionProbeManager {
     const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
     mats.forEach((mat) => {
       const m = mat as THREE.MeshStandardMaterial;
-      if (m.isMeshStandardMaterial || m.isMeshPhongMaterial) {
+      if (m.isMeshStandardMaterial) {
         m.envMap          = probe.envMap;
         m.envMapIntensity = intensity;
         m.needsUpdate     = true;

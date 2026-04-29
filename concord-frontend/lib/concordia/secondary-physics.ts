@@ -76,18 +76,20 @@ const _tmpAcc = new THREE.Vector3();
  * Explicit Euler on velocity-Verlet; velocity derived from position delta.
  */
 function integrateParticle(
-  p:        SecondaryParticle,
-  dt:       number,
-  settings: SecondaryPhysicsSettings,
-  parentAccel: THREE.Vector3, // inertia force from parent bone's acceleration
+  p:            SecondaryParticle,
+  dt:           number,
+  settings:     SecondaryPhysicsSettings,
+  parentAccel:  THREE.Vector3, // inertia force from parent bone's acceleration
+  gravityScale: number,
+  windScale:    number,
 ): void {
   if (p.invMass === 0) return; // pinned
 
   _tmpVel.subVectors(p.position, p.prevPosition);
   _tmpVel.multiplyScalar(1 - p.drag);             // damping
 
-  _tmpAcc.copy(settings.gravity).multiplyScalar(p.gravityScale ?? 1);
-  _tmpAcc.addScaledVector(settings.wind, p.windScale ?? 1);
+  _tmpAcc.copy(settings.gravity).multiplyScalar(gravityScale);
+  _tmpAcc.addScaledVector(settings.wind, windScale);
   _tmpAcc.addScaledVector(parentAccel, -1);        // inertia: oppose parent acceleration
 
   p.prevPosition.copy(p.position);
@@ -281,7 +283,7 @@ export function updateChain(
   for (let step = 0; step < settings.subSteps; step++) {
     // Integrate free particles
     for (let i = 1; i < chain.particles.length; i++) {
-      integrateParticle(chain.particles[i], subDt, settings, _parentAccel);
+      integrateParticle(chain.particles[i], subDt, settings, _parentAccel, chain.gravityScale, chain.windScale);
     }
     // Relax constraints
     for (let iter = 0; iter < chain.iterations; iter++) {

@@ -191,7 +191,10 @@ export function applySSSTOAvatar(
     if (!mat || mat.type !== 'MeshStandardMaterial') return;
     // Match skin-tone materials (low metalness, no map)
     if (mat.metalness < 0.1 && !mat.map) {
-      const colorDist = mat.color.distanceTo(skinColor);
+      const dr = mat.color.r - skinColor.r;
+      const dg = mat.color.g - skinColor.g;
+      const db = mat.color.b - skinColor.b;
+      const colorDist = Math.sqrt(dr * dr + dg * dg + db * db);
       if (colorDist < 0.3) mesh.material = sssMaterial;
     }
   });
