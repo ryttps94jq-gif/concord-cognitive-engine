@@ -11,7 +11,7 @@ const panel = 'bg-black/80 backdrop-blur-sm border border-white/10 rounded-lg';
 
 // ── Types ──────────────────────────────────────────────────────────
 
-export type HUDMode = 'explore' | 'build' | 'inspect' | 'combat' | 'social';
+export type HUDMode = 'explore' | 'build' | 'inspect' | 'combat' | 'social' | 'driving' | 'spectator' | 'lens_work';
 
 export type WeatherIcon = 'clear' | 'cloudy' | 'rain' | 'snow' | 'wind';
 
@@ -169,6 +169,9 @@ export default function HUDOverlay({
     inspect: 'Inspect',
     combat: 'Combat',
     social: 'Social',
+    driving: 'Driving',
+    spectator: 'Spectator',
+    lens_work: 'Lens Work',
   };
 
   return (

@@ -76,6 +76,27 @@ const StressTestPanel = dynamic(() => import('@/components/world-lens/StressTest
 const ReplayForensics = dynamic(() => import('@/components/world-lens/ReplayForensics'), { ssr: false });
 const ReplaySpectator = dynamic(() => import('@/components/world-lens/ReplaySpectator'), { ssr: false });
 
+// ── Concordia Input Mode Overlays ──────────────────────────────────────
+const CombatHUD          = dynamic(() => import('@/components/concordia/hud/CombatHUD').then(m => ({ default: m.CombatHUD })), { ssr: false });
+const VehicleHUD         = dynamic(() => import('@/components/concordia/hud/VehicleHUD').then(m => ({ default: m.VehicleHUD })), { ssr: false });
+const DialoguePanel      = dynamic(() => import('@/components/concordia/dialogue/DialoguePanel').then(m => ({ default: m.DialoguePanel })), { ssr: false });
+const CreationWorkshop   = dynamic(() => import('@/components/concordia/creation/CreationWorkshop').then(m => ({ default: m.CreationWorkshop })), { ssr: false });
+const LensWorkspace      = dynamic(() => import('@/components/concordia/lens/LensWorkspaceInWorld').then(m => ({ default: m.LensWorkspaceInWorld })), { ssr: false });
+const EmoteWheel         = dynamic(() => import('@/components/concordia/social/EmoteWheel').then(m => ({ default: m.EmoteWheel })), { ssr: false });
+const QuickMessageBar    = dynamic(() => import('@/components/concordia/social/QuickMessageBar').then(m => ({ default: m.QuickMessageBar })), { ssr: false });
+const SpectatorControls  = dynamic(() => import('@/components/concordia/spectator/SpectatorControls').then(m => ({ default: m.SpectatorControls })), { ssr: false });
+const MobileControls     = dynamic(() => import('@/components/concordia/mobile/MobileControlsOverlay').then(m => ({ default: m.MobileControlsOverlay })), { ssr: false });
+const TutorialOverlay    = dynamic(() => import('@/components/concordia/onboarding/TutorialHint').then(m => ({ default: m.TutorialOverlay })), { ssr: false });
+
+import { modeManager } from '@/lib/concordia/mode-manager';
+import { MODE_TO_HUD } from '@/lib/concordia/modes';
+import type { InputMode } from '@/lib/concordia/modes';
+import { DEFAULT_SPECIAL } from '@/lib/concordia/player-stats';
+import { useCombatState } from '@/hooks/useCombatState';
+import { useVehicleState } from '@/hooks/useVehicleState';
+import { useDialogue } from '@/hooks/useDialogue';
+import type { HUDMode } from '@/components/world-lens/HUDOverlay';
+
 import { SEED_MATERIALS } from '@/lib/world-lens/material-seed';
 import { cacheMaterials } from '@/lib/world-lens/validation-engine';
 import type {
@@ -586,6 +607,17 @@ export default function WorldLensPage() {
   // The CityStreamingSection component already uses its own useSocket
   // for stream events — this instance is dedicated to multiplayer.
   const worldSocket = useSocket({ autoConnect: true });
+
+  // ── Concordia input mode ──────────────────────────────────────
+  const [inputMode, setInputMode] = useState<InputMode>(() => modeManager.mode);
+  useEffect(() => {
+    return modeManager.subscribe((next) => setInputMode(next));
+  }, []);
+
+  // Mode-specific state hooks (always called — conditionally rendered)
+  const combatCtx   = useCombatState(DEFAULT_SPECIAL);
+  const vehicleCtx  = useVehicleState();
+  const dialogueCtx = useDialogue(DEFAULT_SPECIAL);
 
   // ── State ─────────────────────────────────────────────────────
   const [viewMode, setViewMode] = useState<ViewMode>('concordia');
@@ -1392,9 +1424,9 @@ export default function WorldLensPage() {
               onTransition={() => {}}
             />
           </div>
-          {/* HUD overlay */}
+          {/* HUD overlay — mode drives the top-bar label */}
           <HUDOverlay
-            mode="explore"
+            mode={(MODE_TO_HUD[inputMode] ?? 'explore') as HUDMode}
             district={activeDistrict.name}
             timeOfDay="day"
             weather="clear"
@@ -1408,6 +1440,100 @@ export default function WorldLensPage() {
             onToolSelect={() => {}}
             onMenuOpen={() => {}}
           />
+
+          {/* ── Concordia mode overlays ── */}
+          {inputMode === 'combat' && (
+            <CombatHUD
+              state={combatCtx.state}
+              onActivateSkill={combatCtx.activateSkill}
+              onDodge={combatCtx.dodge}
+              onBlock={combatCtx.setBlock}
+              onToggleVATS={combatCtx.toggleVATS}
+              onQueueShot={combatCtx.queueShot}
+            />
+          )}
+          {inputMode === 'driving' && vehicleCtx.state.active && (
+            <VehicleHUD
+              state={vehicleCtx.state}
+              onExit={() => { vehicleCtx.exitVehicle(); modeManager.pop(); }}
+              onHorn={() => {}}
+              onShiftUp={vehicleCtx.shiftUp}
+              onShiftDown={vehicleCtx.shiftDown}
+            />
+          )}
+          {inputMode === 'conversation' && dialogueCtx.state.open && (
+            <DialoguePanel
+              state={dialogueCtx.state}
+              special={DEFAULT_SPECIAL}
+              onSend={dialogueCtx.send}
+              onClose={() => { dialogueCtx.endDialogue(); modeManager.pop(); }}
+            />
+          )}
+          {inputMode === 'creation' && (
+            <CreationWorkshop
+              playerPosition={playerAvatar.position}
+              playerId={playerAvatar.id}
+              onClose={() => modeManager.pop()}
+            />
+          )}
+          {inputMode === 'lens_work' && (
+            <LensWorkspace
+              lensId="world"
+              lensName="Concordia"
+              playerPosition={playerAvatar.position}
+              onClose={() => modeManager.pop()}
+            />
+          )}
+          {(inputMode === 'social' || inputMode === 'exploration') && (
+            <>
+              <EmoteWheel
+                onEmote={(emoteId) => {
+                  setPlayerAvatar(prev => ({ ...prev, currentAnimation: 'wave' }));
+                  if (worldSocket.isConnected) {
+                    worldSocket.emit('player:move', {
+                      cityId: activeDistrict.id, districtId: activeDistrict.id,
+                      x: playerAvatar.position.x, y: playerAvatar.position.y, z: playerAvatar.position.z,
+                      rotation: playerAvatar.rotation, direction: playerAvatar.rotation,
+                      action: emoteId, currentAnimation: emoteId,
+                    });
+                  }
+                }}
+              />
+              <QuickMessageBar
+                onSend={(msg) => {
+                  if (worldSocket.isConnected) worldSocket.emit('chat:message', { text: msg });
+                }}
+              />
+            </>
+          )}
+          {inputMode === 'spectator' && (
+            <SpectatorControls
+              camera={{ position: { x: 0, y: 10, z: 0 }, yaw: 0, pitch: -30, followingPlayerId: null }}
+              onFollowPlayer={() => {}}
+              onTimeScrub={() => {}}
+              availablePlayers={otherPlayers.map(p => ({ id: p.id, name: p.name }))}
+            />
+          )}
+          {/* Mobile touch controls — gated internally by useIsTouchDevice */}
+          <MobileControls
+            mode={inputMode}
+            onMovement={() => {}}
+            onCamera={() => {}}
+            onJump={() => {}}
+            onInteract={() => {}}
+            onAttack={() => combatCtx.activateSkill(0)}
+            onDodge={combatCtx.dodge}
+            onBlock={combatCtx.setBlock}
+            onThrottle={vehicleCtx.setThrottle}
+            onBrake={vehicleCtx.setBrake}
+            onSteer={vehicleCtx.setSteering}
+            onExitVehicle={() => { vehicleCtx.exitVehicle(); modeManager.pop(); }}
+            hotbarCount={combatCtx.state.hotbar.length}
+            onHotbar={combatCtx.activateSkill}
+          />
+          {/* Tutorial overlay — always present, shows ? button */}
+          <TutorialOverlay />
+
           {/* Gameplay toolbar */}
           <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1 bg-black/70 border border-white/10 rounded-xl px-2 py-1.5 pointer-events-auto">
             {([

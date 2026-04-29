@@ -69,10 +69,10 @@ export type InputMode = keyof typeof INPUT_MODES;
 export const MODE_TO_HUD: Record<InputMode, string> = {
   exploration: 'explore',
   combat: 'combat',
-  driving: 'explore',
+  driving: 'driving',
   conversation: 'social',
   creation: 'build',
-  lens_work: 'inspect',
+  lens_work: 'lens_work',
   social: 'social',
-  spectator: 'explore',
+  spectator: 'spectator',
 };
