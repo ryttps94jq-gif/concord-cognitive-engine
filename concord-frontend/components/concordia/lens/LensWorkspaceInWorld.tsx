@@ -4,6 +4,14 @@ import React, { useState, useCallback } from 'react';
 import { api } from '@/lib/api/client';
 import { modeManager } from '@/lib/concordia/mode-manager';
 
+const LENS_BLUEPRINT_LABEL: Record<string, string> = {
+  architecture: 'Send building design to Concordia',
+  code:         'Send engineering spec to Concordia',
+  materials:    'Send material design to Concordia',
+  studio:       'Send creation to Concordia',
+  research:     'Send research blueprint to Concordia',
+};
+
 // Renders as a floating panel anchored in 3D space via @react-three/drei Html.
 // When not inside a Three.js canvas (e.g. tests, stories), falls back to a
 // fixed-position overlay so it still renders correctly.
@@ -37,6 +45,7 @@ export function LensWorkspaceInWorld({
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [recentDTUs, setRecentDTUs] = useState<Array<{ id: string; title: string }>>([]);
+  const [blueprintToast, setBlueprintToast] = useState<string | null>(null);
 
   const send = useCallback(async () => {
     if (!input.trim()) return;
@@ -76,6 +85,17 @@ export function LensWorkspaceInWorld({
     onClose?.();
   }, [onClose]);
 
+  const handleSendBlueprint = useCallback(async (dtuId: string, dtuTitle: string) => {
+    try {
+      await api.post('/api/blueprints/from-dtu', { dtuId });
+      setBlueprintToast(`"${dtuTitle}" sent to Concordia as a blueprint`);
+      setTimeout(() => setBlueprintToast(null), 3000);
+    } catch {
+      setBlueprintToast('Failed to create blueprint');
+      setTimeout(() => setBlueprintToast(null), 3000);
+    }
+  }, []);
+
   return (
     <div
       className="bg-black/90 border border-white/20 rounded-xl shadow-2xl flex flex-col"
@@ -91,18 +111,35 @@ export function LensWorkspaceInWorld({
       {recentDTUs.length > 0 && (
         <div className="px-3 pt-2 pb-1 border-b border-white/5">
           <div className="text-[10px] text-white/30 font-mono mb-1">RECENT DTUS</div>
-          <div className="flex flex-wrap gap-1">
+          <div className="flex flex-col gap-1">
             {recentDTUs.map(d => (
-              <button
-                key={d.id}
-                onClick={() => setInput(s => s + ` @${d.id}`)}
-                className="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-white/60 hover:bg-white/20 font-mono truncate max-w-[100px]"
-                title={d.title}
-              >
-                {d.title.slice(0, 12)}…
-              </button>
+              <div key={d.id} className="flex items-center gap-1">
+                <button
+                  onClick={() => setInput(s => s + ` @${d.id}`)}
+                  className="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-white/60 hover:bg-white/20 font-mono truncate max-w-[90px] flex-1"
+                  title={d.title}
+                >
+                  {d.title.slice(0, 12)}…
+                </button>
+                {LENS_BLUEPRINT_LABEL[lensId] && (
+                  <button
+                    onClick={() => handleSendBlueprint(d.id, d.title)}
+                    className="text-[9px] px-1.5 py-0.5 rounded bg-green-700/40 text-green-400 hover:bg-green-700/60 whitespace-nowrap flex-shrink-0"
+                    title={LENS_BLUEPRINT_LABEL[lensId]}
+                  >
+                    → Concordia
+                  </button>
+                )}
+              </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Blueprint toast */}
+      {blueprintToast && (
+        <div className="mx-3 mb-1 px-2 py-1.5 rounded-lg bg-green-700/20 border border-green-500/20 text-[10px] text-green-400">
+          {blueprintToast}
         </div>
       )}
 

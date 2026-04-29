@@ -48,6 +48,16 @@ export async function resolveCrisis(db, crisisId, resolution, realtimeEmit) {
   db.prepare(`UPDATE world_crises SET status = 'resolved', resolved_by = ?, outcome = ? WHERE id = ?`)
     .run(resolution.resolvedBy || null, resolution.outcome || null, crisisId);
 
+  // Award Sparks to all contributing players
+  if (resolution.contributorIds?.length > 0) {
+    try {
+      const { awardSparks } = await import("./currency.js");
+      for (const uid of resolution.contributorIds) {
+        awardSparks(db, uid, 25, `crisis_resolved:${crisis.type}`, crisis.origin_world_id);
+      }
+    } catch (_) {}
+  }
+
   try {
     const { recordEvent } = await import("../emergent/history-engine.js");
     recordEvent("era_transition", {

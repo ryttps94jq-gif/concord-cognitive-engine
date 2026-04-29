@@ -95,6 +95,10 @@ const HybridReveal          = dynamic(() => import('@/components/concordia/skill
 const CrisisBanner          = dynamic(() => import('@/components/concordia/world/CrisisBanner').then(m => ({ default: m.CrisisBanner })), { ssr: false });
 const GameModeHUD           = dynamic(() => import('@/components/concordia/game-modes/GameModeHUD').then(m => ({ default: m.GameModeHUD })), { ssr: false });
 const GameModePicker        = dynamic(() => import('@/components/concordia/game-modes/GameModePicker').then(m => ({ default: m.GameModePicker })), { ssr: false });
+const CraftingBench         = dynamic(() => import('@/components/concordia/crafting/CraftingBench').then(m => ({ default: m.CraftingBench })), { ssr: false });
+const GuildPanel            = dynamic(() => import('@/components/concordia/social/GuildPanel').then(m => ({ default: m.GuildPanel })), { ssr: false });
+const SeasonPassPanel       = dynamic(() => import('@/components/concordia/world/SeasonPassPanel').then(m => ({ default: m.SeasonPassPanel })), { ssr: false });
+const SeasonBanner          = dynamic(() => import('@/components/concordia/world/SeasonBanner').then(m => ({ default: m.SeasonBanner })), { ssr: false });
 
 import { modeManager } from '@/lib/concordia/mode-manager';
 import { MODE_TO_HUD } from '@/lib/concordia/modes';
@@ -640,7 +644,7 @@ export default function WorldLensPage() {
 
   // 3D Explore mode state
   const [cameraMode, setCameraMode] = useState<'isometric' | 'follow' | 'free' | 'interior' | 'cinematic'>('follow');
-  const [showPanel, setShowPanel] = useState<'none' | 'inventory' | 'quests' | 'chat' | 'map' | 'crafting' | 'players' | 'profile' | 'collaboration' | 'livecollab' | 'events' | 'socialproof' | 'notifications' | 'smartnotify' | 'moderation' | 'ownership' | 'federation' | 'voice' | 'voiceassist' | 'combat' | 'skills' | 'modes'>('none');
+  const [showPanel, setShowPanel] = useState<'none' | 'inventory' | 'quests' | 'chat' | 'map' | 'crafting' | 'players' | 'profile' | 'collaboration' | 'livecollab' | 'events' | 'socialproof' | 'notifications' | 'smartnotify' | 'moderation' | 'ownership' | 'federation' | 'voice' | 'voiceassist' | 'combat' | 'skills' | 'modes' | 'guild' | 'season' | 'npcshop'>('none');
   // Local player avatar — mutable so moves update it in place. On
   // first mount we ask the server for saved state (via player:load)
   // and land back wherever the user logged off.
@@ -1566,6 +1570,8 @@ export default function WorldLensPage() {
               { key: 'combat', label: 'Combat', icon: Swords },
               { key: 'skills', label: 'Skills', icon: Cpu },
               { key: 'modes', label: 'Modes', icon: Gamepad2 },
+              { key: 'guild', label: 'Guild', icon: Users },
+              { key: 'season', label: 'Season', icon: Award },
             ] as const).map(({ key, label, icon: Icon }) => (
               <button
                 key={key}
@@ -1608,9 +1614,19 @@ export default function WorldLensPage() {
             </div>
           )}
           {showPanel === 'crafting' && (
-            <div className="absolute top-4 left-4 z-20 w-96 max-h-[70vh] overflow-auto pointer-events-auto">
-              <CraftingPanel onClose={() => setShowPanel('none')} />
-            </div>
+            <CraftingBench
+              playerId={playerAvatar.id}
+              toolTier={0}
+              toolQuality={10}
+              skillLevel={1}
+              onClose={() => setShowPanel('none')}
+            />
+          )}
+          {showPanel === 'guild' && (
+            <GuildPanel playerId={playerAvatar.id} onClose={() => setShowPanel('none')} />
+          )}
+          {showPanel === 'season' && (
+            <SeasonPassPanel onClose={() => setShowPanel('none')} />
           )}
           {showPanel === 'players' && (
             <div className="absolute top-4 left-4 z-20 w-80 max-h-[70vh] overflow-auto pointer-events-auto">
@@ -1737,6 +1753,9 @@ export default function WorldLensPage() {
           <LegendaryAnnouncement />
           <HybridReveal />
           <CrisisBanner />
+          <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 pointer-events-auto">
+            <SeasonBanner onOpenPassPanel={() => setShowPanel('season')} />
+          </div>
           <GameModeHUD />
           <GameModePicker open={showPanel === 'modes'} onClose={() => setShowPanel('none')} />
           {/* Combat HUD — renders its own fixed-position overlays

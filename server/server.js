@@ -6388,6 +6388,30 @@ async function tryInitWebSockets(server) {
       }
     });
 
+    // ── Cross-lens skill accrual: 5-min time tick from client ──────
+    socket.on("lens:time-tick", async ({ lensId } = {}) => {
+      const userId = socket.data?.userId;
+      if (!userId || !lensId) return;
+
+      const LENS_SKILL_DOMAIN = {
+        architecture: "construction", code: "engineering", materials: "metallurgy",
+        graph: "systems_thinking", research: "scholarship", marketplace: "commerce",
+        genesis: "strategy", studio: "design",
+      };
+      const domain = LENS_SKILL_DOMAIN[lensId];
+      if (!domain) return;
+
+      // Find matching Concordia skill DTU owned by this player
+      const skill = db.prepare(`
+        SELECT * FROM dtus WHERE owner_user_id = ? AND tags_json LIKE ? AND tags_json LIKE '%concordia%'
+        ORDER BY skill_level DESC LIMIT 1
+      `).get(userId, `%${domain}%`);
+      if (!skill) return;
+
+      const { awardExperience } = await import("./lib/skill-progression.js");
+      await awardExperience(skill, "cross_world_use", { worldId: "concordia-hub", userId, lensId }, db);
+    });
+
     // ── Combat: respawn at a district hub after death ──────────────
     socket.on("player:respawn", (data) => {
       const userId = socket.data?.userId;
@@ -10990,6 +11014,34 @@ function upsertDTU(dtu, { broadcast = true, federate = false } = {}) {
 
   // Qualia hook: notify existential OS of DTU creation
   if (isNew) { try { globalThis.qualiaHooks?.hookDTUCreation(dtu.entityId || dtu.source || "system", dtu); } catch (e) { observe(e, "dtu_qualia_hook_creation"); } }
+
+  // Cross-lens skill accrual: award 1.5x XP to matching Concordia skill on DTU creation
+  if (isNew && dtu.ownerUserId) {
+    try {
+      const lensTag = Array.isArray(dtu.tags) ? dtu.tags.find(t => [
+        "architecture","code","materials","graph","research","marketplace","genesis","studio"
+      ].includes(t)) : null;
+      if (lensTag) {
+        const LENS_SKILL_MAP = {
+          architecture: "construction", code: "engineering", materials: "metallurgy",
+          graph: "systems_thinking", research: "scholarship", marketplace: "commerce",
+          genesis: "strategy", studio: "design",
+        };
+        const domain = LENS_SKILL_MAP[lensTag];
+        if (domain) {
+          const matchSkill = db.prepare(`
+            SELECT * FROM dtus WHERE owner_user_id = ? AND tags_json LIKE ? AND tags_json LIKE '%concordia%'
+            ORDER BY skill_level DESC LIMIT 1
+          `).get(dtu.ownerUserId, `%${domain}%`);
+          if (matchSkill) {
+            import("./lib/skill-progression.js").then(({ awardExperience }) => {
+              awardExperience(matchSkill, "cross_world_use", { worldId: "concordia-hub", userId: dtu.ownerUserId, lensTag }, db).catch(() => {});
+            }).catch(() => {});
+          }
+        }
+      }
+    } catch (_) {}
+  }
 
   // Broadcast DTU change via WebSocket (local-first realtime)
   if (broadcast && REALTIME.ready) {
@@ -25887,6 +25939,7 @@ app.use("/api/world", createWorldRoutes({ requireAuth, db }));
 // ===== CONCORDIA MULTI-WORLD (worlds, transit, substrate, skill commerce) =====
 import createWorldsRouter from "./routes/worlds.js";
 import { seedWorlds } from "./lib/world-seed.js";
+import { seedToolRecipes } from "./lib/tool-tree.js";
 import { simulators as npcSimulators, NPCSimulator } from "./lib/npc-simulator.js";
 import { selectBrain as _selectBrainForNpc } from "./lib/inference/router.js";
 import { startPatternDetection } from "./lib/substrate-diffusion.js";
@@ -25896,6 +25949,7 @@ app.use("/api/worlds", createWorldsRouter({ requireAuth, db }));
 if (db) {
   try {
     seedWorlds(db);
+    seedToolRecipes(db);
     // Start an NPC simulator for each seeded world
     const worldRows = db.prepare("SELECT id FROM worlds WHERE status = 'active'").all();
     for (const { id } of worldRows) {
@@ -25911,6 +25965,16 @@ if (db) {
     startCrisisWatch(db, realtimeEmit);
   } catch (e) { console.warn("[worlds] startup failed:", e.message); }
 }
+
+// ===== CONCORDIA CRAFTING ECONOMY (tools, blueprints, wagers, NPC shops) =====
+import createToolsRouter from "./routes/tools.js";
+import createBlueprintsRouter from "./routes/blueprints.js";
+import createWagersRouter from "./routes/wagers.js";
+import createNPCShopRouter from "./routes/npc-shop.js";
+app.use("/api/tools", createToolsRouter({ requireAuth, db }));
+app.use("/api/blueprints", createBlueprintsRouter({ requireAuth, db }));
+app.use("/api/wagers", createWagersRouter({ requireAuth, db, realtimeEmit }));
+app.use("/api/npc-shop", createNPCShopRouter({ requireAuth, db }));
 
 // ===== CONNECTIVE TISSUE (economy wiring, DTU pipeline, CRETI, compression, fork, preview, search, emergent/bot auth) =====
 import createConnectiveTissueRouter from "./routes/connective-tissue.js";

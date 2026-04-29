@@ -1,9 +1,18 @@
 'use client';
 
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { api } from '@/lib/api/client';
 import { modeManager } from '@/lib/concordia/mode-manager';
 import { emitEvent } from '@/lib/realtime/event-bus';
+
+const TIER_LABELS = ['Tier 0 — Bare Hands', 'Tier 1 — Basic Tools', 'Tier 2 — Crafted Tools', 'Tier 3 — Advanced Tools', 'Tier 4 — Legendary Forge'];
+const TIER_CAPS: Record<number, string> = {
+  0: 'Rough, primitive objects. Stone, clay, basic wood structures only.',
+  1: 'Simple shaped objects. Mortared walls, crude furniture, basic shelters.',
+  2: 'Functional constructions. Iron fixtures, kiln-fired ceramics, multi-story structures.',
+  3: 'Complex systems. Mechanical devices, electrical installations, precision components.',
+  4: 'Any complexity. Masterwork items of any material or mechanism.',
+};
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -122,8 +131,22 @@ export function CreationWorkshop({
   const [error, setError] = useState<string | null>(null);
   const [recording, setRecording] = useState(false);
   const [selectedMaterial, setSelectedMaterial] = useState<string | null>(null);
+  const [toolTier, setToolTier] = useState(0);
+  const [toolQuality, setToolQuality] = useState(10);
   const mediaRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+
+  // Fetch player's tool tier on mount
+  useEffect(() => {
+    api.get('/api/tools/mine').then(res => {
+      const { tier, tools } = res.data ?? {};
+      if (typeof tier === 'number') setToolTier(tier);
+      if (Array.isArray(tools) && tools.length > 0) {
+        const best = Math.max(...tools.map((t: { quality: number }) => t.quality ?? 10));
+        setToolQuality(best);
+      }
+    }).catch(() => { /* stay at defaults */ });
+  }, []);
 
   const MATERIALS = [
     { id: 'concrete',  label: 'Concrete',  color: '#9ca3af', note: 'High compressive strength' },
@@ -140,8 +163,10 @@ export function CreationWorkshop({
     setError(null);
     try {
       const mat = selectedMaterial ? ` Primary material: ${selectedMaterial}.` : '';
+      const tierCap = TIER_CAPS[toolTier] ?? TIER_CAPS[0];
+      const tierContext = `Player has Tool Tier ${toolTier} (${TIER_LABELS[toolTier]}). ${tierCap} If the spec requires a higher tier, decline it politely and suggest a simpler achievable version at this tier.`;
       const res = await api.post('/api/chat', {
-        message: `Generate a Concordia world object from this specification. Return JSON: { name, description, type, dimensions: {width, height, depth}, materials: string[], physics: {passed, score, note}, materialsCheck: {passed, score, note}, structural: {passed, score, note}, aesthetic: {passed, score, note}, overallScore, derivedFrom: string[], suggestions: string[] }. Spec: ${spec}${mat}`,
+        message: `${tierContext}\n\nGenerate a Concordia world object from this specification. Return JSON: { name, description, type, dimensions: {width, height, depth}, materials: string[], physics: {passed, score, note}, materialsCheck: {passed, score, note}, structural: {passed, score, note}, aesthetic: {passed, score, note}, overallScore, derivedFrom: string[], suggestions: string[] }. Spec: ${spec}${mat}`,
         lensContext: { lens: 'game', intent: 'creation-preview' },
         brainOverride: 'subconscious',
       });
@@ -202,6 +227,8 @@ export function CreationWorkshop({
           materials: preview.materials,
           validationScore: validation.score,
           placedBy: playerId,
+          toolTier,
+          toolQuality,
         },
         parents: validation.derivedFrom,
       });
@@ -273,6 +300,12 @@ export function CreationWorkshop({
           {/* Spec input */}
           {step === 'spec' && (
             <>
+              {/* Tool tier badge */}
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-xs">
+                <span className="text-white/40">Current tool tier:</span>
+                <span className="text-white font-mono font-semibold">{TIER_LABELS[toolTier]}</span>
+                <span className="ml-auto text-white/30">{TIER_CAPS[toolTier]}</span>
+              </div>
               <div>
                 <label className="text-sm text-white/70 mb-2 block">Describe what you want to build</label>
                 <textarea

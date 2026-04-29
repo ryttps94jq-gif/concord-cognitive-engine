@@ -34,6 +34,20 @@ export function computeLevelFromExperience(totalExp) {
 }
 
 /**
+ * Compute the quality of a created item based on player skill level and tool quality.
+ * Formula: skill contributes 60%, tool quality contributes 40%.
+ * Clamped 1–100.
+ * @param {number} skillLevel  player's skill level (1–5000+)
+ * @param {number} toolQuality tool quality (0–100)
+ * @returns {number} quality score 1–100
+ */
+export function computeCreationQuality(skillLevel = 1, toolQuality = 10) {
+  const skillContrib = Math.min(skillLevel / 500, 1) * 60;
+  const toolContrib = Math.min(toolQuality / 100, 1) * 40;
+  return Math.max(1, Math.min(100, Math.round(skillContrib + toolContrib)));
+}
+
+/**
  * Award experience to a skill DTU for a meaningful event.
  * Returns { awarded, newLevel, grinding } — grinding=true means 0 XP awarded.
  * @param {object} skill  DTU row

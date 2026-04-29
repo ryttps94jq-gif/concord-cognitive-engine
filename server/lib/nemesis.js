@@ -1,11 +1,11 @@
 // server/lib/nemesis.js
 // When an NPC kills a player, the NPC becomes their named nemesis — gaining a title
 // and growing stronger. When the player kills their nemesis, the record is cleared and
-// the player earns CC + a chronicle entry.
+// the player earns Sparks + a chronicle entry.
 
 import crypto from "crypto";
 
-const NEMESIS_KILL_CC = 50;
+const NEMESIS_KILL_SPARKS = 50;
 const NPC_LEVEL_BOOST = 0.5; // added to nemesis NPC's combat skill levels
 
 export function getNemesisForPlayer(db, playerId) {
@@ -52,8 +52,11 @@ export async function onPlayerKilledNemesis(db, playerId, npcId, realtimeEmit) {
 
   db.prepare("DELETE FROM nemesis_records WHERE player_id = ?").run(playerId);
 
-  // Award CC
-  db.prepare("UPDATE users SET concordia_credits = concordia_credits + ? WHERE id = ?").run(NEMESIS_KILL_CC, playerId);
+  // Award Sparks (gameplay reward — never CC)
+  try {
+    const { awardSparks } = await import("./currency.js");
+    awardSparks(db, playerId, NEMESIS_KILL_SPARKS, "nemesis_kill", nemesis.world_id);
+  } catch (_) {}
 
   // Unlock achievement via world-progression if available
   try {
@@ -73,7 +76,7 @@ export async function onPlayerKilledNemesis(db, playerId, npcId, realtimeEmit) {
 
   realtimeEmit("world:notification", {
     userId: playerId,
-    message: `Nemesis defeated! ${nemesis.npc_title} has fallen. +${NEMESIS_KILL_CC} CC`,
+    message: `Nemesis defeated! ${nemesis.npc_title} has fallen. +${NEMESIS_KILL_SPARKS} Sparks`,
     type: "milestone",
   });
 

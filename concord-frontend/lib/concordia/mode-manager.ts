@@ -76,3 +76,28 @@ class ModeManager {
 }
 
 export const modeManager = new ModeManager();
+
+// ── Cross-lens skill accrual ─────────────────────────────────────────────────
+// When a player is in lens_work mode, emit a tick every 5 minutes so the server
+// can award 0.1 XP to their matching Concordia skill DTU.
+
+let _lensTickInterval: ReturnType<typeof setInterval> | null = null;
+let _activeLensId: string | null = null;
+
+export function startLensTimeTick(lensId: string, emitFn: (event: string, data: unknown) => void): void {
+  stopLensTimeTick();
+  _activeLensId = lensId;
+  _lensTickInterval = setInterval(() => {
+    if (_activeLensId) {
+      emitFn('lens:time-tick', { lensId: _activeLensId });
+    }
+  }, 5 * 60 * 1000); // every 5 minutes
+}
+
+export function stopLensTimeTick(): void {
+  if (_lensTickInterval !== null) {
+    clearInterval(_lensTickInterval);
+    _lensTickInterval = null;
+  }
+  _activeLensId = null;
+}
