@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef, useCallback, useState } from 'react';
+import { maybeUpdateMode, buildContext, type NearbyEntity, type ZoneType } from '@/lib/concordia/context-detection';
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -636,6 +637,23 @@ export default function AvatarSystem3D({
           onMove?.(pos, playerRotationRef.current);
         } else if (activeAnimation !== 'idle' && !['sit', 'build', 'inspect', 'craft'].includes(activeAnimation)) {
           setActiveAnimation('idle');
+        }
+
+        // ── Context-aware mode switching (10 Hz) ─────────────
+        {
+          const nearbyEntities: NearbyEntity[] = [];
+          for (const [id] of npcMeshes) {
+            nearbyEntities.push({ id, type: 'npc', position: { x: 0, y: 0, z: 0 } });
+          }
+          const ctx = buildContext(
+            playerPositionRef.current,
+            nearbyEntities,
+            false,   // inVehicle — updated externally when player boards
+            'open' as ZoneType,
+            0,       // activeHostiles — updated by combat system
+            null,    // dialoguePartnerId — updated by dialogue system
+          );
+          maybeUpdateMode(ctx);
         }
 
         // ── Interpolate other players (10Hz -> smooth) ───────
