@@ -25788,6 +25788,28 @@ app.use("/api/lens-features", createLensFeatureRouter(db, LENS_FEATURES));
 import createWorldRoutes from "./routes/world.js";
 app.use("/api/world", createWorldRoutes({ requireAuth, db }));
 
+// ===== CONCORDIA MULTI-WORLD (worlds, transit, substrate, skill commerce) =====
+import createWorldsRouter from "./routes/worlds.js";
+import { seedWorlds } from "./lib/world-seed.js";
+import { simulators as npcSimulators, NPCSimulator } from "./lib/npc-simulator.js";
+import { selectBrain as _selectBrainForNpc } from "./lib/inference/router.js";
+import { startPatternDetection } from "./lib/substrate-diffusion.js";
+app.use("/api/worlds", createWorldsRouter({ requireAuth, db }));
+if (db) {
+  try {
+    seedWorlds(db);
+    // Start an NPC simulator for each seeded world
+    const worldRows = db.prepare("SELECT id FROM worlds WHERE status = 'active'").all();
+    for (const { id } of worldRows) {
+      const sim = new NPCSimulator(id, db, _selectBrainForNpc);
+      sim.initialize().then(() => sim.start()).catch(e => console.warn(`[npc-sim] ${id}:`, e.message));
+      npcSimulators.set(id, sim);
+    }
+    // Start daily substrate pattern detection
+    startPatternDetection(db, _selectBrainForNpc);
+  } catch (e) { console.warn("[worlds] startup failed:", e.message); }
+}
+
 // ===== CONNECTIVE TISSUE (economy wiring, DTU pipeline, CRETI, compression, fork, preview, search, emergent/bot auth) =====
 import createConnectiveTissueRouter from "./routes/connective-tissue.js";
 app.use("/api/ct", createConnectiveTissueRouter({ db, requireAuth }));

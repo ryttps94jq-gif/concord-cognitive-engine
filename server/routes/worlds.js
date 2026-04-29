@@ -1,0 +1,321 @@
+// server/routes/worlds.js
+// Multi-world API routes: list, get, create, travel, skill teach/effectiveness.
+
+import express from "express";
+import crypto from "crypto";
+import { loadWorld, listWorlds, getActiveWorldForPlayer } from "../lib/world-loader.js";
+
+export default function createWorldsRouter({ requireAuth, db }) {
+  const router = express.Router();
+
+  // GET /api/worlds — list all active worlds
+  router.get("/", (req, res) => {
+    try {
+      const worlds = listWorlds(db);
+      res.json({ worlds });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // GET /api/worlds/current — current world for the authenticated player
+  router.get("/current", requireAuth, (req, res) => {
+    try {
+      const worldId = getActiveWorldForPlayer(db, req.user.id);
+      const world   = loadWorld(db, worldId);
+      res.json({ worldId, world });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // GET /api/worlds/:id — single world detail
+  router.get("/:id", (req, res) => {
+    try {
+      const world = loadWorld(db, req.params.id);
+      if (!world) return res.status(404).json({ error: "World not found" });
+      res.json({ world });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // GET /api/worlds/:id/metrics — population metrics
+  router.get("/:id/metrics", (req, res) => {
+    try {
+      const world = loadWorld(db, req.params.id);
+      if (!world) return res.status(404).json({ error: "World not found" });
+
+      const completedQuests = db.prepare(
+        "SELECT COUNT(*) as c FROM world_quests WHERE world_id = ? AND status = 'completed'"
+      ).get(req.params.id)?.c || 0;
+
+      const skillDtusCreated = db.prepare(
+        "SELECT COUNT(*) as c FROM world_visits WHERE world_id = ? AND departed_at IS NOT NULL"
+      ).get(req.params.id)?.c || 0;
+
+      res.json({
+        worldId: req.params.id,
+        population:       world.population,
+        npcCount:         world.npc_count,
+        totalVisits:      world.total_visits,
+        userCreations:    world.user_creation_count,
+        completedQuests,
+        skillDtusCreated,
+      });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // POST /api/worlds — create a new world (auth required)
+  router.post("/", requireAuth, (req, res) => {
+    try {
+      const { name, universe_type, description, physics_modulators, rule_modulators } = req.body;
+      if (!name || !universe_type) return res.status(400).json({ error: "name and universe_type required" });
+
+      const id = `world-${crypto.randomUUID()}`;
+      db.prepare(`
+        INSERT INTO worlds (id, name, universe_type, description, physics_modulators, rule_modulators, created_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        id, name, universe_type, description || "",
+        JSON.stringify(physics_modulators || {}),
+        JSON.stringify(rule_modulators    || {}),
+        req.user.id,
+      );
+
+      const world = loadWorld(db, id);
+      res.status(201).json({ world });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // PATCH /api/worlds/:id/health — update district health score
+  router.patch("/:id/health", requireAuth, (req, res) => {
+    try {
+      const { field, value } = req.body;
+      const allowed = ["population", "npc_count", "user_creation_count"];
+      if (!allowed.includes(field)) return res.status(400).json({ error: "Invalid field" });
+
+      db.prepare(`UPDATE worlds SET ${field} = ? WHERE id = ?`).run(value, req.params.id);
+      res.json({ ok: true, field, value });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // POST /api/worlds/travel — move authenticated player to a new world
+  router.post("/travel", requireAuth, (req, res) => {
+    try {
+      const { worldId: destinationWorldId } = req.body;
+      if (!destinationWorldId) return res.status(400).json({ error: "worldId required" });
+
+      const dest = loadWorld(db, destinationWorldId);
+      if (!dest) return res.status(404).json({ error: "Destination world not found" });
+
+      const userId = req.user.id;
+      const currentWorldId = getActiveWorldForPlayer(db, userId);
+
+      // Close open visit on current world
+      const openVisit = db.prepare(
+        "SELECT id FROM world_visits WHERE user_id = ? AND world_id = ? AND departed_at IS NULL ORDER BY arrived_at DESC LIMIT 1"
+      ).get(userId, currentWorldId);
+
+      if (openVisit) {
+        db.prepare(
+          "UPDATE world_visits SET departed_at = unixepoch(), total_time_minutes = (unixepoch() - arrived_at) / 60.0 WHERE id = ?"
+        ).run(openVisit.id);
+        db.prepare("UPDATE worlds SET population = MAX(0, population - 1) WHERE id = ?").run(currentWorldId);
+      }
+
+      // Open new visit
+      db.prepare(
+        "INSERT INTO world_visits (id, user_id, world_id) VALUES (?, ?, ?)"
+      ).run(crypto.randomUUID(), userId, destinationWorldId);
+      db.prepare(
+        "UPDATE worlds SET population = population + 1, total_visits = total_visits + 1 WHERE id = ?"
+      ).run(destinationWorldId);
+
+      // Update player world state
+      db.prepare(
+        "INSERT INTO player_world_state (user_id, world_id) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET world_id = excluded.world_id"
+      ).run(userId, destinationWorldId);
+
+      res.json({ ok: true, previousWorldId: currentWorldId, worldId: destinationWorldId, world: dest });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // GET /api/worlds/:worldId/quests — list quests in a world
+  router.get("/:worldId/quests", (req, res) => {
+    try {
+      const { status = "available" } = req.query;
+      const quests = db.prepare(
+        "SELECT * FROM world_quests WHERE world_id = ? AND (status = ? OR ? = 'all') ORDER BY created_at DESC"
+      ).all(req.params.worldId, status, status);
+
+      res.json({ quests: quests.map(_parseQuest) });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // POST /api/worlds/:worldId/quests/:questId/accept
+  router.post("/:worldId/quests/:questId/accept", requireAuth, (req, res) => {
+    try {
+      const { questId } = req.params;
+      const quest = db.prepare("SELECT * FROM world_quests WHERE id = ? AND status = 'available'").get(questId);
+      if (!quest) return res.status(404).json({ error: "Quest not available" });
+
+      db.prepare(
+        "UPDATE world_quests SET status = 'active', accepted_by = ? WHERE id = ?"
+      ).run(req.user.id, questId);
+
+      res.json({ ok: true, quest: _parseQuest({ ...quest, status: "active", accepted_by: req.user.id }) });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // POST /api/worlds/:worldId/quests/:questId/event — dispatch progress event
+  router.post("/:worldId/quests/:questId/event", requireAuth, (req, res) => {
+    try {
+      const quest = db.prepare("SELECT * FROM world_quests WHERE id = ?").get(req.params.questId);
+      if (!quest) return res.status(404).json({ error: "Quest not found" });
+      // Progress update is handled by quest-emergence.js; acknowledge receipt here
+      res.json({ ok: true, questId: req.params.questId, event: req.body });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // POST /api/skills/teach — teach a skill from one player to another
+  router.post("/skills/teach", requireAuth, async (req, res) => {
+    try {
+      const { teacherDtuId, studentId } = req.body;
+      if (!teacherDtuId || !studentId) return res.status(400).json({ error: "teacherDtuId and studentId required" });
+
+      const { teachSkillToPlayer } = await import("../lib/skill-effectiveness.js");
+      const { selectBrain } = await import("../lib/inference/router.js");
+      const worldId = req.query.worldId || "concordia-hub";
+      const world   = loadWorld(db, worldId);
+
+      const newSkill = await teachSkillToPlayer(
+        req.user.id,
+        studentId,
+        teacherDtuId,
+        { worldId, worldName: world?.name },
+        db,
+        selectBrain,
+      );
+
+      res.status(201).json({ skill: newSkill });
+    } catch (e) {
+      res.status(e.status || 500).json({ error: e.message });
+    }
+  });
+
+  // GET /api/skills/:dtuId/effectiveness — skill effectiveness in a world
+  router.get("/skills/:dtuId/effectiveness", async (req, res) => {
+    try {
+      const { worldId = "concordia-hub" } = req.query;
+      const skill = db.prepare("SELECT * FROM dtus WHERE id = ?").get(req.params.dtuId);
+      if (!skill) return res.status(404).json({ error: "Skill not found" });
+
+      const world = loadWorld(db, worldId);
+      if (!world) return res.status(404).json({ error: "World not found" });
+
+      const { evaluateSkillInWorld } = await import("../lib/skill-effectiveness.js");
+      res.json({ skillId: req.params.dtuId, worldId, ...evaluateSkillInWorld(skill, world) });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // GET /api/worlds/marketplace — list skill listings
+  router.get("/marketplace", async (req, res) => {
+    try {
+      const { getListings } = await import("../lib/skill-marketplace.js");
+      const { worldId, maxPrice, page, limit } = req.query;
+      const result = getListings({
+        worldId,
+        maxPrice: maxPrice ? Number(maxPrice) : undefined,
+        page:     page     ? Number(page)     : 1,
+        limit:    limit    ? Number(limit)    : 20,
+      }, db);
+      res.json(result);
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // POST /api/worlds/marketplace/list — list a skill for sale
+  router.post("/marketplace/list", requireAuth, async (req, res) => {
+    try {
+      const { dtuId, priceCC, description } = req.body;
+      if (!dtuId || priceCC == null) return res.status(400).json({ error: "dtuId and priceCC required" });
+
+      const { listSkillForSale } = await import("../lib/skill-marketplace.js");
+      const listing = listSkillForSale(req.user.id, dtuId, Number(priceCC), description, db);
+      res.status(201).json({ listing });
+    } catch (e) {
+      res.status(e.status || 500).json({ error: e.message });
+    }
+  });
+
+  // POST /api/worlds/marketplace/purchase — buy a skill listing
+  router.post("/marketplace/purchase", requireAuth, async (req, res) => {
+    try {
+      const { listingId } = req.body;
+      if (!listingId) return res.status(400).json({ error: "listingId required" });
+
+      const { purchaseSkill } = await import("../lib/skill-marketplace.js");
+      const { selectBrain } = await import("../lib/inference/router.js");
+      const worldId = getActiveWorldForPlayer(db, req.user.id);
+      const world   = loadWorld(db, worldId);
+
+      const result = await purchaseSkill(
+        req.user.id, listingId,
+        { worldId, worldName: world?.name },
+        db, selectBrain,
+      );
+      res.json(result);
+    } catch (e) {
+      res.status(e.status || 500).json({ error: e.message });
+    }
+  });
+
+  // GET /api/substrate/patterns — substrate pattern feed
+  router.get("/substrate/patterns", (req, res) => {
+    try {
+      const patterns = db.prepare(
+        "SELECT * FROM substrate_patterns ORDER BY current_strength DESC LIMIT 50"
+      ).all().map(p => ({
+        ...p,
+        member_dtu_ids: _tryParseJSON(p.member_dtu_ids, []),
+        worlds_present: _tryParseJSON(p.worlds_present, []),
+      }));
+      res.json({ patterns });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  return router;
+}
+
+function _parseQuest(q) {
+  return {
+    ...q,
+    objectives: _tryParseJSON(q.objectives_json, []),
+    reward:     _tryParseJSON(q.reward_json,     {}),
+  };
+}
+
+function _tryParseJSON(val, fallback) {
+  if (!val) return fallback;
+  try { return JSON.parse(val); } catch { return fallback; }
+}
