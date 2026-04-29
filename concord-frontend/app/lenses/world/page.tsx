@@ -100,7 +100,7 @@ const GuildPanel            = dynamic(() => import('@/components/concordia/socia
 const SeasonPassPanel       = dynamic(() => import('@/components/concordia/world/SeasonPassPanel').then(m => ({ default: m.SeasonPassPanel })), { ssr: false });
 const SeasonBanner          = dynamic(() => import('@/components/concordia/world/SeasonBanner').then(m => ({ default: m.SeasonBanner })), { ssr: false });
 
-import { modeManager } from '@/lib/concordia/mode-manager';
+import { modeManager, startLensTimeTick, stopLensTimeTick } from '@/lib/concordia/mode-manager';
 import { MODE_TO_HUD } from '@/lib/concordia/modes';
 import type { InputMode } from '@/lib/concordia/modes';
 import { DEFAULT_SPECIAL } from '@/lib/concordia/player-stats';
@@ -625,6 +625,16 @@ export default function WorldLensPage() {
   useEffect(() => {
     return modeManager.subscribe((next) => setInputMode(next));
   }, []);
+
+  // Start/stop the 5-minute lens time tick whenever the player enters lens_work mode.
+  useEffect(() => {
+    if (inputMode === 'lens_work' && worldSocket.isConnected) {
+      startLensTimeTick('world', (event, data) => worldSocket.emit(event, data));
+    } else {
+      stopLensTimeTick();
+    }
+    return () => stopLensTimeTick();
+  }, [inputMode, worldSocket.isConnected]);
 
   // Mode-specific state hooks (always called — conditionally rendered)
   const combatCtx   = useCombatState(DEFAULT_SPECIAL);
