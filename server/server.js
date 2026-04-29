@@ -5985,6 +5985,21 @@ async function tryInitWebSockets(server) {
   REALTIME.ready = true;
   globalThis._concordREALTIME = REALTIME;
 
+  // Horizontal scaling: attach Redis pub/sub adapter when REDIS_URL is set
+  if (process.env.REDIS_URL) {
+    try {
+      const { createAdapter } = await import("@socket.io/redis-adapter");
+      const { createClient } = await import("redis");
+      const pubClient = createClient({ url: process.env.REDIS_URL });
+      const subClient = pubClient.duplicate();
+      await Promise.all([pubClient.connect(), subClient.connect()]);
+      io.adapter(createAdapter(pubClient, subClient));
+      console.info("[Socket.IO] Redis adapter active —", process.env.REDIS_URL);
+    } catch (err) {
+      console.warn("[Socket.IO] Redis adapter failed, falling back to in-memory:", err.message);
+    }
+  }
+
   // SECURITY: Socket.IO authentication middleware
   io.use((socket, next) => {
     // Parse cookies from handshake
@@ -6288,8 +6303,128 @@ async function tryInitWebSockets(server) {
             attackerId: userId,
             targetId: data.targetId,
           });
+
+          // Death stakes: drop 20% of the killed player's gathered materials
+          const targetUserId = db.prepare("SELECT id FROM users WHERE id = ?").get(String(data.targetId || ""))?.id;
+          if (targetUserId) {
+            import("./lib/nemesis.js").then(async ({ onNPCKilledPlayer }) => {
+              // NPC nemesis check: did this NPC just get killed and is it someone's nemesis?
+            }).catch(() => {});
+
+            const materials = db.prepare(`
+              SELECT id, title FROM dtus
+              WHERE creator_id = ? AND type = 'material' LIMIT 20
+            `).all(targetUserId);
+            if (materials.length > 0) {
+              const dropCount = Math.max(1, Math.floor(materials.length * 0.2));
+              const dropped = materials.slice(0, dropCount);
+              const nodeId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2);
+              const pos = cityPresence?.getPlayerPosition?.(targetUserId) || { x: 0, y: 0, z: 0 };
+              try {
+                db.prepare(`
+                  INSERT INTO loot_nodes (id, world_id, x, y, z, contents, created_at, expires_at, killer_id)
+                  VALUES (?, 'concordia-hub', ?, ?, ?, ?, ?, ?, ?)
+                `).run(nodeId, pos.x || 0, pos.y || 0, pos.z || 0,
+                  JSON.stringify(dropped), Date.now(), Date.now() + 300_000, userId);
+                realtimeEmit("world:loot-node", { id: nodeId, x: pos.x, y: pos.y, z: pos.z, itemCount: dropped.length });
+              } catch (_) {}
+            }
+          }
+
+          // Nemesis: check if attacker killed their nemesis, or if NPC killed the attacker
+          import("./lib/nemesis.js").then(async ({ onPlayerKilledNemesis, onNPCKilledPlayer }) => {
+            const targetId = String(data.targetId || "");
+            const isNPC = !!db.prepare("SELECT id FROM world_npcs WHERE id = ?").get(targetId);
+            if (isNPC) {
+              const killed = await onPlayerKilledNemesis(db, userId, targetId, realtimeEmit);
+              if (killed) {
+                socket.emit("nemesis:defeated", { npcId: targetId });
+              }
+            }
+          }).catch(() => {});
         }
       }
+    });
+
+    // ── Skill use → XP award + mastery milestone notifications ──────
+    socket.on("skill:use", async ({ dtuId, context = {} } = {}) => {
+      const userId = socket.data?.userId;
+      if (!userId || !dtuId) return;
+
+      const skill = db.prepare("SELECT * FROM dtus WHERE id = ?").get(dtuId);
+      if (!skill || skill.type !== "skill") return;
+
+      const { awardExperience, getMasteryMarkers } = await import("./lib/skill-progression.js");
+      const prevBadge = getMasteryMarkers(skill).badge;
+      const prevLevel = skill.skill_level || 1;
+      const worldId = context.worldId || "concordia-hub";
+      const ctx = { ...context, userId, worldId };
+
+      db.prepare("UPDATE dtus SET last_used_at = ? WHERE id = ?").run(Date.now(), dtuId);
+      const result = await awardExperience(skill, context.meaningful ? "meaningful_application" : "practice", ctx, db);
+      const updated = db.prepare("SELECT * FROM dtus WHERE id = ?").get(dtuId);
+      const mastery = getMasteryMarkers(updated);
+      const leveledUp = Math.floor(updated.skill_level) > Math.floor(prevLevel);
+
+      socket.emit("skill:xp-awarded", { dtuId, ...result, mastery, leveledUp });
+
+      if (leveledUp && mastery.badge !== prevBadge) {
+        realtimeEmit("world:notification", {
+          userId,
+          message: `${skill.title} reached ${mastery.title}!`,
+          type: "milestone",
+        });
+
+        // Legendary / Mythic — broadcast to entire world + add chronicle entry
+        if (mastery.legendaryStatus || mastery.mythicStatus) {
+          const username = db.prepare("SELECT username FROM users WHERE id = ?").get(userId)?.username || "Unknown";
+          realtimeEmit("world:legendary-achievement", {
+            playerName: username,
+            skillTitle: skill.title,
+            masteryTitle: mastery.title,
+            worldId,
+          });
+          import("../emergent/history-engine.js").then(({ recordEvent }) => {
+            recordEvent("breakthrough", {
+              actorId: userId,
+              description: `${username} achieved ${mastery.title} in ${skill.title}.`,
+              significance: "legendary_mastery",
+            });
+          }).catch(() => {});
+        }
+      }
+
+      if (context.recentSkillIds?.length >= 1) {
+        const { detectSkillInteraction } = await import("./lib/skill-interaction.js");
+        const allSkills = [dtuId, ...context.recentSkillIds]
+          .map((id) => db.prepare("SELECT * FROM dtus WHERE id = ?").get(id))
+          .filter(Boolean);
+        detectSkillInteraction({ id: userId, worldId }, allSkills, ctx, db, _selectBrainForNpc).catch(() => {});
+      }
+    });
+
+    // ── Cross-lens skill accrual: 5-min time tick from client ──────
+    socket.on("lens:time-tick", async ({ lensId } = {}) => {
+      const userId = socket.data?.userId;
+      if (!userId || !lensId) return;
+
+      const LENS_SKILL_DOMAIN = {
+        architecture: "construction", code: "engineering", materials: "metallurgy",
+        graph: "systems_thinking", research: "scholarship", marketplace: "commerce",
+        genesis: "strategy", studio: "design",
+      };
+      const domain = LENS_SKILL_DOMAIN[lensId];
+      if (!domain) return;
+
+      // Find matching Concordia skill DTU owned by this player
+      const skill = db.prepare(`
+        SELECT * FROM dtus WHERE owner_user_id = ? AND tags_json LIKE ? AND tags_json LIKE '%concordia%'
+        ORDER BY skill_level DESC LIMIT 1
+      `).get(userId, `%${domain}%`);
+      if (!skill) return;
+
+      const { awardExperience } = await import("./lib/skill-progression.js");
+      await awardExperience(skill, "cross_world_use", { worldId: "concordia-hub", userId, lensId }, db);
     });
 
     // ── Combat: respawn at a district hub after death ──────────────
@@ -10894,6 +11029,34 @@ function upsertDTU(dtu, { broadcast = true, federate = false } = {}) {
 
   // Qualia hook: notify existential OS of DTU creation
   if (isNew) { try { globalThis.qualiaHooks?.hookDTUCreation(dtu.entityId || dtu.source || "system", dtu); } catch (e) { observe(e, "dtu_qualia_hook_creation"); } }
+
+  // Cross-lens skill accrual: award 1.5x XP to matching Concordia skill on DTU creation
+  if (isNew && dtu.ownerUserId) {
+    try {
+      const lensTag = Array.isArray(dtu.tags) ? dtu.tags.find(t => [
+        "architecture","code","materials","graph","research","marketplace","genesis","studio"
+      ].includes(t)) : null;
+      if (lensTag) {
+        const LENS_SKILL_MAP = {
+          architecture: "construction", code: "engineering", materials: "metallurgy",
+          graph: "systems_thinking", research: "scholarship", marketplace: "commerce",
+          genesis: "strategy", studio: "design",
+        };
+        const domain = LENS_SKILL_MAP[lensTag];
+        if (domain) {
+          const matchSkill = db.prepare(`
+            SELECT * FROM dtus WHERE owner_user_id = ? AND tags_json LIKE ? AND tags_json LIKE '%concordia%'
+            ORDER BY skill_level DESC LIMIT 1
+          `).get(dtu.ownerUserId, `%${domain}%`);
+          if (matchSkill) {
+            import("./lib/skill-progression.js").then(({ awardExperience }) => {
+              awardExperience(matchSkill, "cross_world_use", { worldId: "concordia-hub", userId: dtu.ownerUserId, lensTag }, db).catch(() => {});
+            }).catch(() => {});
+          }
+        }
+      }
+    } catch (_) {}
+  }
 
   // Broadcast DTU change via WebSocket (local-first realtime)
   if (broadcast && REALTIME.ready) {
@@ -25787,6 +25950,66 @@ app.use("/api/lens-features", createLensFeatureRouter(db, LENS_FEATURES));
 // ===== WORLD ENGINE (districts, jobs, businesses, events, progression) =====
 import createWorldRoutes from "./routes/world.js";
 app.use("/api/world", createWorldRoutes({ requireAuth, db }));
+
+// ===== CONCORDIA MULTI-WORLD (worlds, transit, substrate, skill commerce) =====
+import createWorldsRouter from "./routes/worlds.js";
+import { seedWorlds } from "./lib/world-seed.js";
+import { seedToolRecipes } from "./lib/tool-tree.js";
+import { seedLensPortals } from "./lib/lens-portal-registry.js";
+import { simulators as npcSimulators, NPCSimulator } from "./lib/npc-simulator.js";
+import { selectBrain as _selectBrainForNpc } from "./lib/inference/router.js";
+import { startPatternDetection } from "./lib/substrate-diffusion.js";
+import { startAtrophyCycle } from "./lib/skill-atrophy.js";
+import { startCrisisWatch } from "./lib/world-crisis.js";
+app.use("/api/worlds", createWorldsRouter({ requireAuth, db }));
+if (db) {
+  try {
+    seedWorlds(db);
+    seedToolRecipes(db);
+    seedLensPortals(db, "concordia-hub");
+    // Start an NPC simulator for each seeded world
+    const worldRows = db.prepare("SELECT id FROM worlds WHERE status = 'active'").all();
+    for (const { id } of worldRows) {
+      const sim = new NPCSimulator(id, db, _selectBrainForNpc);
+      sim.initialize().then(() => sim.start()).catch(e => console.warn(`[npc-sim] ${id}:`, e.message));
+      npcSimulators.set(id, sim);
+    }
+    // Start daily substrate pattern detection
+    startPatternDetection(db, _selectBrainForNpc);
+    // Start nightly skill atrophy cycle
+    startAtrophyCycle(db);
+    // Start hourly crisis watch (auto-expires + auto-triggers knowledge_extinction)
+    startCrisisWatch(db, realtimeEmit);
+  } catch (e) { console.warn("[worlds] startup failed:", e.message); }
+}
+
+// ===== CONCORDIA CRAFTING ECONOMY (tools, blueprints, wagers, NPC shops) =====
+import createToolsRouter from "./routes/tools.js";
+import createBlueprintsRouter from "./routes/blueprints.js";
+import createWagersRouter from "./routes/wagers.js";
+import createNPCShopRouter from "./routes/npc-shop.js";
+app.use("/api/tools", createToolsRouter({ requireAuth, db }));
+app.use("/api/blueprints", createBlueprintsRouter({ requireAuth, db }));
+app.use("/api/wagers", createWagersRouter({ requireAuth, db, realtimeEmit }));
+app.use("/api/npc-shop", createNPCShopRouter({ requireAuth, db }));
+
+// ===== CONCORDIA LIVING WORLD (portals, player inventory, arena, leaderboards) =====
+import createLensPortalsRouter from "./routes/lens-portals.js";
+import createPlayerInventoryRouter from "./routes/player-inventory.js";
+import createArenaRouter from "./routes/arena.js";
+import createLeaderboardsRouter from "./routes/leaderboards.js";
+app.use("/api/lens-portals",      createLensPortalsRouter({ requireAuth, db }));
+app.use("/api/player-inventory",  createPlayerInventoryRouter({ requireAuth, db }));
+app.use("/api/arena",             createArenaRouter({ requireAuth, db, realtimeEmit }));
+app.use("/api/leaderboards",      createLeaderboardsRouter({ db }));
+
+// ===== WORLD NARRATIVE (Oracle brain: lore synthesis, quest chains, dialogue) =====
+import createWorldNarrativeRouter, { buildLore } from "./routes/world-narrative.js";
+app.use("/api/world/narrative", createWorldNarrativeRouter({ requireAuth, requireRole }));
+// Synthesize lore every 10 minutes in the background
+setInterval(() => {
+  buildLore("concordia-hub").catch(e => logger.warn({ err: e.message }, "lore_interval_failed"));
+}, 10 * 60 * 1000);
 
 // ===== CONNECTIVE TISSUE (economy wiring, DTU pipeline, CRETI, compression, fork, preview, search, emergent/bot auth) =====
 import createConnectiveTissueRouter from "./routes/connective-tissue.js";

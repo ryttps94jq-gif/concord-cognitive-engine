@@ -61,6 +61,8 @@ services:
       - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET:-}
       - STRIPE_PRICE_PRO=${STRIPE_PRICE_PRO:-}
       - STRIPE_PRICE_TEAMS=${STRIPE_PRICE_TEAMS:-}
+      # Redis — for Socket.IO horizontal scaling + session cache
+      - REDIS_URL=redis://redis:6379
       # Optional features
       - EMBEDDINGS_ENABLED=${EMBEDDINGS_ENABLED:-true}
       - FEDERATION_ENABLED=${FEDERATION_ENABLED:-false}
@@ -68,6 +70,8 @@ services:
       - ENABLE_TERMINAL_EXEC=${ENABLE_TERMINAL_EXEC:-false}
       - TELEMETRY_ENABLED=${TELEMETRY_ENABLED:-false}
     depends_on:
+      redis:
+        condition: service_healthy
       ollama-conscious:
         condition: service_healthy
       ollama-subconscious:
@@ -246,6 +250,27 @@ services:
           memory: 256M
           cpus: '0.15'
 
+  # Redis — Socket.IO pub/sub adapter + session cache
+  redis:
+    image: redis:7-alpine
+    container_name: concord-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis-data:/data
+    networks:
+      - concord-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 600M
+          cpus: '0.5'
+
   # Qdrant — vector search engine for embedding similarity
   qdrant:
     image: qdrant/qdrant:latest
@@ -415,6 +440,8 @@ networks:
 
 volumes:
   concord-data:
+    driver: local
+  redis-data:
     driver: local
   qdrant-data:
     driver: local

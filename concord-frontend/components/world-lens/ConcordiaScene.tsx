@@ -49,6 +49,9 @@ export interface ConcordiaSceneAPI {
 interface ConcordiaSceneProps {
   districtId: string;
   quality?: QualityPreset;
+  theme?: import('@/lib/world-lens/concordia-theme').ConcordiaThemeId;
+  renderStyle?: 'pbr' | 'toon';
+  questObjectives?: import('@/components/world-lens/QuestMarker3D').QuestObjective[];
   onBuildingClick?: (buildingId: string, intersection: unknown) => void;
   onTerrainClick?: (position: { x: number; y: number; z: number }) => void;
   width?: number | string;
@@ -128,15 +131,20 @@ const panel = 'bg-black/80 backdrop-blur-sm border border-white/10 rounded-lg';
 export default function ConcordiaScene({
   districtId,
   quality: initialQuality = 'medium',
+  theme: themeProp = 'neon-punk',
+  renderStyle = 'pbr',
+  questObjectives = [],
   onBuildingClick,
   onTerrainClick,
   width = '100%',
   height = '100%',
 }: ConcordiaSceneProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const physicsRef = useRef<{ step: (dt: number) => void; destroy: () => void } | null>(null);
   const rendererRef = useRef<unknown>(null);
   const sceneRef = useRef<unknown>(null);
   const cameraRef = useRef<unknown>(null);
+  const composerRef = useRef<{ render: (delta: number) => void; setSize: (w: number, h: number) => void } | null>(null);
   const layersRef = useRef<Record<string, unknown>>({});
   const frameIdRef = useRef<number>(0);
   const clockRef = useRef<unknown>(null);
@@ -180,6 +188,25 @@ export default function ConcordiaScene({
       THREE = await import('three');
       if (disposed) return;
 
+      // Physics world — init Rapier WASM, terrain collider registered via event
+      const { physicsWorld } = await import('@/lib/world-lens/physics-world');
+      await physicsWorld.init();
+      physicsRef.current = physicsWorld;
+      if (disposed) { physicsWorld.destroy(); physicsRef.current = null; return; }
+
+      // Listen for terrain-ready to register heightfield collider
+      function onTerrainPhysics(e: Event) {
+        const { hmData, hmWidth, hmHeight } = (e as CustomEvent).detail ?? {};
+        if (hmData) {
+          physicsWorld.createHeightfieldCollider(hmData, hmWidth, hmHeight, {
+            x: 2000,   // TERRAIN_SIZE
+            y: 80,     // maxElevation
+            z: 2000,
+          });
+        }
+      }
+      window.addEventListener('concordia:terrain-ready', onTerrainPhysics);
+
       const settings = QUALITY_SETTINGS[quality];
 
       // ── Renderer ─────────────────────────────────────────────────
@@ -215,9 +242,53 @@ export default function ConcordiaScene({
       renderer.outputColorSpace = THREE.SRGBColorSpace;
       rendererRef.current = renderer;
 
+      // ── Post-Processing ─────────────────────────────────────────
+      // Bloom disabled in toon mode (toon + bloom conflicts visually).
+      // Vignette always on for medium+.
+      if (quality !== 'low') {
+        try {
+          const [{ EffectComposer }, { RenderPass }, { UnrealBloomPass }, { ShaderPass }] = await Promise.all([
+            import('three/examples/jsm/postprocessing/EffectComposer.js'),
+            import('three/examples/jsm/postprocessing/RenderPass.js'),
+            import('three/examples/jsm/postprocessing/UnrealBloomPass.js'),
+            import('three/examples/jsm/postprocessing/ShaderPass.js'),
+          ]);
+          const composer = new EffectComposer(renderer);
+          composer.addPass(new RenderPass(scene, camera));
+          // Bloom: PBR only — toon shading looks wrong with bloom
+          if (renderStyle !== 'toon') {
+            const bloom = new UnrealBloomPass(
+              new THREE.Vector2(canvas!.clientWidth, canvas!.clientHeight),
+              quality === 'high' || quality === 'ultra' ? 1.2 : 0.7,
+              0.4,
+              0.3,
+            );
+            composer.addPass(bloom);
+          }
+          // Vignette: always on for cinematic framing
+          const vignetteShader = {
+            uniforms: { tDiffuse: { value: null }, darkness: { value: 0.55 }, offset: { value: 0.5 } },
+            vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+            fragmentShader: `uniform sampler2D tDiffuse; uniform float darkness; uniform float offset; varying vec2 vUv;
+              void main() {
+                vec4 color = texture2D(tDiffuse, vUv);
+                vec2 uv = (vUv - vec2(0.5)) * vec2(offset);
+                float vignette = clamp(dot(uv, uv) * darkness * 4.0, 0.0, 1.0);
+                gl_FragColor = vec4(mix(color.rgb, vec3(0.0), vignette), color.a);
+              }`,
+          };
+          composer.addPass(new ShaderPass(vignetteShader));
+          composerRef.current = composer;
+        } catch (ppErr) {
+          console.warn('[ConcordiaScene] Post-processing unavailable:', ppErr);
+        }
+      }
+
       // ── Scene ───────────────────────────────────────────────────
+      const { CONCORDIA_THEMES } = await import('@/lib/world-lens/concordia-theme');
+      const activeTheme = CONCORDIA_THEMES[themeProp] || CONCORDIA_THEMES['neon-punk'];
       scene = new THREE.Scene();
-      scene.fog = new THREE.FogExp2(0x8899bb, 0.0008);
+      scene.fog = new THREE.Fog(activeTheme.fog.color, activeTheme.fog.near, activeTheme.fog.far);
       sceneRef.current = scene;
 
       // ── Camera ──────────────────────────────────────────────────
@@ -244,10 +315,10 @@ export default function ConcordiaScene({
       raycasterRef.current = raycaster;
 
       // ── Ambient + default directional light ─────────────────────
-      const ambient = new THREE.AmbientLight(0x405070, 0.5);
+      const ambient = new THREE.AmbientLight(activeTheme.ambientLight.color, activeTheme.ambientLight.intensity);
       scene.add(ambient);
 
-      const sun = new THREE.DirectionalLight(0xfff4e0, 1.2);
+      const sun = new THREE.DirectionalLight(activeTheme.sunLight.color, activeTheme.sunLight.intensity);
       sun.position.set(100, 200, 80);
       sun.castShadow = true;
       sun.shadow.mapSize.width = settings.shadowMapSize;
@@ -260,6 +331,27 @@ export default function ConcordiaScene({
       sun.shadow.camera.bottom = -300;
       scene.add(sun);
 
+      // ── Portal glow lights — 5 retained (was 15); intensity +30% to compensate ──
+      // Removed lights rely on building emissive (0.08) beyond 15m — imperceptible
+      const PORTAL_POSITIONS = [[8,4],[4,6],[12,3],[2,8],[16,7]];
+      for (const [px, pz] of PORTAL_POSITIONS) {
+        const pl = new THREE.PointLight(activeTheme.portalGlow, 2.6, 15);
+        pl.position.set(px, 2, pz);
+        scene.add(pl);
+      }
+      // ── Street lamp point lights — 3 retained (was 8); intensity +30% ──
+      const LAMP_POSITIONS = [[3,3],[7,7],[11,2]];
+      for (const [lx, lz] of LAMP_POSITIONS) {
+        const lamp = new THREE.PointLight(activeTheme.streetLamp, 1.95, 20);
+        lamp.position.set(lx, 4, lz);
+        scene.add(lamp);
+      }
+
+      // Notify QuestMarker3D and other overlays that scene + camera are ready
+      window.dispatchEvent(new CustomEvent('concordia:scene-ready', {
+        detail: { scene, camera },
+      }));
+
       setIsReady(true);
 
       // ── Game loop ───────────────────────────────────────────────
@@ -269,8 +361,10 @@ export default function ConcordiaScene({
         const delta = clock.getDelta();
         const elapsed = clock.getElapsedTime();
 
-        // Update physics / avatars / NPCs / weather / particles
-        // Each layer group can have a userData.update callback
+        // Step physics simulation
+        physicsRef.current?.step(delta);
+
+        // Update avatars / NPCs / weather / particles per layer
         for (const name of LAYER_NAMES) {
           const group = layers[name];
           if (group && (group.userData as { update?: (d: number, e: number) => void }).update) {
@@ -278,8 +372,12 @@ export default function ConcordiaScene({
           }
         }
 
-        // Render
-        renderer.render(scene, camera);
+        // Render (use EffectComposer when available, plain renderer otherwise)
+        if (composerRef.current) {
+          composerRef.current.render(delta);
+        } else {
+          renderer.render(scene, camera);
+        }
 
         // Performance budget monitoring
         const info = renderer.info;
@@ -320,6 +418,7 @@ export default function ConcordiaScene({
         c.aspect = w / h;
         c.updateProjectionMatrix();
         r.setSize(w, h);
+        composerRef.current?.setSize(w, h);
       }
     }
     window.addEventListener('resize', handleResize);
@@ -394,6 +493,8 @@ export default function ConcordiaScene({
       if (rendererRef.current) {
         (rendererRef.current as { dispose: () => void }).dispose();
       }
+      physicsRef.current?.destroy();
+      physicsRef.current = null;
 
       rendererRef.current = null;
       sceneRef.current = null;
@@ -402,7 +503,7 @@ export default function ConcordiaScene({
       buildingMap.clear();
       setIsReady(false);
     };
-  }, [districtId, quality, onBuildingClick, onTerrainClick]);
+  }, [districtId, quality, themeProp, renderStyle, onBuildingClick, onTerrainClick]);
 
   // ── Scene API ──────────────────────────────────────────────────
 
@@ -480,14 +581,34 @@ export default function ConcordiaScene({
 
   // ── Render ─────────────────────────────────────────────────────
 
+  // ── Quest marker container ref ──────────────────────────────────
+  const containerRef = useRef<HTMLDivElement>(null);
+  // Lazy import QuestMarker3D to avoid SSR issues
+  const [QuestMarker3DComp, setQuestMarker3DComp] = React.useState<React.ComponentType<{
+    objectives: import('@/components/world-lens/QuestMarker3D').QuestObjective[];
+    containerEl: HTMLElement | null;
+  }> | null>(null);
+  useEffect(() => {
+    import('@/components/world-lens/QuestMarker3D').then(m => {
+      setQuestMarker3DComp(() => m.default as typeof QuestMarker3DComp);
+    });
+  }, []);
+
   return (
     <ConcordiaSceneContext.Provider value={sceneAPI}>
-      <div className="relative" style={{ width, height }}>
+      <div ref={containerRef} className="relative" style={{ width, height }}>
         <canvas
           ref={canvasRef}
           className="w-full h-full block"
           style={{ touchAction: 'none' }}
         />
+        {/* 3D quest objective markers — CSS2DRenderer overlay */}
+        {QuestMarker3DComp && questObjectives.length > 0 && (
+          <QuestMarker3DComp
+            objectives={questObjectives}
+            containerEl={containerRef.current}
+          />
+        )}
 
         {/* Loading overlay */}
         {!isReady && (

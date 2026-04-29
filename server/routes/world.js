@@ -144,7 +144,10 @@ import {
   getCurrentSeason,
   addSeasonChallenge,
   completeChallenge,
+  generateDailyTasks,
+  completeDailyTask,
 } from "../lib/world-progression.js";
+import { awardSparks, getBalances } from "../lib/currency.js";
 
 // Events
 import {
@@ -469,7 +472,29 @@ export default function createWorldRoutes({ requireAuth, db = null } = {}) {
 
   router.post("/daily-login", auth, wrap((req, res) => {
     const result = recordDailyLogin(_userId(req));
+    // Award login Sparks
+    const userId = _userId(req);
+    try { awardSparks(db, userId, 2, "daily_login"); } catch (_) {}
     res.json({ ok: true, ...result });
+  }));
+
+  router.get("/daily-tasks", auth, wrap((req, res) => {
+    const tasks = generateDailyTasks(_userId(req));
+    res.json({ ok: true, tasks });
+  }));
+
+  router.post("/daily-tasks/:taskId/complete", auth, wrap((req, res) => {
+    const userId = _userId(req);
+    const result = completeDailyTask(userId, req.params.taskId);
+    if (result.ok) {
+      try { awardSparks(db, userId, 5, "daily_task_complete"); } catch (_) {}
+    }
+    res.json({ ok: true, ...result });
+  }));
+
+  router.get("/balances", auth, wrap((req, res) => {
+    const balances = getBalances(db, _userId(req));
+    res.json({ ok: true, ...balances });
   }));
 
   // ── Seasons ──────────────────────────────────────────────────────────────

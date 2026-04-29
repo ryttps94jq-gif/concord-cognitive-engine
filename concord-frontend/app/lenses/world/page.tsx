@@ -76,6 +76,45 @@ const StressTestPanel = dynamic(() => import('@/components/world-lens/StressTest
 const ReplayForensics = dynamic(() => import('@/components/world-lens/ReplayForensics'), { ssr: false });
 const ReplaySpectator = dynamic(() => import('@/components/world-lens/ReplaySpectator'), { ssr: false });
 
+// ── Concordia Input Mode Overlays ──────────────────────────────────────
+const CombatHUD          = dynamic(() => import('@/components/concordia/hud/CombatHUD').then(m => ({ default: m.CombatHUD })), { ssr: false });
+const VehicleHUD         = dynamic(() => import('@/components/concordia/hud/VehicleHUD').then(m => ({ default: m.VehicleHUD })), { ssr: false });
+const DialoguePanel      = dynamic(() => import('@/components/concordia/dialogue/DialoguePanel').then(m => ({ default: m.DialoguePanel })), { ssr: false });
+const CreationWorkshop   = dynamic(() => import('@/components/concordia/creation/CreationWorkshop').then(m => ({ default: m.CreationWorkshop })), { ssr: false });
+const LensWorkspace      = dynamic(() => import('@/components/concordia/lens/LensWorkspaceInWorld').then(m => ({ default: m.LensWorkspaceInWorld })), { ssr: false });
+const EmoteWheel         = dynamic(() => import('@/components/concordia/social/EmoteWheel').then(m => ({ default: m.EmoteWheel })), { ssr: false });
+const QuickMessageBar    = dynamic(() => import('@/components/concordia/social/QuickMessageBar').then(m => ({ default: m.QuickMessageBar })), { ssr: false });
+const SpectatorControls  = dynamic(() => import('@/components/concordia/spectator/SpectatorControls').then(m => ({ default: m.SpectatorControls })), { ssr: false });
+const MobileControls     = dynamic(() => import('@/components/concordia/mobile/MobileControlsOverlay').then(m => ({ default: m.MobileControlsOverlay })), { ssr: false });
+const TutorialOverlay    = dynamic(() => import('@/components/concordia/onboarding/TutorialHint').then(m => ({ default: m.TutorialOverlay })), { ssr: false });
+const SkillsPanel           = dynamic(() => import('@/components/concordia/skills/SkillsPanel').then(m => ({ default: m.SkillsPanel })), { ssr: false });
+const XPToast               = dynamic(() => import('@/components/concordia/hud/XPToast').then(m => ({ default: m.XPToast })), { ssr: false });
+const NemesisAlert          = dynamic(() => import('@/components/concordia/hud/NemesisAlert').then(m => ({ default: m.NemesisAlert })), { ssr: false });
+const LegendaryAnnouncement = dynamic(() => import('@/components/concordia/world/LegendaryAnnouncement').then(m => ({ default: m.LegendaryAnnouncement })), { ssr: false });
+const HybridReveal          = dynamic(() => import('@/components/concordia/skills/HybridReveal').then(m => ({ default: m.HybridReveal })), { ssr: false });
+const CrisisBanner          = dynamic(() => import('@/components/concordia/world/CrisisBanner').then(m => ({ default: m.CrisisBanner })), { ssr: false });
+const GameModeHUD           = dynamic(() => import('@/components/concordia/game-modes/GameModeHUD').then(m => ({ default: m.GameModeHUD })), { ssr: false });
+const GameModePicker        = dynamic(() => import('@/components/concordia/game-modes/GameModePicker').then(m => ({ default: m.GameModePicker })), { ssr: false });
+const CraftingBench         = dynamic(() => import('@/components/concordia/crafting/CraftingBench').then(m => ({ default: m.CraftingBench })), { ssr: false });
+const GuildPanel            = dynamic(() => import('@/components/concordia/social/GuildPanel').then(m => ({ default: m.GuildPanel })), { ssr: false });
+const SeasonPassPanel       = dynamic(() => import('@/components/concordia/world/SeasonPassPanel').then(m => ({ default: m.SeasonPassPanel })), { ssr: false });
+const SeasonBanner          = dynamic(() => import('@/components/concordia/world/SeasonBanner').then(m => ({ default: m.SeasonBanner })), { ssr: false });
+const LeaderboardPanel      = dynamic(() => import('@/components/concordia/world/LeaderboardPanel').then(m => ({ default: m.LeaderboardPanel })), { ssr: false });
+const WorldEventsPanel      = dynamic(() => import('@/components/concordia/world/WorldEventsPanel').then(m => ({ default: m.WorldEventsPanel })), { ssr: false });
+const ArenaPanel            = dynamic(() => import('@/components/concordia/world/ArenaPanel').then(m => ({ default: m.ArenaPanel })), { ssr: false });
+const JobsBoardPanel        = dynamic(() => import('@/components/concordia/world/JobsBoardPanel').then(m => ({ default: m.JobsBoardPanel })), { ssr: false });
+const LorePanel             = dynamic(() => import('@/components/concordia/world/LorePanel').then(m => ({ default: m.LorePanel })), { ssr: false });
+
+import { LensPortalMarker } from '@/components/concordia/world/LensPortalMarker';
+import { modeManager, startLensTimeTick, stopLensTimeTick } from '@/lib/concordia/mode-manager';
+import { MODE_TO_HUD } from '@/lib/concordia/modes';
+import type { InputMode } from '@/lib/concordia/modes';
+import { DEFAULT_SPECIAL } from '@/lib/concordia/player-stats';
+import { useCombatState } from '@/hooks/useCombatState';
+import { useVehicleState } from '@/hooks/useVehicleState';
+import { useDialogue } from '@/hooks/useDialogue';
+import type { HUDMode } from '@/components/world-lens/HUDOverlay';
+
 import { SEED_MATERIALS } from '@/lib/world-lens/material-seed';
 import { cacheMaterials } from '@/lib/world-lens/validation-engine';
 import type {
@@ -92,7 +131,7 @@ import {
   Wrench, Package, Code2, Terminal, Diff, BookOpen, BoxSelect,
   FileCode, GitBranch, Activity, Gauge, ShoppingCart,
   Award, Stamp, FlaskConical, History, Clapperboard, ChevronRight,
-  Swords,
+  Swords, Cpu, Gamepad2, Trophy, Briefcase,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '@/lib/api/client';
@@ -587,6 +626,27 @@ export default function WorldLensPage() {
   // for stream events — this instance is dedicated to multiplayer.
   const worldSocket = useSocket({ autoConnect: true });
 
+  // ── Concordia input mode ──────────────────────────────────────
+  const [inputMode, setInputMode] = useState<InputMode>(() => modeManager.mode);
+  useEffect(() => {
+    return modeManager.subscribe((next) => setInputMode(next));
+  }, []);
+
+  // Start/stop the 5-minute lens time tick whenever the player enters lens_work mode.
+  useEffect(() => {
+    if (inputMode === 'lens_work' && worldSocket.isConnected) {
+      startLensTimeTick('world', (event, data) => worldSocket.emit(event, data));
+    } else {
+      stopLensTimeTick();
+    }
+    return () => stopLensTimeTick();
+  }, [inputMode, worldSocket.isConnected]);
+
+  // Mode-specific state hooks (always called — conditionally rendered)
+  const combatCtx   = useCombatState(DEFAULT_SPECIAL);
+  const vehicleCtx  = useVehicleState();
+  const dialogueCtx = useDialogue(DEFAULT_SPECIAL);
+
   // ── State ─────────────────────────────────────────────────────
   const [viewMode, setViewMode] = useState<ViewMode>('concordia');
   const [activeDistrict, setActiveDistrict] = useState<District>(DEMO_DISTRICT);
@@ -600,7 +660,9 @@ export default function WorldLensPage() {
 
   // 3D Explore mode state
   const [cameraMode, setCameraMode] = useState<'isometric' | 'follow' | 'free' | 'interior' | 'cinematic'>('follow');
-  const [showPanel, setShowPanel] = useState<'none' | 'inventory' | 'quests' | 'chat' | 'map' | 'crafting' | 'players' | 'profile' | 'collaboration' | 'livecollab' | 'events' | 'socialproof' | 'notifications' | 'smartnotify' | 'moderation' | 'ownership' | 'federation' | 'voice' | 'voiceassist' | 'combat'>('none');
+  const [concordiaTheme, setConcordiaTheme] = useState<'neon-punk' | 'classic' | 'minimal'>('neon-punk');
+  const [concordiaRenderStyle, setConcordiaRenderStyle] = useState<'pbr' | 'toon'>('pbr');
+  const [showPanel, setShowPanel] = useState<'none' | 'inventory' | 'quests' | 'chat' | 'map' | 'crafting' | 'players' | 'profile' | 'collaboration' | 'livecollab' | 'events' | 'socialproof' | 'notifications' | 'smartnotify' | 'moderation' | 'ownership' | 'federation' | 'voice' | 'voiceassist' | 'combat' | 'skills' | 'modes' | 'guild' | 'season' | 'npcshop' | 'leaderboard' | 'worldevents' | 'arena' | 'jobs' | 'lore'>('none');
   // Local player avatar — mutable so moves update it in place. On
   // first mount we ask the server for saved state (via player:load)
   // and land back wherever the user logged off.
@@ -638,6 +700,17 @@ export default function WorldLensPage() {
     rotation: 0,
     currentAnimation: 'idle',
   });
+  // Lens portal buildings loaded from server
+  const [portals, setPortals] = useState<Array<{
+    id: string; lens_id: string; label: string; x: number; y: number;
+    accessible: boolean; required_skill_level: number;
+    npc_name?: string; npc_title?: string;
+  }>>([]);
+  // When a portal is entered, overrides the LensWorkspace lensId
+  const [activeLensOverride, setActiveLensOverride] = useState<string | null>(null);
+  // Portal within E-press range
+  const [nearPortalId, setNearPortalId] = useState<string | null>(null);
+
   // Other players in the same chunk(s), updated via city:positions
   // socket broadcasts. The `currentAnimation` is typed to match the
   // AnimationClip union that AvatarSystem3D accepts; remote player
@@ -749,6 +822,39 @@ export default function WorldLensPage() {
   useEffect(() => {
     cacheMaterials(materials);
   }, [materials]);
+
+  // Fetch lens portal buildings for this world
+  useEffect(() => {
+    fetch('/api/lens-portals?worldId=concordia-hub')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.portals) setPortals(d.portals); })
+      .catch(() => {});
+  }, []);
+
+  // Proximity check: update nearPortalId whenever the player moves
+  useEffect(() => {
+    const near = portals.find(p =>
+      Math.hypot(p.x - playerAvatar.position.x, p.y - playerAvatar.position.y) < 3
+    );
+    setNearPortalId(near?.id ?? null);
+  }, [playerAvatar.position, portals]);
+
+  // E key: enter a nearby accessible portal
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'e' && e.key !== 'E') return;
+      const near = portals.find(p =>
+        Math.hypot(p.x - playerAvatar.position.x, p.y - playerAvatar.position.y) < 3
+      );
+      if (near?.accessible) {
+        setActiveLensOverride(near.lens_id);
+        modeManager.switchTo('lens_work', { push: true });
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [portals, playerAvatar.position]);
 
   // ── MMO multiplayer wiring ──────────────────────────────────────────
   // On mount: ask the server for our last-saved position, subscribe
@@ -1292,6 +1398,8 @@ export default function WorldLensPage() {
           <ConcordiaScene
             districtId={activeDistrict.id}
             quality="medium"
+            theme={concordiaTheme}
+            renderStyle={concordiaRenderStyle}
             onBuildingClick={(id) => {
               const b = activeDistrict.buildings.find(b => b.id === id);
               if (b) setSelectedBuilding(b);
@@ -1300,6 +1408,30 @@ export default function WorldLensPage() {
             width="100%"
             height="100%"
           />
+          {/* Theme picker — 3 swatches + PBR/Toon toggle top-right */}
+          <div className="absolute top-4 right-4 z-20 flex items-center gap-1.5 bg-black/50 border border-white/10 rounded-xl px-2 py-1.5 pointer-events-auto">
+            {([
+              { id: 'neon-punk' as const, swatch: '#6366f1', label: 'Neon Punk' },
+              { id: 'classic'  as const, swatch: '#e8c97a', label: 'Classic' },
+              { id: 'minimal'  as const, swatch: '#94a3b8', label: 'Minimal' },
+            ]).map(t => (
+              <button
+                key={t.id}
+                onClick={() => setConcordiaTheme(t.id)}
+                title={t.label}
+                className={`w-5 h-5 rounded-full border-2 transition-transform ${concordiaTheme === t.id ? 'border-white scale-110' : 'border-transparent hover:scale-105'}`}
+                style={{ backgroundColor: t.swatch }}
+              />
+            ))}
+            <div className="w-px h-4 bg-white/20 mx-0.5" />
+            <button
+              onClick={() => setConcordiaRenderStyle(s => s === 'pbr' ? 'toon' : 'pbr')}
+              title={concordiaRenderStyle === 'pbr' ? 'Switch to Toon (cel shading)' : 'Switch to PBR (realistic)'}
+              className={`px-2 py-0.5 text-[10px] font-bold rounded-md transition-colors ${concordiaRenderStyle === 'toon' ? 'bg-indigo-500/70 text-white' : 'bg-white/10 text-white/60 hover:bg-white/20 hover:text-white'}`}
+            >
+              {concordiaRenderStyle === 'pbr' ? 'PBR' : 'Toon'}
+            </button>
+          </div>
           {/* 3D scene rendering layers */}
           <TerrainRenderer
             districts={[]}
@@ -1382,6 +1514,31 @@ export default function WorldLensPage() {
               }}
             />
           </div>
+          {/* Lens portal markers — rendered as 2D overlays */}
+          {portals.map(portal => {
+            const isNearby = nearPortalId === portal.id;
+            return (
+              <div
+                key={portal.id}
+                className="absolute pointer-events-auto"
+                style={{
+                  left: `calc(50% + ${(portal.x - playerAvatar.position.x) * 32}px)`,
+                  top: `calc(50% + ${(portal.y - playerAvatar.position.y) * 32}px)`,
+                  transform: 'translate(-50%, -50%)',
+                  zIndex: 15,
+                }}
+              >
+                <LensPortalMarker
+                  portal={{ ...portal, district: 'concordia', building_type: 'portal', description: undefined }}
+                  isNearby={isNearby}
+                  onEnter={(p) => {
+                    setActiveLensOverride(p.lens_id);
+                    modeManager.switchTo('lens_work', { push: true });
+                  }}
+                />
+              </div>
+            );
+          })}
           {/* Camera mode controls */}
           <div className="absolute top-4 right-4 z-20">
             <CameraControls
@@ -1392,9 +1549,9 @@ export default function WorldLensPage() {
               onTransition={() => {}}
             />
           </div>
-          {/* HUD overlay */}
+          {/* HUD overlay — mode drives the top-bar label */}
           <HUDOverlay
-            mode="explore"
+            mode={(MODE_TO_HUD[inputMode] ?? 'explore') as HUDMode}
             district={activeDistrict.name}
             timeOfDay="day"
             weather="clear"
@@ -1408,6 +1565,103 @@ export default function WorldLensPage() {
             onToolSelect={() => {}}
             onMenuOpen={() => {}}
           />
+
+          {/* ── Concordia mode overlays ── */}
+          {inputMode === 'combat' && (
+            <CombatHUD
+              state={combatCtx.state}
+              onActivateSkill={combatCtx.activateSkill}
+              onDodge={combatCtx.dodge}
+              onBlock={combatCtx.setBlock}
+              onToggleVATS={combatCtx.toggleVATS}
+              onQueueShot={combatCtx.queueShot}
+            />
+          )}
+          {inputMode === 'driving' && vehicleCtx.state.occupied && (
+            <VehicleHUD
+              state={vehicleCtx.state}
+              onExit={() => { vehicleCtx.exitVehicle(); modeManager.pop(); }}
+              onHorn={() => {}}
+              onShiftUp={vehicleCtx.shiftUp}
+              onShiftDown={vehicleCtx.shiftDown}
+            />
+          )}
+          {inputMode === 'conversation' && dialogueCtx.state.active && (
+            <DialoguePanel
+              state={dialogueCtx.state}
+              special={DEFAULT_SPECIAL}
+              onSend={dialogueCtx.send}
+              onClose={() => { dialogueCtx.endDialogue(); modeManager.pop(); }}
+            />
+          )}
+          {inputMode === 'creation' && (
+            <CreationWorkshop
+              playerPosition={playerAvatar.position}
+              playerId={playerAvatar.id}
+              onClose={() => modeManager.pop()}
+            />
+          )}
+          {inputMode === 'lens_work' && (
+            <LensWorkspace
+              lensId="world"
+              lensIdOverride={activeLensOverride ?? undefined}
+              lensName={activeLensOverride
+                ? activeLensOverride.charAt(0).toUpperCase() + activeLensOverride.slice(1).replace(/-/g, ' ')
+                : 'Concordia'}
+              playerPosition={playerAvatar.position}
+              onClose={() => { modeManager.pop(); setActiveLensOverride(null); }}
+            />
+          )}
+          {(inputMode === 'social' || inputMode === 'exploration') && (
+            <>
+              <EmoteWheel
+                onEmote={(emoteId) => {
+                  setPlayerAvatar(prev => ({ ...prev, currentAnimation: 'wave' }));
+                  if (worldSocket.isConnected) {
+                    worldSocket.emit('player:move', {
+                      cityId: activeDistrict.id, districtId: activeDistrict.id,
+                      x: playerAvatar.position.x, y: playerAvatar.position.y, z: playerAvatar.position.z,
+                      rotation: playerAvatar.rotation, direction: playerAvatar.rotation,
+                      action: emoteId, currentAnimation: emoteId,
+                    });
+                  }
+                }}
+              />
+              <QuickMessageBar
+                onSend={(msg) => {
+                  if (worldSocket.isConnected) worldSocket.emit('chat:message', { text: msg });
+                }}
+              />
+            </>
+          )}
+          {inputMode === 'spectator' && (
+            <SpectatorControls
+              camera={{ moveForward: () => {}, moveBack: () => {}, moveLeft: () => {}, moveRight: () => {}, moveUp: () => {}, moveDown: () => {}, rotate: (_dx, _dy) => {}, zoom: (_d) => {} }}
+              onFollowPlayer={() => {}}
+              onTimeScrub={() => {}}
+              availablePlayers={otherPlayers.map(p => ({ id: p.id, name: p.name }))}
+            />
+          )}
+          {/* Mobile touch controls — gated internally by useIsTouchDevice */}
+          <MobileControls
+            mode={inputMode}
+            onMovement={() => {}}
+            onCamera={() => {}}
+            onJump={() => {}}
+            onInteract={() => {}}
+            onAttack={() => combatCtx.activateSkill(0)}
+            onDodge={combatCtx.dodge}
+            onBlock={combatCtx.setBlock}
+            onThrottle={vehicleCtx.setThrottle}
+            onBrake={vehicleCtx.setBrake}
+            onSteer={vehicleCtx.setSteering}
+            onExitVehicle={() => { vehicleCtx.exitVehicle(); modeManager.pop(); }}
+            hotbarCount={combatCtx.state.hotbar.slots.length}
+            onHotbar={combatCtx.activateSkill}
+          />
+          {/* Tutorial overlay — always present, shows ? button */}
+          <TutorialOverlay />
+
           {/* Gameplay toolbar */}
           <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1 bg-black/70 border border-white/10 rounded-xl px-2 py-1.5 pointer-events-auto">
             {([
@@ -1430,6 +1684,15 @@ export default function WorldLensPage() {
               { key: 'voice', label: 'Voice', icon: Mic },
               { key: 'voiceassist', label: 'Assist', icon: AudioLines },
               { key: 'combat', label: 'Combat', icon: Swords },
+              { key: 'skills', label: 'Skills', icon: Cpu },
+              { key: 'modes', label: 'Modes', icon: Gamepad2 },
+              { key: 'guild', label: 'Guild', icon: Users },
+              { key: 'season', label: 'Season', icon: Award },
+              { key: 'leaderboard', label: 'Board', icon: Trophy },
+              { key: 'worldevents', label: 'Events+', icon: CalendarDays },
+              { key: 'arena', label: 'Arena', icon: Swords },
+              { key: 'jobs', label: 'Jobs', icon: Briefcase },
+              { key: 'lore', label: 'Lore', icon: BookOpen },
             ] as const).map(({ key, label, icon: Icon }) => (
               <button
                 key={key}
@@ -1472,9 +1735,34 @@ export default function WorldLensPage() {
             </div>
           )}
           {showPanel === 'crafting' && (
-            <div className="absolute top-4 left-4 z-20 w-96 max-h-[70vh] overflow-auto pointer-events-auto">
-              <CraftingPanel onClose={() => setShowPanel('none')} />
-            </div>
+            <CraftingBench
+              playerId={playerAvatar.id}
+              toolTier={0}
+              toolQuality={10}
+              skillLevel={1}
+              onClose={() => setShowPanel('none')}
+            />
+          )}
+          {showPanel === 'guild' && (
+            <GuildPanel playerId={playerAvatar.id} onClose={() => setShowPanel('none')} />
+          )}
+          {showPanel === 'season' && (
+            <SeasonPassPanel onClose={() => setShowPanel('none')} />
+          )}
+          {showPanel === 'leaderboard' && (
+            <LeaderboardPanel currentUserId={playerAvatar.id} onClose={() => setShowPanel('none')} />
+          )}
+          {showPanel === 'worldevents' && (
+            <WorldEventsPanel worldId="concordia-hub" onClose={() => setShowPanel('none')} />
+          )}
+          {showPanel === 'arena' && (
+            <ArenaPanel playerId={playerAvatar.id} onClose={() => setShowPanel('none')} />
+          )}
+          {showPanel === 'jobs' && (
+            <JobsBoardPanel playerId={playerAvatar.id} onClose={() => setShowPanel('none')} />
+          )}
+          {showPanel === 'lore' && (
+            <LorePanel worldId="concordia-hub" onClose={() => setShowPanel('none')} />
           )}
           {showPanel === 'players' && (
             <div className="absolute top-4 left-4 z-20 w-80 max-h-[70vh] overflow-auto pointer-events-auto">
@@ -1591,6 +1879,21 @@ export default function WorldLensPage() {
               <VoiceAssistant />
             </div>
           )}
+          {showPanel === 'skills' && (
+            <div className="absolute top-4 right-4 z-20 w-96 max-h-[70vh] overflow-auto pointer-events-auto">
+              <SkillsPanel worldId={activeDistrict.id} onClose={() => setShowPanel('none')} />
+            </div>
+          )}
+          <XPToast />
+          <NemesisAlert />
+          <LegendaryAnnouncement />
+          <HybridReveal />
+          <CrisisBanner />
+          <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 pointer-events-auto">
+            <SeasonBanner onOpenPassPanel={() => setShowPanel('season')} />
+          </div>
+          <GameModeHUD />
+          <GameModePicker open={showPanel === 'modes'} onClose={() => setShowPanel('none')} />
           {/* Combat HUD — renders its own fixed-position overlays
               (health bar, target panel, floating damage numbers,
               combat log, death overlay). Surfaces whenever the

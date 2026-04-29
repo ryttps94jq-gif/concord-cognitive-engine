@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Cpu, Zap, MessageSquare, Eye, Star, Clock } from 'lucide-react';
+import { Cpu, Zap, MessageSquare, Eye, Star, Clock, Trophy } from 'lucide-react';
 import Link from 'next/link';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useSocket } from '@/hooks/useSocket';
@@ -184,6 +184,7 @@ export default function GenesisLens() {
 
   const [emergents, setEmergents] = useState<EmergentIdentity[]>([]);
   const [feed, setFeed] = useState<FeedEvent[]>([]);
+  const [legends, setLegends] = useState<{ id: string; title: string; skill_level: number; username: string | null; world_id: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [isLive, setIsLive] = useState(false);
 
@@ -194,18 +195,21 @@ export default function GenesisLens() {
     Promise.all([
       fetch('/api/emergents').then(r => r.json()).catch(() => ({ emergents: [] })),
       fetch('/api/emergents/feed/recent?limit=50').then(r => r.json()).catch(() => ({ events: [] })),
-    ]).then(([emergentsData, feedData]) => {
+      fetch('/api/worlds/skills/legendary').then(r => r.json()).catch(() => ({ legends: [] })),
+    ]).then(([emergentsData, feedData, legendData]) => {
       setEmergents(emergentsData.emergents || []);
       setFeed(feedData.events || []);
+      setLegends(legendData.legends || []);
       setLoading(false);
     });
   }, []);
 
   // Live feed via WebSocket
   useEffect(() => {
-    const handleActivity = useCallback((data: FeedEvent) => {
+    const handleActivity = (...args: unknown[]) => {
+      const data = args[0] as FeedEvent;
       setFeed(prev => [data, ...prev].slice(0, 100));
-    }, []);
+    };
 
     on('emergent:activity', handleActivity);
     setIsLive(isConnected);
@@ -294,6 +298,29 @@ export default function GenesisLens() {
           )}
         </div>
       </div>
+
+      {/* Hall of Legends */}
+      {legends.length > 0 && (
+        <div className="mt-10">
+          <div className="flex items-center gap-2 mb-4">
+            <Trophy className="w-4 h-4 text-yellow-400" />
+            <h2 className="text-lg font-semibold">Hall of Legends</h2>
+            <span className="text-xs text-gray-600 ml-1">Legendary & Mythic skill masters</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            {legends.slice(0, 8).map((leg, i) => (
+              <div key={leg.id} className="p-3 rounded-lg bg-gradient-to-br from-yellow-900/20 to-amber-900/10 border border-yellow-500/20 hover:border-yellow-500/40 transition">
+                <div className="flex items-start justify-between gap-1 mb-1">
+                  <span className="text-yellow-400 text-xs font-mono">#{i + 1}</span>
+                  <span className="text-yellow-300/60 text-xs font-mono">Lv {leg.skill_level?.toFixed(0)}</span>
+                </div>
+                <p className="text-white text-sm font-semibold truncate">{leg.title}</p>
+                <p className="text-gray-500 text-xs mt-0.5 truncate">{leg.username || 'anonymous'} · {leg.world_id}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

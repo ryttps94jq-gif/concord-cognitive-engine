@@ -1,6 +1,7 @@
 'use client';
 
 import React, { createContext, useCallback, useContext, useRef, useState } from 'react';
+import { useSoundscape } from './SoundscapeEngine';
 
 /* ── Types ─────────────────────────────────────────────────────── */
 
@@ -69,10 +70,24 @@ interface GameJuiceProps {
   intensity?: number;
 }
 
+// Map JuiceTrigger → SFX id from SoundscapeEngine SFX_MAP
+const TRIGGER_SFX: Record<JuiceTrigger, string> = {
+  'place-dtu':             'snap-click',
+  'validate-pass':         'ascending-chime',
+  'validate-fail':         'low-thud',
+  'earn-royalty':          'coin-clink',
+  'get-cited':             'notification-glow',
+  'milestone':             'fanfare-short',
+  'disaster':              'rumble',
+  'construction-complete': 'build-finish',
+  'competition-win':       'victory-sting',
+};
+
 export default function GameJuice({ children, enabled = true, intensity: initialIntensity = 0.8 }: GameJuiceProps) {
   const [intensityValue, setIntensityValue] = useState(initialIntensity);
   const [overlays, setOverlays] = useState<JuiceOverlay[]>([]);
   const overlayCounter = useRef(0);
+  const soundscape = useSoundscape();
 
   const removeOverlay = useCallback((id: string) => {
     setOverlays((prev) => prev.filter((o) => o.id !== id));
@@ -84,6 +99,10 @@ export default function GameJuice({ children, enabled = true, intensity: initial
 
       const feedback = FEEDBACK_MAP[trigger];
       if (!feedback) return;
+
+      // Play audio SFX
+      const sfxId = TRIGGER_SFX[trigger];
+      if (sfxId) soundscape.triggerSFX(sfxId);
 
       const scaledDuration = feedback.duration * intensityValue;
       const id = `juice-${overlayCounter.current++}`;
