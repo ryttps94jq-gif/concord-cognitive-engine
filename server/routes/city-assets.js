@@ -28,14 +28,12 @@ export default function createCityAssetsRouter({ requireAuth } = {}) {
   // GET /api/city-assets — list assets with optional category/theme filters (paginated)
   // Query params: page (1-based, default 1), limit (default 20, max 100)
   router.get("/", asyncHandler(async (req, res) => {
-    const allAssets = listAssets(req.query);
     const page = Math.max(1, parseInt(req.query.page) || 1);
     const limit = Math.min(parseInt(req.query.limit) || 20, 100);
     const offset = (page - 1) * limit;
-    const total = allAssets.length;
-    const data = allAssets.slice(offset, offset + limit);
-    // Keep backward-compat `assets` key alongside new `data` key
-    res.json({ ok: true, assets: data, data, pagination: { page, limit, total, hasMore: offset + limit < total }, categories: ASSET_CATEGORIES, themes: ASSET_THEMES });
+    // listAssets handles filtering/sorting and returns { items, total }
+    const { items, total } = listAssets({ ...req.query, limit, offset });
+    res.json({ ok: true, assets: items, data: items, pagination: { page, limit, total, hasMore: offset + limit < total }, categories: ASSET_CATEGORIES, themes: ASSET_THEMES });
   }));
 
   // GET /api/city-assets/stats — overall asset stats

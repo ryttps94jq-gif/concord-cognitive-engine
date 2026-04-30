@@ -92,34 +92,7 @@ export default function lensFeatureRoutes(db, lensFeatures) {
     });
   });
 
-  /**
-   * GET /api/lens-features/:lensId
-   * Get all features for a specific lens
-   */
-  router.get("/:lensId", (req, res) => {
-    const result = getLensFeatures(db, req.params.lensId);
-    res.json(result);
-  });
-
-  /**
-   * GET /api/lens-features/:lensId/:featureId
-   * Get a specific feature
-   */
-  router.get("/:lensId/:featureId", (req, res) => {
-    const result = getFeature(db, req.params.lensId, req.params.featureId);
-    res.json(result);
-  });
-
-  /**
-   * POST /api/lens-features/seed
-   * Seed all lens features from the static registry
-   */
-  router.post("/seed", (_req, res) => {
-    const result = seedLensFeatures(db, lensFeatures);
-    res.json(result);
-  });
-
-  // ── Lens Templates ─────────────────────────────────────────────────────────
+  // ── Lens Templates (must be before /:lensId wildcard) ────────────────────
 
   router.get("/templates", (_req, res) => {
     const templates = Object.values(LENS_TEMPLATES).map(t => ({
@@ -140,6 +113,21 @@ export default function lensFeatureRoutes(db, lensFeatures) {
     } catch (e) {
       res.status(500).json({ ok: false, error: e.message });
     }
+  });
+
+  router.post("/seed", (_req, res) => {
+    const result = seedLensFeatures(db, lensFeatures);
+    res.json(result);
+  });
+
+  router.get("/:lensId", (req, res) => {
+    const result = getLensFeatures(db, req.params.lensId);
+    res.json(result);
+  });
+
+  router.get("/:lensId/:featureId", (req, res) => {
+    const result = getFeature(db, req.params.lensId, req.params.featureId);
+    res.json(result);
   });
 
   return router;
