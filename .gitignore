@@ -30,3 +30,6 @@ server/.parity-test-state-*.json
 # Frontend build output (.next inside concord-frontend)
 concord-frontend/.next/
 concord-frontend/node_modules/
+
+# Claude Code internal state (agent worktrees, plan files, etc.)
+.claude/worktrees/
