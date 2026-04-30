@@ -4,10 +4,13 @@
 
 import { registerTrustTrajectoryHook } from "../agentic/trust-trajectory.js";
 import { createWorktree, recordOperation } from "../agentic/worktree.js";
+import logger from '../../logger.js';
 
 // Register the trust-trajectory before_tool hook once at module load.
 // This is async but non-blocking; any error is non-fatal.
-registerTrustTrajectoryHook().catch(() => {});
+registerTrustTrajectoryHook().catch((err) => {
+  logger.warn('inference:agent-loop', 'trust trajectory hook registration failed', { error: err?.message });
+});
 
 const DEFAULT_MAX_STEPS = 10;
 

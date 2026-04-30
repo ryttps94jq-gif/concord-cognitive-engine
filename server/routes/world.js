@@ -700,8 +700,11 @@ export default function createWorldRoutes({ requireAuth, db = null } = {}) {
 
   // ── Materials API ─────────────────────────────────────────────────
 
-  router.get("/sim/materials", wrap((_req, res) => {
-    res.json({ ok: true, materials: Array.from(simMaterials.values()) });
+  router.get("/sim/materials", wrap((req, res) => {
+    const _limit = Math.min(parseInt(req.query.limit) || 100, 500);
+    const _offset = Math.max(parseInt(req.query.offset) || 0, 0);
+    const _all = Array.from(simMaterials.values());
+    res.json({ ok: true, materials: _all.slice(_offset, _offset + _limit), total: _all.length, limit: _limit, offset: _offset });
   }));
 
   router.get("/sim/materials/:id", wrap((req, res) => {
@@ -774,8 +777,11 @@ export default function createWorldRoutes({ requireAuth, db = null } = {}) {
     res.json({ ok: true, building });
   }));
 
-  router.get("/sim/buildings", wrap((_req, res) => {
-    res.json({ ok: true, buildings: Array.from(simBuildingDTUs.values()) });
+  router.get("/sim/buildings", wrap((req, res) => {
+    const _limit = Math.min(parseInt(req.query.limit) || 100, 500);
+    const _offset = Math.max(parseInt(req.query.offset) || 0, 0);
+    const _all = Array.from(simBuildingDTUs.values());
+    res.json({ ok: true, buildings: _all.slice(_offset, _offset + _limit), total: _all.length, limit: _limit, offset: _offset });
   }));
 
   router.get("/sim/buildings/:id", wrap((req, res) => {
@@ -803,8 +809,11 @@ export default function createWorldRoutes({ requireAuth, db = null } = {}) {
 
   // ── Simulation Districts API ──────────────────────────────────────
 
-  router.get("/sim/districts", wrap((_req, res) => {
-    res.json({ ok: true, districts: Array.from(simDistricts.values()) });
+  router.get("/sim/districts", wrap((req, res) => {
+    const _limit = Math.min(parseInt(req.query.limit) || 100, 500);
+    const _offset = Math.max(parseInt(req.query.offset) || 0, 0);
+    const _all = Array.from(simDistricts.values());
+    res.json({ ok: true, districts: _all.slice(_offset, _offset + _limit), total: _all.length, limit: _limit, offset: _offset });
   }));
 
   router.post("/sim/districts", auth, wrap((req, res) => {
@@ -878,8 +887,11 @@ export default function createWorldRoutes({ requireAuth, db = null } = {}) {
 
   // ── Firms API ─────────────────────────────────────────────────────
 
-  router.get("/sim/firms", wrap((_req, res) => {
-    res.json({ ok: true, firms: Array.from(simFirms.values()) });
+  router.get("/sim/firms", wrap((req, res) => {
+    const _limit = Math.min(parseInt(req.query.limit) || 100, 500);
+    const _offset = Math.max(parseInt(req.query.offset) || 0, 0);
+    const _all = Array.from(simFirms.values());
+    res.json({ ok: true, firms: _all.slice(_offset, _offset + _limit), total: _all.length, limit: _limit, offset: _offset });
   }));
 
   router.post("/sim/firms", auth, wrap((req, res) => {
@@ -923,8 +935,11 @@ export default function createWorldRoutes({ requireAuth, db = null } = {}) {
 
   // ── Events API ────────────────────────────────────────────────────
 
-  router.get("/sim/events", wrap((_req, res) => {
-    res.json({ ok: true, events: Array.from(simEvents.values()) });
+  router.get("/sim/events", wrap((req, res) => {
+    const _limit = Math.min(parseInt(req.query.limit) || 100, 500);
+    const _offset = Math.max(parseInt(req.query.offset) || 0, 0);
+    const _all = Array.from(simEvents.values());
+    res.json({ ok: true, events: _all.slice(_offset, _offset + _limit), total: _all.length, limit: _limit, offset: _offset });
   }));
 
   router.post("/sim/events", auth, wrap((req, res) => {
@@ -1208,8 +1223,11 @@ export default function createWorldRoutes({ requireAuth, db = null } = {}) {
     res.json({ ok: true, recipes: simCraftingRecipes });
   }));
 
-  router.get("/sim/crafting/stations", wrap((_req, res) => {
-    res.json({ ok: true, stations: Array.from(simCraftingStations.values()) });
+  router.get("/sim/crafting/stations", wrap((req, res) => {
+    const _limit = Math.min(parseInt(req.query.limit) || 100, 500);
+    const _offset = Math.max(parseInt(req.query.offset) || 0, 0);
+    const _all = Array.from(simCraftingStations.values());
+    res.json({ ok: true, stations: _all.slice(_offset, _offset + _limit), total: _all.length, limit: _limit, offset: _offset });
   }));
 
   router.post("/sim/crafting/stations", auth, wrap((req, res) => {

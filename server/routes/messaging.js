@@ -26,6 +26,7 @@ import {
   deleteBinding,
 } from "../lib/messaging/inbound-pipeline.js";
 import { registerPermissionTierHook } from "../lib/messaging/permission-tiers.js";
+import logger from '../logger.js';
 
 const ADAPTERS = { whatsapp, telegram, discord, signal, imessage, slack };
 const adapterRegistry = buildAdapterRegistry({ whatsapp, telegram, discord, signal, imessage, slack });
@@ -75,7 +76,12 @@ export function createMessagingRouter({ db, infer, contentGuard }) {
       res.json({ ok: true });
 
       if (normalized.ok) {
-        processInboundMessage({ adapter, normalized, db, infer, contentGuard }).catch(() => {});
+        processInboundMessage({ adapter, normalized, db, infer, contentGuard }).catch((err) => {
+          logger.warn('routes:messaging', 'inbound message processing failed', {
+            platform: normalized?.platform,
+            error: err?.message,
+          });
+        });
       }
     };
   }

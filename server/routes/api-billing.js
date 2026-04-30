@@ -29,7 +29,7 @@ export default function createAPIBillingRouter({ db, requireAuth }) {
   const authForWrites = (req, res, next) => {
     if (req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS") return next();
     if (typeof requireAuth === "function") return requireAuth()(req, res, next);
-    return next();
+    return res.status(401).json({ ok: false, error: 'auth_not_configured' });
   };
   router.use(authForWrites);
 
