@@ -18,6 +18,7 @@
 
 import { Router } from "express";
 import crypto from "crypto";
+import { listWorktrees } from "../lib/agentic/worktree.js";
 
 function uid() {
   return crypto.randomUUID();
@@ -259,6 +260,27 @@ export default function createAgentsRouter({ db, requireAuth, STATE }) {
       res.json({ ok: true, agentId: req.params.agentId, terminated: true });
     } catch (err) {
       console.error("[agents] DELETE /:agentId error:", err);
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  // ── GET /:agentId/worktrees — list emergent worktrees ──────────────────────
+
+  router.get("/:agentId/worktrees", (req, res) => {
+    try {
+      const worktrees = listWorktrees(req.params.agentId);
+      // Exclude the full operations array from the response to keep payloads small
+      const summary = worktrees.map(wt => ({
+        branch: wt.branch,
+        emergentId: wt.emergentId,
+        dtuPrefix: wt.dtuPrefix,
+        operationCount: wt.operations.length,
+        createdAt: wt.createdAt,
+        status: wt.status,
+      }));
+      res.json({ ok: true, emergentId: req.params.agentId, worktrees: summary, count: summary.length });
+    } catch (err) {
+      console.error("[agents] GET /:agentId/worktrees error:", err);
       res.status(500).json({ ok: false, error: err.message });
     }
   });

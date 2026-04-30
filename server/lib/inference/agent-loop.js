@@ -2,6 +2,13 @@
 // Multi-step inference loop: call brain → detect tool calls → dispatch → reinject.
 // Respects maxSteps and StopCondition to prevent infinite loops.
 
+import { registerTrustTrajectoryHook } from "../agentic/trust-trajectory.js";
+import { createWorktree, recordOperation } from "../agentic/worktree.js";
+
+// Register the trust-trajectory before_tool hook once at module load.
+// This is async but non-blocking; any error is non-fatal.
+registerTrustTrajectoryHook().catch(() => {});
+
 const DEFAULT_MAX_STEPS = 10;
 
 /**
@@ -67,6 +74,16 @@ export async function runAgentLoop(brain, messages, tools, opts = {}) {
   let totalTokensOut = 0;
   let workingMessages = [...messages];
 
+  // A3: Per-emergent worktree — created once per agent task execution.
+  // Skipped silently when no emergentId is present.
+  const emergentId = opts.emergentId || null;
+  let _worktree = null;
+  if (emergentId) {
+    try {
+      _worktree = createWorktree(emergentId);
+    } catch { /* non-fatal; proceed without worktree */ }
+  }
+
   for (let step = 0; step < maxSteps; step++) {
     if (opts.signal?.aborted) {
       return { steps, finalText: "", toolCalls: allToolCalls, tokensIn: totalTokensIn, tokensOut: totalTokensOut, terminated: "aborted" };
@@ -103,6 +120,16 @@ export async function runAgentLoop(brain, messages, tools, opts = {}) {
     // Dispatch each tool call and reinject results
     for (const call of response.toolCalls) {
       allToolCalls.push(call);
+
+      // A3: Record the operation in the emergent's worktree (if present).
+      if (_worktree) {
+        try {
+          recordOperation(emergentId, _worktree.branch, {
+            type: "annotate",
+            payload: { tool: call.name, args: call.args },
+          });
+        } catch { /* non-fatal */ }
+      }
 
       const toolStart = Date.now();
       const result = await dispatchTool(call, opts.dispatchCtx);

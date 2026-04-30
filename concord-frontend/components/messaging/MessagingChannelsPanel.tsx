@@ -175,7 +175,7 @@ export function MessagingChannelsPanel() {
   const [connectingPlatform, setConnectingPlatform] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
-  const { data: bindingsData, isLoading } = useQuery({
+  const { data: bindingsData, isLoading, isError: bindingsError } = useQuery({
     queryKey: ['messaging-bindings'],
     queryFn: () => api.get('/api/messaging/bindings').then(r => r.data),
   });
@@ -212,6 +212,11 @@ export function MessagingChannelsPanel() {
       {/* Connected platforms */}
       {isLoading ? (
         <div className="text-xs text-white/40">Loading connections...</div>
+      ) : bindingsError ? (
+        <div className="flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/30 rounded text-xs text-red-400">
+          <AlertCircle className="w-4 h-4 flex-shrink-0" />
+          Failed to load messaging connections. Check server status.
+        </div>
       ) : bindings.length === 0 ? (
         <div className="p-4 bg-white/5 rounded-lg text-center text-sm text-white/40">
           No platforms connected yet. Add one below.

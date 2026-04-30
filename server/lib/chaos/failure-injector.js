@@ -5,6 +5,7 @@
 // Never runs in production unless explicitly opted in.
 
 import { addListener } from "../inference/tracer.js";
+import logger from "../../logger.js";
 
 const ENABLED = process.env.CONCORD_CHAOS_ENABLED === "true";
 
@@ -38,7 +39,7 @@ export class FailureInjector {
     const exp = this.experiments.get(name);
     if (!exp) throw new Error(`Unknown experiment: ${name}`);
 
-    console.log(`[chaos] Starting experiment: ${name}`);
+    logger.info(`[chaos] Starting experiment: ${name}`);
     this.running = name;
     this._observations = [];
 
@@ -72,15 +73,15 @@ export class FailureInjector {
         durationMs: observations.durationMs,
       };
 
-      console.log(`[chaos] Experiment ${name}: ${passed ? "PASSED" : "FAILED"}`);
+      logger.info(`[chaos] Experiment ${name}: ${passed ? "PASSED" : "FAILED"}`);
       return result;
     } catch (error) {
       if (injection && exp.cleanup) {
-        await exp.cleanup(injection).catch(() => {});
+        await exp.cleanup(injection).catch(() => {}); // intentional: cleanup failure during chaos experiment must not re-throw
       }
       unsubTracer();
       this.running = null;
-      console.error(`[chaos] Experiment ${name} threw:`, error.message);
+      logger.error(`[chaos] Experiment ${name} threw:`, error.message);
       throw error;
     }
   }

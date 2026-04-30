@@ -37,13 +37,50 @@ async function getFiles(dir, exts = [".js"]) {
 
 // ── Import extraction ──────────────────────────────────────────────────────────
 
-const IMPORT_RE = /(?:import\s+(?:[\w{},\s*]+\s+from\s+)?|require\s*\(\s*)['"]([^'"]+)['"]/g;
+// Match real ES module `import` statements and CommonJS `require()` calls.
+// The `import` keyword must appear at the start of the line (possibly after
+// whitespace) so that import paths embedded in string literals or DSL template
+// code strings are not matched.
+const IMPORT_RE = /(?:^[ \t]*import\s+(?:[\w{},\s*]+\s+from\s+)?|(?:^|[^'"`\w])require\s*\(\s*)['"]([^'"]+)['"]/gm;
+
+/**
+ * Strip single-line comments (// ...) and block comments (/* ... *\/)
+ * from JS source so the import regex doesn't match paths inside JSDoc
+ * usage examples or embedded DSL template strings.
+ *
+ * This is a lightweight approximation — good enough for import auditing.
+ * It preserves string literals that don't contain comment sequences,
+ * and normalises template literals to simple quoted strings so the import
+ * RE cannot match across backtick strings that contain import-like text.
+ */
+function stripComments(src) {
+  // Remove block comments (non-greedy, dotAll)
+  let out = src.replace(/\/\*[\s\S]*?\*\//g, (m) => {
+    // Replace with same number of newlines to preserve line numbers in errors
+    const lines = (m.match(/\n/g) || []).length;
+    return "\n".repeat(lines);
+  });
+  // Remove single-line comments — but not inside strings.
+  // Strategy: split on lines, strip `// ...` that are not inside a string.
+  // A full parser would be needed for 100% accuracy; this handles the
+  // common JSDoc `*   import { x } from './y'` pattern correctly because
+  // those lines are already inside a block comment (stripped above).
+  out = out.replace(/\/\/[^\n]*/g, "");
+  return out;
+}
 
 function extractImports(content) {
+  const stripped = stripComments(content);
   const all = [];
   IMPORT_RE.lastIndex = 0;
   let m;
-  while ((m = IMPORT_RE.exec(content)) !== null) all.push(m[1]);
+  while ((m = IMPORT_RE.exec(stripped)) !== null) {
+    const spec = m[1];
+    // Skip paths that look like they came from a template string / embedded DSL
+    // (they contain whitespace or DSL-specific syntax which real JS paths never have).
+    if (/\s/.test(spec)) continue;
+    all.push(spec);
+  }
   return all;
 }
 

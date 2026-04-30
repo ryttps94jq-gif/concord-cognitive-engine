@@ -2,6 +2,7 @@
 // Per-world NPC simulation. One NPCSimulator instance per active world.
 
 import crypto from "crypto";
+import logger from "../logger.js";
 import { adjustSimulationDensity } from "./population-scaling.js";
 import {
   buildStructure,
@@ -288,7 +289,7 @@ export class NPCSimulator {
   start() {
     if (this._timer) return;
     this._timer = setInterval(() => {
-      this.tick().catch(() => {});
+      this.tick().catch(err => logger?.debug?.('[npc-simulator] background op failed', { err: err?.message }));
     }, this._tickRate);
   }
 

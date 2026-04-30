@@ -17,6 +17,9 @@ import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
+import { InferenceTranscriptViewer } from '@/components/debug/InferenceTranscriptViewer';
+import { SLODashboard } from '@/components/debug/SLODashboard';
+import { ProvenanceDashboard } from '@/components/debug/ProvenanceDashboard';
 
 type LogLevel = 'all' | 'info' | 'warn' | 'error' | 'debug';
 
@@ -30,7 +33,7 @@ interface LogEntry {
 export default function DebugLensPage() {
   useLensNav('debug');
   const { latestData: realtimeData, isLive, lastUpdated, insights } = useRealtimeLens('debug');
-  const [activeTab, setActiveTab] = useState<'status' | 'events' | 'test' | 'inspector' | 'context' | 'logs'>('status');
+  const [activeTab, setActiveTab] = useState<'status' | 'events' | 'test' | 'inspector' | 'context' | 'logs' | 'monitoring'>('status');
 
   // --- Domain action state ---
   const { items: debugItems } = useLensData('debug', 'debug', { seed: [] });
@@ -453,7 +456,7 @@ export default function DebugLensPage() {
 
       {/* Tabs */}
       <div className="flex gap-2 flex-wrap no-scrollbar">
-        {(['status', 'events', 'logs', 'inspector', 'context', 'test'] as const).map((tab) => (
+        {(['status', 'events', 'logs', 'inspector', 'context', 'test', 'monitoring'] as const).map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -691,6 +694,20 @@ export default function DebugLensPage() {
       )}
 
       {activeTab === 'context' && <ContextInspectorPanel />}
+
+      {activeTab === 'monitoring' && (
+        <div className="space-y-6">
+          <div className="panel p-4">
+            <InferenceTranscriptViewer />
+          </div>
+          <div className="panel p-4">
+            <SLODashboard />
+          </div>
+          <div className="panel p-4">
+            <ProvenanceDashboard />
+          </div>
+        </div>
+      )}
 
       {activeTab === 'test' && (
         <div className="panel p-4">

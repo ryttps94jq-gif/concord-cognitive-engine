@@ -1,4 +1,5 @@
 // server/lib/audit/provenance.js
+import logger from "../../logger.js";
 // Substrate provenance audit framework.
 // Every public-facing claim about Concord capability is registered here and verified
 // against the running system before any communication uses it.
@@ -273,16 +274,16 @@ export async function preLaunchVerification() {
   const errors = results.filter(r => r.status === "error");
 
   const report = provenance.getReport();
-  console.log(`[provenance] ${report.verified}/${report.total} claims verified`);
+  logger.info(`[provenance] ${report.verified}/${report.total} claims verified`);
 
   if (failures.length > 0 || errors.length > 0) {
-    console.error("[provenance] VERIFICATION FAILURES:");
+    logger.error("[provenance] VERIFICATION FAILURES:");
     [...failures, ...errors].forEach(f => {
-      console.error(`  ✗ ${f.claimId}: ${f.detail || f.error}`);
+      logger.error(`  ✗ ${f.claimId}: ${f.detail || f.error}`);
     });
     return { ok: false, failures, errors, report };
   }
 
-  console.log("[provenance] All claims verified ✓");
+  logger.info("[provenance] All claims verified ✓");
   return { ok: true, failures: [], errors: [], report };
 }

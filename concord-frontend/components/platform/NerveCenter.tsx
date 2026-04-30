@@ -78,7 +78,7 @@ function StrategyCard({ strategy, hints }: {
   );
 }
 
-export default function NerveCenter() {
+function NerveCenter() {
   const { data: beaconRes, isLoading: beaconLoading } = useQuery({
     queryKey: ['beacon-check'],
     queryFn: () => apiHelpers.bridge.beacon(),
@@ -282,3 +282,9 @@ export default function NerveCenter() {
     </div>
   );
 }
+
+
+import { withErrorBoundary } from '@/components/common/ErrorBoundary';
+const _NerveCenter = withErrorBoundary(NerveCenter);
+export { _NerveCenter as NerveCenter };
+export default _NerveCenter;

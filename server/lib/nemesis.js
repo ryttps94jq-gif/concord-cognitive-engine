@@ -4,6 +4,7 @@
 // the player earns Sparks + a chronicle entry.
 
 import crypto from "crypto";
+import logger from "../logger.js";
 
 const NEMESIS_KILL_SPARKS = 50;
 const NPC_LEVEL_BOOST = 0.5; // added to nemesis NPC's combat skill levels
@@ -29,7 +30,9 @@ export async function onNPCKilledPlayer(db, npcId, playerId, worldId, selectBrai
     }]);
     const candidate = res?.content?.[0]?.text?.trim();
     if (candidate && candidate.length < 60) title = candidate;
-  } catch (_) {}
+  } catch (err) {
+    logger?.debug?.('[nemesis] optional step skipped', { reason: err?.message });
+  }
 
   if (existing) {
     db.prepare(`UPDATE nemesis_records SET kill_count = kill_count + 1, npc_title = ?, last_encounter = ? WHERE player_id = ?`)
@@ -56,13 +59,17 @@ export async function onPlayerKilledNemesis(db, playerId, npcId, realtimeEmit) {
   try {
     const { awardSparks } = await import("./currency.js");
     awardSparks(db, playerId, NEMESIS_KILL_SPARKS, "nemesis_kill", nemesis.world_id);
-  } catch (_) {}
+  } catch (err) {
+    logger?.debug?.('[nemesis] optional step skipped', { reason: err?.message });
+  }
 
   // Unlock achievement via world-progression if available
   try {
     const { trackAction } = await import("./world-progression.js");
     trackAction(db, playerId, "nemesis_slain");
-  } catch (_) {}
+  } catch (err) {
+    logger?.debug?.('[nemesis] optional step skipped', { reason: err?.message });
+  }
 
   // Chronicle entry
   try {
@@ -72,7 +79,9 @@ export async function onPlayerKilledNemesis(db, playerId, npcId, realtimeEmit) {
       description: `${nemesis.npc_title} was defeated after ${nemesis.kill_count} encounter(s).`,
       significance: "nemesis_defeated",
     });
-  } catch (_) {}
+  } catch (err) {
+    logger?.debug?.('[nemesis] optional step skipped', { reason: err?.message });
+  }
 
   realtimeEmit("world:notification", {
     userId: playerId,

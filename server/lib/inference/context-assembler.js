@@ -3,6 +3,7 @@
 //   system prompt (lens context) → DTU substrate → personal substrate → history → intent
 
 import { fetchPersonalSubstrate } from "../chat-context-pipeline.js";
+import { MEMORY_LAYERS } from "../agentic/memory-bank.js";
 
 const MAX_HISTORY_MESSAGES = 40;
 const MAX_HISTORY_CHARS = 12000;
@@ -129,4 +130,15 @@ export async function assembleContext(req, db) {
   messages.push({ role: "user", content: req.intent });
 
   return messages;
+}
+
+/**
+ * Describe the available memory layers for metadata / introspection purposes.
+ * This is additive — callers can inspect what memory layers are available
+ * without any behavioral change to assembleContext().
+ *
+ * @returns {typeof MEMORY_LAYERS}
+ */
+export function getMemoryLayerMetadata() {
+  return MEMORY_LAYERS;
 }

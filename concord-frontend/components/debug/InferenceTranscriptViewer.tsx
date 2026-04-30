@@ -127,13 +127,13 @@ export function InferenceTranscriptViewer() {
   const [minLatency, setMinLatency] = useState('');
   const [filterInferenceId, setFilterInferenceId] = useState('');
 
-  const { data, isLoading, refetch } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['inference-traces', minLatency, filterInferenceId],
     queryFn: async () => {
       const params = new URLSearchParams({ limit: '30' });
       if (minLatency) params.set('minLatency', minLatency);
       if (filterInferenceId) params.set('inferenceId', filterInferenceId);
-      const res = await api.get(`/api/traces?${params}`);
+      const res = await api.get(`/api/inference/traces?${params}`);
       return res.data;
     },
     refetchInterval: 10000,
@@ -166,6 +166,13 @@ export function InferenceTranscriptViewer() {
           Refresh
         </button>
       </div>
+
+      {isError && (
+        <div className="flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/30 rounded text-xs text-red-400">
+          <AlertCircle className="w-4 h-4 flex-shrink-0" />
+          Failed to load traces: {(error as Error)?.message || 'Unknown error'}
+        </div>
+      )}
 
       {isLoading && <div className="text-xs text-white/40">Loading traces...</div>}
 

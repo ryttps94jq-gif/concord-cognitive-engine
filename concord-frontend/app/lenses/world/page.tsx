@@ -2130,7 +2130,7 @@ export default function WorldLensPage() {
                 <MarketplacePalette
                   onSelectComponent={(entry) => {
                     // Auto-cite when selecting from marketplace
-                    console.log('Selected component:', entry.dtuId, 'by', entry.creator);
+                    void entry;
                   }}
                 />
               </div>
