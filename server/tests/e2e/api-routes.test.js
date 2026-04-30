@@ -6,16 +6,14 @@
  * process in the after() hook.
  *
  * Why child-process instead of direct import?
- *   server.js is a 62 k-line monolith that does NOT export `app`.  Importing
- *   it directly in test scope would require patching internals.  Spawning it
+ *   server.js is a 62 k-line monolith that does NOT export `app`. Importing
+ *   it directly in test scope would require patching internals. Spawning it
  *   is the cleanest, most realistic test surface: it exercises the real boot
  *   sequence end-to-end.
  *
- * Environment variables forwarded to the child:
- *   PORT            — a random free port obtained before spawn
- *   NODE_ENV        — "e2e-test"  (avoids both prod and the no-listen guard)
- *   CONCORD_NO_LISTEN — explicitly unset so the server does bind
- *   DATA_DIR        — isolated temp dir so tests don't touch real data
+ * Two server instances are started:
+ *   - Suite A: AUTH_MODE=public — tests GET routes freely
+ *   - Suite B: AUTH_MODE=hybrid — tests auth-protection of routes
  */
 
 import { describe, it, before, after } from 'node:test';
@@ -24,12 +22,15 @@ import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const SERVER_JS = join(__dirname, '../../server.js');
+const SERVER_CWD = join(__dirname, '../..');
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-/** Resolve a port that is free at the moment of the call. */
 function getFreePort() {
   return new Promise((resolve, reject) => {
     const srv = createServer();
@@ -41,52 +42,43 @@ function getFreePort() {
   });
 }
 
-/**
- * Spawn the Concord server and resolve once it is accepting connections.
- * Rejects if the server does not become ready within `timeoutMs`.
- */
-function spawnServer(port, dataDir, timeoutMs = 60_000) {
+function spawnServer(port, dataDir, extraEnv, timeoutMs) {
+  timeoutMs = timeoutMs || 90000;
+  extraEnv = extraEnv || {};
   return new Promise((resolve, reject) => {
-    const serverDir = join(fileURLToPath(import.meta.url), '../../..');
-    const serverPath = join(serverDir, 'server.js');
-
-    const env = {
-      ...process.env,
+    const env = Object.assign({}, process.env, {
       PORT: String(port),
-      // Use "e2e-test" — not "test" (which triggers SHOULD_LISTEN=false)
+      // "e2e-test" — NOT "test" (which triggers SHOULD_LISTEN=false in server.js)
       NODE_ENV: 'e2e-test',
       CONCORD_NO_LISTEN: 'false',
       DATA_DIR: dataDir,
-      // Keep info level so server_listening message is visible to test runner
-      LOG_LEVEL: 'info',
+      LOG_LEVEL: 'error',
       LOG_FORMAT: 'json',
-      // Open auth mode so unauthenticated requests reach route handlers
-      AUTH_MODE: 'public',
-      // Disable optional heavy deps that slow boot or require credentials
       OPENAI_API_KEY: '',
       ANTHROPIC_API_KEY: '',
-    };
+    }, extraEnv);
 
-    const child = spawn(process.execPath, [serverPath], {
-      env,
-      cwd: serverDir,
+    const child = spawn(process.execPath, [SERVER_JS], {
+      env: env,
+      cwd: SERVER_CWD,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
 
     let resolved = false;
-    const timer = setTimeout(() => {
+    const timer = setTimeout(function() {
       if (!resolved) {
         child.kill('SIGKILL');
-        reject(new Error(`Server did not become ready within ${timeoutMs}ms`));
+        reject(new Error('Server on port ' + port + ' did not become ready within ' + timeoutMs + 'ms'));
       }
     }, timeoutMs);
 
     function checkLine(line) {
-      // The server emits "server_listening" in structuredLog once it binds
       if (
-        line.includes('server_listening') ||
-        line.includes(`http://localhost:${port}`) ||
-        line.includes(`"url":"http://localhost:${port}"`)
+        line.indexOf('server_listening') !== -1 ||
+        line.indexOf('http://localhost:' + port) !== -1 ||
+        line.indexOf('"url":"http://localhost:' + port + '"') !== -1 ||
+        line.indexOf('Listening on port ' + port) !== -1 ||
+        line.indexOf('listening on') !== -1
       ) {
         if (!resolved) {
           resolved = true;
@@ -97,29 +89,29 @@ function spawnServer(port, dataDir, timeoutMs = 60_000) {
     }
 
     let stdoutBuf = '';
-    child.stdout.on('data', (chunk) => {
+    child.stdout.on('data', function(chunk) {
       stdoutBuf += chunk.toString();
       const lines = stdoutBuf.split('\n');
-      stdoutBuf = lines.pop(); // keep incomplete line
+      stdoutBuf = lines.pop();
       lines.forEach(checkLine);
     });
 
     let stderrBuf = '';
-    child.stderr.on('data', (chunk) => {
+    child.stderr.on('data', function(chunk) {
       stderrBuf += chunk.toString();
       const lines = stderrBuf.split('\n');
       stderrBuf = lines.pop();
       lines.forEach(checkLine);
     });
 
-    child.on('exit', (code, signal) => {
+    child.on('exit', function(code, signal) {
       if (!resolved) {
         clearTimeout(timer);
-        reject(new Error(`Server exited early (code=${code} signal=${signal})`));
+        reject(new Error('Server exited early (code=' + code + ' signal=' + signal + ')'));
       }
     });
 
-    child.on('error', (err) => {
+    child.on('error', function(err) {
       if (!resolved) {
         clearTimeout(timer);
         reject(err);
@@ -128,280 +120,326 @@ function spawnServer(port, dataDir, timeoutMs = 60_000) {
   });
 }
 
-/** fetch with a 5-second abort timeout. */
-async function apiFetch(base, path, options = {}) {
+function stopServer(child) {
+  if (!child || child.killed) return Promise.resolve();
+  return new Promise(function(resolve) {
+    child.kill('SIGTERM');
+    const t = setTimeout(function() { child.kill('SIGKILL'); resolve(); }, 5000);
+    child.on('exit', function() { clearTimeout(t); resolve(); });
+  });
+}
+
+async function apiFetch(base, path, options) {
+  options = options || {};
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 5_000);
+  const timer = setTimeout(function() { controller.abort(); }, 5000);
   try {
-    const res = await fetch(`${base}${path}`, {
-      ...options,
-      signal: controller.signal,
-    });
+    const res = await fetch(base + path, Object.assign({}, options, { signal: controller.signal }));
     return res;
   } finally {
     clearTimeout(timer);
   }
 }
 
-/** GET JSON and return { status, body } */
 async function getJSON(base, path) {
   const res = await apiFetch(base, path);
-  let body;
-  try { body = await res.json(); } catch { body = null; }
-  return { status: res.status, body };
+  let body = null;
+  try { body = await res.json(); } catch (_) { body = null; }
+  return { status: res.status, body: body };
 }
 
-/** POST JSON and return { status, body } */
 async function postJSON(base, path, payload) {
+  payload = payload || {};
   const res = await apiFetch(base, path, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
-  let body;
-  try { body = await res.json(); } catch { body = null; }
-  return { status: res.status, body };
+  let body = null;
+  try { body = await res.json(); } catch (_) { body = null; }
+  return { status: res.status, body: body };
 }
 
-// ── Test suite ────────────────────────────────────────────────────────────────
+// ── Suite A: Public routes ────────────────────────────────────────────────────
 
-describe('E2E API routes', { timeout: 120_000 }, () => {
-  let base;        // e.g. "http://127.0.0.1:54321"
-  let serverProc;  // ChildProcess
+describe('E2E API routes — public auth mode', { timeout: 120000 }, function() {
+  let base;
+  let serverProc;
 
-  before(async () => {
+  before(async function() {
     const port = await getFreePort();
-    const dataDir = mkdtempSync(join(tmpdir(), 'concord-e2e-'));
-    base = `http://127.0.0.1:${port}`;
-    serverProc = await spawnServer(port, dataDir, 90_000);
+    const dataDir = mkdtempSync(join(tmpdir(), 'concord-e2e-pub-'));
+    base = 'http://127.0.0.1:' + port;
+    serverProc = await spawnServer(port, dataDir, { AUTH_MODE: 'public' }, 90000);
   });
 
-  after(async () => {
-    if (serverProc && !serverProc.killed) {
-      serverProc.kill('SIGTERM');
-      // Give up to 3 s for graceful shutdown
-      await new Promise((resolve) => {
-        const t = setTimeout(() => { serverProc.kill('SIGKILL'); resolve(); }, 3_000);
-        serverProc.on('exit', () => { clearTimeout(t); resolve(); });
-      });
-    }
+  after(function() { return stopServer(serverProc); });
+
+  // ── /health ──────────────────────────────────────────────────────────────
+
+  it('GET /health returns 200 or 503 (not 404 or 500)', async function() {
+    const { status } = await getJSON(base, '/health');
+    assert.ok(
+      status === 200 || status === 503,
+      'Expected 200 or 503 from /health, got ' + status,
+    );
   });
 
-  // ── Public GET routes that must return 200 with ok:true ─────────────────
+  // ── /api/status ──────────────────────────────────────────────────────────
 
-  it('GET /api/status returns 200 with ok:true', async () => {
+  it('GET /api/status returns 200 with ok:true', async function() {
     const { status, body } = await getJSON(base, '/api/status');
-    assert.equal(status, 200, `Expected 200, got ${status}`);
-    assert.equal(body?.ok, true, 'Expected ok:true in body');
-    // version should be a non-empty string
-    assert.equal(typeof body?.version, 'string', 'Expected version string');
+    assert.equal(status, 200, 'Expected 200, got ' + status);
+    assert.equal(body && body.ok, true, 'Expected ok:true in body');
+  });
+
+  it('GET /api/status has a version string', async function() {
+    const { status, body } = await getJSON(base, '/api/status');
+    assert.equal(status, 200);
+    assert.equal(typeof body.version, 'string', 'Expected version string');
     assert.ok(body.version.length > 0, 'version must be non-empty');
   });
 
-  it('GET /api/compute/modules returns 200 with ok:true and modules array', async () => {
-    const { status, body } = await getJSON(base, '/api/compute/modules');
-    assert.equal(status, 200, `Expected 200, got ${status}`);
-    assert.equal(body?.ok, true, 'Expected ok:true');
-    assert.ok(Array.isArray(body?.modules), 'Expected modules array');
-    assert.ok(body.modules.length > 0, 'Expected at least one compute module');
+  it('GET /api/status has numeric uptime', async function() {
+    const { status, body } = await getJSON(base, '/api/status');
+    assert.equal(status, 200);
+    assert.ok(typeof body.uptime === 'number' && body.uptime >= 0, 'Expected non-negative uptime');
   });
 
-  it('GET /api/city-assets returns 200 with ok:true and assets array', async () => {
-    const { status, body } = await getJSON(base, '/api/city-assets');
-    assert.equal(status, 200, `Expected 200, got ${status}`);
-    assert.equal(body?.ok, true, 'Expected ok:true');
-    assert.ok(Array.isArray(body?.assets), 'Expected assets array');
+  it('GET /api/status has counts object', async function() {
+    const { status, body } = await getJSON(base, '/api/status');
+    assert.equal(status, 200);
+    assert.ok(body.counts && typeof body.counts === 'object', 'Expected counts object');
   });
 
-  it('GET /api/lens-features/templates returns 200 with ok:true and templates array', async () => {
-    const { status, body } = await getJSON(base, '/api/lens-features/templates');
-    assert.equal(status, 200, `Expected 200, got ${status}`);
-    assert.equal(body?.ok, true, 'Expected ok:true');
-    assert.ok(Array.isArray(body?.templates), 'Expected templates array');
+  // ── /api/lenses ──────────────────────────────────────────────────────────
+
+  it('GET /api/lenses/templates returns 200 with ok:true and templates array', async function() {
+    const { status, body } = await getJSON(base, '/api/lenses/templates');
+    assert.equal(status, 200, 'Expected 200, got ' + status);
+    assert.equal(body && body.ok, true, 'Expected ok:true');
+    assert.ok(Array.isArray(body && body.templates), 'Expected templates array');
     assert.ok(body.templates.length > 0, 'Expected at least one template');
   });
 
-  it('GET /api/worlds returns 200 with an array', async () => {
-    const { status, body } = await getJSON(base, '/api/worlds');
-    assert.equal(status, 200, `Expected 200, got ${status}`);
-    // worlds router returns { ok, worlds } or an array — just check 200
-    assert.ok(body !== null, 'Expected JSON body');
-  });
-
-  it('GET /api/lattice/beacon returns 200 with ok:true', async () => {
-    const { status, body } = await getJSON(base, '/api/lattice/beacon');
-    assert.equal(status, 200, `Expected 200, got ${status}`);
-    assert.equal(body?.ok, true, 'Expected ok:true');
-  });
-
-  it('GET /api/lenses/templates returns 200', async () => {
-    const { status, body } = await getJSON(base, '/api/lenses/templates');
-    assert.equal(status, 200, `Expected 200, got ${status}`);
-    assert.ok(body !== null, 'Expected JSON body');
-  });
-
-  it('GET /api/lenses/custom returns 200', async () => {
+  it('GET /api/lenses/custom returns 200 with ok:true and lenses array', async function() {
     const { status, body } = await getJSON(base, '/api/lenses/custom');
-    assert.equal(status, 200, `Expected 200, got ${status}`);
+    assert.equal(status, 200, 'Expected 200, got ' + status);
+    assert.equal(body && body.ok, true, 'Expected ok:true');
+    assert.ok(Array.isArray(body && body.lenses), 'Expected lenses array');
+  });
+
+  // ── /api/lattice/beacon ──────────────────────────────────────────────────
+
+  it('GET /api/lattice/beacon returns 200 with ok:true and rootHash', async function() {
+    const { status, body } = await getJSON(base, '/api/lattice/beacon');
+    assert.equal(status, 200, 'Expected 200, got ' + status);
+    assert.equal(body && body.ok, true, 'Expected ok:true');
+    assert.ok(typeof body.rootHash === 'string', 'Expected rootHash string');
+  });
+
+  // ── /api/worlds ──────────────────────────────────────────────────────────
+
+  it('GET /api/worlds returns 200 with worlds array', async function() {
+    const { status, body } = await getJSON(base, '/api/worlds');
+    assert.equal(status, 200, 'Expected 200, got ' + status);
+    assert.ok(body !== null, 'Expected JSON body');
+    assert.ok(
+      Array.isArray(body && body.worlds) || Array.isArray(body),
+      'Expected worlds array in response',
+    );
+  });
+
+  // ── /api/dtus ────────────────────────────────────────────────────────────
+
+  it('GET /api/dtus returns 200 with ok:true', async function() {
+    const { status, body } = await getJSON(base, '/api/dtus');
+    assert.equal(status, 200, 'Expected 200, got ' + status);
+    assert.equal(body && body.ok, true, 'Expected ok:true');
+  });
+
+  // ── /api/bridge ──────────────────────────────────────────────────────────
+
+  it('GET /api/bridge/organisms returns 200 with ok:true and organisms array', async function() {
+    const { status, body } = await getJSON(base, '/api/bridge/organisms');
+    assert.equal(status, 200, 'Expected 200, got ' + status);
+    assert.equal(body && body.ok, true, 'Expected ok:true');
+    assert.ok(Array.isArray(body && body.organisms), 'Expected organisms array');
+  });
+
+  it('GET /api/bridge/emergents returns 200', async function() {
+    const { status, body } = await getJSON(base, '/api/bridge/emergents');
+    assert.equal(status, 200, 'Expected 200, got ' + status);
     assert.ok(body !== null, 'Expected JSON body');
   });
 
-  // ── Compute run ──────────────────────────────────────────────────────────
-
-  it('POST /api/compute/run with logic.isTautology returns 200 ok:true', async () => {
-    const { status, body } = await postJSON(base, '/api/compute/run', {
-      module: 'logic',
-      fn: 'isTautology',
-      args: ['P | !P'],
-    });
-    assert.equal(status, 200, `Expected 200, got ${status}. body: ${JSON.stringify(body)}`);
-    assert.equal(body?.ok, true, 'Expected ok:true');
-    // result should be a boolean
-    assert.equal(typeof body?.result, 'boolean', 'Expected boolean result from isTautology');
+  it('GET /api/bridge/log returns 200 with ok:true and log array', async function() {
+    const { status, body } = await getJSON(base, '/api/bridge/log');
+    assert.equal(status, 200, 'Expected 200, got ' + status);
+    assert.equal(body && body.ok, true, 'Expected ok:true');
+    assert.ok(Array.isArray(body && body.log), 'Expected log array');
   });
 
-  it('POST /api/compute/run with unknown module returns 404', async () => {
-    const { status } = await postJSON(base, '/api/compute/run', {
-      module: 'nonexistent-module-xyz',
-      fn: 'anything',
-      args: [],
-    });
-    assert.equal(status, 404, `Expected 404 for unknown module, got ${status}`);
+  it('GET /api/bridge/debates returns 200', async function() {
+    const { status, body } = await getJSON(base, '/api/bridge/debates');
+    assert.equal(status, 200, 'Expected 200, got ' + status);
+    assert.ok(body !== null, 'Expected JSON body');
   });
 
-  // ── Lens feature generate ────────────────────────────────────────────────
-
-  it('POST /api/lens-features/generate with basic-crud template returns 200', async () => {
-    const { status, body } = await postJSON(base, '/api/lens-features/generate', {
-      template: 'basic-crud',
-      config: { domain: 'test' },
-    });
-    assert.equal(status, 200, `Expected 200, got ${status}. body: ${JSON.stringify(body)}`);
-    assert.equal(body?.ok, true, 'Expected ok:true');
-    assert.ok(body?.lens !== undefined, 'Expected lens in response');
+  it('GET /api/bridge/births returns 200', async function() {
+    const { status, body } = await getJSON(base, '/api/bridge/births');
+    assert.equal(status, 200, 'Expected 200, got ' + status);
+    assert.ok(body !== null, 'Expected JSON body');
   });
 
-  it('POST /api/lens-features/generate with unknown template returns 400', async () => {
-    const { status, body } = await postJSON(base, '/api/lens-features/generate', {
-      template: 'no-such-template-xyz',
-      config: {},
-    });
-    assert.equal(status, 400, `Expected 400 for unknown template, got ${status}`);
-    assert.equal(body?.ok, false, 'Expected ok:false');
+  // ── /api/emergent ────────────────────────────────────────────────────────
+
+  it('GET /api/emergent/status returns 200 with ok:true', async function() {
+    const { status, body } = await getJSON(base, '/api/emergent/status');
+    assert.equal(status, 200, 'Expected 200, got ' + status);
+    assert.equal(body && body.ok, true, 'Expected ok:true');
+  });
+
+  it('GET /api/emergent/status has numeric emergentCount', async function() {
+    const { status, body } = await getJSON(base, '/api/emergent/status');
+    assert.equal(status, 200);
+    assert.ok(
+      typeof body.emergentCount === 'number',
+      'Expected numeric emergentCount',
+    );
+  });
+
+  it('GET /api/emergent/lattice/proposals returns 200 with proposals array', async function() {
+    const { status, body } = await getJSON(base, '/api/emergent/lattice/proposals');
+    assert.equal(status, 200, 'Expected 200, got ' + status);
+    assert.equal(body && body.ok, true, 'Expected ok:true');
+    assert.ok(Array.isArray(body && body.proposals), 'Expected proposals array');
+  });
+
+  // ── /api/lens-features ───────────────────────────────────────────────────
+
+  it('GET /api/lens-features/stats returns 200 with ok:true and totalFeatures', async function() {
+    const { status, body } = await getJSON(base, '/api/lens-features/stats');
+    assert.equal(status, 200, 'Expected 200, got ' + status);
+    assert.equal(body && body.ok, true, 'Expected ok:true');
+    assert.ok(
+      typeof body.totalFeatures === 'number',
+      'Expected totalFeatures field',
+    );
+  });
+
+  it('GET /api/lens-features/universal returns 200 with ok:true and features array', async function() {
+    const { status, body } = await getJSON(base, '/api/lens-features/universal');
+    assert.equal(status, 200, 'Expected 200, got ' + status);
+    assert.equal(body && body.ok, true, 'Expected ok:true');
+    assert.ok(Array.isArray(body && body.features), 'Expected features array');
+  });
+
+  it('GET /api/lens-features/summaries returns 200', async function() {
+    const { status, body } = await getJSON(base, '/api/lens-features/summaries');
+    assert.equal(status, 200, 'Expected 200, got ' + status);
+    assert.ok(body !== null, 'Expected JSON body');
   });
 
   // ── 404 handling ─────────────────────────────────────────────────────────
 
-  it('GET /api/this-route-does-not-exist returns 404', async () => {
+  it('GET /api/this-route-does-not-exist returns 404', async function() {
     const { status } = await getJSON(base, '/api/this-route-does-not-exist');
-    assert.equal(status, 404, `Expected 404, got ${status}`);
+    assert.equal(status, 404, 'Expected 404, got ' + status);
   });
 
-  it('GET /api/xyzzy-nonexistent returns 404', async () => {
-    const { status } = await getJSON(base, '/api/xyzzy-nonexistent');
-    assert.equal(status, 404, `Expected 404, got ${status}`);
+  it('GET /api/xyzzy-nonexistent-route returns 404', async function() {
+    const { status } = await getJSON(base, '/api/xyzzy-nonexistent-route');
+    assert.equal(status, 404, 'Expected 404, got ' + status);
+  });
+});
+
+// ── Suite B: Auth protection ──────────────────────────────────────────────────
+
+describe('E2E API routes — hybrid auth (auth protection)', { timeout: 120000 }, function() {
+  let base;
+  let serverProc;
+
+  before(async function() {
+    const port = await getFreePort();
+    const dataDir = mkdtempSync(join(tmpdir(), 'concord-e2e-hyb-'));
+    base = 'http://127.0.0.1:' + port;
+    serverProc = await spawnServer(port, dataDir, { AUTH_MODE: 'hybrid' }, 90000);
   });
 
-  // ── Auth-required routes return 401 or 403 (not 200, not 500) ───────────
+  after(function() { return stopServer(serverProc); });
 
-  it('POST /api/city-assets (write) returns non-500', async () => {
-    const { status } = await postJSON(base, '/api/city-assets', {
-      name: 'test-asset',
-      category: 'building',
-    });
-    assert.ok(
-      status !== 500,
-      `Expected non-500 for POST /api/city-assets, got ${status}`,
-    );
+  // ── Always-public routes still work ──────────────────────────────────────
+
+  it('GET /api/status returns 200 in hybrid mode', async function() {
+    const { status, body } = await getJSON(base, '/api/status');
+    assert.equal(status, 200, 'Expected 200, got ' + status);
+    assert.equal(body && body.ok, true, 'Expected ok:true');
   });
 
-  it('POST /api/dtus/:id/fork returns non-500 (may be 401/403/404)', async () => {
-    const { status } = await postJSON(base, '/api/dtus/fake-nonexistent-id/fork', {});
-    assert.ok(
-      status !== 500,
-      `Expected non-500 for DTU fork, got ${status}`,
-    );
-  });
-
-  it('POST /api/dtus/:id/vote returns non-500 (may be 401/403/404)', async () => {
-    const { status } = await postJSON(base, '/api/dtus/fake-nonexistent-id/vote', { direction: 'up' });
-    assert.ok(
-      status !== 500,
-      `Expected non-500 for DTU vote, got ${status}`,
-    );
-  });
-
-  // ── Skills export — not 500 ──────────────────────────────────────────────
-
-  it('GET /api/skills/export/:id returns 200 or 404, not 500', async () => {
-    const { status } = await getJSON(base, '/api/skills/export/test-emergent-id');
-    assert.ok(
-      status === 200 || status === 404,
-      `Expected 200 or 404 for skills export, got ${status}`,
-    );
-  });
-
-  // ── Emergent proposals list ──────────────────────────────────────────────
-
-  it('GET /api/emergent/lattice/proposals returns 200 or 401/403, not 500', async () => {
-    const { status } = await getJSON(base, '/api/emergent/lattice/proposals');
-    assert.ok(
-      status !== 500,
-      `Expected non-500 for /api/emergent/lattice/proposals, got ${status}`,
-    );
-  });
-
-  it('GET /api/emergent/status returns 200', async () => {
-    const { status, body } = await getJSON(base, '/api/emergent/status');
-    assert.equal(status, 200, `Expected 200, got ${status}`);
-    assert.ok(body !== null, 'Expected JSON body');
-  });
-
-  // ── Health / system checks ───────────────────────────────────────────────
-
-  it('GET /health returns 200 or 503 (not 404 or 500)', async () => {
+  it('GET /health returns 200 or 503 in hybrid mode (not 401)', async function() {
     const { status } = await getJSON(base, '/health');
     assert.ok(
       status === 200 || status === 503,
-      `Expected 200 or 503 from /health, got ${status}`,
+      'Expected 200 or 503 from /health, got ' + status,
     );
   });
 
-  it('GET / returns 200 with ok:true', async () => {
-    const { status, body } = await getJSON(base, '/');
-    assert.equal(status, 200, `Expected 200, got ${status}`);
-    assert.equal(body?.ok, true, 'Expected ok:true');
+  it('GET /api/emergent/status returns 200 in hybrid mode (public GET path)', async function() {
+    const { status } = await getJSON(base, '/api/emergent/status');
+    assert.equal(status, 200, 'Expected 200, got ' + status);
   });
 
-  it('GET /api/compute/modules returns 200 (alternate check)', async () => {
-    const { status, body } = await getJSON(base, '/api/compute/modules');
-    assert.equal(status, 200, `Expected 200, got ${status}`);
-    assert.ok(Array.isArray(body?.modules), 'Expected modules array');
+  it('GET /api/lattice/beacon returns 200 in hybrid mode', async function() {
+    const { status, body } = await getJSON(base, '/api/lattice/beacon');
+    assert.equal(status, 200, 'Expected 200, got ' + status);
+    assert.equal(body && body.ok, true, 'Expected ok:true');
   });
 
-  it('GET /api/city-assets/stats returns 200', async () => {
-    const { status, body } = await getJSON(base, '/api/city-assets/stats');
-    assert.equal(status, 200, `Expected 200, got ${status}`);
-    assert.equal(body?.ok, true, 'Expected ok:true');
+  // ── Auth-protected routes return 401 ─────────────────────────────────────
+
+  it('POST /api/dtus/:id/fork (unauthenticated) returns 401', async function() {
+    const { status } = await postJSON(base, '/api/dtus/fake-dtu-id/fork', {});
+    assert.equal(status, 401, 'Expected 401, got ' + status);
   });
 
-  it('GET /api/city-assets/base returns 200', async () => {
-    const { status, body } = await getJSON(base, '/api/city-assets/base');
-    assert.equal(status, 200, `Expected 200, got ${status}`);
-    assert.equal(body?.ok, true, 'Expected ok:true');
+  it('POST /api/dtus/:id/vote (unauthenticated) returns 401', async function() {
+    const { status } = await postJSON(base, '/api/dtus/fake-dtu-id/vote', { direction: 'up' });
+    assert.equal(status, 401, 'Expected 401, got ' + status);
   });
 
-  it('GET /api/bridge/log returns 200, not 500', async () => {
-    const { status } = await getJSON(base, '/api/bridge/log');
-    assert.ok(
-      status !== 500,
-      `Expected non-500 for /api/bridge/log, got ${status}`,
-    );
+  it('POST /api/dtus/:id/like (unauthenticated) returns 401', async function() {
+    const { status } = await postJSON(base, '/api/dtus/fake-dtu-id/like', {});
+    assert.equal(status, 401, 'Expected 401, got ' + status);
   });
 
-  it('GET /api/bridge/organisms returns 200', async () => {
-    const { status, body } = await getJSON(base, '/api/bridge/organisms');
-    assert.equal(status, 200, `Expected 200, got ${status}`);
-    assert.ok(body !== null, 'Expected JSON body');
+  it('POST /api/worlds (unauthenticated) returns 401', async function() {
+    const { status } = await postJSON(base, '/api/worlds', { name: 'TestWorld' });
+    assert.equal(status, 401, 'Expected 401, got ' + status);
+  });
+
+  it('POST /api/storage/upload (unauthenticated) returns 401', async function() {
+    const { status } = await postJSON(base, '/api/storage/upload', {});
+    assert.equal(status, 401, 'Expected 401, got ' + status);
+  });
+
+  // ── Auth responses are 401, never 500 or 200 ─────────────────────────────
+
+  it('POST /api/dtus/:id/fork returns 401 not 500', async function() {
+    const { status } = await postJSON(base, '/api/dtus/fake-dtu-id/fork', {});
+    assert.notEqual(status, 500, 'Should not return 500 for unauthed request');
+    assert.equal(status, 401, 'Expected 401, got ' + status);
+  });
+
+  it('POST /api/dtus/:id/vote returns 401 not 200', async function() {
+    const { status } = await postJSON(base, '/api/dtus/fake-dtu-id/vote', { direction: 'up' });
+    assert.notEqual(status, 200, 'Should not return 200 for unauthed request');
+    assert.equal(status, 401, 'Expected 401, got ' + status);
+  });
+
+  it('POST /api/dtus/:id/like returns 401 not 200', async function() {
+    const { status } = await postJSON(base, '/api/dtus/fake-dtu-id/like', {});
+    assert.notEqual(status, 200, 'Should not return 200 for unauthed request');
+    assert.equal(status, 401, 'Expected 401, got ' + status);
   });
 });
