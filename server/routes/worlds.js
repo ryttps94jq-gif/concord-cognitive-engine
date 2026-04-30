@@ -3,7 +3,10 @@
 
 import express from "express";
 import crypto from "crypto";
+import logger from "../logger.js";
 import { loadWorld, listWorlds, getActiveWorldForPlayer } from "../lib/world-loader.js";
+import { travelToWorld, applyWorldRulesToPlayer } from "../lib/transit.js";
+import { spawnWorldNativeEmergent, getWorldEmergents, getCrossWorldEmergents, growAffinity } from "../lib/world-emergents.js";
 
 export default function createWorldsRouter({ requireAuth, db }) {
   const router = express.Router();
@@ -86,6 +89,10 @@ export default function createWorldsRouter({ requireAuth, db }) {
       );
 
       const world = loadWorld(db, id);
+      // Spawn a native emergent for the new world (non-blocking)
+      spawnWorldNativeEmergent(id, db, () => "default").catch(err =>
+        logger?.debug?.("[worlds] native emergent spawn failed", { worldId: id, err: err?.message })
+      );
       res.status(201).json({ world });
     } catch (e) {
       res.status(500).json({ error: e.message });
@@ -107,45 +114,17 @@ export default function createWorldsRouter({ requireAuth, db }) {
   });
 
   // POST /api/worlds/travel — move authenticated player to a new world
-  router.post("/travel", requireAuth, (req, res) => {
+  router.post("/travel", requireAuth, async (req, res) => {
     try {
       const { worldId: destinationWorldId } = req.body;
       if (!destinationWorldId) return res.status(400).json({ error: "worldId required" });
-
-      const dest = loadWorld(db, destinationWorldId);
-      if (!dest) return res.status(404).json({ error: "Destination world not found" });
-
       const userId = req.user.id;
-      const currentWorldId = getActiveWorldForPlayer(db, userId);
-
-      // Close open visit on current world
-      const openVisit = db.prepare(
-        "SELECT id FROM world_visits WHERE user_id = ? AND world_id = ? AND departed_at IS NULL ORDER BY arrived_at DESC LIMIT 1"
-      ).get(userId, currentWorldId);
-
-      if (openVisit) {
-        db.prepare(
-          "UPDATE world_visits SET departed_at = unixepoch(), total_time_minutes = (unixepoch() - arrived_at) / 60.0 WHERE id = ?"
-        ).run(openVisit.id);
-        db.prepare("UPDATE worlds SET population = MAX(0, population - 1) WHERE id = ?").run(currentWorldId);
-      }
-
-      // Open new visit
-      db.prepare(
-        "INSERT INTO world_visits (id, user_id, world_id) VALUES (?, ?, ?)"
-      ).run(crypto.randomUUID(), userId, destinationWorldId);
-      db.prepare(
-        "UPDATE worlds SET population = population + 1, total_visits = total_visits + 1 WHERE id = ?"
-      ).run(destinationWorldId);
-
-      // Update player world state
-      db.prepare(
-        "INSERT INTO player_world_state (user_id, world_id) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET world_id = excluded.world_id"
-      ).run(userId, destinationWorldId);
-
-      res.json({ ok: true, previousWorldId: currentWorldId, worldId: destinationWorldId, world: dest });
+      const result = await travelToWorld(userId, destinationWorldId, db, req.app.locals.io ?? null);
+      applyWorldRulesToPlayer(userId, result.world, db);
+      res.json({ ok: true, ...result });
     } catch (e) {
-      res.status(500).json({ error: e.message });
+      const status = e.status ?? 500;
+      res.status(status).json({ error: e.message });
     }
   });
 
@@ -519,6 +498,36 @@ export default function createWorldsRouter({ requireAuth, db }) {
         worlds_present: _tryParseJSON(p.worlds_present, []),
       }));
       res.json({ patterns });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ── World Emergents ────────────────────────────────────────────────────────
+
+  router.get("/:worldId/emergents", async (req, res) => {
+    try {
+      const emergents = await getWorldEmergents(req.params.worldId, db);
+      res.json({ ok: true, emergents });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  router.get("/emergents/cross-world", async (req, res) => {
+    try {
+      const emergents = await getCrossWorldEmergents(db);
+      res.json({ ok: true, emergents });
+    } catch (e) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  router.post("/:worldId/emergents/:emergentId/affinity", requireAuth, async (req, res) => {
+    try {
+      const { delta = 1 } = req.body;
+      await growAffinity(req.params.emergentId, req.params.worldId, delta, db);
+      res.json({ ok: true });
     } catch (e) {
       res.status(500).json({ error: e.message });
     }

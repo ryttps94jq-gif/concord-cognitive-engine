@@ -5,6 +5,7 @@
 import crypto from "node:crypto";
 import { PERMISSION_TIERS } from "./permission-tiers.js";
 import logger from "../../logger.js";
+import { parseWorldIntent, routeToWorldOrChat } from "./cross-reality-bridge.js";
 
 /**
  * Process an inbound message from an external platform.
@@ -48,6 +49,14 @@ export async function processInboundMessage({ adapter, normalized, db, infer, cr
         return;
       }
     } catch { /* content guard errors are non-fatal */ }
+  }
+
+  // 2b. Cross-reality routing — check if message targets a virtual world
+  const worldIntent = parseWorldIntent(normalized.text ?? '');
+  if (worldIntent) {
+    // TODO: wire infer and worldExecute when available in this scope for full routing
+    await routeToWorldOrChat({ text: normalized.text, userId: binding.user_id, worldId: null, infer, worldExecute: null }).catch(err => logger?.debug?.('[inbound] world routing failed', { err: err?.message }));
+    return; // handled by world routing
   }
 
   // 3. Record inbound message

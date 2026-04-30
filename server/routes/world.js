@@ -184,6 +184,7 @@ import {
   getValidDomains,
   getCityRulesSchema,
 } from "../lib/city-manager.js";
+import { handlePlayerDeath, claimLootBag, handleRobbery, reclaimExpiredBags } from "../lib/pvp-loot.js";
 
 /**
  * @param {object} [opts]
@@ -2210,6 +2211,34 @@ export default function createWorldRoutes({ requireAuth, db = null } = {}) {
       createdAt: new Date().toISOString(),
     };
     res.json({ ok: true, webhook });
+  }));
+
+  // ── PvP Loot System ────────────────────────────────────────────────────────
+
+  router.post("/combat/death", auth, wrap((req, res) => {
+    if (!db) return res.status(503).json({ ok: false, error: "DB not available" });
+    const { killedId, killerId, gameMode, worldId, x, y, z } = req.body;
+    const result = handlePlayerDeath(db, { killedId, killerId, gameMode, worldId, x, y, z });
+    res.json({ ok: true, ...result });
+  }));
+
+  router.post("/loot/:bagId/claim", auth, wrap((req, res) => {
+    if (!db) return res.status(503).json({ ok: false, error: "DB not available" });
+    const result = claimLootBag(db, { bagId: req.params.bagId, claimerId: _userId(req) });
+    res.json({ ok: true, ...result });
+  }));
+
+  router.post("/combat/robbery", auth, wrap((req, res) => {
+    if (!db) return res.status(503).json({ ok: false, error: "DB not available" });
+    const { victimId, gameMode, worldId } = req.body;
+    const result = handleRobbery(db, { robberId: _userId(req), victimId, gameMode, worldId });
+    res.json({ ok: true, ...result });
+  }));
+
+  router.post("/loot/reclaim-expired", auth, wrap((req, res) => {
+    if (!db) return res.status(503).json({ ok: false, error: "DB not available" });
+    const result = reclaimExpiredBags(db);
+    res.json({ ok: true, ...result });
   }));
 
   return router;

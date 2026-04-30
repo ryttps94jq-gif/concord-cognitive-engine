@@ -7,6 +7,7 @@
  */
 
 import express from "express";
+import "../lib/api-billing-constants.js"; // imported for module wiring; constants sourced below
 import {
   API_BILLING_MODEL, API_KEY_SYSTEM, API_PRICING,
   API_DASHBOARD, API_BILLING_HEADERS, API_BALANCE_ALERTS,

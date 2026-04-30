@@ -227,6 +227,7 @@ import {
 // ---- "Everything Real" imports: migration runner + durable endpoints ----
 import { runMigrations as runSchemaMigrations } from "./migrate.js";
 import { registerDurableEndpoints } from "./durable.js";
+import { initExtensions } from "./lib/startup-extensions.js";
 
 // ---- Guidance Layer v1: events, SSE, inspector, undo, suggestions ----
 import { registerGuidanceEndpoints } from "./guidance.js";
@@ -26018,6 +26019,10 @@ import { startPatternDetection } from "./lib/substrate-diffusion.js";
 import { startAtrophyCycle } from "./lib/skill-atrophy.js";
 import { startCrisisWatch } from "./lib/world-crisis.js";
 app.use("/api/worlds", createWorldsRouter({ requireAuth, db }));
+
+import createCityAssetsRouter from "./routes/city-assets.js";
+app.use("/api/city-assets", createCityAssetsRouter({ requireAuth }));
+
 if (db) {
   try {
     seedWorlds(db);
@@ -26251,6 +26256,8 @@ try { app.use("/api/channels", createChannelsRouter({ STATE, requireAuth, realti
 
 import createAgentsRouter from "./routes/agents.js";
 try { app.use("/api/agents", createAgentsRouter({ db, requireAuth, STATE })); } catch (e) { structuredLog("warn", "agents_routes_skip", { error: e.message }); }
+import createSkillsRouter from "./routes/skills.js";
+app.use("/api/skills", createSkillsRouter({ requireAuth, DATA_DIR }));
 
 import { createA2ARouter } from "./lib/agentic/a2a-server.js";
 try {
@@ -38414,6 +38421,20 @@ app.post("/api/webhooks", asyncHandler(async (req, res) => res.json(await runMac
 app.get("/api/webhooks", asyncHandler(async (req, res) => res.json(await runMacro("webhook", "list", {}, makeCtx(req)))));
 app.delete("/api/webhooks/:id", asyncHandler(async (req, res) => res.json(await runMacro("webhook", "delete", { webhookId: req.params.id }, makeCtx(req)))));
 app.post("/api/webhooks/:id/toggle", asyncHandler(async (req, res) => res.json(await runMacro("webhook", "toggle", { webhookId: req.params.id, ...req.body }, makeCtx(req)))));
+// Webhook auth — per-domain HMAC secret management
+import { getOrCreateWebhookSecret, listWebhookDomains, revokeWebhookSecret, verifyWebhook } from "./lib/webhook-auth.js";
+app.get("/api/webhooks/domains", asyncHandler(async (req, res) => {
+  const domains = listWebhookDomains(STATE, { baseUrl: req.protocol + "://" + req.get("host") });
+  res.json({ ok: true, domains });
+}));
+app.post("/api/webhooks/domains/:domain/secret", asyncHandler(async (req, res) => {
+  const result = getOrCreateWebhookSecret(STATE, req.params.domain);
+  res.json({ ok: true, ...result });
+}));
+app.delete("/api/webhooks/domains/:domain/secret", asyncHandler(async (req, res) => {
+  revokeWebhookSecret(STATE, req.params.domain);
+  res.json({ ok: true });
+}));
 app.post("/api/automations", asyncHandler(async (req, res) => res.json(await runMacro("automation", "create", req.body, makeCtx(req)))));
 app.get("/api/automations", asyncHandler(async (req, res) => res.json(await runMacro("automation", "list", {}, makeCtx(req)))));
 app.post("/api/automations/:id/run", asyncHandler(async (req, res) => res.json(await runMacro("automation", "run", { automationId: req.params.id, triggerData: req.body }, makeCtx(req)))));
@@ -50826,6 +50847,11 @@ const server = SHOULD_LISTEN ? app.listen(PORT, () => {
 // Optional: enable thin realtime mirror (WebSockets) for queues/jobs/panels.
 try { await tryInitWebSockets(server); } catch (e) {
   structuredLog("error", "websocket_init_failed", { error: String(e?.message || e), stack: String(e?.stack || "").slice(0, 500) });
+}
+
+// ── Optional extension modules (CDN, feeds, security, DTU system, etc.) ──
+try { await initExtensions(app, db, STATE, REALTIME.io ?? null); } catch (e) {
+  structuredLog("error", "startup_extensions_failed", { error: String(e?.message || e) });
 }
 
 // ── World Lens / MMO presence system ──────────────────────────────────────

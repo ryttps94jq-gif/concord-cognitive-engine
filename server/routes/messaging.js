@@ -17,6 +17,7 @@ import * as discord from "../lib/messaging/adapters/discord.js";
 import * as signal from "../lib/messaging/adapters/signal.js";
 import * as imessage from "../lib/messaging/adapters/imessage.js";
 import * as slack from "../lib/messaging/adapters/slack.js";
+import { buildAdapterRegistry } from "../lib/messaging/adapter-interface.js";
 import {
   processInboundMessage,
   createBinding,
@@ -27,6 +28,7 @@ import {
 import { registerPermissionTierHook } from "../lib/messaging/permission-tiers.js";
 
 const ADAPTERS = { whatsapp, telegram, discord, signal, imessage, slack };
+const adapterRegistry = buildAdapterRegistry({ whatsapp, telegram, discord, signal, imessage, slack });
 
 export function createMessagingRouter({ db, infer, contentGuard }) {
   const router = Router();
