@@ -24,7 +24,7 @@ interface EmergentStatusData {
   total?: number;
 }
 
-export function HeartbeatBar() {
+function HeartbeatBar() {
   const queryClient = useQueryClient();
   const { lockPercentage } = use70Lock();
   const [liveDtuCount, setLiveDtuCount] = useState<number | null>(null);

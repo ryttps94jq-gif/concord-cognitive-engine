@@ -105,7 +105,7 @@ function formatScore(score: number): string {
 // Component
 // ---------------------------------------------------------------------------
 
-export function CrossDomainConnections({ domain, domainLabel }: CrossDomainConnectionsProps) {
+function CrossDomainConnections({ domain, domainLabel }: CrossDomainConnectionsProps) {
   const [open, setOpen] = useState(false);
   const router = useRouter();
 
@@ -408,8 +408,6 @@ export function CrossDomainConnections({ domain, domainLabel }: CrossDomainConne
     </>
   );
 }
-
-export default CrossDomainConnections;
 
 import { withErrorBoundary } from '@/components/common/ErrorBoundary';
 const _WrappedCrossDomainConnections = withErrorBoundary(CrossDomainConnections);

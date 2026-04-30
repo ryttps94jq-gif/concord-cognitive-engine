@@ -40,7 +40,7 @@ interface LensListResponse {
   total: number;
 }
 
-export function SmartContextBar({ domain, domainLabel }: SmartContextBarProps) {
+function SmartContextBar({ domain, domainLabel }: SmartContextBarProps) {
   // Fetch the most recent DTUs for this domain.
   // The query is intentionally lenient — if the API is down or the domain has
   // no data we simply render with safe defaults (0 count, no items).

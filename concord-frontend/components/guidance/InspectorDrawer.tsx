@@ -61,7 +61,7 @@ const ENTITY_ICONS: Record<string, typeof FileText> = {
   job: Cog,
 };
 
-export function InspectorDrawer({ entityType, entityId, onClose }: InspectorProps) {
+function InspectorDrawer({ entityType, entityId, onClose }: InspectorProps) {
   const addToast = useUIStore((s) => s.addToast);
   const [expandedSections, setExpandedSections] = useState<Set<string>>(
     new Set(['details', 'actions'])

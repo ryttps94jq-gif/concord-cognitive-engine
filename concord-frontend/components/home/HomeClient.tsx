@@ -83,7 +83,7 @@ import { TrendingDomains } from '@/components/social/TrendingDomains';
 
 const ENTERED_KEY = 'concord_entered';
 
-export function HomeClient() {
+function HomeClient() {
   const [hasEntered, setHasEntered] = useState<boolean | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
   const setFullPageMode = useUIStore((state) => state.setFullPageMode);
@@ -407,40 +407,38 @@ function DashboardPage() {
 
   // Build 3D graph nodes from DTUs for the Resonance Universe
   const graph3DNodes = useMemo(() => {
-    return dtus
-      .slice(0, 100)
-      .map(
-        (
-          dtu: {
-            id: string;
-            tier?: string;
-            summary?: string;
-            title?: string;
-            resonance?: number;
-            domain?: string;
-          },
-          i: number
-        ) => {
-          // Spiral galaxy distribution
-          const t = i / Math.max(dtus.length, 1);
-          const radius = 3 + t * 18;
-          const angle = t * Math.PI * 10;
-          const y = Math.sin(i * 0.7) * 3;
+    return dtus.slice(0, 100).map(
+      (
+        dtu: {
+          id: string;
+          tier?: string;
+          summary?: string;
+          title?: string;
+          resonance?: number;
+          domain?: string;
+        },
+        i: number
+      ) => {
+        // Spiral galaxy distribution
+        const t = i / Math.max(dtus.length, 1);
+        const radius = 3 + t * 18;
+        const angle = t * Math.PI * 10;
+        const y = Math.sin(i * 0.7) * 3;
 
-          return {
-            id: dtu.id,
-            label: dtu.title || dtu.summary?.slice(0, 24) || dtu.id.slice(0, 8),
-            tier: (dtu.tier || 'regular') as 'regular' | 'mega' | 'hyper' | 'shadow',
-            position: [Math.cos(angle) * radius, y, Math.sin(angle) * radius] as [
-              number,
-              number,
-              number,
-            ],
-            connections: [] as string[],
-            resonance: dtu.resonance ?? (resonanceData?.coherence || 0),
-          };
-        }
-      );
+        return {
+          id: dtu.id,
+          label: dtu.title || dtu.summary?.slice(0, 24) || dtu.id.slice(0, 8),
+          tier: (dtu.tier || 'regular') as 'regular' | 'mega' | 'hyper' | 'shadow',
+          position: [Math.cos(angle) * radius, y, Math.sin(angle) * radius] as [
+            number,
+            number,
+            number,
+          ],
+          connections: [] as string[],
+          resonance: dtu.resonance ?? (resonanceData?.coherence || 0),
+        };
+      }
+    );
   }, [dtus, resonanceData?.coherence]);
 
   // Build connections between nearby nodes

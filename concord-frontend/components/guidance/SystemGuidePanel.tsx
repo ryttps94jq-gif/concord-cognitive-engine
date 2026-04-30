@@ -67,7 +67,7 @@ interface EventItem {
   entityType: string | null;
 }
 
-export function SystemGuidePanel() {
+function SystemGuidePanel() {
   const [collapsed, setCollapsed] = useState(false);
 
   const { data: health } = useQuery<HealthData>({

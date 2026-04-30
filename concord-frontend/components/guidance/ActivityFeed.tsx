@@ -37,7 +37,7 @@ interface EventsResponse {
   offset: number;
 }
 
-export function ActivityFeed() {
+function ActivityFeed() {
   const queryClient = useQueryClient();
   const addToast = useUIStore((s) => s.addToast);
   const [offset, setOffset] = useState(0);

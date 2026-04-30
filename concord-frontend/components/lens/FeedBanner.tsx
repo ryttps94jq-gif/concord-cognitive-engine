@@ -12,7 +12,7 @@ interface FeedBannerProps {
  * Shows active feed sources for a lens domain.
  * Displays a compact banner with feed count and source names.
  */
-export function FeedBanner({ domain }: FeedBannerProps) {
+function FeedBanner({ domain }: FeedBannerProps) {
   const { data } = useQuery({
     queryKey: ['feed-sources'],
     queryFn: () => api.get('/api/feeds/sources').then((r) => r.data),

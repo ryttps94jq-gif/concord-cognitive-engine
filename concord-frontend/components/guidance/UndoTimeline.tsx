@@ -29,7 +29,7 @@ interface EventsResponse {
   total: number;
 }
 
-export function UndoTimeline() {
+function UndoTimeline() {
   const queryClient = useQueryClient();
   const addToast = useUIStore((s) => s.addToast);
 

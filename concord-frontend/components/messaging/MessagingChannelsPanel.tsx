@@ -245,7 +245,7 @@ function ConnectPlatformForm({ platform, onClose }: { platform: string; onClose:
   );
 }
 
-export function MessagingChannelsPanel() {
+function MessagingChannelsPanel() {
   const [connectingPlatform, setConnectingPlatform] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
@@ -354,10 +354,9 @@ export function MessagingChannelsPanel() {
                   <span className="text-xs text-white/70 truncate">{meta.label}</span>
                   {isConnected && <CheckCircle className="w-3 h-3 text-green-400 ml-auto" />}
                   {!isAvailable && !isConnected && (
-                    <AlertCircle
-                      className="w-3 h-3 text-yellow-400/50 ml-auto"
-                      title="Not configured on server"
-                    />
+                    <span className="ml-auto" title="Not configured on server">
+                      <AlertCircle className="w-3 h-3 text-yellow-400/50" />
+                    </span>
                   )}
                 </button>
               );

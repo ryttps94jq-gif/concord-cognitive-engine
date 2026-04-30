@@ -156,7 +156,7 @@ function TraceCard({ trace }: { trace: InferenceTrace }) {
   );
 }
 
-export function InferenceTranscriptViewer() {
+function InferenceTranscriptViewer() {
   const [minLatency, setMinLatency] = useState('');
   const [filterInferenceId, setFilterInferenceId] = useState('');
 

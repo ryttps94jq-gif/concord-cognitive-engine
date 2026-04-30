@@ -10,7 +10,7 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api/client';
 import { DollarSign } from 'lucide-react';
 
-export function WalletBadge() {
+function WalletBadge() {
   const { data: balance } = useQuery({
     queryKey: ['wallet-balance'],
     queryFn: () =>
@@ -36,8 +36,6 @@ export function WalletBadge() {
     </Link>
   );
 }
-
-export default WalletBadge;
 
 import { withErrorBoundary } from '@/components/common/ErrorBoundary';
 const _WrappedWalletBadge = withErrorBoundary(WalletBadge);

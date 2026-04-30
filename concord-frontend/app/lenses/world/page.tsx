@@ -996,6 +996,7 @@ export default function WorldLensPage() {
     | 'none'
     | 'inventory'
     | 'quests'
+    | 'questlog'
     | 'chat'
     | 'map'
     | 'crafting'

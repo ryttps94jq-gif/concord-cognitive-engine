@@ -12,7 +12,7 @@ interface ScopeMetrics {
   [key: string]: unknown;
 }
 
-export function ScopeIndicator() {
+function ScopeIndicator() {
   const { data } = useQuery({
     queryKey: ['scope-metrics'],
     queryFn: () => apiHelpers.scope.metrics().then((r) => r.data as ScopeMetrics),

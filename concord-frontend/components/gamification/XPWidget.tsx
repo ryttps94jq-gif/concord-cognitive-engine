@@ -40,7 +40,7 @@ interface XPWidgetProps {
   className?: string;
 }
 
-export function XPWidget({ expanded: defaultExpanded = false, className }: XPWidgetProps) {
+function XPWidget({ expanded: defaultExpanded = false, className }: XPWidgetProps) {
   const [expanded, setExpanded] = useState(defaultExpanded);
 
   const { data: profile } = useQuery<{ ok: boolean } & XPProfile>({

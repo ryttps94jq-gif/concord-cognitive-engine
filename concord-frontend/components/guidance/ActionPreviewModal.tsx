@@ -42,7 +42,7 @@ interface ActionPreviewModalProps {
   onCancel: () => void;
 }
 
-export function ActionPreviewModal({
+function ActionPreviewModal({
   action,
   entityType,
   entityId,

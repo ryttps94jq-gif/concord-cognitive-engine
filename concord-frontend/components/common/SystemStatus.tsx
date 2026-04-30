@@ -29,7 +29,7 @@ interface StatusResponse {
   version?: string;
 }
 
-export function SystemStatus() {
+function SystemStatus() {
   const requestErrors = useUIStore((s) => s.requestErrors);
   const clearRequestErrors = useUIStore((s) => s.clearRequestErrors);
   const authPosture = useUIStore((s) => s.authPosture);

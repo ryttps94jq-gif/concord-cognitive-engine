@@ -64,7 +64,7 @@ const CONSENT_OPTIONS: { value: ConsentMode; label: string; desc: string; icon: 
     },
   ];
 
-export function SovereigntyDashboard() {
+function SovereigntyDashboard() {
   const qc = useQueryClient();
 
   const { data: status, isLoading } = useQuery<SovereigntyStatus>({

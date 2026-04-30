@@ -40,7 +40,7 @@ const CONSENSUS_COLORS: Record<string, string> = {
   split: 'text-yellow-400 bg-yellow-500/10 border-yellow-500/30',
 };
 
-export function BrainCouncil({ className }: { className?: string }) {
+function BrainCouncil({ className }: { className?: string }) {
   const [expanded, setExpanded] = useState(false);
   const [question, setQuestion] = useState('');
   const queryClient = useQueryClient();

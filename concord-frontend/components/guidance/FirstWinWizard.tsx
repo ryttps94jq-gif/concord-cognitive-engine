@@ -48,7 +48,7 @@ const STEP_ROUTES: Record<string, string> = {
 
 const DISMISSED_KEY = 'concord_first_win_dismissed';
 
-export function FirstWinWizard() {
+function FirstWinWizard() {
   const router = useRouter();
   const [dismissed, setDismissed] = useState(() => {
     if (typeof window !== 'undefined') {

@@ -9,7 +9,7 @@ interface ComputeModule {
   description: string;
 }
 
-export function ComputePanel() {
+function ComputePanel() {
   const [selectedModule, setSelectedModule] = useState('');
   const [fnName, setFnName] = useState('');
   const [argsText, setArgsText] = useState('[]');

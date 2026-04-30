@@ -23,7 +23,7 @@ interface GenerateResponse {
 
 const DEFAULT_CONFIG = '{"domain": ""}';
 
-export function LensTemplateGenerator() {
+function LensTemplateGenerator() {
   const [selectedTemplate, setSelectedTemplate] = useState('');
   const [configText, setConfigText] = useState(DEFAULT_CONFIG);
   const [generatedLens, setGeneratedLens] = useState<object | null>(null);

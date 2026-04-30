@@ -38,7 +38,7 @@ const TYPE_PREVIEW_LIMITS: Record<ArtistryContentType, { label: string; maxPrevi
   '3d': { label: 'Rotating thumbnail', maxPreview: 'Preview render only' },
 };
 
-export function CrossPostModal({
+function CrossPostModal({
   isOpen,
   onClose,
   onSubmit,

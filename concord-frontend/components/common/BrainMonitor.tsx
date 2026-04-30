@@ -177,7 +177,7 @@ function BrainCard({ name, brain }: { name: keyof typeof BRAIN_CONFIG; brain: Br
   );
 }
 
-export function BrainMonitor() {
+function BrainMonitor() {
   const [expanded, setExpanded] = useState(false);
 
   const { data, isLoading, refetch } = useQuery<BrainStatusResponse>({
@@ -365,8 +365,6 @@ export function BrainMonitor() {
     </div>
   );
 }
-
-export default BrainMonitor;
 
 import { withErrorBoundary } from '@/components/common/ErrorBoundary';
 const _WrappedBrainMonitor = withErrorBoundary(BrainMonitor);

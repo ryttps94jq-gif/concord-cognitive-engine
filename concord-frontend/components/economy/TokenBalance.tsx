@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
 import { Coins } from 'lucide-react';
 
-export function TokenBalance({ userId }: { userId?: string }) {
+function TokenBalance({ userId }: { userId?: string }) {
   const { data, isLoading } = useQuery({
     queryKey: ['economy-balance', userId],
     queryFn: () => apiHelpers.economy.balance(userId).then((r) => r.data),

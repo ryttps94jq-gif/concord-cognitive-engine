@@ -34,7 +34,7 @@ interface ResurrectionContext {
   stats: { totalDTUs: number; domains: number };
 }
 
-export function ContextResurrection() {
+function ContextResurrection() {
   const [dismissed, setDismissed] = useState(false);
   const [shown, setShown] = useState(false);
 

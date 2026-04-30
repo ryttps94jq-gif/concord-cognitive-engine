@@ -52,7 +52,7 @@ const TYPE_COLORS: Record<string, string> = {
   capture: 'bg-emerald-500/20 text-emerald-400',
 };
 
-export function LiveDTUFeed({
+function LiveDTUFeed({
   limit = 10,
   onDtuClick,
 }: {

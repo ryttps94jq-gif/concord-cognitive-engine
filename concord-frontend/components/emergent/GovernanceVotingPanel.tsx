@@ -52,7 +52,7 @@ const VOTE_CONFIG: Record<
   },
 };
 
-export function GovernanceVotingPanel({ proposalId }: GovernanceVotingPanelProps) {
+function GovernanceVotingPanel({ proposalId }: GovernanceVotingPanelProps) {
   const [voteSuccess, setVoteSuccess] = useState<VoteResponse | null>(null);
   const [voteError, setVoteError] = useState<string | null>(null);
 
@@ -183,8 +183,6 @@ export function GovernanceVotingPanel({ proposalId }: GovernanceVotingPanelProps
     </div>
   );
 }
-
-export default GovernanceVotingPanel;
 
 import { withErrorBoundary } from '@/components/common/ErrorBoundary';
 const _WrappedGovernanceVotingPanel = withErrorBoundary(GovernanceVotingPanel);

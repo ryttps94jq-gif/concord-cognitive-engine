@@ -65,7 +65,7 @@ const SCOPE_CONFIG: Record<Scope, { label: string; icon: React.ElementType; colo
   global: { label: 'Global', icon: Globe, color: 'text-neon-blue' },
 };
 
-export function RegionalLeaderboard({
+function RegionalLeaderboard({
   defaultScope = 'regional',
   limit = 10,
   compact = false,
@@ -218,8 +218,6 @@ export function RegionalLeaderboard({
     </section>
   );
 }
-
-export default RegionalLeaderboard;
 
 import { withErrorBoundary } from '@/components/common/ErrorBoundary';
 const _WrappedRegionalLeaderboard = withErrorBoundary(RegionalLeaderboard);

@@ -33,7 +33,7 @@ interface ReportButtonProps {
   className?: string;
 }
 
-export function ReportButton({
+function ReportButton({
   contentId,
   contentType = 'content',
   creatorId,

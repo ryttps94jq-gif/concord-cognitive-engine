@@ -16,7 +16,7 @@ interface Transaction {
   created_at?: string;
 }
 
-export function TransactionHistory({ userId, limit = 20 }: { userId?: string; limit?: number }) {
+function TransactionHistory({ userId, limit = 20 }: { userId?: string; limit?: number }) {
   const { data, isLoading } = useQuery({
     queryKey: ['economy-history', userId, limit],
     queryFn: () => apiHelpers.economy.history({ user_id: userId, limit }).then((r) => r.data),

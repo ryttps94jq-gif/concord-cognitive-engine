@@ -51,7 +51,7 @@ interface MorningBriefProps {
   className?: string;
 }
 
-export function MorningBrief({ compact = false, className }: MorningBriefProps) {
+function MorningBrief({ compact = false, className }: MorningBriefProps) {
   const [expanded, setExpanded] = useState(true);
   const queryClient = useQueryClient();
 

@@ -124,7 +124,7 @@ const FALLBACK_ACTIONS = [
   },
 ] as const;
 
-export function UniversalActions({
+function UniversalActions({
   domain,
   artifactId,
   params,
