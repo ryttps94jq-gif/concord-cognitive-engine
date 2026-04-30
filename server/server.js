@@ -108,6 +108,7 @@ import registerOperationRoutes from "./routes/operations.js";
 import createQualiaRouter from "./routes/qualia.js";
 import createSovereignRouter from "./routes/sovereign.js";
 import createSovereignEmergentRouter from "./routes/sovereign-emergent.js";
+import { createUserDispatchRouter } from "./routes/user-dispatch.js";
 import createFederationRouter from "./routes/federation.js";
 import registerOAuthRoutes from "./routes/oauth.js";
 import createAuditRouter from "./routes/audit.js";
@@ -25714,6 +25715,7 @@ app.use("/api/emergent", createEmergentRouter({ makeCtx, runMacro }));
 app.use("/api/qualia", createQualiaRouter());
 app.use("/api/sovereign", createSovereignRouter({ STATE, makeCtx, runMacro, saveStateDebounced })); // includes /api/sovereign/dashboard, /pulse, /decree, /audit, /eval
 app.use("/api/sovereign-emergent", createSovereignEmergentRouter({ STATE }));
+app.use("/api", createUserDispatchRouter({ STATE })); // non-sovereign user action dispatch (POST /api/run)
 app.use("/api/federation", createFederationRouter({ db }));
 
 // ═══════════════════════════════════════════════════════════════════════════
