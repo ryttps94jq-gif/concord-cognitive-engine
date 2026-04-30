@@ -1244,12 +1244,10 @@ function ActiveSessionView({ session, onLeave }: { session: CollabSession; onLea
         useUIStore.getState().addToast({ type: 'success', message: `Uploaded "${file.name}"` });
       } catch (err) {
         console.error('[Collab] File upload failed:', err);
-        useUIStore
-          .getState()
-          .addToast({
-            type: 'error',
-            message: `Upload failed: ${err instanceof Error ? err.message : 'Unknown error'}`,
-          });
+        useUIStore.getState().addToast({
+          type: 'error',
+          message: `Upload failed: ${err instanceof Error ? err.message : 'Unknown error'}`,
+        });
       } finally {
         setIsUploading(false);
       }
@@ -1257,8 +1255,125 @@ function ActiveSessionView({ session, onLeave }: { session: CollabSession; onLea
     [createFileEntry]
   );
 
-  // --- Screen sharing state ---
-  const [screenShareInfo, setScreenShareInfo] = useState(false);
+  // --- Screen sharing (WebRTC) ---
+  const [isSharing, setIsSharing] = useState(false);
+  const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
+  const localStreamRef = useRef<MediaStream | null>(null);
+  const pcRef = useRef<RTCPeerConnection | null>(null);
+  const remoteVideoRef = useRef<HTMLVideoElement>(null);
+  const ICE_SERVERS = useRef<RTCIceServer[]>([{ urls: 'stun:stun.l.google.com:19302' }]);
+  const shareRoom = `collab:${session.id}`;
+
+  const stopScreenShare = useCallback(() => {
+    localStreamRef.current?.getTracks().forEach((t) => t.stop());
+    localStreamRef.current = null;
+    pcRef.current?.close();
+    pcRef.current = null;
+    setIsSharing(false);
+    try {
+      import('@/lib/realtime/socket')
+        .then(({ getSocket }) => {
+          getSocket().emit('screen-share:stop', { room: shareRoom });
+        })
+        .catch(() => {
+          /* socket unavailable */
+        });
+    } catch (_) {
+      /* socket unavailable */
+    }
+  }, [shareRoom]);
+
+  const startScreenShare = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+      localStreamRef.current = stream;
+      stream.getVideoTracks()[0].onended = stopScreenShare;
+
+      const { getSocket } = await import('@/lib/realtime/socket');
+      const socket = getSocket();
+      socket.emit('room:join', { room: shareRoom });
+
+      const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS.current });
+      pcRef.current = pc;
+      stream.getTracks().forEach((t) => pc.addTrack(t, stream));
+
+      pc.onicecandidate = ({ candidate }) => {
+        if (candidate)
+          socket.emit('screen-share:ice-candidate', { to: null, room: shareRoom, candidate });
+      };
+
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      socket.emit('screen-share:start', { room: shareRoom });
+      socket.emit('screen-share:offer', { room: shareRoom, offer });
+
+      socket.on(
+        'screen-share:answer',
+        async ({ answer }: { answer: RTCSessionDescriptionInit }) => {
+          if (pc.signalingState !== 'closed') await pc.setRemoteDescription(answer);
+        }
+      );
+
+      setIsSharing(true);
+    } catch (err) {
+      if ((err as Error).name !== 'NotAllowedError') {
+        useUIStore
+          .getState()
+          .addToast({
+            type: 'error',
+            message: 'Screen share failed: ' + (err instanceof Error ? err.message : String(err)),
+          });
+      }
+    }
+  }, [shareRoom, stopScreenShare]);
+
+  // Receive incoming screen share from another participant
+  useEffect(() => {
+    let socket: ReturnType<typeof import('@/lib/realtime/socket').getSocket>;
+    let cleanup = false;
+
+    import('@/lib/realtime/socket').then(({ getSocket }) => {
+      if (cleanup) return;
+      socket = getSocket();
+      socket.emit('room:join', { room: shareRoom });
+
+      socket.on('screen-share:start', () => {
+        const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS.current });
+        pcRef.current = pc;
+        pc.ontrack = (e) => setRemoteStream(e.streams[0]);
+        pc.onicecandidate = ({ candidate }) => {
+          if (candidate)
+            socket.emit('screen-share:ice-candidate', { to: null, room: shareRoom, candidate });
+        };
+        socket.on(
+          'screen-share:offer',
+          async ({ from, offer }: { from: string; offer: RTCSessionDescriptionInit }) => {
+            await pc.setRemoteDescription(offer);
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
+            socket.emit('screen-share:answer', { to: from, answer });
+          }
+        );
+        socket.on(
+          'screen-share:ice-candidate',
+          async ({ candidate }: { candidate: RTCIceCandidateInit }) => {
+            if (pc.remoteDescription) await pc.addIceCandidate(candidate);
+          }
+        );
+      });
+
+      socket.on('screen-share:stop', () => {
+        pcRef.current?.close();
+        pcRef.current = null;
+        setRemoteStream(null);
+      });
+    });
+
+    return () => {
+      cleanup = true;
+      pcRef.current?.close();
+    };
+  }, [shareRoom]);
 
   useEffect(() => {
     const t = setInterval(() => setElapsed(Date.now() - session.startedAt), 1000);
@@ -1383,6 +1498,28 @@ function ActiveSessionView({ session, onLeave }: { session: CollabSession; onLea
         {/* Center: shared workspace */}
         <div className="flex-1 flex flex-col overflow-hidden">
           <div className="flex-1 p-5 overflow-y-auto space-y-4">
+            {/* Remote screen share video */}
+            {remoteStream && (
+              <div className="panel p-3">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-neon-green animate-pulse" />
+                  <h3 className="text-xs font-semibold text-neon-green uppercase tracking-wider">
+                    Live Screen Share
+                  </h3>
+                </div>
+                <video
+                  autoPlay
+                  playsInline
+                  className="w-full rounded-lg bg-black"
+                  style={{ maxHeight: 320 }}
+                  ref={(el) => {
+                    (remoteVideoRef as React.MutableRefObject<HTMLVideoElement | null>).current =
+                      el;
+                    if (el && remoteStream) el.srcObject = remoteStream;
+                  }}
+                />
+              </div>
+            )}
             {/* Project timeline placeholder */}
             <div className="panel p-4">
               <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
@@ -1476,22 +1613,20 @@ function ActiveSessionView({ session, onLeave }: { session: CollabSession; onLea
           {/* Bottom action bar */}
           <div className="flex items-center gap-2 px-5 py-3 border-t border-lattice-border bg-lattice-surface/50">
             <button
-              onClick={() => setScreenShareInfo((prev) => !prev)}
+              onClick={isSharing ? stopScreenShare : startScreenShare}
               className={cn(
                 'flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md border transition-colors',
-                screenShareInfo
-                  ? 'bg-amber-500/10 border-amber-500/30 text-amber-400'
+                isSharing
+                  ? 'bg-red-500/10 border-red-500/30 text-red-400 hover:bg-red-500/20'
                   : 'bg-lattice-surface border-lattice-border text-gray-300 hover:border-neon-blue/40'
               )}
             >
-              <Monitor className="w-3.5 h-3.5" /> Share Screen
+              <Monitor className="w-3.5 h-3.5" /> {isSharing ? 'Stop Sharing' : 'Share Screen'}
             </button>
-            {screenShareInfo && (
-              <span className="text-[10px] text-amber-400/80 px-2 py-1 bg-amber-500/10 rounded-md border border-amber-500/20">
-                <span className="px-1.5 py-0.5 bg-amber-500/20 text-amber-400 rounded text-[10px] font-medium uppercase tracking-wide mr-1">
-                  Soon
-                </span>
-                Screen sharing via WebRTC
+            {remoteStream && (
+              <span className="flex items-center gap-1.5 text-xs text-neon-green">
+                <span className="w-1.5 h-1.5 rounded-full bg-neon-green animate-pulse" />
+                Receiving screen share
               </span>
             )}
             <input

@@ -6446,9 +6446,24 @@ async function tryInitWebSockets(server) {
       socket.emit("player:respawn:ack", result);
     });
 
+    // Screen share WebRTC signaling — relay offer/answer/ICE between collab room peers
+    socket.on("screen-share:start", ({ room }) => {
+      if (room) socket.to(room).emit("screen-share:start", { from: socket.id });
+    });
+    socket.on("screen-share:stop", ({ room }) => {
+      if (room) socket.to(room).emit("screen-share:stop", { from: socket.id });
+    });
+    socket.on("screen-share:offer", ({ room, offer }) => {
+      if (room && offer) socket.to(room).emit("screen-share:offer", { from: socket.id, offer });
+    });
+    socket.on("screen-share:answer", ({ to, answer }) => {
+      if (to && answer) io.to(to).emit("screen-share:answer", { from: socket.id, answer });
+    });
+    socket.on("screen-share:ice-candidate", ({ to, candidate }) => {
+      if (to && candidate) io.to(to).emit("screen-share:ice-candidate", { from: socket.id, candidate });
+    });
+
     socket.on("disconnect", () => {
-      // Persist final position before dropping from memory.
-      const userId = socket.data?.userId;
       if (userId) {
         try { cityPresence.removeUser(userId); } catch (_e) { /* ignore */ }
       }
