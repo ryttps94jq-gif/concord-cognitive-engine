@@ -51,10 +51,10 @@ const STATUS_ICONS: Record<string, React.ReactNode> = {
   no_data: <Activity className="w-3.5 h-3.5" />,
 };
 
-export function SLODashboard() {
+function SLODashboard() {
   const { data, isLoading, isError, error } = useQuery<SLODashboardData>({
     queryKey: ['slo-dashboard'],
-    queryFn: () => api.get('/api/inference/slos').then(r => r.data),
+    queryFn: () => api.get('/api/inference/slos').then((r) => r.data),
     refetchInterval: 30000,
   });
 
@@ -98,12 +98,14 @@ export function SLODashboard() {
       </div>
 
       <div className="space-y-2">
-        {slos.map(slo => (
+        {slos.map((slo) => (
           <div
             key={slo.id}
             className="flex items-center gap-3 p-3 bg-white/5 rounded-lg border border-white/10"
           >
-            <span className={`flex items-center gap-1 px-1.5 py-0.5 rounded border text-xs font-medium ${STATUS_STYLES[slo.status]}`}>
+            <span
+              className={`flex items-center gap-1 px-1.5 py-0.5 rounded border text-xs font-medium ${STATUS_STYLES[slo.status]}`}
+            >
               {STATUS_ICONS[slo.status]}
               {slo.status === 'no_data' ? 'no data' : slo.status}
             </span>
@@ -112,9 +114,16 @@ export function SLODashboard() {
               <p className="text-xs text-white/40 truncate">{slo.description}</p>
             </div>
             <div className="text-right flex-shrink-0">
-              <p className="text-xs text-white/60">Target: <span className="text-white">{formatTarget(slo)}</span></p>
+              <p className="text-xs text-white/60">
+                Target: <span className="text-white">{formatTarget(slo)}</span>
+              </p>
               {slo.current != null && (
-                <p className="text-xs text-white/40">Current: <span className={slo.status === 'breached' ? 'text-red-400' : 'text-green-400'}>{formatCurrent(slo)}</span></p>
+                <p className="text-xs text-white/40">
+                  Current:{' '}
+                  <span className={slo.status === 'breached' ? 'text-red-400' : 'text-green-400'}>
+                    {formatCurrent(slo)}
+                  </span>
+                </p>
               )}
               {slo.sampleCount > 0 && (
                 <p className="text-xs text-white/25">{slo.sampleCount} samples</p>
@@ -132,3 +141,7 @@ export function SLODashboard() {
     </div>
   );
 }
+
+import { withErrorBoundary } from '@/components/common/ErrorBoundary';
+const _WrappedSLODashboard = withErrorBoundary(SLODashboard);
+export { _WrappedSLODashboard as SLODashboard };

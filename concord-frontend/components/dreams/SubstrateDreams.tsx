@@ -35,7 +35,7 @@ const PHASE_COLORS: Record<string, string> = {
   wake: 'text-yellow-400',
 };
 
-export function SubstrateDreams({ className }: { className?: string }) {
+function SubstrateDreams({ className }: { className?: string }) {
   const [expanded, setExpanded] = useState(false);
   const queryClient = useQueryClient();
 
@@ -195,34 +195,29 @@ export function SubstrateDreams({ className }: { className?: string }) {
                   Recent Insights
                 </h4>
                 <div className="space-y-2">
-                  {historyData.lastInsights
-                    .slice(0, 5)
-                    .map(
-                      (
-                        insight: {
-                          content: string;
-                          type: string;
-                          domains?: string[];
-                          createdAt: string;
-                        },
-                        i: number
-                      ) => (
-                        <div
-                          key={i}
-                          className="p-2 bg-lattice-deep rounded-lg text-sm text-gray-300"
-                        >
-                          <p>{insight.content}</p>
-                          <div className="flex items-center gap-2 mt-1">
-                            <span className="text-xs text-neon-cyan">{insight.type}</span>
-                            {insight.domains?.map((d) => (
-                              <span key={d} className="text-xs text-gray-500">
-                                {d}
-                              </span>
-                            ))}
-                          </div>
+                  {historyData.lastInsights.slice(0, 5).map(
+                    (
+                      insight: {
+                        content: string;
+                        type: string;
+                        domains?: string[];
+                        createdAt: string;
+                      },
+                      i: number
+                    ) => (
+                      <div key={i} className="p-2 bg-lattice-deep rounded-lg text-sm text-gray-300">
+                        <p>{insight.content}</p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-xs text-neon-cyan">{insight.type}</span>
+                          {insight.domains?.map((d) => (
+                            <span key={d} className="text-xs text-gray-500">
+                              {d}
+                            </span>
+                          ))}
                         </div>
-                      )
-                    )}
+                      </div>
+                    )
+                  )}
                 </div>
               </div>
             )}

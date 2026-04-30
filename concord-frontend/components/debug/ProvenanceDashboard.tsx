@@ -32,17 +32,19 @@ const STATUS_STYLES: Record<string, string> = {
 };
 
 function ClaimIcon({ status }: { status: string }) {
-  if (status === 'verified') return <CheckCircle className="w-4 h-4 text-green-400 flex-shrink-0" />;
-  if (status === 'failed' || status === 'error') return <XCircle className="w-4 h-4 text-red-400 flex-shrink-0" />;
+  if (status === 'verified')
+    return <CheckCircle className="w-4 h-4 text-green-400 flex-shrink-0" />;
+  if (status === 'failed' || status === 'error')
+    return <XCircle className="w-4 h-4 text-red-400 flex-shrink-0" />;
   return <AlertCircle className="w-4 h-4 text-white/20 flex-shrink-0" />;
 }
 
-export function ProvenanceDashboard() {
+function ProvenanceDashboard() {
   const queryClient = useQueryClient();
 
   const { data, isLoading, isError, error } = useQuery<ProvenanceReport>({
     queryKey: ['provenance-report'],
-    queryFn: () => api.get('/api/audit/provenance').then(r => r.data),
+    queryFn: () => api.get('/api/audit/provenance').then((r) => r.data),
     refetchInterval: 60000,
   });
 
@@ -82,7 +84,9 @@ export function ProvenanceDashboard() {
           <div className="flex gap-2 text-xs">
             <span className="text-green-400">{data?.verified ?? 0} verified</span>
             {(data?.failed ?? 0) > 0 && <span className="text-red-400">{data?.failed} failed</span>}
-            {(data?.unverified ?? 0) > 0 && <span className="text-white/30">{data?.unverified} unverified</span>}
+            {(data?.unverified ?? 0) > 0 && (
+              <span className="text-white/30">{data?.unverified} unverified</span>
+            )}
           </div>
           <button
             onClick={() => verifyMutation.mutate()}
@@ -103,7 +107,7 @@ export function ProvenanceDashboard() {
       )}
 
       <div className="space-y-1.5">
-        {claims.map(claim => (
+        {claims.map((claim) => (
           <div key={claim.id} className="flex items-start gap-3 p-2.5 bg-white/5 rounded-lg">
             <ClaimIcon status={claim.status} />
             <div className="flex-1 min-w-0">
@@ -130,3 +134,7 @@ export function ProvenanceDashboard() {
     </div>
   );
 }
+
+import { withErrorBoundary } from '@/components/common/ErrorBoundary';
+const _WrappedProvenanceDashboard = withErrorBoundary(ProvenanceDashboard);
+export { _WrappedProvenanceDashboard as ProvenanceDashboard };

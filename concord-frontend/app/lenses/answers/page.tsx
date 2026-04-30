@@ -17,7 +17,7 @@
  * any DTU that matches by id merges its `detail` onto the seed entry.
  */
 
-import { useMemo, useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
   Atom,
@@ -483,20 +483,18 @@ export default function AnswersLensPage() {
     };
   }, []);
 
-  const allAnswers = remoteAnswers ?? SEED_ANSWERS;
-
-  const bySection = useMemo(() => {
-    const map = new Map<AnswerSection, AnswerEntry[]>();
-    for (const section of SECTIONS) map.set(section.id, []);
-    for (const a of allAnswers) {
-      const bucket = map.get(a.section);
-      if (bucket) bucket.push(a);
-    }
-    return map;
-  }, [allAnswers]);
-
+  // Show loading state before computing derived data to avoid hook ordering issues
   if (isLoading)
     return <div className="animate-pulse p-8 text-center text-gray-400">Loading...</div>;
+
+  const allAnswers = remoteAnswers ?? SEED_ANSWERS;
+
+  const bySection = new Map<AnswerSection, AnswerEntry[]>();
+  for (const section of SECTIONS) bySection.set(section.id, []);
+  for (const a of allAnswers) {
+    const bucket = bySection.get(a.section);
+    if (bucket) bucket.push(a);
+  }
 
   const activeMeta = SECTIONS.find((s) => s.id === activeSection) ?? SECTIONS[0];
   const activeEntries = bySection.get(activeSection) ?? [];
