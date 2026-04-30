@@ -173,4 +173,7 @@ export function ComputePanel() {
   );
 }
 
-export default ComputePanel;
+import { withErrorBoundary } from '@/components/common/ErrorBoundary';
+const _WrappedComputePanel = withErrorBoundary(ComputePanel);
+export { _WrappedComputePanel as ComputePanel };
+export default _WrappedComputePanel;

@@ -197,4 +197,7 @@ export function LensTemplateGenerator() {
   );
 }
 
-export default LensTemplateGenerator;
+import { withErrorBoundary } from '@/components/common/ErrorBoundary';
+const _WrappedLensTemplateGenerator = withErrorBoundary(LensTemplateGenerator);
+export { _WrappedLensTemplateGenerator as LensTemplateGenerator };
+export default _WrappedLensTemplateGenerator;
