@@ -24672,6 +24672,24 @@ allowMacro("chicken3", "meta_commit_quiet", _ACL_OWNER);
 allowMacro("entity", "terminal_approve", _ACL_ADMIN);
 allowMacro("grounding", "approve_action", _ACL_ADMIN);
 
+// Council: read operations are public; user-facing mutations are member-level.
+// Overrides the domain-level _ACL_OWNER so regular users can vote, check
+// credibility, and trigger review without needing owner role.
+allowMacro("council", "tally", _ACL_PUB);
+allowMacro("council", "status", _ACL_PUB);
+allowMacro("council", "list", _ACL_PUB);
+allowMacro("council", "vote", _ACL_MEMBER);
+allowMacro("council", "reviewGlobal", _ACL_MEMBER);
+allowMacro("council", "credibility", _ACL_MEMBER);
+allowMacro("council", "proposePromotion", _ACL_MEMBER);
+
+// Global corpus: members can propose content and publish to global timeline.
+// Overrides the domain-level _ACL_OWNER for these user-facing operations.
+allowMacro("global", "propose", _ACL_MEMBER);
+allowMacro("global", "publish", _ACL_MEMBER);
+allowMacro("global", "queue", _ACL_MEMBER);
+allowMacro("global", "contributions", _ACL_MEMBER);
+
 // Lens artifact macros: list/get/export = member, create/update/delete/run/bulkCreate = member
 allowDomain("lens", _ACL_MEMBER);
 allowMacro("lens", "list", _ACL_PUB);
