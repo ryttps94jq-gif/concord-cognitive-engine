@@ -191,3 +191,7 @@ export function QuickCapture({ domain }: QuickCaptureProps) {
     </>
   );
 }
+
+import { withErrorBoundary } from '@/components/common/ErrorBoundary';
+const _WrappedQuickCapture = withErrorBoundary(QuickCapture);
+export { _WrappedQuickCapture as QuickCapture };

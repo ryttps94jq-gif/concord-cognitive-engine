@@ -185,3 +185,8 @@ export function GovernanceVotingPanel({ proposalId }: GovernanceVotingPanelProps
 }
 
 export default GovernanceVotingPanel;
+
+import { withErrorBoundary } from '@/components/common/ErrorBoundary';
+const _WrappedGovernanceVotingPanel = withErrorBoundary(GovernanceVotingPanel);
+export { _WrappedGovernanceVotingPanel as GovernanceVotingPanel };
+export default _WrappedGovernanceVotingPanel;
