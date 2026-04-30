@@ -45863,6 +45863,14 @@ app.post("/api/xp/award", (req, res) => {
   res.json({ ok: true, ...result });
 });
 
+// Wire XP hooks so all real activity events auto-award XP
+import { installXPHooks } from "./lib/xp-hooks.js";
+try {
+  installXPHooks({ awardXP, getXPProfile, STATE, saveStateDebounced });
+} catch (e) {
+  structuredLog("warn", "xp_hooks_init_failed", { error: e?.message });
+}
+
 // ── 2. Context Resurrection — Perfect memory across sessions ────────────────
 
 app.get("/api/context/resurrect", asyncHandler(async (req, res) => {
