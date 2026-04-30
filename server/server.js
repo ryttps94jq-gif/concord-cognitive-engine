@@ -24932,6 +24932,8 @@ let weeklyTimer = null;
 let globalTickTimer = null;  // Scope Separation: separate 5-min Global tick
 let cognitiveWorker = null;
 let cognitiveWorkerReady = false;
+let _cognitiveWorkerRestartCount = 0;
+let _cognitiveWorkerStartTime = 0;
 let _heartbeatCount = 0;
 
 // ── Cognitive Worker: snapshot builder ────────────────────────────────────────
@@ -25059,11 +25061,16 @@ function spawnCognitiveWorker() {
   const workerPath = new URL("./workers/cognitive-worker.js", import.meta.url).pathname;
   cognitiveWorker = new Worker(workerPath);
   cognitiveWorkerReady = false;
+  _cognitiveWorkerStartTime = Date.now();
 
   cognitiveWorker.on("message", async (msg) => {
     if (msg.type === "ready") {
       cognitiveWorkerReady = true;
       log("heartbeat.worker", "Cognitive worker ready");
+      // Reset backoff if worker has been stable for > 60s
+      if (Date.now() - _cognitiveWorkerStartTime > 60_000) {
+        _cognitiveWorkerRestartCount = 0;
+      }
       return;
     }
     if (msg.type === "tick-result") {
@@ -25078,18 +25085,23 @@ function spawnCognitiveWorker() {
   cognitiveWorker.on("error", (err) => {
     console.error("[cognitive-worker] Fatal:", err);
     cognitiveWorkerReady = false;
-    // Auto-restart after 5s
-    setTimeout(() => {
-      log("heartbeat.worker", "Restarting cognitive worker after crash");
-      spawnCognitiveWorker();
-    }, 5000);
+    const uptime = Date.now() - _cognitiveWorkerStartTime;
+    if (uptime < 10_000) _cognitiveWorkerRestartCount++;
+    else _cognitiveWorkerRestartCount = Math.max(0, _cognitiveWorkerRestartCount - 1);
+    const backoffMs = Math.min(5000 * Math.pow(2, _cognitiveWorkerRestartCount), 300_000);
+    log("heartbeat.worker", `Restarting cognitive worker after crash (backoff ${backoffMs}ms, attempt ${_cognitiveWorkerRestartCount})`);
+    setTimeout(() => spawnCognitiveWorker(), backoffMs);
   });
 
   cognitiveWorker.on("exit", (code) => {
     cognitiveWorkerReady = false;
     if (code !== 0) {
       console.error(`[cognitive-worker] Exited with code ${code}`);
-      setTimeout(() => spawnCognitiveWorker(), 5000);
+      const uptime = Date.now() - _cognitiveWorkerStartTime;
+      if (uptime < 10_000) _cognitiveWorkerRestartCount++;
+      else _cognitiveWorkerRestartCount = Math.max(0, _cognitiveWorkerRestartCount - 1);
+      const backoffMs = Math.min(5000 * Math.pow(2, _cognitiveWorkerRestartCount), 300_000);
+      setTimeout(() => spawnCognitiveWorker(), backoffMs);
     }
   });
 }

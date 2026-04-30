@@ -4254,14 +4254,33 @@ function _updateOrganFromRepair(phase, result) {
 
 /**
  * Agent tick function. Called by the agent system.
- * Runs all guardian monitors in sequence.
+ * Runs guardian monitors that haven't been checked recently.
+ * Concurrency-guarded — overlapping calls are silently skipped.
  */
+let _repairAgentTickRunning = false;
+const _MONITOR_CHECK_TIMEOUT_MS = 30_000;
+
 export async function repairAgentTick() {
+  if (_repairAgentTickRunning) {
+    logger.debug('emergent:repair-cortex', 'repairAgentTick skipped — previous tick still running');
+    return { ok: true, skipped: true };
+  }
+  _repairAgentTickRunning = true;
   try {
     const results = {};
     for (const [name, monitor] of Object.entries(GUARDIAN_MONITORS)) {
+      // Skip monitors that ran recently via startGuardian() — avoid double-work
+      const lastChecked = _guardianStatuses.get(name)?.lastChecked;
+      if (lastChecked) {
+        const ageMs = Date.now() - new Date(lastChecked).getTime();
+        if (ageMs < monitor.interval * 0.9) continue;
+      }
       try {
-        const result = await monitor.check();
+        const checkWithTimeout = Promise.race([
+          monitor.check(),
+          new Promise((_, rej) => setTimeout(() => rej(new Error('monitor_timeout')), _MONITOR_CHECK_TIMEOUT_MS)),
+        ]);
+        const result = await checkWithTimeout;
         _guardianStatuses.set(name, { ...result, lastChecked: nowISO() });
 
         if (!result.healthy) {
@@ -4269,12 +4288,14 @@ export async function repairAgentTick() {
         }
 
         results[name] = result;
-      } catch (_e) { logger.debug('emergent:repair-cortex', 'silent', { error: _e?.message }); }
+      } catch (_e) { logger.debug('emergent:repair-cortex', 'silent', { name, error: _e?.message }); }
     }
 
     return { ok: true, monitors: results };
   } catch (e) {
     return { ok: false, error: String(e?.message || e) };
+  } finally {
+    _repairAgentTickRunning = false;
   }
 }
 
