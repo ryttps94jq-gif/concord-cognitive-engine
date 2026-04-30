@@ -693,9 +693,7 @@ export default function DocsLensPage() {
           </h3>
           <ArtifactUploader
             lens="docs"
-            onUploadComplete={(dtuId) => {
-              console.log('[Docs] Uploaded artifact:', dtuId);
-            }}
+            onUploadComplete={(_dtuId) => {}}
             acceptTypes=".pdf,.md,.txt,.docx,.json,.csv"
             compact
           />
