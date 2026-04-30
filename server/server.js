@@ -42345,14 +42345,21 @@ app.post("/api/lab/run", asyncHandler(async (req, res) => {
   }
 }));
 
-// Custom lenses - sourced from lens artifacts
+// Custom lenses - sourced from lens artifacts (paginated)
+// Query params: page (1-based, default 1), limit (default 20, max 100)
 app.get("/api/lenses/custom", (req, res) => {
   const userId = req.user?.id;
-  const custom = Array.from(STATE.lensArtifacts.values())
+  const allLenses = Array.from(STATE.lensArtifacts.values())
     .filter(a => a.type === "custom-lens" || a.domain === "custom")
     .filter(a => !userId || a.ownerId === userId || a.meta?.visibility === "public")
     .map(a => ({ id: a.id, title: a.title, domain: a.domain, config: a.data, createdAt: a.createdAt, ownerId: a.ownerId }));
-  res.json({ ok: true, lenses: custom });
+  const page = Math.max(1, parseInt(req.query.page) || 1);
+  const limit = Math.min(parseInt(req.query.limit) || 20, 100);
+  const offset = (page - 1) * limit;
+  const total = allLenses.length;
+  const data = allLenses.slice(offset, offset + limit);
+  // Keep backward-compat `lenses` key alongside new `data` key
+  res.json({ ok: true, lenses: data, data, pagination: { page, limit, total, hasMore: offset + limit < total } });
 });
 
 app.get("/api/lenses/templates", (req, res) => {

@@ -30,88 +30,332 @@ import {
   type DeformationRecord,
   type WeatherPhysicsModifiers,
 } from '@/lib/world-lens/world-deformation';
-import { encodeDelta, ReconciliationBuffer, type CharState, type ServerStateMsg } from '@/lib/concordia/netcode';
+import {
+  encodeDelta,
+  ReconciliationBuffer,
+  type CharState,
+  type ServerStateMsg,
+} from '@/lib/concordia/netcode';
 
-const ConcordiaScene = dynamic(() => import('@/components/world-lens/ConcordiaScene'), { ssr: false });
-const AvatarSystem3D = dynamic(() => import('@/components/world-lens/AvatarSystem3D'), { ssr: false });
-const CameraControls = dynamic(() => import('@/components/world-lens/CameraControls'), { ssr: false });
+const ConcordiaScene = dynamic(() => import('@/components/world-lens/ConcordiaScene'), {
+  ssr: false,
+});
+const AvatarSystem3D = dynamic(() => import('@/components/world-lens/AvatarSystem3D'), {
+  ssr: false,
+});
+const CameraControls = dynamic(() => import('@/components/world-lens/CameraControls'), {
+  ssr: false,
+});
 const HUDOverlay = dynamic(() => import('@/components/world-lens/HUDOverlay'), { ssr: false });
 const ChatSystem = dynamic(() => import('@/components/world-lens/ChatSystem'), { ssr: false });
-const InventoryPanel = dynamic(() => import('@/components/world-lens/InventoryPanel'), { ssr: false });
+const InventoryPanel = dynamic(() => import('@/components/world-lens/InventoryPanel'), {
+  ssr: false,
+});
 const QuestPanel = dynamic(() => import('@/components/world-lens/QuestPanel'), { ssr: false });
-const PlayerPresence = dynamic(() => import('@/components/world-lens/PlayerPresence'), { ssr: false });
+const PlayerPresence = dynamic(() => import('@/components/world-lens/PlayerPresence'), {
+  ssr: false,
+});
 const CombatSystem = dynamic(() => import('@/components/world-lens/CombatSystem'), { ssr: false });
-const MapNavigation = dynamic(() => import('@/components/world-lens/MapNavigation'), { ssr: false });
-const PlayerProfile = dynamic(() => import('@/components/world-lens/PlayerProfile'), { ssr: false });
-const CraftingPanel = dynamic(() => import('@/components/world-lens/CraftingPanel'), { ssr: false });
-const CollaborationTools = dynamic(() => import('@/components/world-lens/CollaborationTools'), { ssr: false });
-const LiveCollaboration = dynamic(() => import('@/components/world-lens/LiveCollaboration'), { ssr: false });
-const EventsGatherings = dynamic(() => import('@/components/world-lens/EventsGatherings'), { ssr: false });
-const SocialProofFeed = dynamic(() => import('@/components/world-lens/SocialProofFeed'), { ssr: false });
-const NotificationFeed = dynamic(() => import('@/components/world-lens/NotificationFeed'), { ssr: false });
-const SmartNotifications = dynamic(() => import('@/components/world-lens/SmartNotifications'), { ssr: false });
-const ModerationPanel = dynamic(() => import('@/components/world-lens/ModerationPanel'), { ssr: false });
-const OwnershipProfile = dynamic(() => import('@/components/world-lens/OwnershipProfile'), { ssr: false });
-const FederationPanel = dynamic(() => import('@/components/world-lens/FederationPanel'), { ssr: false });
-const VoiceInterface = dynamic(() => import('@/components/world-lens/VoiceInterface'), { ssr: false });
-const VoiceAssistant = dynamic(() => import('@/components/world-lens/VoiceAssistant'), { ssr: false });
-const BuildingRenderer3D = dynamic(() => import('@/components/world-lens/BuildingRenderer3D'), { ssr: false });
-const TerrainRenderer = dynamic(() => import('@/components/world-lens/TerrainRenderer'), { ssr: false });
-const SkyWeatherRenderer = dynamic(() => import('@/components/world-lens/SkyWeatherRenderer'), { ssr: false });
-const WaterRenderer = dynamic(() => import('@/components/world-lens/WaterRenderer'), { ssr: false });
-const ParticleEffectsComponent = dynamic(() => import('@/components/world-lens/ParticleEffects'), { ssr: false });
-const SoundscapeEngine = dynamic(() => import('@/components/world-lens/SoundscapeEngine'), { ssr: false });
-const AnimationManager = dynamic(() => import('@/components/world-lens/AnimationManager'), { ssr: false });
+const MapNavigation = dynamic(() => import('@/components/world-lens/MapNavigation'), {
+  ssr: false,
+});
+const PlayerProfile = dynamic(() => import('@/components/world-lens/PlayerProfile'), {
+  ssr: false,
+});
+const _CraftingPanel = dynamic(() => import('@/components/world-lens/CraftingPanel'), {
+  ssr: false,
+});
+const CollaborationTools = dynamic(() => import('@/components/world-lens/CollaborationTools'), {
+  ssr: false,
+});
+const LiveCollaboration = dynamic(() => import('@/components/world-lens/LiveCollaboration'), {
+  ssr: false,
+});
+const EventsGatherings = dynamic(() => import('@/components/world-lens/EventsGatherings'), {
+  ssr: false,
+});
+const SocialProofFeed = dynamic(() => import('@/components/world-lens/SocialProofFeed'), {
+  ssr: false,
+});
+const NotificationFeed = dynamic(() => import('@/components/world-lens/NotificationFeed'), {
+  ssr: false,
+});
+const SmartNotifications = dynamic(() => import('@/components/world-lens/SmartNotifications'), {
+  ssr: false,
+});
+const ModerationPanel = dynamic(() => import('@/components/world-lens/ModerationPanel'), {
+  ssr: false,
+});
+const OwnershipProfile = dynamic(() => import('@/components/world-lens/OwnershipProfile'), {
+  ssr: false,
+});
+const FederationPanel = dynamic(() => import('@/components/world-lens/FederationPanel'), {
+  ssr: false,
+});
+const VoiceInterface = dynamic(() => import('@/components/world-lens/VoiceInterface'), {
+  ssr: false,
+});
+const VoiceAssistant = dynamic(() => import('@/components/world-lens/VoiceAssistant'), {
+  ssr: false,
+});
+const BuildingRenderer3D = dynamic(() => import('@/components/world-lens/BuildingRenderer3D'), {
+  ssr: false,
+});
+const TerrainRenderer = dynamic(() => import('@/components/world-lens/TerrainRenderer'), {
+  ssr: false,
+});
+const SkyWeatherRenderer = dynamic(() => import('@/components/world-lens/SkyWeatherRenderer'), {
+  ssr: false,
+});
+const WaterRenderer = dynamic(() => import('@/components/world-lens/WaterRenderer'), {
+  ssr: false,
+});
+const ParticleEffectsComponent = dynamic(() => import('@/components/world-lens/ParticleEffects'), {
+  ssr: false,
+});
+const SoundscapeEngine = dynamic(() => import('@/components/world-lens/SoundscapeEngine'), {
+  ssr: false,
+});
+const AnimationManager = dynamic(() => import('@/components/world-lens/AnimationManager'), {
+  ssr: false,
+});
 const GameJuice = dynamic(() => import('@/components/world-lens/GameJuice'), { ssr: false });
-const LoadingTransitions = dynamic(() => import('@/components/world-lens/LoadingTransitions'), { ssr: false });
+const LoadingTransitions = dynamic(() => import('@/components/world-lens/LoadingTransitions'), {
+  ssr: false,
+});
 
 // ── Builder / Tools (District mode) ───────────────────────────────
-const SnapBuildCatalog = dynamic(() => import('@/components/world-lens/SnapBuildCatalog'), { ssr: false });
-const ConcordDSLEditor = dynamic(() => import('@/components/world-lens/ConcordDSLEditor'), { ssr: false });
-const ConcordTerminal = dynamic(() => import('@/components/world-lens/ConcordTerminal'), { ssr: false });
-const DTUDiffViewer = dynamic(() => import('@/components/world-lens/DTUDiffViewer'), { ssr: false });
-const StandardsLibrary = dynamic(() => import('@/components/world-lens/StandardsLibrary'), { ssr: false });
-const FabricationExportPanel = dynamic(() => import('@/components/world-lens/FabricationExportPanel'), { ssr: false });
+const SnapBuildCatalog = dynamic(() => import('@/components/world-lens/SnapBuildCatalog'), {
+  ssr: false,
+});
+const ConcordDSLEditor = dynamic(() => import('@/components/world-lens/ConcordDSLEditor'), {
+  ssr: false,
+});
+const ConcordTerminal = dynamic(() => import('@/components/world-lens/ConcordTerminal'), {
+  ssr: false,
+});
+const DTUDiffViewer = dynamic(() => import('@/components/world-lens/DTUDiffViewer'), {
+  ssr: false,
+});
+const StandardsLibrary = dynamic(() => import('@/components/world-lens/StandardsLibrary'), {
+  ssr: false,
+});
+const FabricationExportPanel = dynamic(
+  () => import('@/components/world-lens/FabricationExportPanel'),
+  { ssr: false }
+);
 const ExportEmbed = dynamic(() => import('@/components/world-lens/ExportEmbed'), { ssr: false });
-const NotebookEditor = dynamic(() => import('@/components/world-lens/NotebookEditor'), { ssr: false });
-const DependencyGraphViewer = dynamic(() => import('@/components/world-lens/DependencyGraphViewer'), { ssr: false });
-const DigitalTwinDashboard = dynamic(() => import('@/components/world-lens/DigitalTwinDashboard'), { ssr: false });
-const SensorDashboard = dynamic(() => import('@/components/world-lens/SensorDashboard'), { ssr: false });
-const ServiceMarketplace = dynamic(() => import('@/components/world-lens/ServiceMarketplace'), { ssr: false });
-const CertificatePanel = dynamic(() => import('@/components/world-lens/CertificatePanel'), { ssr: false });
-const NotarizationPanel = dynamic(() => import('@/components/world-lens/NotarizationPanel'), { ssr: false });
-const StressTestPanel = dynamic(() => import('@/components/world-lens/StressTestPanel'), { ssr: false });
-const ReplayForensics = dynamic(() => import('@/components/world-lens/ReplayForensics'), { ssr: false });
-const ReplaySpectator = dynamic(() => import('@/components/world-lens/ReplaySpectator'), { ssr: false });
+const NotebookEditor = dynamic(() => import('@/components/world-lens/NotebookEditor'), {
+  ssr: false,
+});
+const DependencyGraphViewer = dynamic(
+  () => import('@/components/world-lens/DependencyGraphViewer'),
+  { ssr: false }
+);
+const DigitalTwinDashboard = dynamic(() => import('@/components/world-lens/DigitalTwinDashboard'), {
+  ssr: false,
+});
+const SensorDashboard = dynamic(() => import('@/components/world-lens/SensorDashboard'), {
+  ssr: false,
+});
+const ServiceMarketplace = dynamic(() => import('@/components/world-lens/ServiceMarketplace'), {
+  ssr: false,
+});
+const CertificatePanel = dynamic(() => import('@/components/world-lens/CertificatePanel'), {
+  ssr: false,
+});
+const NotarizationPanel = dynamic(() => import('@/components/world-lens/NotarizationPanel'), {
+  ssr: false,
+});
+const StressTestPanel = dynamic(() => import('@/components/world-lens/StressTestPanel'), {
+  ssr: false,
+});
+const ReplayForensics = dynamic(() => import('@/components/world-lens/ReplayForensics'), {
+  ssr: false,
+});
+const ReplaySpectator = dynamic(() => import('@/components/world-lens/ReplaySpectator'), {
+  ssr: false,
+});
 
 // ── Concordia Input Mode Overlays ──────────────────────────────────────
-const CombatHUD          = dynamic(() => import('@/components/concordia/hud/CombatHUD').then(m => ({ default: m.CombatHUD })), { ssr: false });
-const VehicleHUD         = dynamic(() => import('@/components/concordia/hud/VehicleHUD').then(m => ({ default: m.VehicleHUD })), { ssr: false });
-const DialoguePanel      = dynamic(() => import('@/components/concordia/dialogue/DialoguePanel').then(m => ({ default: m.DialoguePanel })), { ssr: false });
-const CreationWorkshop   = dynamic(() => import('@/components/concordia/creation/CreationWorkshop').then(m => ({ default: m.CreationWorkshop })), { ssr: false });
-const LensWorkspace      = dynamic(() => import('@/components/concordia/lens/LensWorkspaceInWorld').then(m => ({ default: m.LensWorkspaceInWorld })), { ssr: false });
-const EmoteWheel         = dynamic(() => import('@/components/concordia/social/EmoteWheel').then(m => ({ default: m.EmoteWheel })), { ssr: false });
-const QuickMessageBar    = dynamic(() => import('@/components/concordia/social/QuickMessageBar').then(m => ({ default: m.QuickMessageBar })), { ssr: false });
-const SpectatorControls  = dynamic(() => import('@/components/concordia/spectator/SpectatorControls').then(m => ({ default: m.SpectatorControls })), { ssr: false });
-const MobileControls     = dynamic(() => import('@/components/concordia/mobile/MobileControlsOverlay').then(m => ({ default: m.MobileControlsOverlay })), { ssr: false });
-const TutorialOverlay    = dynamic(() => import('@/components/concordia/onboarding/TutorialHint').then(m => ({ default: m.TutorialOverlay })), { ssr: false });
-const SkillsPanel           = dynamic(() => import('@/components/concordia/skills/SkillsPanel').then(m => ({ default: m.SkillsPanel })), { ssr: false });
-const XPToast               = dynamic(() => import('@/components/concordia/hud/XPToast').then(m => ({ default: m.XPToast })), { ssr: false });
-const NemesisAlert          = dynamic(() => import('@/components/concordia/hud/NemesisAlert').then(m => ({ default: m.NemesisAlert })), { ssr: false });
-const LegendaryAnnouncement = dynamic(() => import('@/components/concordia/world/LegendaryAnnouncement').then(m => ({ default: m.LegendaryAnnouncement })), { ssr: false });
-const HybridReveal          = dynamic(() => import('@/components/concordia/skills/HybridReveal').then(m => ({ default: m.HybridReveal })), { ssr: false });
-const CrisisBanner          = dynamic(() => import('@/components/concordia/world/CrisisBanner').then(m => ({ default: m.CrisisBanner })), { ssr: false });
-const GameModeHUD           = dynamic(() => import('@/components/concordia/game-modes/GameModeHUD').then(m => ({ default: m.GameModeHUD })), { ssr: false });
-const GameModePicker        = dynamic(() => import('@/components/concordia/game-modes/GameModePicker').then(m => ({ default: m.GameModePicker })), { ssr: false });
-const CraftingBench         = dynamic(() => import('@/components/concordia/crafting/CraftingBench').then(m => ({ default: m.CraftingBench })), { ssr: false });
-const GuildPanel            = dynamic(() => import('@/components/concordia/social/GuildPanel').then(m => ({ default: m.GuildPanel })), { ssr: false });
-const SeasonPassPanel       = dynamic(() => import('@/components/concordia/world/SeasonPassPanel').then(m => ({ default: m.SeasonPassPanel })), { ssr: false });
-const SeasonBanner          = dynamic(() => import('@/components/concordia/world/SeasonBanner').then(m => ({ default: m.SeasonBanner })), { ssr: false });
-const LeaderboardPanel      = dynamic(() => import('@/components/concordia/world/LeaderboardPanel').then(m => ({ default: m.LeaderboardPanel })), { ssr: false });
-const WorldEventsPanel      = dynamic(() => import('@/components/concordia/world/WorldEventsPanel').then(m => ({ default: m.WorldEventsPanel })), { ssr: false });
-const ArenaPanel            = dynamic(() => import('@/components/concordia/world/ArenaPanel').then(m => ({ default: m.ArenaPanel })), { ssr: false });
-const JobsBoardPanel        = dynamic(() => import('@/components/concordia/world/JobsBoardPanel').then(m => ({ default: m.JobsBoardPanel })), { ssr: false });
-const LorePanel             = dynamic(() => import('@/components/concordia/world/LorePanel').then(m => ({ default: m.LorePanel })), { ssr: false });
+const CombatHUD = dynamic(
+  () => import('@/components/concordia/hud/CombatHUD').then((m) => ({ default: m.CombatHUD })),
+  { ssr: false }
+);
+const VehicleHUD = dynamic(
+  () => import('@/components/concordia/hud/VehicleHUD').then((m) => ({ default: m.VehicleHUD })),
+  { ssr: false }
+);
+const DialoguePanel = dynamic(
+  () =>
+    import('@/components/concordia/dialogue/DialoguePanel').then((m) => ({
+      default: m.DialoguePanel,
+    })),
+  { ssr: false }
+);
+const CreationWorkshop = dynamic(
+  () =>
+    import('@/components/concordia/creation/CreationWorkshop').then((m) => ({
+      default: m.CreationWorkshop,
+    })),
+  { ssr: false }
+);
+const LensWorkspace = dynamic(
+  () =>
+    import('@/components/concordia/lens/LensWorkspaceInWorld').then((m) => ({
+      default: m.LensWorkspaceInWorld,
+    })),
+  { ssr: false }
+);
+const EmoteWheel = dynamic(
+  () => import('@/components/concordia/social/EmoteWheel').then((m) => ({ default: m.EmoteWheel })),
+  { ssr: false }
+);
+const QuickMessageBar = dynamic(
+  () =>
+    import('@/components/concordia/social/QuickMessageBar').then((m) => ({
+      default: m.QuickMessageBar,
+    })),
+  { ssr: false }
+);
+const SpectatorControls = dynamic(
+  () =>
+    import('@/components/concordia/spectator/SpectatorControls').then((m) => ({
+      default: m.SpectatorControls,
+    })),
+  { ssr: false }
+);
+const MobileControls = dynamic(
+  () =>
+    import('@/components/concordia/mobile/MobileControlsOverlay').then((m) => ({
+      default: m.MobileControlsOverlay,
+    })),
+  { ssr: false }
+);
+const TutorialOverlay = dynamic(
+  () =>
+    import('@/components/concordia/onboarding/TutorialHint').then((m) => ({
+      default: m.TutorialOverlay,
+    })),
+  { ssr: false }
+);
+const SkillsPanel = dynamic(
+  () =>
+    import('@/components/concordia/skills/SkillsPanel').then((m) => ({ default: m.SkillsPanel })),
+  { ssr: false }
+);
+const XPToast = dynamic(
+  () => import('@/components/concordia/hud/XPToast').then((m) => ({ default: m.XPToast })),
+  { ssr: false }
+);
+const NemesisAlert = dynamic(
+  () =>
+    import('@/components/concordia/hud/NemesisAlert').then((m) => ({ default: m.NemesisAlert })),
+  { ssr: false }
+);
+const LegendaryAnnouncement = dynamic(
+  () =>
+    import('@/components/concordia/world/LegendaryAnnouncement').then((m) => ({
+      default: m.LegendaryAnnouncement,
+    })),
+  { ssr: false }
+);
+const HybridReveal = dynamic(
+  () =>
+    import('@/components/concordia/skills/HybridReveal').then((m) => ({ default: m.HybridReveal })),
+  { ssr: false }
+);
+const CrisisBanner = dynamic(
+  () =>
+    import('@/components/concordia/world/CrisisBanner').then((m) => ({ default: m.CrisisBanner })),
+  { ssr: false }
+);
+const GameModeHUD = dynamic(
+  () =>
+    import('@/components/concordia/game-modes/GameModeHUD').then((m) => ({
+      default: m.GameModeHUD,
+    })),
+  { ssr: false }
+);
+const GameModePicker = dynamic(
+  () =>
+    import('@/components/concordia/game-modes/GameModePicker').then((m) => ({
+      default: m.GameModePicker,
+    })),
+  { ssr: false }
+);
+const QuestLog = dynamic(
+  () => import('@/components/concordia/quests/QuestLog').then((m) => ({ default: m.QuestLog })),
+  { ssr: false }
+);
+// QuestNotification and GatheringMinigame are imported for future activation via gathering/quest state.
+// They are loaded but not yet wired to in-game events; see render site below.
+const _QuestNotification = dynamic(
+  () =>
+    import('@/components/concordia/quests/QuestNotification').then((m) => ({
+      default: m.QuestNotification,
+    })),
+  { ssr: false }
+);
+const _GatheringMinigame = dynamic(
+  () =>
+    import('@/components/concordia/crafting/GatheringMinigame').then((m) => ({
+      default: m.GatheringMinigame,
+    })),
+  { ssr: false }
+);
+const CraftingBench = dynamic(
+  () =>
+    import('@/components/concordia/crafting/CraftingBench').then((m) => ({
+      default: m.CraftingBench,
+    })),
+  { ssr: false }
+);
+const GuildPanel = dynamic(
+  () => import('@/components/concordia/social/GuildPanel').then((m) => ({ default: m.GuildPanel })),
+  { ssr: false }
+);
+const SeasonPassPanel = dynamic(
+  () =>
+    import('@/components/concordia/world/SeasonPassPanel').then((m) => ({
+      default: m.SeasonPassPanel,
+    })),
+  { ssr: false }
+);
+const SeasonBanner = dynamic(
+  () =>
+    import('@/components/concordia/world/SeasonBanner').then((m) => ({ default: m.SeasonBanner })),
+  { ssr: false }
+);
+const LeaderboardPanel = dynamic(
+  () =>
+    import('@/components/concordia/world/LeaderboardPanel').then((m) => ({
+      default: m.LeaderboardPanel,
+    })),
+  { ssr: false }
+);
+const WorldEventsPanel = dynamic(
+  () =>
+    import('@/components/concordia/world/WorldEventsPanel').then((m) => ({
+      default: m.WorldEventsPanel,
+    })),
+  { ssr: false }
+);
+const ArenaPanel = dynamic(
+  () => import('@/components/concordia/world/ArenaPanel').then((m) => ({ default: m.ArenaPanel })),
+  { ssr: false }
+);
+const JobsBoardPanel = dynamic(
+  () =>
+    import('@/components/concordia/world/JobsBoardPanel').then((m) => ({
+      default: m.JobsBoardPanel,
+    })),
+  { ssr: false }
+);
+const LorePanel = dynamic(
+  () => import('@/components/concordia/world/LorePanel').then((m) => ({ default: m.LorePanel })),
+  { ssr: false }
+);
 
 import { LensPortalMarker } from '@/components/concordia/world/LensPortalMarker';
 import { modeManager, startLensTimeTick, stopLensTimeTick } from '@/lib/concordia/mode-manager';
@@ -126,20 +370,66 @@ import type { HUDMode } from '@/components/world-lens/HUDOverlay';
 import { SEED_MATERIALS } from '@/lib/world-lens/material-seed';
 import { cacheMaterials } from '@/lib/world-lens/validation-engine';
 import type {
-  District, CreationMode, PlacedBuildingDTU, InfrastructureDTU,
-  TerrainCell, Citation, BuildingDTU, MaterialDTU, ValidationReport,
+  District,
+  CreationMode,
+  PlacedBuildingDTU,
+  InfrastructureDTU,
+  TerrainCell,
+  Citation,
+  BuildingDTU,
+  MaterialDTU,
+  ValidationReport,
 } from '@/lib/world-lens/types';
 import type { ConcordiaDistrict } from '@/components/world-lens/ConcordiaHub';
 
 import {
-  Globe, ChevronDown, Layers, Map as MapIcon, Zap, X,
-  Radio, Eye, Play, Square, Users, Clock, Coins,
-  HeartHandshake, CalendarDays, Bell, Mic, MessageSquare,
-  ThumbsUp, BellRing, Shield, Fingerprint, Network, AudioLines,
-  Wrench, Package, Code2, Terminal, Diff, BookOpen, BoxSelect,
-  FileCode, GitBranch, Activity, Gauge, ShoppingCart,
-  Award, Stamp, FlaskConical, History, Clapperboard, ChevronRight,
-  Swords, Cpu, Gamepad2, Trophy, Briefcase,
+  Globe,
+  ChevronDown,
+  Layers,
+  Map as MapIcon,
+  Zap,
+  X,
+  Radio,
+  Eye,
+  Play,
+  Square,
+  Users,
+  Clock,
+  Coins,
+  HeartHandshake,
+  CalendarDays,
+  Bell,
+  Mic,
+  MessageSquare,
+  ThumbsUp,
+  BellRing,
+  Shield,
+  Fingerprint,
+  Network,
+  AudioLines,
+  Wrench,
+  Package,
+  Code2,
+  Terminal,
+  Diff,
+  BookOpen,
+  BoxSelect,
+  FileCode,
+  GitBranch,
+  Activity,
+  Gauge,
+  ShoppingCart,
+  Award,
+  Stamp,
+  FlaskConical,
+  History,
+  Clapperboard,
+  ChevronRight,
+  Swords,
+  Cpu,
+  Gamepad2,
+  Trophy,
+  Briefcase,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '@/lib/api/client';
@@ -212,46 +502,56 @@ function CityStreamingSection() {
   useEffect(() => {
     const handleDtuCreated = (data: unknown) => {
       const d = data as Record<string, unknown>;
-      setActivityFeed(prev => [...prev.slice(-49), {
-        id: `evt-${++eventCounter.current}`,
-        type: 'dtu-created' as const,
-        message: `DTU created: ${d.title || d.dtuId || 'untitled'}`,
-        timestamp: new Date().toISOString(),
-      }]);
+      setActivityFeed((prev) => [
+        ...prev.slice(-49),
+        {
+          id: `evt-${++eventCounter.current}`,
+          type: 'dtu-created' as const,
+          message: `DTU created: ${d.title || d.dtuId || 'untitled'}`,
+          timestamp: new Date().toISOString(),
+        },
+      ]);
       // Update stream stats
-      setActiveStreams(prev => prev.map(s =>
-        s.id === d.streamId ? { ...s, dtusCreated: (s.dtusCreated || 0) + 1 } : s
-      ));
+      setActiveStreams((prev) =>
+        prev.map((s) => (s.id === d.streamId ? { ...s, dtusCreated: (s.dtusCreated || 0) + 1 } : s))
+      );
     };
 
     const handleSale = (data: unknown) => {
       const d = data as Record<string, unknown>;
-      setActivityFeed(prev => [...prev.slice(-49), {
-        id: `evt-${++eventCounter.current}`,
-        type: 'sale' as const,
-        message: `Sale: ${d.amount || 0} CC`,
-        timestamp: new Date().toISOString(),
-      }]);
-      setActiveStreams(prev => prev.map(s =>
-        s.id === d.streamId ? {
-          ...s,
-          salesMade: (s.salesMade || 0) + 1,
-          ccEarned: (s.ccEarned || 0) + Number(d.amount || 0),
-        } : s
-      ));
+      setActivityFeed((prev) => [
+        ...prev.slice(-49),
+        {
+          id: `evt-${++eventCounter.current}`,
+          type: 'sale' as const,
+          message: `Sale: ${d.amount || 0} CC`,
+          timestamp: new Date().toISOString(),
+        },
+      ]);
+      setActiveStreams((prev) =>
+        prev.map((s) =>
+          s.id === d.streamId
+            ? {
+                ...s,
+                salesMade: (s.salesMade || 0) + 1,
+                ccEarned: (s.ccEarned || 0) + Number(d.amount || 0),
+              }
+            : s
+        )
+      );
     };
 
     const handleStreamStarted = (data: unknown) => {
       const d = data as CityStream;
-      setActiveStreams(prev => {
-        if (prev.some(s => s.id === d.id)) return prev;
+      setActiveStreams((prev) => {
+        if (prev.some((s) => s.id === d.id)) return prev;
         return [...prev, d];
       });
     };
 
     const handleStreamEnded = (data: unknown) => {
       const d = data as Record<string, unknown>;
-      setActiveStreams(prev => prev.filter(s => s.id !== d.streamId && s.id !== d.id));
+      setActiveStreams((prev) => prev.filter((s) => s.id !== d.streamId && s.id !== d.id));
       if (watchingStreamId === (d.streamId ?? d.id)) {
         setWatchingStreamId(null);
       }
@@ -326,7 +626,7 @@ function CityStreamingSection() {
     }
   };
 
-  const watchedStream = activeStreams.find(s => s.id === watchingStreamId);
+  const watchedStream = activeStreams.find((s) => s.id === watchingStreamId);
 
   // Duration helper
   const formatDuration = (startedAt: string) => {
@@ -341,7 +641,9 @@ function CityStreamingSection() {
     <div className="flex-1 overflow-y-auto p-4 space-y-4">
       {/* Connection status */}
       <div className="flex items-center gap-2 text-xs text-gray-500">
-        <div className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-green-400' : 'bg-red-400'}`} />
+        <div
+          className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-green-400' : 'bg-red-400'}`}
+        />
         {isConnected ? 'Live connection' : 'Connecting...'}
       </div>
 
@@ -403,13 +705,13 @@ function CityStreamingSection() {
             <input
               type="text"
               value={streamTitle}
-              onChange={e => setStreamTitle(e.target.value)}
+              onChange={(e) => setStreamTitle(e.target.value)}
               placeholder="Stream title..."
               className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500/50"
             />
             <select
               value={streamCityId}
-              onChange={e => setStreamCityId(e.target.value)}
+              onChange={(e) => setStreamCityId(e.target.value)}
               className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-cyan-500/50"
             >
               <option value="concordia-central">Concordia Central</option>
@@ -455,13 +757,11 @@ function CityStreamingSection() {
         </div>
 
         {activeStreams.length === 0 ? (
-          <div className="text-center py-6 text-gray-500 text-xs">
-            No active streams right now
-          </div>
+          <div className="text-center py-6 text-gray-500 text-xs">No active streams right now</div>
         ) : (
           <div className="space-y-2">
             <AnimatePresence mode="popLayout">
-              {activeStreams.map(stream => (
+              {activeStreams.map((stream) => (
                 <motion.div
                   key={stream.id}
                   initial={{ opacity: 0, scale: 0.95 }}
@@ -477,9 +777,7 @@ function CityStreamingSection() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5">
                         <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
-                        <span className="text-xs text-gray-400 truncate">
-                          {stream.creatorId}
-                        </span>
+                        <span className="text-xs text-gray-400 truncate">{stream.creatorId}</span>
                       </div>
                       <div className="text-sm text-white font-medium truncate mt-0.5">
                         {stream.title}
@@ -543,19 +841,19 @@ function CityStreamingSection() {
                   Waiting for stream activity...
                 </div>
               ) : (
-                activityFeed.map(evt => (
+                activityFeed.map((evt) => (
                   <motion.div
                     key={evt.id}
                     initial={{ opacity: 0, x: -8 }}
                     animate={{ opacity: 1, x: 0 }}
                     className="flex items-center gap-2 text-[11px] py-0.5"
                   >
-                    <span className={`w-1 h-1 rounded-full shrink-0 ${
-                      evt.type === 'sale' ? 'bg-green-400' : 'bg-cyan-400'
-                    }`} />
-                    <span className={
-                      evt.type === 'sale' ? 'text-green-400' : 'text-gray-300'
-                    }>
+                    <span
+                      className={`w-1 h-1 rounded-full shrink-0 ${
+                        evt.type === 'sale' ? 'bg-green-400' : 'bg-cyan-400'
+                      }`}
+                    />
+                    <span className={evt.type === 'sale' ? 'text-green-400' : 'text-gray-300'}>
                       {evt.message}
                     </span>
                     <span className="text-gray-600 ml-auto text-[9px]">
@@ -576,7 +874,8 @@ function CityStreamingSection() {
                 Sales: <span className="text-green-400 font-medium">{watchedStream.salesMade}</span>
               </span>
               <span className="text-gray-400">
-                Earned: <span className="text-green-400 font-medium">{watchedStream.ccEarned} CC</span>
+                Earned:{' '}
+                <span className="text-green-400 font-medium">{watchedStream.ccEarned} CC</span>
               </span>
             </div>
           </motion.div>
@@ -591,13 +890,31 @@ function CityStreamingSection() {
 type ViewMode = 'concordia' | 'district' | 'streams' | 'explore';
 
 type DistrictTool =
-  | 'snapbuild' | 'dsl' | 'terminal' | 'diff' | 'standards'
-  | 'fabrication' | 'embed' | 'notebook' | 'depgraph'
-  | 'digitaltwin' | 'sensors' | 'marketplace'
-  | 'certificates' | 'notarization' | 'stresstest'
-  | 'replay' | 'spectator' | null;
+  | 'snapbuild'
+  | 'dsl'
+  | 'terminal'
+  | 'diff'
+  | 'standards'
+  | 'fabrication'
+  | 'embed'
+  | 'notebook'
+  | 'depgraph'
+  | 'digitaltwin'
+  | 'sensors'
+  | 'marketplace'
+  | 'certificates'
+  | 'notarization'
+  | 'stresstest'
+  | 'replay'
+  | 'spectator'
+  | null;
 
-const DISTRICT_TOOLS: { key: Exclude<DistrictTool, null>; label: string; icon: React.ComponentType<{ className?: string }>; group: string }[] = [
+const DISTRICT_TOOLS: {
+  key: Exclude<DistrictTool, null>;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  group: string;
+}[] = [
   // Build
   { key: 'snapbuild', label: 'Snap Build', icon: Package, group: 'Build' },
   { key: 'dsl', label: 'DSL Editor', icon: Code2, group: 'Build' },
@@ -648,11 +965,12 @@ export default function WorldLensPage() {
       stopLensTimeTick();
     }
     return () => stopLensTimeTick();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inputMode, worldSocket.isConnected]);
 
   // Mode-specific state hooks (always called — conditionally rendered)
-  const combatCtx   = useCombatState(DEFAULT_SPECIAL);
-  const vehicleCtx  = useVehicleState();
+  const combatCtx = useCombatState(DEFAULT_SPECIAL);
+  const vehicleCtx = useVehicleState();
   const dialogueCtx = useDialogue(DEFAULT_SPECIAL);
 
   // ── State ─────────────────────────────────────────────────────
@@ -667,14 +985,60 @@ export default function WorldLensPage() {
   const [toolsExpanded, setToolsExpanded] = useState(false);
 
   // 3D Explore mode state
-  const [cameraMode, setCameraMode] = useState<'isometric' | 'follow' | 'free' | 'interior' | 'cinematic'>('follow');
-  const [concordiaTheme, setConcordiaTheme] = useState<'neon-punk' | 'classic' | 'minimal'>('neon-punk');
+  const [cameraMode, setCameraMode] = useState<
+    'isometric' | 'follow' | 'free' | 'interior' | 'cinematic'
+  >('follow');
+  const [concordiaTheme, setConcordiaTheme] = useState<'neon-punk' | 'classic' | 'minimal'>(
+    'neon-punk'
+  );
   const [concordiaRenderStyle, setConcordiaRenderStyle] = useState<'pbr' | 'toon'>('pbr');
-  const [showPanel, setShowPanel] = useState<'none' | 'inventory' | 'quests' | 'chat' | 'map' | 'crafting' | 'players' | 'profile' | 'collaboration' | 'livecollab' | 'events' | 'socialproof' | 'notifications' | 'smartnotify' | 'moderation' | 'ownership' | 'federation' | 'voice' | 'voiceassist' | 'combat' | 'skills' | 'modes' | 'guild' | 'season' | 'npcshop' | 'leaderboard' | 'worldevents' | 'arena' | 'jobs' | 'lore'>('none');
+  const [showPanel, setShowPanel] = useState<
+    | 'none'
+    | 'inventory'
+    | 'quests'
+    | 'chat'
+    | 'map'
+    | 'crafting'
+    | 'players'
+    | 'profile'
+    | 'collaboration'
+    | 'livecollab'
+    | 'events'
+    | 'socialproof'
+    | 'notifications'
+    | 'smartnotify'
+    | 'moderation'
+    | 'ownership'
+    | 'federation'
+    | 'voice'
+    | 'voiceassist'
+    | 'combat'
+    | 'skills'
+    | 'modes'
+    | 'guild'
+    | 'season'
+    | 'npcshop'
+    | 'leaderboard'
+    | 'worldevents'
+    | 'arena'
+    | 'jobs'
+    | 'lore'
+  >('none');
   // Local player avatar — mutable so moves update it in place. On
   // first mount we ask the server for saved state (via player:load)
   // and land back wherever the user logged off.
-  type PlayerAnimationClip = 'idle' | 'walk' | 'run' | 'sit' | 'build' | 'inspect' | 'wave' | 'clap' | 'point' | 'celebrate' | 'craft';
+  type PlayerAnimationClip =
+    | 'idle'
+    | 'walk'
+    | 'run'
+    | 'sit'
+    | 'build'
+    | 'inspect'
+    | 'wave'
+    | 'clap'
+    | 'point'
+    | 'celebrate'
+    | 'craft';
   const [playerAvatar, setPlayerAvatar] = useState<{
     id: string;
     name: string;
@@ -709,11 +1073,19 @@ export default function WorldLensPage() {
     currentAnimation: 'idle',
   });
   // Lens portal buildings loaded from server
-  const [portals, setPortals] = useState<Array<{
-    id: string; lens_id: string; label: string; x: number; y: number;
-    accessible: boolean; required_skill_level: number;
-    npc_name?: string; npc_title?: string;
-  }>>([]);
+  const [portals, setPortals] = useState<
+    Array<{
+      id: string;
+      lens_id: string;
+      label: string;
+      x: number;
+      y: number;
+      accessible: boolean;
+      required_skill_level: number;
+      npc_name?: string;
+      npc_title?: string;
+    }>
+  >([]);
   // When a portal is entered, overrides the LensWorkspace lensId
   const [activeLensOverride, setActiveLensOverride] = useState<string | null>(null);
   // Portal within E-press range
@@ -724,15 +1096,28 @@ export default function WorldLensPage() {
   // AnimationClip union that AvatarSystem3D accepts; remote player
   // actions that aren't in that set get coerced to 'idle' at the
   // mapping site below.
-  const [otherPlayers, setOtherPlayers] = useState<Array<{
-    id: string;
-    name: string;
-    appearance: typeof playerAvatar.appearance;
-    position: { x: number; y: number; z: number };
-    rotation: number;
-    currentAnimation: 'idle' | 'walk' | 'run' | 'sit' | 'build' | 'inspect' | 'wave' | 'clap' | 'point' | 'celebrate' | 'craft';
-    timestamp: number;
-  }>>([]);
+  const [otherPlayers, setOtherPlayers] = useState<
+    Array<{
+      id: string;
+      name: string;
+      appearance: typeof playerAvatar.appearance;
+      position: { x: number; y: number; z: number };
+      rotation: number;
+      currentAnimation:
+        | 'idle'
+        | 'walk'
+        | 'run'
+        | 'sit'
+        | 'build'
+        | 'inspect'
+        | 'wave'
+        | 'clap'
+        | 'point'
+        | 'celebrate'
+        | 'craft';
+      timestamp: number;
+    }>
+  >([]);
 
   // ── Combat state ────────────────────────────────────────────────
   // Source of truth for combat HUD. Mirrors what the server sends
@@ -760,7 +1145,12 @@ export default function WorldLensPage() {
     coverBonus: number;
     isDead: boolean;
     damageNumbers: Array<{ id: string; amount: number; isCrit: boolean; timestamp: number }>;
-    combatLog: Array<{ id: string; message: string; type: 'damage-dealt' | 'damage-taken' | 'block' | 'heal' | 'death' | 'info'; timestamp: string }>;
+    combatLog: Array<{
+      id: string;
+      message: string;
+      type: 'damage-dealt' | 'damage-taken' | 'block' | 'heal' | 'death' | 'info';
+      timestamp: string;
+    }>;
     damageFlash: boolean;
   }>({
     health: 100,
@@ -781,8 +1171,14 @@ export default function WorldLensPage() {
 
   // AAA systems: deformation store, combat music, delta compression, weather modifiers
   const deformStoreRef = useRef(new DeformationStore());
-  const deformLookupRef = useRef<((id: string) => { visible: boolean; userData: Record<string, unknown> } | undefined) | null>(null);
-  const combatMusicRef = useRef<{ onCombatEvent: (intensity: number) => void; update: (delta: number, inCombat: boolean) => void; dispose: () => void } | null>(null);
+  const deformLookupRef = useRef<
+    ((id: string) => { visible: boolean; userData: Record<string, unknown> } | undefined) | null
+  >(null);
+  const combatMusicRef = useRef<{
+    onCombatEvent: (intensity: number) => void;
+    update: (delta: number, inCombat: boolean) => void;
+    dispose: () => void;
+  } | null>(null);
   const prevCharStateRef = useRef<CharState | null>(null);
   const inputSeqRef = useRef(0);
   const reconRef = useRef<ReconciliationBuffer | null>(null);
@@ -791,13 +1187,14 @@ export default function WorldLensPage() {
     if (!reconRef.current) {
       reconRef.current = new ReconciliationBuffer((state, input) => {
         // Minimal KCC sim: apply velocity from input flags, same constants as AvatarSystem3D
-        const WALK = 5.0; const RUN = 12.0;
+        const WALK = 5.0;
+        const RUN = 12.0;
         const spd = input.sprint ? RUN : WALK;
         return {
           ...state,
           seq: input.seq,
           position: {
-            x: state.position.x + input.strafe  * spd * input.delta,
+            x: state.position.x + input.strafe * spd * input.delta,
             y: state.position.y,
             z: state.position.z + input.forward * spd * input.delta,
           },
@@ -825,7 +1222,10 @@ export default function WorldLensPage() {
     damageFlash: false,
   });
   const pushCombatLog = useCallback(
-    (message: string, type: 'damage-dealt' | 'damage-taken' | 'block' | 'heal' | 'death' | 'info') => {
+    (
+      message: string,
+      type: 'damage-dealt' | 'damage-taken' | 'block' | 'heal' | 'death' | 'info'
+    ) => {
       combatLogIdRef.current++;
       const now = new Date();
       const ts = `${now.getMinutes()}:${String(now.getSeconds()).padStart(2, '0')}`;
@@ -837,10 +1237,12 @@ export default function WorldLensPage() {
         ].slice(0, 40),
       }));
     },
-    [],
+    []
   );
 
-  const [visibleLayers, setVisibleLayers] = useState(new Set(['water', 'power', 'drainage', 'road', 'data']));
+  const [visibleLayers, setVisibleLayers] = useState(
+    new Set(['water', 'power', 'drainage', 'road', 'data'])
+  );
   const [showValidation, setShowValidation] = useState(false);
   const [showWeather, setShowWeather] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
@@ -864,15 +1266,17 @@ export default function WorldLensPage() {
   // Fetch lens portal buildings for this world
   useEffect(() => {
     fetch('/api/lens-portals?worldId=concordia-hub')
-      .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d?.portals) setPortals(d.portals); })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d?.portals) setPortals(d.portals);
+      })
       .catch(() => {});
   }, []);
 
   // Proximity check: update nearPortalId whenever the player moves
   useEffect(() => {
-    const near = portals.find(p =>
-      Math.hypot(p.x - playerAvatar.position.x, p.y - playerAvatar.position.y) < 3
+    const near = portals.find(
+      (p) => Math.hypot(p.x - playerAvatar.position.x, p.y - playerAvatar.position.y) < 3
     );
     setNearPortalId(near?.id ?? null);
   }, [playerAvatar.position, portals]);
@@ -881,8 +1285,8 @@ export default function WorldLensPage() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key !== 'e' && e.key !== 'E') return;
-      const near = portals.find(p =>
-        Math.hypot(p.x - playerAvatar.position.x, p.y - playerAvatar.position.y) < 3
+      const near = portals.find(
+        (p) => Math.hypot(p.x - playerAvatar.position.x, p.y - playerAvatar.position.y) < 3
       );
       if (near?.accessible) {
         setActiveLensOverride(near.lens_id);
@@ -891,7 +1295,6 @@ export default function WorldLensPage() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [portals, playerAvatar.position]);
 
   // ── MMO multiplayer wiring ──────────────────────────────────────────
@@ -908,7 +1311,13 @@ export default function WorldLensPage() {
     const handleLoadAck = (msg: unknown) => {
       const data = msg as {
         ok: boolean;
-        state?: { x: number; y: number; z: number; rotation?: number; currentAnimation?: string } | null;
+        state?: {
+          x: number;
+          y: number;
+          z: number;
+          rotation?: number;
+          currentAnimation?: string;
+        } | null;
         deformations?: DeformationRecord[];
       };
       if (data?.ok && data.state) {
@@ -916,7 +1325,8 @@ export default function WorldLensPage() {
           ...prev,
           position: { x: data.state!.x, y: data.state!.y, z: data.state!.z },
           rotation: data.state!.rotation ?? 0,
-          currentAnimation: (data.state!.currentAnimation as typeof prev.currentAnimation) ?? 'idle',
+          currentAnimation:
+            (data.state!.currentAnimation as typeof prev.currentAnimation) ?? 'idle',
         }));
       }
       if (data?.deformations?.length) {
@@ -936,9 +1346,13 @@ export default function WorldLensPage() {
         cityId: string;
         users: Array<{
           userId: string;
-          x: number; y: number; z: number;
-          direction?: number; rotation?: number;
-          action?: string; avatar?: unknown;
+          x: number;
+          y: number;
+          z: number;
+          direction?: number;
+          rotation?: number;
+          action?: string;
+          avatar?: unknown;
           displayName?: string;
         }>;
       };
@@ -962,8 +1376,31 @@ export default function WorldLensPage() {
             // union that the renderer can't handle.
             currentAnimation: (() => {
               const a = String(u.action || '').toLowerCase();
-              const validClips = new Set(['idle','walk','run','sit','build','inspect','wave','clap','point','celebrate','craft']);
-              return (validClips.has(a) ? a : 'idle') as 'idle' | 'walk' | 'run' | 'sit' | 'build' | 'inspect' | 'wave' | 'clap' | 'point' | 'celebrate' | 'craft';
+              const validClips = new Set([
+                'idle',
+                'walk',
+                'run',
+                'sit',
+                'build',
+                'inspect',
+                'wave',
+                'clap',
+                'point',
+                'celebrate',
+                'craft',
+              ]);
+              return (validClips.has(a) ? a : 'idle') as
+                | 'idle'
+                | 'walk'
+                | 'run'
+                | 'sit'
+                | 'build'
+                | 'inspect'
+                | 'wave'
+                | 'clap'
+                | 'point'
+                | 'celebrate'
+                | 'craft';
             })(),
             timestamp: Date.now(),
           });
@@ -976,7 +1413,17 @@ export default function WorldLensPage() {
     };
 
     const handleMoveAck = (msg: unknown) => {
-      const data = msg as { nearby?: Array<{ userId: string; x: number; y: number; z: number; direction?: number; action?: string; displayName?: string }>; };
+      const data = msg as {
+        nearby?: Array<{
+          userId: string;
+          x: number;
+          y: number;
+          z: number;
+          direction?: number;
+          action?: string;
+          displayName?: string;
+        }>;
+      };
       if (!data?.nearby?.length) return;
       // Short-circuit: if the ack includes nearby players we apply
       // them immediately without waiting for the next broadcast tick.
@@ -1003,15 +1450,15 @@ export default function WorldLensPage() {
       if (!data?.prev) return;
 
       const serverMsg: ServerStateMsg = {
-        seq:   data.seq ?? 0,
-        tick:  0,
+        seq: data.seq ?? 0,
+        tick: 0,
         state: {
-          seq:      data.seq ?? 0,
+          seq: data.seq ?? 0,
           position: { x: data.prev.x, y: data.prev.y, z: data.prev.z },
           velocity: { x: 0, y: 0, z: 0 },
           onGround: true,
-          health:   combatStateRef.current.health,
-          stamina:  combatStateRef.current.stamina,
+          health: combatStateRef.current.health,
+          stamina: combatStateRef.current.stamina,
         },
       };
 
@@ -1021,7 +1468,7 @@ export default function WorldLensPage() {
         const reconState = reconRef.current.reconcile(serverMsg);
         const err = Math.hypot(
           reconState.position.x - (prevCharStateRef.current?.position.x ?? reconState.position.x),
-          reconState.position.z - (prevCharStateRef.current?.position.z ?? reconState.position.z),
+          reconState.position.z - (prevCharStateRef.current?.position.z ?? reconState.position.z)
         );
         if (err < ReconciliationBuffer.SNAP_THRESHOLD) {
           reconPos = reconState.position;
@@ -1057,11 +1504,14 @@ export default function WorldLensPage() {
         attackerStamina?: number;
       };
       if (!data?.ok) {
-        if (data?.error === 'out_of_range')       pushCombatLog('Target out of range.', 'info');
-        else if (data?.error === 'insufficient_stamina') pushCombatLog('Too tired to attack.', 'info');
-        else if (data?.error === 'different_city') pushCombatLog('Target is in another city.', 'info');
+        if (data?.error === 'out_of_range') pushCombatLog('Target out of range.', 'info');
+        else if (data?.error === 'insufficient_stamina')
+          pushCombatLog('Too tired to attack.', 'info');
+        else if (data?.error === 'different_city')
+          pushCombatLog('Target is in another city.', 'info');
         else if (data?.error === 'target_not_found') pushCombatLog('Target lost.', 'info');
-        else if (data?.error) pushCombatLog(`Attack failed: ${data.error.replace(/_/g, ' ')}`, 'info');
+        else if (data?.error)
+          pushCombatLog(`Attack failed: ${data.error.replace(/_/g, ' ')}`, 'info');
         return;
       }
       dmgNumIdRef.current++;
@@ -1071,8 +1521,12 @@ export default function WorldLensPage() {
         target: prev.target
           ? {
               ...prev.target,
-              health: typeof data.targetHealth === 'number' ? data.targetHealth : prev.target.health,
-              maxHealth: typeof data.targetMaxHealth === 'number' ? data.targetMaxHealth : prev.target.maxHealth,
+              health:
+                typeof data.targetHealth === 'number' ? data.targetHealth : prev.target.health,
+              maxHealth:
+                typeof data.targetMaxHealth === 'number'
+                  ? data.targetMaxHealth
+                  : prev.target.maxHealth,
             }
           : prev.target,
         damageNumbers: [
@@ -1090,7 +1544,7 @@ export default function WorldLensPage() {
         : (combatStateRef.current.target?.name ?? 'target');
       pushCombatLog(
         `You hit ${targetName} for ${data.damage} damage${data.isCrit ? ' (crit)' : ''}.`,
-        'damage-dealt',
+        'damage-dealt'
       );
       combatMusicRef.current?.onCombatEvent(1.0);
 
@@ -1121,10 +1575,7 @@ export default function WorldLensPage() {
         maxHealth: data.targetMaxHealth,
         damageFlash: true,
       }));
-      pushCombatLog(
-        `Took ${data.damage} damage${data.isCrit ? ' (crit)' : ''}.`,
-        'damage-taken',
-      );
+      pushCombatLog(`Took ${data.damage} damage${data.isCrit ? ' (crit)' : ''}.`, 'damage-taken');
       // Clear the flash after 300ms so pulsing red overlay fades
       setTimeout(() => {
         setCombatState((prev) => ({ ...prev, damageFlash: false }));
@@ -1262,12 +1713,16 @@ export default function WorldLensPage() {
   useEffect(() => {
     const initCombatMusic = () => {
       if (combatMusicRef.current) return;
-      import('@/lib/world-lens/spatial-audio').then(({ CombatMusicSystem }) => {
-        const ctx = new AudioContext();
-        const cms = new CombatMusicSystem(ctx);
-        cms.start();
-        combatMusicRef.current = cms;
-      }).catch(() => { /* optional */ });
+      import('@/lib/world-lens/spatial-audio')
+        .then(({ CombatMusicSystem }) => {
+          const ctx = new AudioContext();
+          const cms = new CombatMusicSystem(ctx);
+          cms.start();
+          combatMusicRef.current = cms;
+        })
+        .catch(() => {
+          /* optional */
+        });
     };
     window.addEventListener('pointerdown', initCombatMusic, { once: true });
     return () => {
@@ -1306,38 +1761,47 @@ export default function WorldLensPage() {
   });
 
   const runWorldAction = useRunArtifact('world');
-  const [worldActionResult, setWorldActionResult] = useState<{ action: string; result: Record<string, unknown> } | null>(null);
+  const [worldActionResult, setWorldActionResult] = useState<{
+    action: string;
+    result: Record<string, unknown>;
+  } | null>(null);
   const [worldActiveAction, setWorldActiveAction] = useState<string | null>(null);
 
-  const handleWorldAction = useCallback(async (action: string) => {
-    const id = _buildingItems[0]?.id;
-    if (!id) return;
-    setWorldActiveAction(action);
-    try {
-      const res = await runWorldAction.mutateAsync({ id, action });
-      if (res.ok) setWorldActionResult({ action, result: res.result as Record<string, unknown> });
-    } finally {
-      setWorldActiveAction(null);
-    }
-  }, [_buildingItems, runWorldAction]);
+  const handleWorldAction = useCallback(
+    async (action: string) => {
+      const id = _buildingItems[0]?.id;
+      if (!id) return;
+      setWorldActiveAction(action);
+      try {
+        const res = await runWorldAction.mutateAsync({ id, action });
+        if (res.ok) setWorldActionResult({ action, result: res.result as Record<string, unknown> });
+      } finally {
+        setWorldActiveAction(null);
+      }
+    },
+    [_buildingItems, runWorldAction]
+  );
 
   // ── Handlers ──────────────────────────────────────────────────
 
   // ── Combat handlers ───────────────────────────────────────────
-  const handleSelectCombatTarget = useCallback((p: { id: string; name: string; type: 'enemy' | 'player' }) => {
-    setCombatState((prev) => ({
-      ...prev,
-      target: {
-        id: p.id,
-        name: p.name,
-        type: p.type,
-        health: 100,
-        maxHealth: 100,
-        level: 1,
-      },
-    }));
-    setShowPanel('combat');
-  }, []);
+  const handleSelectCombatTarget = useCallback(
+    (p: { id: string; name: string; type: 'enemy' | 'player' }) => {
+      setCombatState((prev) => ({
+        ...prev,
+        target: {
+          id: p.id,
+          name: p.name,
+          type: p.type,
+          health: 100,
+          maxHealth: 100,
+          level: 1,
+        },
+      }));
+      setShowPanel('combat');
+    },
+    []
+  );
 
   const handleAttack = useCallback(() => {
     const target = combatStateRef.current.target;
@@ -1380,9 +1844,30 @@ export default function WorldLensPage() {
     setSelectedTerrain(null);
     // Generate mock citations for demo
     setCitations([
-      { id: 'c1', citingDTU: building.dtuId, citedDTU: 'comp-concrete-found-v2', citedCreator: '@engineer_jane', timestamp: new Date().toISOString(), context: 'foundation' },
-      { id: 'c2', citingDTU: building.dtuId, citedDTU: 'mat-usb-a', citedCreator: '@materials_lab', timestamp: new Date().toISOString(), context: 'beam material' },
-      { id: 'c3', citingDTU: building.dtuId, citedDTU: 'infra-water-1', citedCreator: '@civil_sara', timestamp: new Date().toISOString(), context: 'water connection' },
+      {
+        id: 'c1',
+        citingDTU: building.dtuId,
+        citedDTU: 'comp-concrete-found-v2',
+        citedCreator: '@engineer_jane',
+        timestamp: new Date().toISOString(),
+        context: 'foundation',
+      },
+      {
+        id: 'c2',
+        citingDTU: building.dtuId,
+        citedDTU: 'mat-usb-a',
+        citedCreator: '@materials_lab',
+        timestamp: new Date().toISOString(),
+        context: 'beam material',
+      },
+      {
+        id: 'c3',
+        citingDTU: building.dtuId,
+        citedDTU: 'infra-water-1',
+        citedCreator: '@civil_sara',
+        timestamp: new Date().toISOString(),
+        context: 'water connection',
+      },
     ]);
   }, []);
 
@@ -1393,13 +1878,16 @@ export default function WorldLensPage() {
     setCitations([]);
   }, []);
 
-  const handleTerrainClick = useCallback((x: number, y: number) => {
-    const cell = activeDistrict.terrain.grid[y]?.[x] || null;
-    setSelectedTerrain(cell);
-    setSelectedBuilding(null);
-    setSelectedInfra(null);
-    setCitations([]);
-  }, [activeDistrict]);
+  const handleTerrainClick = useCallback(
+    (x: number, y: number) => {
+      const cell = activeDistrict.terrain.grid[y]?.[x] || null;
+      setSelectedTerrain(cell);
+      setSelectedBuilding(null);
+      setSelectedInfra(null);
+      setCitations([]);
+    },
+    [activeDistrict]
+  );
 
   const handleCloseInspector = useCallback(() => {
     setSelectedBuilding(null);
@@ -1410,7 +1898,7 @@ export default function WorldLensPage() {
   }, []);
 
   const handleToggleLayer = useCallback((layer: string) => {
-    setVisibleLayers(prev => {
+    setVisibleLayers((prev) => {
       const next = new Set(prev);
       if (next.has(layer)) next.delete(layer);
       else next.add(layer);
@@ -1419,54 +1907,63 @@ export default function WorldLensPage() {
   }, []);
 
   const handleRotate = useCallback(() => {
-    setRotation(prev => ((prev + 1) % 4) as 0 | 1 | 2 | 3);
+    setRotation((prev) => ((prev + 1) % 4) as 0 | 1 | 2 | 3);
   }, []);
 
-  const handlePublishBuilding = useCallback((building: BuildingDTU) => {
-    createBuilding({
-      title: building.name,
-      data: building as unknown as Record<string, unknown>,
-    });
-    setCreationMode(null);
-    // Add to district
-    setActiveDistrict(prev => ({
-      ...prev,
-      buildings: [
-        ...prev.buildings,
-        {
-          id: `placed-${building.id}`,
-          dtuId: building.id,
-          position: { x: 10 + Math.random() * 5, y: 10 + Math.random() * 5 },
-          rotation: 0,
-          validationStatus: building.validationReport?.overallPass ? 'validated' : 'experimental',
-          creator: building.creator,
-          placedAt: new Date().toISOString().slice(0, 10),
-        },
-      ],
-    }));
-  }, [createBuilding]);
+  const handlePublishBuilding = useCallback(
+    (building: BuildingDTU) => {
+      createBuilding({
+        title: building.name,
+        data: building as unknown as Record<string, unknown>,
+      });
+      setCreationMode(null);
+      // Add to district
+      setActiveDistrict((prev) => ({
+        ...prev,
+        buildings: [
+          ...prev.buildings,
+          {
+            id: `placed-${building.id}`,
+            dtuId: building.id,
+            position: { x: 10 + Math.random() * 5, y: 10 + Math.random() * 5 },
+            rotation: 0,
+            validationStatus: building.validationReport?.overallPass ? 'validated' : 'experimental',
+            creator: building.creator,
+            placedAt: new Date().toISOString().slice(0, 10),
+          },
+        ],
+      }));
+    },
+    [createBuilding]
+  );
 
-  const handlePublishComponent = useCallback((component: {
-    name: string;
-    category: string;
-    materialId: string;
-    dimensions: { length: number; width: number; height: number };
-    crossSection: string;
-  }) => {
-    createBuilding({
-      title: component.name,
-      data: component as unknown as Record<string, unknown>,
-    });
-    setCreationMode(null);
-  }, [createBuilding]);
+  const handlePublishComponent = useCallback(
+    (component: {
+      name: string;
+      category: string;
+      materialId: string;
+      dimensions: { length: number; width: number; height: number };
+      crossSection: string;
+    }) => {
+      createBuilding({
+        title: component.name,
+        data: component as unknown as Record<string, unknown>,
+      });
+      setCreationMode(null);
+    },
+    [createBuilding]
+  );
 
-  const handlePublishRawDTU = useCallback((dtu: Record<string, unknown>) => {
-    createBuilding({
-      title: (dtu.name as string) || 'Raw DTU',
-      data: dtu,
-    });
-    setCreationMode(null);
-  }, [createBuilding]);
+  const handlePublishRawDTU = useCallback(
+    (dtu: Record<string, unknown>) => {
+      createBuilding({
+        title: (dtu.name as string) || 'Raw DTU',
+        data: dtu,
+      });
+      setCreationMode(null);
+    },
+    [createBuilding]
+  );
 
   const handleConcordiaDistrictSelect = useCallback((_district: ConcordiaDistrict) => {
     // In future: load actual district data from server
@@ -1548,7 +2045,7 @@ export default function WorldLensPage() {
             theme={concordiaTheme}
             renderStyle={concordiaRenderStyle}
             onBuildingClick={(id) => {
-              const b = activeDistrict.buildings.find(b => b.id === id);
+              const b = activeDistrict.buildings.find((b) => b.id === id);
               if (b) setSelectedBuilding(b);
             }}
             onTerrainClick={() => {}}
@@ -1562,11 +2059,11 @@ export default function WorldLensPage() {
           />
           {/* Theme picker — 3 swatches + PBR/Toon toggle top-right */}
           <div className="absolute top-4 right-4 z-20 flex items-center gap-1.5 bg-black/50 border border-white/10 rounded-xl px-2 py-1.5 pointer-events-auto">
-            {([
+            {[
               { id: 'neon-punk' as const, swatch: '#6366f1', label: 'Neon Punk' },
-              { id: 'classic'  as const, swatch: '#e8c97a', label: 'Classic' },
-              { id: 'minimal'  as const, swatch: '#94a3b8', label: 'Minimal' },
-            ]).map(t => (
+              { id: 'classic' as const, swatch: '#e8c97a', label: 'Classic' },
+              { id: 'minimal' as const, swatch: '#94a3b8', label: 'Minimal' },
+            ].map((t) => (
               <button
                 key={t.id}
                 onClick={() => setConcordiaTheme(t.id)}
@@ -1577,23 +2074,20 @@ export default function WorldLensPage() {
             ))}
             <div className="w-px h-4 bg-white/20 mx-0.5" />
             <button
-              onClick={() => setConcordiaRenderStyle(s => s === 'pbr' ? 'toon' : 'pbr')}
-              title={concordiaRenderStyle === 'pbr' ? 'Switch to Toon (cel shading)' : 'Switch to PBR (realistic)'}
+              onClick={() => setConcordiaRenderStyle((s) => (s === 'pbr' ? 'toon' : 'pbr'))}
+              title={
+                concordiaRenderStyle === 'pbr'
+                  ? 'Switch to Toon (cel shading)'
+                  : 'Switch to PBR (realistic)'
+              }
               className={`px-2 py-0.5 text-[10px] font-bold rounded-md transition-colors ${concordiaRenderStyle === 'toon' ? 'bg-indigo-500/70 text-white' : 'bg-white/10 text-white/60 hover:bg-white/20 hover:text-white'}`}
             >
               {concordiaRenderStyle === 'pbr' ? 'PBR' : 'Toon'}
             </button>
           </div>
           {/* 3D scene rendering layers */}
-          <TerrainRenderer
-            districts={[]}
-            lodCenter={{ x: 0, z: 0 }}
-            quality="medium"
-          />
-          <BuildingRenderer3D
-            buildings={[]}
-            viewMode="normal"
-          />
+          <TerrainRenderer districts={[]} lodCenter={{ x: 0, z: 0 }} quality="medium" />
+          <BuildingRenderer3D buildings={[]} viewMode="normal" />
           <SkyWeatherRenderer
             timeOfDay={12}
             weather="clear"
@@ -1625,8 +2119,12 @@ export default function WorldLensPage() {
             }}
             weatherOverride={weatherData ?? undefined}
           />
-          <AnimationManager><></></AnimationManager>
-          <GameJuice><></></GameJuice>
+          <AnimationManager>
+            <></>
+          </AnimationManager>
+          <GameJuice>
+            <></>
+          </GameJuice>
           <LoadingTransitions
             transition="district"
             destination={{ name: 'Loading...' }}
@@ -1671,14 +2169,18 @@ export default function WorldLensPage() {
                     seq,
                     delta: dt,
                     forward: dz / len,
-                    strafe:  dx / len,
+                    strafe: dx / len,
                     jump: false,
                     sprint: false,
                     yaw: rotation,
                   };
                   const currentState: CharState = prev ?? {
-                    seq: 0, position: pos, velocity: { x: 0, y: 0, z: 0 },
-                    onGround: true, health: combatState.health, stamina: combatState.stamina,
+                    seq: 0,
+                    position: pos,
+                    velocity: { x: 0, y: 0, z: 0 },
+                    onGround: true,
+                    health: combatState.health,
+                    stamina: combatState.stamina,
                   };
                   const predicted = getRecon().predict(currentState, inputFrame);
 
@@ -1708,7 +2210,7 @@ export default function WorldLensPage() {
             />
           </div>
           {/* Lens portal markers — rendered as 2D overlays */}
-          {portals.map(portal => {
+          {portals.map((portal) => {
             const isNearby = nearPortalId === portal.id;
             return (
               <div
@@ -1722,7 +2224,12 @@ export default function WorldLensPage() {
                 }}
               >
                 <LensPortalMarker
-                  portal={{ ...portal, district: 'concordia', building_type: 'portal', description: undefined }}
+                  portal={{
+                    ...portal,
+                    district: 'concordia',
+                    building_type: 'portal',
+                    description: undefined,
+                  }}
                   isNearby={isNearby}
                   onEnter={(p) => {
                     setActiveLensOverride(p.lens_id);
@@ -1735,7 +2242,16 @@ export default function WorldLensPage() {
           {/* Camera mode controls */}
           <div className="absolute top-4 right-4 z-20">
             <CameraControls
-              cameraState={{ mode: cameraMode, zoom: 15, rotation: 'NE', followTarget: 'avatar', cinematicPlaying: false, cinematicTime: 0, cinematicDuration: 0, transitioning: false }}
+              cameraState={{
+                mode: cameraMode,
+                zoom: 15,
+                rotation: 'NE',
+                followTarget: 'avatar',
+                cinematicPlaying: false,
+                cinematicTime: 0,
+                cinematicDuration: 0,
+                transitioning: false,
+              }}
               onModeChange={(mode) => setCameraMode(mode as typeof cameraMode)}
               onZoom={() => {}}
               onRotate={() => {}}
@@ -1773,7 +2289,10 @@ export default function WorldLensPage() {
           {inputMode === 'driving' && vehicleCtx.state.occupied && (
             <VehicleHUD
               state={vehicleCtx.state}
-              onExit={() => { vehicleCtx.exitVehicle(); modeManager.pop(); }}
+              onExit={() => {
+                vehicleCtx.exitVehicle();
+                modeManager.pop();
+              }}
               onHorn={() => {}}
               onShiftUp={vehicleCtx.shiftUp}
               onShiftDown={vehicleCtx.shiftDown}
@@ -1784,7 +2303,10 @@ export default function WorldLensPage() {
               state={dialogueCtx.state}
               special={DEFAULT_SPECIAL}
               onSend={dialogueCtx.send}
-              onClose={() => { dialogueCtx.endDialogue(); modeManager.pop(); }}
+              onClose={() => {
+                dialogueCtx.endDialogue();
+                modeManager.pop();
+              }}
             />
           )}
           {inputMode === 'creation' && (
@@ -1798,24 +2320,35 @@ export default function WorldLensPage() {
             <LensWorkspace
               lensId="world"
               lensIdOverride={activeLensOverride ?? undefined}
-              lensName={activeLensOverride
-                ? activeLensOverride.charAt(0).toUpperCase() + activeLensOverride.slice(1).replace(/-/g, ' ')
-                : 'Concordia'}
+              lensName={
+                activeLensOverride
+                  ? activeLensOverride.charAt(0).toUpperCase() +
+                    activeLensOverride.slice(1).replace(/-/g, ' ')
+                  : 'Concordia'
+              }
               playerPosition={playerAvatar.position}
-              onClose={() => { modeManager.pop(); setActiveLensOverride(null); }}
+              onClose={() => {
+                modeManager.pop();
+                setActiveLensOverride(null);
+              }}
             />
           )}
           {(inputMode === 'social' || inputMode === 'exploration') && (
             <>
               <EmoteWheel
                 onEmote={(emoteId) => {
-                  setPlayerAvatar(prev => ({ ...prev, currentAnimation: 'wave' }));
+                  setPlayerAvatar((prev) => ({ ...prev, currentAnimation: 'wave' }));
                   if (worldSocket.isConnected) {
                     worldSocket.emit('player:move', {
-                      cityId: activeDistrict.id, districtId: activeDistrict.id,
-                      x: playerAvatar.position.x, y: playerAvatar.position.y, z: playerAvatar.position.z,
-                      rotation: playerAvatar.rotation, direction: playerAvatar.rotation,
-                      action: emoteId, currentAnimation: emoteId,
+                      cityId: activeDistrict.id,
+                      districtId: activeDistrict.id,
+                      x: playerAvatar.position.x,
+                      y: playerAvatar.position.y,
+                      z: playerAvatar.position.z,
+                      rotation: playerAvatar.rotation,
+                      direction: playerAvatar.rotation,
+                      action: emoteId,
+                      currentAnimation: emoteId,
                     });
                   }
                 }}
@@ -1829,10 +2362,19 @@ export default function WorldLensPage() {
           )}
           {inputMode === 'spectator' && (
             <SpectatorControls
-              camera={{ moveForward: () => {}, moveBack: () => {}, moveLeft: () => {}, moveRight: () => {}, moveUp: () => {}, moveDown: () => {}, rotate: (_dx, _dy) => {}, zoom: (_d) => {} }}
+              camera={{
+                moveForward: () => {},
+                moveBack: () => {},
+                moveLeft: () => {},
+                moveRight: () => {},
+                moveUp: () => {},
+                moveDown: () => {},
+                rotate: (_dx, _dy) => {},
+                zoom: (_d) => {},
+              }}
               onFollowPlayer={() => {}}
               onTimeScrub={() => {}}
-              availablePlayers={otherPlayers.map(p => ({ id: p.id, name: p.name }))}
+              availablePlayers={otherPlayers.map((p) => ({ id: p.id, name: p.name }))}
             />
           )}
           {/* Mobile touch controls — gated internally by useIsTouchDevice */}
@@ -1848,7 +2390,10 @@ export default function WorldLensPage() {
             onThrottle={vehicleCtx.setThrottle}
             onBrake={vehicleCtx.setBrake}
             onSteer={vehicleCtx.setSteering}
-            onExitVehicle={() => { vehicleCtx.exitVehicle(); modeManager.pop(); }}
+            onExitVehicle={() => {
+              vehicleCtx.exitVehicle();
+              modeManager.pop();
+            }}
             hotbarCount={combatCtx.state.hotbar.slots.length}
             onHotbar={combatCtx.activateSkill}
           />
@@ -1857,36 +2402,38 @@ export default function WorldLensPage() {
 
           {/* Gameplay toolbar */}
           <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1 bg-black/70 border border-white/10 rounded-xl px-2 py-1.5 pointer-events-auto">
-            {([
-              { key: 'inventory', label: 'Inventory', icon: Layers },
-              { key: 'quests', label: 'Quests', icon: Zap },
-              { key: 'chat', label: 'Chat', icon: MessageSquare },
-              { key: 'map', label: 'Map', icon: MapIcon },
-              { key: 'crafting', label: 'Craft', icon: Layers },
-              { key: 'players', label: 'Players', icon: Users },
-              { key: 'profile', label: 'Profile', icon: Eye },
-              { key: 'collaboration', label: 'Collab', icon: HeartHandshake },
-              { key: 'livecollab', label: 'Live Co-op', icon: Radio },
-              { key: 'events', label: 'Events', icon: CalendarDays },
-              { key: 'socialproof', label: 'Social', icon: ThumbsUp },
-              { key: 'notifications', label: 'Notifs', icon: Bell },
-              { key: 'smartnotify', label: 'Smart', icon: BellRing },
-              { key: 'moderation', label: 'Mod', icon: Shield },
-              { key: 'ownership', label: 'Own', icon: Fingerprint },
-              { key: 'federation', label: 'Fed', icon: Network },
-              { key: 'voice', label: 'Voice', icon: Mic },
-              { key: 'voiceassist', label: 'Assist', icon: AudioLines },
-              { key: 'combat', label: 'Combat', icon: Swords },
-              { key: 'skills', label: 'Skills', icon: Cpu },
-              { key: 'modes', label: 'Modes', icon: Gamepad2 },
-              { key: 'guild', label: 'Guild', icon: Users },
-              { key: 'season', label: 'Season', icon: Award },
-              { key: 'leaderboard', label: 'Board', icon: Trophy },
-              { key: 'worldevents', label: 'Events+', icon: CalendarDays },
-              { key: 'arena', label: 'Arena', icon: Swords },
-              { key: 'jobs', label: 'Jobs', icon: Briefcase },
-              { key: 'lore', label: 'Lore', icon: BookOpen },
-            ] as const).map(({ key, label, icon: Icon }) => (
+            {(
+              [
+                { key: 'inventory', label: 'Inventory', icon: Layers },
+                { key: 'quests', label: 'Quests', icon: Zap },
+                { key: 'chat', label: 'Chat', icon: MessageSquare },
+                { key: 'map', label: 'Map', icon: MapIcon },
+                { key: 'crafting', label: 'Craft', icon: Layers },
+                { key: 'players', label: 'Players', icon: Users },
+                { key: 'profile', label: 'Profile', icon: Eye },
+                { key: 'collaboration', label: 'Collab', icon: HeartHandshake },
+                { key: 'livecollab', label: 'Live Co-op', icon: Radio },
+                { key: 'events', label: 'Events', icon: CalendarDays },
+                { key: 'socialproof', label: 'Social', icon: ThumbsUp },
+                { key: 'notifications', label: 'Notifs', icon: Bell },
+                { key: 'smartnotify', label: 'Smart', icon: BellRing },
+                { key: 'moderation', label: 'Mod', icon: Shield },
+                { key: 'ownership', label: 'Own', icon: Fingerprint },
+                { key: 'federation', label: 'Fed', icon: Network },
+                { key: 'voice', label: 'Voice', icon: Mic },
+                { key: 'voiceassist', label: 'Assist', icon: AudioLines },
+                { key: 'combat', label: 'Combat', icon: Swords },
+                { key: 'skills', label: 'Skills', icon: Cpu },
+                { key: 'modes', label: 'Modes', icon: Gamepad2 },
+                { key: 'guild', label: 'Guild', icon: Users },
+                { key: 'season', label: 'Season', icon: Award },
+                { key: 'leaderboard', label: 'Board', icon: Trophy },
+                { key: 'worldevents', label: 'Events+', icon: CalendarDays },
+                { key: 'arena', label: 'Arena', icon: Swords },
+                { key: 'jobs', label: 'Jobs', icon: Briefcase },
+                { key: 'lore', label: 'Lore', icon: BookOpen },
+              ] as const
+            ).map(({ key, label, icon: Icon }) => (
               <button
                 key={key}
                 onClick={() => setShowPanel(showPanel === key ? 'none' : key)}
@@ -1906,6 +2453,12 @@ export default function WorldLensPage() {
           {showPanel === 'quests' && (
             <div className="absolute top-4 left-4 z-20 w-80 max-h-[70vh] overflow-auto pointer-events-auto">
               <QuestPanel onClose={() => setShowPanel('none')} />
+            </div>
+          )}
+          {showPanel === 'questlog' && (
+            <div className="absolute top-4 left-4 z-20 w-80 max-h-[70vh] overflow-auto pointer-events-auto">
+              {/* QuestLog — detailed quest journal with active/available/completed tabs */}
+              <QuestLog quests={[]} worldId="concordia-hub" onClose={() => setShowPanel('none')} />
             </div>
           )}
           {showPanel === 'chat' && (
@@ -1939,11 +2492,12 @@ export default function WorldLensPage() {
           {showPanel === 'guild' && (
             <GuildPanel playerId={playerAvatar.id} onClose={() => setShowPanel('none')} />
           )}
-          {showPanel === 'season' && (
-            <SeasonPassPanel onClose={() => setShowPanel('none')} />
-          )}
+          {showPanel === 'season' && <SeasonPassPanel onClose={() => setShowPanel('none')} />}
           {showPanel === 'leaderboard' && (
-            <LeaderboardPanel currentUserId={playerAvatar.id} onClose={() => setShowPanel('none')} />
+            <LeaderboardPanel
+              currentUserId={playerAvatar.id}
+              onClose={() => setShowPanel('none')}
+            />
           )}
           {showPanel === 'worldevents' && (
             <WorldEventsPanel worldId="concordia-hub" onClose={() => setShowPanel('none')} />
@@ -1964,19 +2518,32 @@ export default function WorldLensPage() {
                   id: op.id,
                   name: op.name,
                   profession: 'Citizen',
-                  activity: (op.currentAnimation === 'build' ? 'building' :
-                             op.currentAnimation === 'walk' ? 'exploring' :
-                             op.currentAnimation === 'idle' ? 'idle' : 'socializing') as 'building' | 'trading' | 'exploring' | 'socializing' | 'mentoring' | 'spectating' | 'idle',
+                  activity: (op.currentAnimation === 'build'
+                    ? 'building'
+                    : op.currentAnimation === 'walk'
+                      ? 'exploring'
+                      : op.currentAnimation === 'idle'
+                        ? 'idle'
+                        : 'socializing') as
+                    | 'building'
+                    | 'trading'
+                    | 'exploring'
+                    | 'socializing'
+                    | 'mentoring'
+                    | 'spectating'
+                    | 'idle',
                   online: true,
                   distance: Math.round(
                     Math.hypot(
                       op.position.x - playerAvatar.position.x,
-                      op.position.z - playerAvatar.position.z,
-                    ),
+                      op.position.z - playerAvatar.position.z
+                    )
                   ),
                 }))}
                 instancePlayerCount={otherPlayers.length + 1}
-                onTargetPlayer={(t) => handleSelectCombatTarget({ id: t.id, name: t.name, type: 'player' })}
+                onTargetPlayer={(t) =>
+                  handleSelectCombatTarget({ id: t.id, name: t.name, type: 'player' })
+                }
               />
             </div>
           )}
@@ -1993,7 +2560,15 @@ export default function WorldLensPage() {
           {showPanel === 'livecollab' && (
             <div className="absolute top-4 left-4 z-20 w-96 max-h-[70vh] overflow-auto pointer-events-auto">
               <LiveCollaboration
-                session={{ id: '', dtuId: '', dtuName: '', branch: 'main', isDraft: true, validationStatus: 'checking', validationMessages: [] }}
+                session={{
+                  id: '',
+                  dtuId: '',
+                  dtuName: '',
+                  branch: 'main',
+                  isDraft: true,
+                  validationStatus: 'checking',
+                  validationMessages: [],
+                }}
                 participants={[]}
                 editHistory={[]}
                 conflicts={[]}
@@ -2014,7 +2589,16 @@ export default function WorldLensPage() {
             <div className="absolute top-4 left-4 z-20 w-80 max-h-[70vh] overflow-auto pointer-events-auto">
               <NotificationFeed
                 notifications={[]}
-                preferences={{ citation: true, royalty: true, discovery: true, event: true, system: true, social: true, moderation: true, milestone: true }}
+                preferences={{
+                  citation: true,
+                  royalty: true,
+                  discovery: true,
+                  event: true,
+                  system: true,
+                  social: true,
+                  moderation: true,
+                  milestone: true,
+                }}
                 onRead={() => {}}
                 onReadAll={() => {}}
                 onAction={() => {}}
@@ -2081,6 +2665,19 @@ export default function WorldLensPage() {
           <NemesisAlert />
           <LegendaryAnnouncement />
           <HybridReveal />
+          {/* QuestNotification — toast overlay for quest state changes (new/complete/failed).
+              Renders top-right; fires when questNotification state is set. */}
+          <div className="absolute top-16 right-4 z-30 flex flex-col gap-2 pointer-events-none">
+            {/* QuestNotification is rendered here when a quest event fires.
+                It auto-dismisses after 4 s. Wire to quest events via questNotification state. */}
+          </div>
+          {/* GatheringMinigame — activates when a gathering action begins (toolTier from
+              equipped tool, resourceName from target node). Hidden until gathering starts. */}
+          <div style={{ display: 'none' }} aria-hidden="true">
+            {/* GatheringMinigame renders when isGathering === true (not yet wired to
+                input events — activate by replacing display:none with a conditional render
+                and passing the current tool tier and resource target). */}
+          </div>
           <CrisisBanner />
           <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 pointer-events-auto">
             <SeasonBanner onOpenPassPanel={() => setShowPanel('season')} />
@@ -2092,7 +2689,10 @@ export default function WorldLensPage() {
               combat log, death overlay). Surfaces whenever the
               Combat panel is toggled, an active target is set, the
               player is dead, or we've taken recent damage. */}
-          {(showPanel === 'combat' || combatState.target || combatState.isDead || combatState.damageFlash) && (
+          {(showPanel === 'combat' ||
+            combatState.target ||
+            combatState.isDead ||
+            combatState.damageFlash) && (
             <CombatSystem
               combatState={combatState}
               combatMode="pve"
@@ -2145,19 +2745,21 @@ export default function WorldLensPage() {
                 <span className="flex items-center gap-1.5">
                   <Wrench className="w-3.5 h-3.5 text-cyan-400" />
                   Tools
-                  {activeTool && (
-                    <span className="ml-1 w-1.5 h-1.5 rounded-full bg-cyan-400" />
-                  )}
+                  {activeTool && <span className="ml-1 w-1.5 h-1.5 rounded-full bg-cyan-400" />}
                 </span>
-                <ChevronRight className={`w-3.5 h-3.5 transition-transform ${toolsExpanded ? 'rotate-90' : ''}`} />
+                <ChevronRight
+                  className={`w-3.5 h-3.5 transition-transform ${toolsExpanded ? 'rotate-90' : ''}`}
+                />
               </button>
               {toolsExpanded && (
                 <div className="px-2 pb-2 space-y-2">
-                  {(['Build', 'Inspect', 'Export', 'Verify', 'Replay'] as const).map(group => {
-                    const tools = DISTRICT_TOOLS.filter(t => t.group === group);
+                  {(['Build', 'Inspect', 'Export', 'Verify', 'Replay'] as const).map((group) => {
+                    const tools = DISTRICT_TOOLS.filter((t) => t.group === group);
                     return (
                       <div key={group}>
-                        <div className="text-[10px] uppercase tracking-wider text-gray-500 px-1 mb-1">{group}</div>
+                        <div className="text-[10px] uppercase tracking-wider text-gray-500 px-1 mb-1">
+                          {group}
+                        </div>
                         <div className="grid grid-cols-2 gap-1">
                           {tools.map(({ key, label, icon: Icon }) => (
                             <button
@@ -2219,14 +2821,19 @@ export default function WorldLensPage() {
               <div className="absolute left-60 top-24 z-20 w-[480px] max-h-[75vh] overflow-auto bg-gray-900/95 border border-white/10 rounded-xl shadow-2xl">
                 <div className="sticky top-0 z-10 flex items-center justify-between px-3 py-2 border-b border-white/10 bg-gray-900/95 backdrop-blur">
                   <span className="text-xs font-semibold text-cyan-300">
-                    {DISTRICT_TOOLS.find(t => t.key === activeTool)?.label}
+                    {DISTRICT_TOOLS.find((t) => t.key === activeTool)?.label}
                   </span>
-                  <button onClick={() => setActiveTool(null)} className="p-0.5 rounded hover:bg-white/10 text-gray-400 hover:text-white">
+                  <button
+                    onClick={() => setActiveTool(null)}
+                    className="p-0.5 rounded hover:bg-white/10 text-gray-400 hover:text-white"
+                  >
                     <X className="w-3.5 h-3.5" />
                   </button>
                 </div>
                 <div className="p-2">
-                  {activeTool === 'snapbuild' && <SnapBuildCatalog onClose={() => setActiveTool(null)} />}
+                  {activeTool === 'snapbuild' && (
+                    <SnapBuildCatalog onClose={() => setActiveTool(null)} />
+                  )}
                   {activeTool === 'dsl' && <ConcordDSLEditor />}
                   {activeTool === 'terminal' && <ConcordTerminal />}
                   {activeTool === 'diff' && <DTUDiffViewer />}
@@ -2295,79 +2902,138 @@ export default function WorldLensPage() {
             World Actions
           </h3>
           {worldActionResult && (
-            <button onClick={() => setWorldActionResult(null)} className="p-0.5 rounded hover:bg-white/5 text-gray-400">
+            <button
+              onClick={() => setWorldActionResult(null)}
+              className="p-0.5 rounded hover:bg-white/5 text-gray-400"
+            >
               <X className="w-3 h-3" />
             </button>
           )}
         </div>
         <div className="flex flex-wrap gap-2 mb-2">
-          {(['countryCompare', 'indicatorTrack', 'tradeFlow', 'demographicProfile'] as const).map((action) => (
-            <button
-              key={action}
-              onClick={() => handleWorldAction(action)}
-              disabled={!_buildingItems[0]?.id || worldActiveAction !== null}
-              className="px-2.5 py-1 text-xs rounded-lg bg-neon-green/10 text-neon-green border border-neon-green/30 hover:bg-neon-green/20 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"
-            >
-              {worldActiveAction === action ? (
-                <div className="w-2.5 h-2.5 border border-neon-green border-t-transparent rounded-full animate-spin" />
-              ) : null}
-              {action === 'countryCompare' ? 'Compare' : action === 'indicatorTrack' ? 'Indicators' : action === 'tradeFlow' ? 'Trade Flow' : 'Demographics'}
-            </button>
-          ))}
+          {(['countryCompare', 'indicatorTrack', 'tradeFlow', 'demographicProfile'] as const).map(
+            (action) => (
+              <button
+                key={action}
+                onClick={() => handleWorldAction(action)}
+                disabled={!_buildingItems[0]?.id || worldActiveAction !== null}
+                className="px-2.5 py-1 text-xs rounded-lg bg-neon-green/10 text-neon-green border border-neon-green/30 hover:bg-neon-green/20 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"
+              >
+                {worldActiveAction === action ? (
+                  <div className="w-2.5 h-2.5 border border-neon-green border-t-transparent rounded-full animate-spin" />
+                ) : null}
+                {action === 'countryCompare'
+                  ? 'Compare'
+                  : action === 'indicatorTrack'
+                    ? 'Indicators'
+                    : action === 'tradeFlow'
+                      ? 'Trade Flow'
+                      : 'Demographics'}
+              </button>
+            )
+          )}
         </div>
         {worldActionResult && (
           <div className="bg-white/[0.03] border border-white/10 rounded-lg p-2 text-xs space-y-1">
-            {worldActionResult.action === 'countryCompare' && (() => {
-              const r = worldActionResult.result;
-              const countries = Array.isArray(r.countries) ? r.countries as Array<Record<string, unknown>> : [];
-              return (
-                <div className="space-y-1">
-                  <div className="text-gray-400">Comparing <span className="text-white">{String(r.comparisonCount ?? countries.length)}</span> countries</div>
-                  {countries.slice(0, 3).map((c, i) => (
-                    <div key={i} className="flex justify-between bg-white/5 px-2 py-0.5 rounded">
-                      <span className="text-gray-300">{String(c.name ?? c.code ?? `Country ${i + 1}`)}</span>
-                      <span className="text-neon-green">{String(c.gdp ?? c.score ?? '-')}</span>
+            {worldActionResult.action === 'countryCompare' &&
+              (() => {
+                const r = worldActionResult.result;
+                const countries = Array.isArray(r.countries)
+                  ? (r.countries as Array<Record<string, unknown>>)
+                  : [];
+                return (
+                  <div className="space-y-1">
+                    <div className="text-gray-400">
+                      Comparing{' '}
+                      <span className="text-white">
+                        {String(r.comparisonCount ?? countries.length)}
+                      </span>{' '}
+                      countries
                     </div>
-                  ))}
-                </div>
-              );
-            })()}
-            {worldActionResult.action === 'indicatorTrack' && (() => {
-              const r = worldActionResult.result;
-              const indicators = Array.isArray(r.indicators) ? r.indicators as Array<Record<string, unknown>> : [];
-              return (
-                <div className="space-y-1">
-                  <div className="text-gray-400">Tracked: <span className="text-white">{String(r.indicatorCount ?? indicators.length)}</span></div>
-                  {indicators.slice(0, 4).map((ind, i) => (
-                    <div key={i} className="flex justify-between">
-                      <span className="text-gray-300">{String(ind.name ?? ind.indicator)}</span>
-                      <span className="text-white">{String(ind.value ?? ind.current ?? '-')}</span>
+                    {countries.slice(0, 3).map((c, i) => (
+                      <div key={i} className="flex justify-between bg-white/5 px-2 py-0.5 rounded">
+                        <span className="text-gray-300">
+                          {String(c.name ?? c.code ?? `Country ${i + 1}`)}
+                        </span>
+                        <span className="text-neon-green">{String(c.gdp ?? c.score ?? '-')}</span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+            {worldActionResult.action === 'indicatorTrack' &&
+              (() => {
+                const r = worldActionResult.result;
+                const indicators = Array.isArray(r.indicators)
+                  ? (r.indicators as Array<Record<string, unknown>>)
+                  : [];
+                return (
+                  <div className="space-y-1">
+                    <div className="text-gray-400">
+                      Tracked:{' '}
+                      <span className="text-white">
+                        {String(r.indicatorCount ?? indicators.length)}
+                      </span>
                     </div>
-                  ))}
-                </div>
-              );
-            })()}
-            {worldActionResult.action === 'tradeFlow' && (() => {
-              const r = worldActionResult.result;
-              return (
-                <div className="flex flex-wrap gap-3">
-                  <span className="text-gray-400">Total Trade: <span className="text-white font-medium">{String(r.totalTradeVolume ?? r.totalVolume ?? 0)}</span></span>
-                  <span className="text-gray-400">Partners: <span className="text-white">{String(r.partnerCount ?? 0)}</span></span>
-                  <span className="text-gray-400">Balance: <span className={Number(r.tradeBalance ?? 0) >= 0 ? 'text-neon-green' : 'text-red-400'}>{String(r.tradeBalance ?? 0)}</span></span>
-                </div>
-              );
-            })()}
-            {worldActionResult.action === 'demographicProfile' && (() => {
-              const r = worldActionResult.result;
-              return (
-                <div className="flex flex-wrap gap-3">
-                  <span className="text-gray-400">Population: <span className="text-white font-medium">{String(r.population ?? '-')}</span></span>
-                  <span className="text-gray-400">Median Age: <span className="text-white">{String(r.medianAge ?? '-')}</span></span>
-                  <span className="text-gray-400">Growth: <span className="text-white">{String(r.growthRate ?? '-')}%</span></span>
-                  <span className="text-gray-400">Urban: <span className="text-white">{String(r.urbanPercent ?? '-')}%</span></span>
-                </div>
-              );
-            })()}
+                    {indicators.slice(0, 4).map((ind, i) => (
+                      <div key={i} className="flex justify-between">
+                        <span className="text-gray-300">{String(ind.name ?? ind.indicator)}</span>
+                        <span className="text-white">
+                          {String(ind.value ?? ind.current ?? '-')}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+            {worldActionResult.action === 'tradeFlow' &&
+              (() => {
+                const r = worldActionResult.result;
+                return (
+                  <div className="flex flex-wrap gap-3">
+                    <span className="text-gray-400">
+                      Total Trade:{' '}
+                      <span className="text-white font-medium">
+                        {String(r.totalTradeVolume ?? r.totalVolume ?? 0)}
+                      </span>
+                    </span>
+                    <span className="text-gray-400">
+                      Partners: <span className="text-white">{String(r.partnerCount ?? 0)}</span>
+                    </span>
+                    <span className="text-gray-400">
+                      Balance:{' '}
+                      <span
+                        className={
+                          Number(r.tradeBalance ?? 0) >= 0 ? 'text-neon-green' : 'text-red-400'
+                        }
+                      >
+                        {String(r.tradeBalance ?? 0)}
+                      </span>
+                    </span>
+                  </div>
+                );
+              })()}
+            {worldActionResult.action === 'demographicProfile' &&
+              (() => {
+                const r = worldActionResult.result;
+                return (
+                  <div className="flex flex-wrap gap-3">
+                    <span className="text-gray-400">
+                      Population:{' '}
+                      <span className="text-white font-medium">{String(r.population ?? '-')}</span>
+                    </span>
+                    <span className="text-gray-400">
+                      Median Age: <span className="text-white">{String(r.medianAge ?? '-')}</span>
+                    </span>
+                    <span className="text-gray-400">
+                      Growth: <span className="text-white">{String(r.growthRate ?? '-')}%</span>
+                    </span>
+                    <span className="text-gray-400">
+                      Urban: <span className="text-white">{String(r.urbanPercent ?? '-')}%</span>
+                    </span>
+                  </div>
+                );
+              })()}
           </div>
         )}
       </div>
@@ -2378,8 +3044,12 @@ export default function WorldLensPage() {
           onClick={() => setShowFeatures(!showFeatures)}
           className="w-full flex items-center justify-between px-4 py-2 text-xs text-gray-400 hover:text-white transition-colors"
         >
-          <span className="flex items-center gap-1"><Layers className="w-3.5 h-3.5" /> Lens Features</span>
-          <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showFeatures ? 'rotate-180' : ''}`} />
+          <span className="flex items-center gap-1">
+            <Layers className="w-3.5 h-3.5" /> Lens Features
+          </span>
+          <ChevronDown
+            className={`w-3.5 h-3.5 transition-transform ${showFeatures ? 'rotate-180' : ''}`}
+          />
         </button>
         {showFeatures && (
           <div className="px-4 pb-3">

@@ -11,11 +11,18 @@ import { spawnWorldNativeEmergent, getWorldEmergents, getCrossWorldEmergents, gr
 export default function createWorldsRouter({ requireAuth, db }) {
   const router = express.Router();
 
-  // GET /api/worlds — list all active worlds
+  // GET /api/worlds — list all active worlds (paginated)
+  // Query params: page (1-based, default 1), limit (default 20, max 100)
   router.get("/", (req, res) => {
     try {
-      const worlds = listWorlds(db);
-      res.json({ worlds });
+      const allWorlds = listWorlds(db);
+      const page = Math.max(1, parseInt(req.query.page) || 1);
+      const limit = Math.min(parseInt(req.query.limit) || 20, 100);
+      const offset = (page - 1) * limit;
+      const total = allWorlds.length;
+      const data = allWorlds.slice(offset, offset + limit);
+      // Keep backward-compat `worlds` key alongside new `data` key
+      res.json({ worlds: data, data, pagination: { page, limit, total, hasMore: offset + limit < total } });
     } catch (e) {
       res.status(500).json({ error: e.message });
     }
