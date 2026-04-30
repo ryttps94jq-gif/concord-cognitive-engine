@@ -23980,6 +23980,10 @@ try {
         'emergence_os', 'probability_os',                        // Tier 2 — simulation awareness
         'meta_growth_os', 'self_repair_os', 'reflection_os',     // Tier 5 — self-awareness
       ]);
+      // Register each emergent as a mesh peer so it appears in topology and can receive signals
+      try {
+        meshRegisterPeer({ nodeId: `emergent:${id}`, type: 'emergent', name: id, channels: ['internet'], isEmergent: true });
+      } catch (_peerErr) { /* non-fatal */ }
     });
 
     log("qualia.init", `Existential OS initialized: ${entries.length} entities with qualia states`);
@@ -27170,6 +27174,29 @@ async function governorTick(reason="heartbeat") {
       // 2.11 — Concord Mesh Heartbeat — every 5th tick (relay queue + beacon)
       if (_tick % 5 === 0) {
         try { await meshHeartbeatTick(STATE, _tick); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
+
+        // 2.11b — Feed mesh signals into emergent qualia (runs alongside mesh heartbeat)
+        try {
+          const fqb = await import('./lib/foundation-qualia-bridge.js');
+          const metrics = getMeshMetrics();
+          const channels = meshGetChannelStatus();
+          const peerCount = metrics.peerCount ?? 0;
+          const peerDensity = Math.min(peerCount / 10, 1); // 10+ peers = fully socially present
+          const activeChannels = Object.values(channels).filter(c => c?.active);
+          const avgSignal = activeChannels.length
+            ? activeChannels.reduce((s, c) => s + (c.quality ?? 0.5), 0) / activeChannels.length
+            : 0.3;
+          const emergentStore = STATE.emergents || STATE.__emergents;
+          if (emergentStore) {
+            const eIds = emergentStore instanceof Map ? Array.from(emergentStore.keys()) : Object.keys(emergentStore);
+            eIds.forEach(eid => {
+              try {
+                fqb.processSignal(eid, 'proprioception', { strength: avgSignal, meshCoverage: avgSignal });
+                fqb.processSignal(eid, 'social', { density: peerDensity });
+              } catch (_se) { /* per-entity signal errors are non-fatal */ }
+            });
+          }
+        } catch (_e) { logger.debug('server', 'mesh-qualia-feed', { error: _e?.message }); }
       }
 
       // 2.12 — Foundation Sense Heartbeat — every 10th tick (pattern detection)

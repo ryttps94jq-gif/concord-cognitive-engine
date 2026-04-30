@@ -1767,6 +1767,30 @@ export default function WorldLensPage() {
     result: Record<string, unknown>;
   } | null>(null);
   const [worldActiveAction, setWorldActiveAction] = useState<string | null>(null);
+  const [gatheringState, setGatheringState] = useState<{
+    toolTier: number;
+    resourceName: string;
+  } | null>(null);
+  const [questNotification, setQuestNotification] = useState<{
+    quest: import('@/lib/concordia/quest-system').Quest;
+    type: 'new' | 'completed' | 'failed';
+  } | null>(null);
+
+  // Expose world event triggers to other components via window so any world sub-component can activate them
+  useEffect(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const w = window as any;
+    w.__worldStartGathering = (toolTier: number, resourceName: string) =>
+      setGatheringState({ toolTier, resourceName });
+    w.__worldQuestEvent = (
+      quest: import('@/lib/concordia/quest-system').Quest,
+      type: 'new' | 'completed' | 'failed'
+    ) => setQuestNotification({ quest, type });
+    return () => {
+      delete w.__worldStartGathering;
+      delete w.__worldQuestEvent;
+    };
+  }, []);
 
   const handleWorldAction = useCallback(
     async (action: string) => {
@@ -2669,16 +2693,27 @@ export default function WorldLensPage() {
           {/* QuestNotification — toast overlay for quest state changes (new/complete/failed).
               Renders top-right; fires when questNotification state is set. */}
           <div className="absolute top-16 right-4 z-30 flex flex-col gap-2 pointer-events-none">
-            {/* QuestNotification is rendered here when a quest event fires.
-                It auto-dismisses after 4 s. Wire to quest events via questNotification state. */}
+            {questNotification && (
+              <_QuestNotification
+                quest={questNotification.quest}
+                type={questNotification.type}
+                onDismiss={() => setQuestNotification(null)}
+              />
+            )}
           </div>
-          {/* GatheringMinigame — activates when a gathering action begins (toolTier from
-              equipped tool, resourceName from target node). Hidden until gathering starts. */}
-          <div style={{ display: 'none' }} aria-hidden="true">
-            {/* GatheringMinigame renders when isGathering === true (not yet wired to
-                input events — activate by replacing display:none with a conditional render
-                and passing the current tool tier and resource target). */}
-          </div>
+          {gatheringState && (
+            <_GatheringMinigame
+              toolTier={gatheringState.toolTier}
+              resourceName={gatheringState.resourceName}
+              onComplete={(score) => {
+                const resource = gatheringState.resourceName;
+                setGatheringState(null);
+                if (score > 0 && worldSocket?.emit)
+                  worldSocket.emit('world:gather-complete', { resource, score });
+              }}
+              onCancel={() => setGatheringState(null)}
+            />
+          )}
           <CrisisBanner />
           <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 pointer-events-auto">
             <SeasonBanner onOpenPassPanel={() => setShowPanel('season')} />
