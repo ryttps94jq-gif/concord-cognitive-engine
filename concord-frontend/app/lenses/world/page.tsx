@@ -5198,6 +5198,7 @@ export default function WorldLensPage() {
                     {CONCORDIA_RENDERER === 'unity-webgl' && UNITY_WEBGL_URL ? (
             <div className="absolute inset-0 z-10 bg-black">
               <iframe
+                id="concordia-unity-webgl"
                 title="Concordia Unity WebGL"
                 src={UNITY_WEBGL_URL}
                 className="w-full h-full border-0"

@@ -31,6 +31,7 @@ import { useConkayRunStore, type RawToolCall } from './conkayRunStore';
 import { useConkayAttentionStore } from './conkayAttentionStore';
 import { detectArtifact } from '@/lib/conkay/artifact-kinds';
 import { isMutatingMacro } from '@/lib/conkay/mutating-macros';
+import { onUnityEvent, postUnityCmd, unityIframePresent } from '@/lib/conkay/unity-bridge';
 import { ConKayActionConfirm } from './ConKayActionConfirm';
 import { ConKayCockpit } from './ConKayCockpit';
 import { CONKAY_SIGNATURE_GREETING, CONKAY_PERSONA_PROMPT, type ConKayState } from './conkay-persona';
@@ -264,6 +265,28 @@ export function ConKayOverlay() {
     useConkayAttentionStore.getState().setBusy(running);
   }, [running]);
   useEffect(() => () => { useConkayAttentionStore.getState().reset(); }, []);
+
+  // ── Unity WebGL postMessage stub (ConKay → iframe) ───────────────────
+  // LIVE: browser posts typed `concordia:cmd` into #concordia-unity-webgl
+  // when that iframe exists (world lens + NEXT_PUBLIC_CONCORDIA_RENDERER=unity-webgl).
+  // No-op if missing. Unity C#/jslib receive is PARTIAL until next WebGL rebuild
+  // with a receiver — we do not claim the player handled the message.
+  useEffect(() => {
+    if (!open) return;
+    const off = onUnityEvent((msg) => {
+      // Honest telemetry only — surface reverse events in the work status line
+      // when ConKay is open; never invent a CAD/physics result.
+      if (msg.event === 'ready' || msg.event === 'pong' || msg.event === 'ack') {
+        setWorkStatus(`Unity bridge: ${msg.event}${msg.id ? ` · ${msg.id}` : ''}`);
+      }
+    });
+    if (unityIframePresent()) {
+      postUnityCmd('hello', { source: 'conkay-overlay', lens: lens?.id ?? null });
+      postUnityCmd('ping', { source: 'conkay-overlay' });
+    }
+    return off;
+  }, [open, lens?.id]);
+
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
@@ -614,6 +637,16 @@ export function ConKayOverlay() {
       if (ok) {
         const artifact = detectArtifact(domain, macro, inputObj, data?.result);
         if (artifact) useConkayHudStore.getState().setLastArtifact(artifact);
+      }
+      if (ok) {
+        // LIVE stub: tell Unity iframe something happened (no-op if iframe absent).
+        // Not a CAD/mesh push — payload is a thin notify for the postMessage path.
+        postUnityCmd('notify', {
+          source: 'conkay',
+          domain,
+          macro,
+          ok: true,
+        });
       }
       const resultStr = data?.result != null ? JSON.stringify(data.result, null, 2) : (ok ? '(done)' : (data?.error || 'no result'));
       const spoken = ok ? `Done — ran ${macro} on the ${domain} lens.` : `${macro} on ${domain} returned: ${data?.error || 'an error'}.`;
