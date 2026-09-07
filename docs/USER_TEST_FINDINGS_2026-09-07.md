@@ -16,7 +16,16 @@ Deploy under test: production standalone build, commits `63cc665` + `c1127eb`.
 | B3 — onboarding forces Concordia | **FIXED** — `/onboarding/location` → `/hub`; character creation deferred to first World-lens open. |
 | R3 — `127.0.0.1:5050` in prod bundle | **FIXED** — `concord-frontend/.env.production.local` blanks the two `NEXT_PUBLIC_*` vars for builds. |
 | B1 (agent numbering) — 503 load-shedding | **ROOT-CAUSED, not yet fixed** — needs the off-Mac migration. |
-| R1 world lens, R5 code-lens CSP, D1 privacy copy, D2 brains, D3 user-menu, Fallback chip | logged, not yet addressed |
+
+## Second batch (commit `dab6243`)
+
+| Item | Status |
+|---|---|
+| **#7 — Sovereign Health ribbon** | **DONE** — `components/shell/SovereignHealthRibbon.tsx` in the global Topbar. Reads the PUBLIC `/api/system/health` (now returns `heartbeat` + `substrate` too). 3 pulse chips: brain count/mode, governorTick liveness, DTU substrate size. Honest — gray "—" when unreachable, never a fake green. Replaces the powerMode-only pulse dot **and** the chat header's `CycleTelemetryRibbon`. |
+| **#5 — ConKay scaffolding examples** | **DONE** — 3 clickable worked-example prompts under the "Build in world" field in `ConKayOverlay`; click populates + fires the NLP→partMesh/FEA→apply_mesh path. |
+| **#6 — optimistic UI / skeletons** | **chat already covered** (optimistic user bubble on `onMutate`, a "thinking" indicator while pending, live streaming render + ConKay `workStatus` micro-status). A broader per-lens content-skeleton pass is genuine follow-up work, not done here. |
+| **D3 — user-menu "Settings" → admin lens** | **FIXED** — now `/settings`. |
+| R1 world-lens assets/socket, R5 code-lens CSP, D1 privacy copy, D2 brain differentiation, D7 "Fallback 5/4" chip | logged, not yet addressed |
 
 ## TL;DR — "what's the deal"
 
