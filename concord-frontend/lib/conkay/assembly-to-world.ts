@@ -199,3 +199,48 @@ export async function runAssemblyChatRevise(opts: {
     unity,
   };
 }
+
+
+/** Fetch BOM JSON for an assembly. */
+export async function fetchAssemblyBom(assemblyId: string) {
+  const res = await api.get(`/api/conkay/assemblies/${assemblyId}/bom`);
+  return res?.data;
+}
+
+/** Trigger browser download of assembly or part STL (auth cookie/bearer via api client blob). */
+export async function downloadStl(opts: { assemblyId: string; partId?: string; filename?: string }) {
+  const path = opts.partId
+    ? `/api/conkay/assemblies/${opts.assemblyId}/parts/${opts.partId}/stl`
+    : `/api/conkay/assemblies/${opts.assemblyId}/stl`;
+  const res = await api.get(path, { responseType: 'blob' });
+  const blob = res?.data instanceof Blob ? res.data : new Blob([res?.data], { type: 'model/stl' });
+  const filename =
+    opts.filename ||
+    (opts.partId ? `conkay-part-${opts.partId.slice(0, 8)}.stl` : `conkay-assembly-${opts.assemblyId.slice(0, 8)}.stl`);
+  if (typeof window !== 'undefined') {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+  return { ok: true, filename, size: blob.size };
+}
+
+/** Download BOM as JSON file. */
+export async function downloadAssemblyBom(assemblyId: string) {
+  const bom = await fetchAssemblyBom(assemblyId);
+  if (!bom?.ok) return { ok: false, error: bom?.reason || bom?.error || 'bom_failed' };
+  const blob = new Blob([JSON.stringify(bom, null, 2)], { type: 'application/json' });
+  const filename = `conkay-bom-${assemblyId.slice(0, 8)}.json`;
+  if (typeof window !== 'undefined') {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+  return { ok: true, filename, bom };
+}

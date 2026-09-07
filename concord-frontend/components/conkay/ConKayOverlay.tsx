@@ -36,7 +36,7 @@ import { runFeaBeamToWorld } from '@/lib/conkay/fea-beam-to-world';
 import { runPartMeshToWorld } from '@/lib/conkay/part-mesh-to-world';
 import { designViaApiOrClient } from '@/lib/conkay/nlp-design-to-world';
 import { runEvoGlbToWorld } from '@/lib/conkay/evo-glb-to-world';
-import { runAssemblyChatRevise } from '@/lib/conkay/assembly-to-world';
+import { runAssemblyChatRevise, downloadStl, downloadAssemblyBom } from '@/lib/conkay/assembly-to-world';
 import { ConKayActionConfirm } from './ConKayActionConfirm';
 import { ConKayCockpit } from './ConKayCockpit';
 import { CONKAY_SIGNATURE_GREETING, CONKAY_PERSONA_PROMPT, type ConKayState } from './conkay-persona';
@@ -518,6 +518,38 @@ export function ConKayOverlay() {
       setAssemblyBusy(false);
     }
   }, [nlpDesignText, assemblyId]);
+
+  const downloadAssemblyStl = useCallback(async () => {
+    if (!assemblyId) {
+      setWorkStatus('STL: no assembly yet — Asm revise first (build assembly / add …)');
+      return;
+    }
+    try {
+      const r = await downloadStl({ assemblyId });
+      setWorkStatus(`STL download LIVE: ${r.filename} (${r.size} bytes) — Wave 2 export`);
+    } catch (e) {
+      setWorkStatus(`STL download failed — ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }, [assemblyId]);
+
+  const downloadBomJson = useCallback(async () => {
+    if (!assemblyId) {
+      setWorkStatus('BOM: no assembly yet — Asm revise first');
+      return;
+    }
+    try {
+      const r = await downloadAssemblyBom(assemblyId);
+      if (!r.ok) {
+        setWorkStatus(`BOM failed — ${r.error}`);
+        return;
+      }
+      setWorkStatus(`BOM download LIVE: ${r.filename} parts=${r.bom?.totalParts ?? '?'} — Wave 2`);
+    } catch (e) {
+      setWorkStatus(`BOM download failed — ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }, [assemblyId]);
+
+
 
 
 
@@ -1280,6 +1312,23 @@ export function ConKayOverlay() {
                   <Layers className="h-3 w-3" />
                   {assemblyBusy ? '…' : 'Asm'}
                 </button>
+                <button type="button" onClick={() => { void downloadAssemblyStl(); }}
+                  disabled={!assemblyId}
+                  title="Download assembly STL (Wave 2 — binary STL from part meshes)"
+                  aria-label="Download assembly STL"
+                  data-testid="ck-assembly-stl"
+                  className="rounded-lg px-2 py-1 text-[10px] text-teal-100 hover:bg-teal-400/15 border border-teal-400/30 disabled:opacity-40">
+                  STL
+                </button>
+                <button type="button" onClick={() => { void downloadBomJson(); }}
+                  disabled={!assemblyId}
+                  title="Download BOM JSON (Wave 2 — part id/kind/material/qty)"
+                  aria-label="Download assembly BOM"
+                  data-testid="ck-assembly-bom"
+                  className="rounded-lg px-2 py-1 text-[10px] text-lime-100 hover:bg-lime-400/15 border border-lime-400/30 disabled:opacity-40">
+                  BOM
+                </button>
+
               </div>
               <button type="button" onClick={dropWorldMarker}
                 title="Drop marker in world (F0 cube via spawn_primitive — not CAD)"

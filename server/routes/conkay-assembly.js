@@ -23,6 +23,11 @@ import {
   feaUtilToColor,
 } from '../lib/conkay/nlp-design-intent.js';
 import { parseAssemblyUtterance } from '../lib/conkay/assembly-nlp.js';
+import {
+  exportPartStl,
+  exportAssemblyStl,
+  buildBom,
+} from '../lib/conkay/assembly-export.js';
 
 export default function createConkayAssemblyRouter({ requireAuth, db }) {
   const router = Router();
@@ -314,6 +319,44 @@ export default function createConkayAssemblyRouter({ requireAuth, db }) {
     } catch (e) {
       return res.status(500).json({ ok: false, error: e instanceof Error ? e.message : String(e) });
     }
+  });
+
+
+  /** GET /api/conkay/assemblies/:id/bom */
+  router.get('/assemblies/:id/bom', auth, (req, res) => {
+    if (!needDb(res)) return;
+    const bom = buildBom(db, req.params.id);
+    if (!bom.ok) return res.status(404).json(bom);
+    return res.json(bom);
+  });
+
+  /** GET /api/conkay/assemblies/:id/parts/:partId/stl — binary STL download */
+  router.get('/assemblies/:id/parts/:partId/stl', auth, (req, res) => {
+    if (!needDb(res)) return;
+    const part = getPart(db, req.params.id, req.params.partId);
+    if (!part) return res.status(404).json({ ok: false, error: 'part_not_found', code: 'NOT_FOUND' });
+    const stl = exportPartStl(part);
+    if (!stl.ok) return res.status(422).json(stl);
+    const filename = `conkay-part-${part.name || part.id}.stl`.replace(/[^\w.\-]+/g, '_');
+    res.setHeader('Content-Type', 'model/stl');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('X-ConKay-Triangle-Count', String(stl.triangleCount));
+    res.setHeader('X-ConKay-Vertex-Count', String(stl.vertexCount));
+    return res.send(stl.buffer);
+  });
+
+  /** GET /api/conkay/assemblies/:id/stl — merged assembly STL */
+  router.get('/assemblies/:id/stl', auth, (req, res) => {
+    if (!needDb(res)) return;
+    const stl = exportAssemblyStl(db, req.params.id);
+    if (!stl.ok) return res.status(422).json(stl);
+    const filename = `conkay-assembly-${req.params.id.slice(0, 8)}.stl`;
+    res.setHeader('Content-Type', 'model/stl');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('X-ConKay-Triangle-Count', String(stl.triangleCount));
+    res.setHeader('X-ConKay-Included-Parts', String(stl.included?.length || 0));
+    res.setHeader('X-ConKay-Skipped-Parts', String(stl.skipped?.length || 0));
+    return res.send(stl.buffer);
   });
 
   return router;
