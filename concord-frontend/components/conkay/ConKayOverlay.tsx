@@ -21,7 +21,7 @@ import { getApiBase } from '@/lib/api/base';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import dynamic from 'next/dynamic';
-import { X, Send, Mic, MicOff, Sparkles, Volume2, VolumeX, Box } from 'lucide-react';
+import { X, Send, Mic, MicOff, Sparkles, Volume2, VolumeX, Box, MapPin } from 'lucide-react';
 import { ConKayMessage, type ConKayReplyFields } from './ConKayViz';
 import { useConKayVoice } from './useConKayVoice';
 import { matchConKaySkill, type ConKaySkill } from './conkay-skills';
@@ -31,7 +31,7 @@ import { useConkayRunStore, type RawToolCall } from './conkayRunStore';
 import { useConkayAttentionStore } from './conkayAttentionStore';
 import { detectArtifact } from '@/lib/conkay/artifact-kinds';
 import { isMutatingMacro } from '@/lib/conkay/mutating-macros';
-import { onUnityEvent, postUnityCmd, unityIframePresent } from '@/lib/conkay/unity-bridge';
+import { onUnityEvent, postUnityCmd, spawnPrimitive, clearTempPrimitives, unityIframePresent } from '@/lib/conkay/unity-bridge';
 import { ConKayActionConfirm } from './ConKayActionConfirm';
 import { ConKayCockpit } from './ConKayCockpit';
 import { CONKAY_SIGNATURE_GREETING, CONKAY_PERSONA_PROMPT, type ConKayState } from './conkay-persona';
@@ -266,26 +266,55 @@ export function ConKayOverlay() {
   }, [running]);
   useEffect(() => () => { useConkayAttentionStore.getState().reset(); }, []);
 
-  // ── Unity WebGL postMessage stub (ConKay → iframe) ───────────────────
-  // LIVE: browser posts typed `concordia:cmd` into #concordia-unity-webgl
-  // when that iframe exists (world lens + NEXT_PUBLIC_CONCORDIA_RENDERER=unity-webgl).
-  // No-op if missing. Unity C#/jslib receive is PARTIAL until next WebGL rebuild
-  // with a receiver — we do not claim the player handled the message.
+  // ── Unity WebGL postMessage (ConKay → iframe) ────────────────────────
+  // LIVE: typed `concordia:cmd` into #concordia-unity-webgl when present
+  // (world lens + NEXT_PUBLIC_CONCORDIA_RENDERER=unity-webgl). Structured
+  // build intents (spawn_primitive / set_color / clear_temp) are F0 markers
+  // only — not free-text CAD. No-op if iframe missing.
+  const [unityPresent, setUnityPresent] = useState(false);
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      setUnityPresent(false);
+      return;
+    }
+    const refresh = () => setUnityPresent(unityIframePresent());
+    refresh();
+    const t = window.setInterval(refresh, 2000);
     const off = onUnityEvent((msg) => {
-      // Honest telemetry only — surface reverse events in the work status line
-      // when ConKay is open; never invent a CAD/physics result.
-      if (msg.event === 'ready' || msg.event === 'pong' || msg.event === 'ack') {
-        setWorkStatus(`Unity bridge: ${msg.event}${msg.id ? ` · ${msg.id}` : ''}`);
+      // Honest telemetry only — never invent a CAD/physics result.
+      if (msg.event === 'ready' || msg.event === 'pong' || msg.event === 'ack' || msg.event === 'spawned') {
+        const kind = msg.payload && typeof msg.payload.kind === 'string' ? ` · ${msg.payload.kind}` : '';
+        setWorkStatus(`Unity bridge: ${msg.event}${kind}${msg.id ? ` · ${msg.id}` : ''}`);
       }
     });
     if (unityIframePresent()) {
       postUnityCmd('hello', { source: 'conkay-overlay', lens: lens?.id ?? null });
       postUnityCmd('ping', { source: 'conkay-overlay' });
     }
-    return off;
+    return () => {
+      window.clearInterval(t);
+      off();
+    };
   }, [open, lens?.id]);
+
+  /** F0: drop a cyan cube marker in the Unity world when iframe is present. */
+  const dropWorldMarker = useCallback(() => {
+    if (!unityIframePresent()) {
+      setWorkStatus('Unity bridge: no iframe (open world lens with unity-webgl)');
+      return;
+    }
+    const id = `marker-${Date.now()}`;
+    const ok = spawnPrimitive(
+      {
+        kind: 'cube',
+        position: { x: (Math.random() - 0.5) * 2, y: 1.2, z: (Math.random() - 0.5) * 2 },
+        scale: 0.45,
+        color: '#3de0f5',
+      },
+      id,
+    );
+    setWorkStatus(ok ? `Unity bridge: spawn_primitive posted · ${id}` : 'Unity bridge: spawn post failed');
+  }, []);
 
 
   useEffect(() => {
@@ -640,13 +669,21 @@ export function ConKayOverlay() {
       }
       if (ok) {
         // LIVE stub: tell Unity iframe something happened (no-op if iframe absent).
-        // Not a CAD/mesh push — payload is a thin notify for the postMessage path.
+        // Not a CAD/mesh push — thin notify + optional F0 marker when WebGL present.
         postUnityCmd('notify', {
           source: 'conkay',
           domain,
           macro,
           ok: true,
         });
+        if (unityIframePresent()) {
+          spawnPrimitive({
+            kind: 'cube',
+            position: { x: 0, y: 1.1, z: 0 },
+            scale: 0.35,
+            color: '#5eead4',
+          }, `macro-${domain}-${macro}-${Date.now()}`);
+        }
       }
       const resultStr = data?.result != null ? JSON.stringify(data.result, null, 2) : (ok ? '(done)' : (data?.error || 'no result'));
       const spoken = ok ? `Done — ran ${macro} on the ${domain} lens.` : `${macro} on ${domain} returned: ${data?.error || 'an error'}.`;
@@ -1000,6 +1037,25 @@ export function ConKayOverlay() {
         </span>
         <ConKayTelemetryChip />
         <div className="ml-auto flex items-center gap-1.5">
+          {unityPresent && (
+            <>
+              <button type="button" onClick={dropWorldMarker}
+                title="Drop marker in world (F0 cube via spawn_primitive — not CAD)"
+                aria-label="Drop marker in world"
+                className="rounded-lg p-2 text-cyan-200 hover:bg-cyan-400/10">
+                <MapPin className="h-4 w-4" />
+              </button>
+              <button type="button" onClick={() => {
+                const ok = clearTempPrimitives(`clear-${Date.now()}`);
+                setWorkStatus(ok ? 'Unity bridge: clear_temp posted' : 'Unity bridge: clear post failed');
+              }}
+                title="Clear ConKayTemp markers in Unity"
+                aria-label="Clear world markers"
+                className="rounded-lg px-2 py-1 text-[10px] text-cyan-300/80 hover:bg-cyan-400/10 border border-cyan-400/20">
+                clear
+              </button>
+            </>
+          )}
           <button onClick={() => setInspecting((x) => !x)} title={inspecting ? 'Close inspector' : 'Inspect an AR artifact (exploded view)'} aria-label="Inspect artifact"
             className={`rounded-lg p-2 hover:bg-cyan-400/10 ${inspecting ? 'text-cyan-100 bg-cyan-400/15' : 'text-cyan-200'}`}>
             <Box className="h-4 w-4" />

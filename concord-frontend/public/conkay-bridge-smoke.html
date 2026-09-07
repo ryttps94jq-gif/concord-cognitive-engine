@@ -42,7 +42,7 @@
   function markOk() {
     var names = events.map(function (e) { return e && e.event; });
     var hit = names.some(function (n) {
-      return n === 'pong' || n === 'ready' || n === 'ack' || n === 'hello';
+      return n === 'pong' || n === 'ready' || n === 'ack' || n === 'hello' || n === 'spawned';
     });
     state.ok = hit;
     if (hit && state.reason === 'waiting') state.reason = 'events-received';
@@ -59,7 +59,7 @@
   }
   window.addEventListener('message', onMsg);
 
-  function postCmd(cmd) {
+  function postCmd(cmd, payload) {
     var win = iframe.contentWindow;
     if (!win) {
       line('post FAILED no contentWindow for ' + cmd);
@@ -68,7 +68,7 @@
     var msg = {
       type: 'concordia:cmd',
       cmd: cmd,
-      payload: { source: 'conkay-bridge-smoke' },
+      payload: payload || { source: 'conkay-bridge-smoke' },
       id: 'smoke-' + cmd + '-' + Date.now(),
       ts: Date.now()
     };
@@ -107,6 +107,7 @@
     clickCanvas();
     postCmd('hello');
     postCmd('ping');
+    postCmd('spawn_primitive', { kind: 'cube', position: { x: 0, y: 1.2, z: 0 }, scale: 0.4, color: '#3de0f5', source: 'conkay-bridge-smoke' });
   }
 
   iframe.addEventListener('load', function () {

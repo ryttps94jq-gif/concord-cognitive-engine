@@ -4,12 +4,11 @@
 // ConKay (or any client) posts typed `concordia:cmd` envelopes into the
 // iframe that world/page.tsx mounts when NEXT_PUBLIC_CONCORDIA_RENDERER=unity-webgl.
 // Reverse path listens for `concordia:event` from the iframe (or same-origin
-// child). No CAD/physics pipeline — that remains DESIGN.
+// child). Structured build intents (spawn_primitive / set_color / clear_temp)
+// are F0 markers only — not free-text CAD / physics / industrial mesh.
 //
 // No-op safe: if the iframe is missing / not yet loaded / cross-origin without
-// contentWindow, send returns false and does nothing. Unity C#/jslib receive
-// stays PARTIAL until the next WebGL rebuild ships a receiver (see
-// ~/.zuko/CONKAY_UNITY_BRIDGE.md).
+// contentWindow, send returns false and does nothing.
 
 export const UNITY_IFRAME_ID = 'concordia-unity-webgl';
 
@@ -23,7 +22,10 @@ export type ConcordiaCmdName =
   | 'focus'
   | 'notify'
   | 'camera'
-  | 'intent';
+  | 'intent'
+  | 'spawn_primitive'
+  | 'set_color'
+  | 'clear_temp';
 
 /** Events the iframe / Unity build may post back to the parent. */
 export type ConcordiaEventName =
@@ -31,12 +33,44 @@ export type ConcordiaEventName =
   | 'ready'
   | 'ack'
   | 'status'
-  | 'error';
+  | 'error'
+  | 'spawned';
+
+export type SpawnPrimitiveKind = 'cube' | 'sphere';
+
+export interface Vec3Payload {
+  x?: number;
+  y?: number;
+  z?: number;
+}
+
+export interface RgbaPayload {
+  r: number;
+  g: number;
+  b: number;
+  a?: number;
+}
+
+/** Payload for `spawn_primitive` — F0 world marker, not CAD. */
+export interface SpawnPrimitivePayload {
+  kind: SpawnPrimitiveKind;
+  position?: Vec3Payload;
+  /** Uniform number or per-axis vec. */
+  scale?: number | Vec3Payload;
+  /** CSS hex (#rrggbb) or 0–1 rgba channels. */
+  color?: string | RgbaPayload;
+}
+
+/** Payload for `set_color` — recolors last / all under ConKayTemp. */
+export interface SetColorPayload {
+  color: string | RgbaPayload;
+  /** When true, recolor every child under ConKayTemp; else last spawned. */
+  all?: boolean;
+}
 
 export interface ConcordiaCmdMessage {
   type: typeof CONCORDIA_CMD;
   cmd: ConcordiaCmdName;
-  /** Opaque payload — stub only; no CAD/mesh contract yet. */
   payload?: Record<string, unknown>;
   /** Correlation id for optional ack matching. */
   id?: string;
@@ -71,7 +105,7 @@ export function unityIframePresent(): boolean {
 /**
  * Post a typed command into the Unity WebGL iframe.
  * Returns true if postMessage was attempted; false if iframe missing.
- * Does NOT claim Unity handled it — handler is PARTIAL until rebuild.
+ * Does NOT claim Unity handled it until a matching concordia:event arrives.
  */
 export function postUnityCmd(
   cmd: ConcordiaCmdName,
@@ -96,6 +130,27 @@ export function postUnityCmd(
   } catch {
     return false;
   }
+}
+
+/** Drop a F0 cube/sphere marker under Unity's ConKayTemp root. */
+export function spawnPrimitive(
+  payload: SpawnPrimitivePayload,
+  id?: string,
+): boolean {
+  return postUnityCmd('spawn_primitive', payload as unknown as Record<string, unknown>, id);
+}
+
+/** Recolor last (or all) ConKayTemp primitives. */
+export function setPrimitiveColor(
+  payload: SetColorPayload,
+  id?: string,
+): boolean {
+  return postUnityCmd('set_color', payload as unknown as Record<string, unknown>, id);
+}
+
+/** Destroy the ConKayTemp root and all spawned markers. */
+export function clearTempPrimitives(id?: string): boolean {
+  return postUnityCmd('clear_temp', {}, id);
 }
 
 /**
