@@ -162,7 +162,7 @@ export async function runAssemblyChatRevise(opts: {
     if (/^build\s+assembly\b/.test(lower) || /^create\s+assembly\b/.test(lower)) {
       // If only "build assembly" — done. If "build assembly … add …" continue? keep simple.
       if (!/\badd\b/.test(lower)) {
-        return { ok: true, assemblyId, action: 'build', parts: [] };
+        return { ok: true, assemblyId: assemblyId ?? undefined, action: 'build', parts: [] };
       }
     }
   }
@@ -173,7 +173,7 @@ export async function runAssemblyChatRevise(opts: {
     if (revised?.code === 'UNRECOGNIZED' && assemblyId) {
       return { ok: true, assemblyId, action: 'build', parts: [] };
     }
-    return { ok: false, error: revised?.error || 'revise_failed', assemblyId };
+    return { ok: false, error: revised?.error || 'revise_failed', assemblyId: assemblyId ?? undefined };
   }
 
   const parts: AssemblyPartView[] = revised.parts || [];

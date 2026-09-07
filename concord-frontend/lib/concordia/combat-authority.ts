@@ -164,7 +164,9 @@ export async function postCombatHit(
         isCrit: !!input.isCrit,
       }),
     });
-    const body = (await res.json().catch(() => null)) as (CombatHitResult & CombatHitFail) | null;
+    // Parsed JSON is a loose bag of optional fields; the union members have a
+    // conflicting `ok` literal so an intersection collapses to `never`.
+    const body = (await res.json().catch(() => null)) as Record<string, any> | null;
     if (!res.ok) {
       return {
         ok: false,
@@ -233,7 +235,7 @@ export async function postQuestInteract(
         worldId: input.worldId || 'concordia-hub',
       }),
     });
-    const body = (await res.json().catch(() => null)) as (QuestInteractResult & QuestInteractFail) | null;
+    const body = (await res.json().catch(() => null)) as Record<string, any> | null;
     if (!res.ok) {
       return {
         ok: false,
