@@ -133,6 +133,8 @@ const PUBLIC_PATHS = new Set([
   '/conkay-apply-mesh-smoke.html',
   // NLP CAD smoke: free-text → intent → apply_mesh (public HTML).
   '/conkay-nlp-cad-smoke.html',
+  // GLB load smoke: load_glb URL → glTFast → glb_loaded (public HTML).
+  '/conkay-glb-smoke.html',
 ]);
 
 const PUBLIC_PREFIXES = [
@@ -268,7 +270,8 @@ export function middleware(request: NextRequest) {
       pathname === '/conkay-bridge-smoke.html' ||
       pathname === '/conkay-industrial-smoke.html' ||
       pathname === '/conkay-apply-mesh-smoke.html' ||
-      pathname === '/conkay-nlp-cad-smoke.html'
+      pathname === '/conkay-nlp-cad-smoke.html' ||
+      pathname === '/conkay-glb-smoke.html'
     ) {
       effectiveCsp = csp
         .replace(/frame-ancestors 'none'/, "frame-ancestors 'self'")

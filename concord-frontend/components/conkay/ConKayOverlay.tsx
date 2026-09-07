@@ -21,7 +21,7 @@ import { getApiBase } from '@/lib/api/base';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import dynamic from 'next/dynamic';
-import { X, Send, Mic, MicOff, Sparkles, Volume2, VolumeX, Box, MapPin, Activity, Layers, Type } from 'lucide-react';
+import { X, Send, Mic, MicOff, Sparkles, Volume2, VolumeX, Box, MapPin, Activity, Layers, Type, Package } from 'lucide-react';
 import { ConKayMessage, type ConKayReplyFields } from './ConKayViz';
 import { useConKayVoice } from './useConKayVoice';
 import { matchConKaySkill, type ConKaySkill } from './conkay-skills';
@@ -31,7 +31,7 @@ import { useConkayRunStore, type RawToolCall } from './conkayRunStore';
 import { useConkayAttentionStore } from './conkayAttentionStore';
 import { detectArtifact } from '@/lib/conkay/artifact-kinds';
 import { isMutatingMacro } from '@/lib/conkay/mutating-macros';
-import { onUnityEvent, postUnityCmd, spawnPrimitive, clearTempPrimitives, unityIframePresent } from '@/lib/conkay/unity-bridge';
+import { onUnityEvent, postUnityCmd, spawnPrimitive, clearTempPrimitives, unityIframePresent, loadGlb } from '@/lib/conkay/unity-bridge';
 import { runFeaBeamToWorld } from '@/lib/conkay/fea-beam-to-world';
 import { runPartMeshToWorld } from '@/lib/conkay/part-mesh-to-world';
 import { designViaApiOrClient } from '@/lib/conkay/nlp-design-to-world';
@@ -287,7 +287,7 @@ export function ConKayOverlay() {
     const t = window.setInterval(refresh, 2000);
     const off = onUnityEvent((msg) => {
       // Honest telemetry only — never invent a CAD/physics result.
-      if (msg.event === 'ready' || msg.event === 'pong' || msg.event === 'ack' || msg.event === 'spawned' || msg.event === 'mesh_applied') {
+      if (msg.event === 'ready' || msg.event === 'pong' || msg.event === 'ack' || msg.event === 'spawned' || msg.event === 'mesh_applied' || msg.event === 'glb_loaded') {
         const kind = msg.payload && typeof msg.payload.kind === 'string' ? ` · ${msg.payload.kind}` : '';
         setWorkStatus(`Unity bridge: ${msg.event}${kind}${msg.id ? ` · ${msg.id}` : ''}`);
       }
@@ -378,6 +378,36 @@ export function ConKayOverlay() {
         `Mesh slice: partMesh ok verts=${verts} — apply skipped: ${res.error || 'iframe/post failed'}`,
       );
     }
+  }, []);
+
+  /**
+   * GLB URL → Unity glTFast under ConKayTemp. Same-origin public prop sample.
+   * Not evo-asset.generate auto-wire — proves load_glb path only.
+   */
+  const loadGlbWorld = useCallback(() => {
+    if (!unityIframePresent()) {
+      setWorkStatus('GLB load: no Unity iframe (open world lens with unity-webgl)');
+      return;
+    }
+    const id = `glb-${Date.now()}`;
+    const url =
+      typeof window !== 'undefined'
+        ? `${window.location.origin}/models/prop/furniture_table.glb`
+        : '/models/prop/furniture_table.glb';
+    const ok = loadGlb(
+      {
+        url,
+        name: 'furniture_table',
+        position: { x: 0.5, y: 0, z: 0.5 },
+        scale: 1,
+      },
+      id,
+    );
+    setWorkStatus(
+      ok
+        ? `GLB load: load_glb posted · ${id} · ${url} (wait glb_loaded)`
+        : 'GLB load: post failed',
+    );
   }, []);
 
   /**
@@ -1190,6 +1220,13 @@ export function ConKayOverlay() {
                 data-testid="ck-part-mesh-world"
                 className="rounded-lg p-2 text-amber-200 hover:bg-amber-400/10">
                 <Layers className="h-4 w-4" />
+              </button>
+              <button type="button" onClick={loadGlbWorld}
+                title="Load public GLB via load_glb → Unity glTFast (furniture_table) — not evo-asset auto-wire"
+                aria-label="Load GLB into world"
+                data-testid="ck-load-glb"
+                className="rounded-lg p-2 text-sky-200 hover:bg-sky-400/10">
+                <Package className="h-4 w-4" />
               </button>
               <button type="button" onClick={() => {
                 const ok = clearTempPrimitives(`clear-${Date.now()}`);

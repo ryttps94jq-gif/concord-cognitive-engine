@@ -6,6 +6,7 @@
 // Reverse path listens for `concordia:event` from the iframe (or same-origin
 // child). F0 markers: spawn_primitive / set_color / clear_temp.
 // Mesh: apply_mesh / spawn_from_spec → MeshFilter (partMesh arrays) — not full CAD.
+// GLB: load_glb { url, position?, scale?, name? } → Unity glTFast URL fetch → glb_loaded.
 //
 // No-op safe: if the iframe is missing / not yet loaded / cross-origin without
 // contentWindow, send returns false and does nothing.
@@ -27,7 +28,8 @@ export type ConcordiaCmdName =
   | 'set_color'
   | 'clear_temp'
   | 'apply_mesh'
-  | 'spawn_from_spec';
+  | 'spawn_from_spec'
+  | 'load_glb';
 
 /** Events the iframe / Unity build may post back to the parent. */
 export type ConcordiaEventName =
@@ -37,7 +39,8 @@ export type ConcordiaEventName =
   | 'status'
   | 'error'
   | 'spawned'
-  | 'mesh_applied';
+  | 'mesh_applied'
+  | 'glb_loaded';
 
 export type SpawnPrimitiveKind = 'cube' | 'sphere';
 
@@ -93,6 +96,20 @@ export interface ApplyMeshPayload {
  */
 export interface SpawnFromSpecPayload extends ApplyMeshPayload {
   spec?: ApplyMeshPayload;
+}
+
+/**
+ * Payload for `load_glb` — same-origin or http(s) GLB/glTF URL.
+ * Unity fetches via glTFast (UnityWebRequest) and parents under ConKayTemp.
+ * Not evo-asset.generate→world auto-wire; caller supplies URL.
+ */
+export interface LoadGlbPayload {
+  url: string;
+  position?: Vec3Payload;
+  /** Uniform number or per-axis vec. */
+  scale?: number | Vec3Payload;
+  /** Optional GameObject name hint. */
+  name?: string;
 }
 
 export interface ConcordiaCmdMessage {
@@ -205,6 +222,15 @@ export function spawnFromSpec(payload: SpawnFromSpecPayload, id?: string): boole
         }
       : payload;
   return postUnityCmd('spawn_from_spec', flat as unknown as Record<string, unknown>, id);
+}
+
+/**
+ * Ask Unity WebGL to fetch+instantiate a GLB/glTF URL under ConKayTemp.
+ * Returns true if postMessage was attempted — wait for `glb_loaded` (or `error`).
+ */
+export function loadGlb(payload: LoadGlbPayload, id?: string): boolean {
+  if (!payload?.url || typeof payload.url !== 'string') return false;
+  return postUnityCmd('load_glb', payload as unknown as Record<string, unknown>, id);
 }
 
 /**
