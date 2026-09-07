@@ -124,6 +124,9 @@ const PUBLIC_PATHS = new Set([
   '/forgot-password',
   '/reset-password',  // token arrives via ?token= — the page itself must be public
   '/onboarding',
+  // ConKay <-> Unity WebGL postMessage smoke (public/conkay-bridge-smoke.html).
+  // Must stay public so headless proof can load without a session cookie.
+  '/conkay-bridge-smoke.html',
 ]);
 
 const PUBLIC_PREFIXES = [
@@ -252,14 +255,18 @@ export function middleware(request: NextRequest) {
 
   function withCspHeaders(response: NextResponse): NextResponse {
     let effectiveCsp = csp;
-    // Unity WebGL iframe document must allow same-origin framing. Global
-    // frame-ancestors 'none' would otherwise block /lenses/world embedding
-    // even after X-Frame-Options was relaxed to SAMEORIGIN.
-    if (pathname.startsWith('/concordia-webgl/')) {
-      effectiveCsp = csp.replace(
-        /frame-ancestors 'none'/,
-        "frame-ancestors 'self'",
-      );
+    // Unity WebGL static template + ConKay smoke need classic inline scripts
+    // (no nonce). Also allow same-origin framing for world lens / smoke iframe.
+    if (
+      pathname.startsWith('/concordia-webgl/') ||
+      pathname === '/conkay-bridge-smoke.html'
+    ) {
+      effectiveCsp = csp
+        .replace(/frame-ancestors 'none'/, "frame-ancestors 'self'")
+        .replace(
+          /script-src [^;]+/,
+          "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob:",
+        );
     }
     response.headers.set('Content-Security-Policy', effectiveCsp);
     response.headers.set('x-nonce', nonce);
