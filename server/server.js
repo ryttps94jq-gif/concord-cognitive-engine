@@ -54951,6 +54951,22 @@ app.get("/api/system/health", (_req, res) => {
     const sessions = STATE.sessions?.size || 0;
     const brainStatus = typeof getBrainStatus === "function" ? getBrainStatus() : {};
     const uptime = process.uptime();
+
+    // Heartbeat liveness — the governorTick loop. `_tickHistory` gets a row
+    // every ~15s; a stale `lastTickAt` means the emergent sim has frozen.
+    const _lastTick = _tickHistory.length ? _tickHistory[_tickHistory.length - 1] : null;
+    const heartbeat = {
+      tick: STATE.__bgTickCounter || 0,
+      lastTickAt: _lastTick?.at || null,
+      lastTickAgoMs: _lastTick?.at ? (Date.now() - new Date(_lastTick.at).getTime()) : null,
+      // ≤ 3 missed 15s intervals => alive
+      alive: _lastTick?.at ? (Date.now() - new Date(_lastTick.at).getTime()) < 48000 : false,
+    };
+
+    // Substrate tier mix — regular DTUs consolidate into MEGA then HYPER, so
+    // (mega + hyper) is the real "compacted" count.
+    const tiers = { regular: 0, mega: 0, hyper: 0, shadow: 0 };
+    for (const d of dtus) tiers[d.tier || "regular"] = (tiers[d.tier || "regular"] || 0) + 1;
     // Outbound fetch scheduler stats (entity-web-exploration + feed-manager).
     // Surfaces the concurrency cap, in-flight count, circuit-breaker openings,
     // and timeout/error tallies — logwatch can scan for "droppedByCircuit > 0"
@@ -54969,6 +54985,8 @@ app.get("/api/system/health", (_req, res) => {
         dtuCount: total,
         sessionCount: sessions,
         brains: brainStatus,
+        heartbeat,
+        substrate: { total, tiers, compacted: (tiers.mega || 0) + (tiers.hyper || 0) },
         memory: { rss: process.memoryUsage().rss, heap: process.memoryUsage().heapUsed },
         postgres: { connected: !!pgPool, status: pgPool ? 'connected' : 'in-memory-fallback' },
         redis: { connected: !!redisClient, status: redisClient ? 'connected' : 'in-memory-fallback' },

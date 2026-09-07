@@ -78,7 +78,6 @@ import { cn } from '@/lib/utils';
 // ConKay ("Kay") — Concord's JARVIS-style majordomo, as a voice-native chat MODE.
 import { ConKayBackdrop } from '@/components/conkay/ConKayBackdrop';
 import { ConKayHud } from '@/components/conkay/ConKayHud';
-import { CycleTelemetryRibbon } from '@/components/conkay/CycleTelemetryRibbon';
 import { SessionContextBadge } from '@/components/conkay/SessionContextBadge';
 import { ConKayMessage } from '@/components/conkay/ConKayViz';
 import { useConKayVoice } from '@/components/conkay/useConKayVoice';
@@ -3269,14 +3268,11 @@ export default function ChatLensPage() {
                   compact: full disclosure wall stays in Settings / byo-keys. */}
               <BrainModePanel compact />
 
-              {/* Cycle Telemetry Ribbon — honest-by-construction "I'm
-                  healthy" surface that reads the real /api/admin/heartbeat-stats
-                  endpoint and reports 168 cycles' p50 latency + in-error
-                  count, with four strict states (live / no_data_yet /
-                  unreachable / no modules registered). Never fabricates
-                  "OK"; the doc in components/conkay/CycleTelemetryRibbon.tsx
-                  explains the full contract. */}
-              <CycleTelemetryRibbon />
+              {/* System health now lives in the global Topbar
+                  (<SovereignHealthRibbon />) on a PUBLIC endpoint — the old
+                  CycleTelemetryRibbon here polled /api/admin/heartbeat-stats,
+                  which 403s for every non-admin and rendered a permanent
+                  "Health: unreachable" + a false permission toast. */}
 
               {/* Session Context Badge — honest-by-construction "X
                   turns · Y% full" chip. Reads the real

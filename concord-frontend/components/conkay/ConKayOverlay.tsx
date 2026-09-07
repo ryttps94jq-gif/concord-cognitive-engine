@@ -448,12 +448,12 @@ export function ConKayOverlay() {
    * NLP CAD v1: free-text → deterministic intent → partMesh/FEA → apply_mesh.
    * Prefer POST /api/conkay/design; fall back to client parse + lensRun.
    */
-  const buildNlpDesignWorld = useCallback(async () => {
+  const buildNlpDesignWorld = useCallback(async (overrideText?: string) => {
     if (!unityIframePresent()) {
       setWorkStatus('NLP CAD: no Unity iframe (open world lens with unity-webgl)');
       return;
     }
-    const text = nlpDesignText.trim();
+    const text = (overrideText ?? nlpDesignText).trim();
     if (!text) {
       setWorkStatus('NLP CAD: enter a design prompt (e.g. steel I-beam 6m, 5kN midspan)');
       return;
@@ -1412,6 +1412,31 @@ export function ConKayOverlay() {
           </button>
         </div>
       </div>
+
+      {/* Scaffolding library — worked examples for the "Build in world" field.
+          The physics parser needs real structural params ("make a house" fails);
+          these show the shape of a prompt it can actually run. Click = populate
+          the field + fire the NLP→partMesh/FEA→apply_mesh path. */}
+      {unityPresent && (
+        <div className="flex flex-wrap items-center gap-1.5 px-5 pb-2 text-[10px] text-cyan-300/50">
+          <span className="text-cyan-300/40">Try:</span>
+          {[
+            'simply supported steel I-beam 6m, 5kN midspan',
+            'cantilevered timber joist 3m, 2kN tip load',
+            'steel I-beam 4m, 8kN at 1m from left support',
+          ].map((ex) => (
+            <button
+              key={ex}
+              type="button"
+              disabled={nlpBuilding}
+              onClick={() => { setNlpDesignText(ex); void buildNlpDesignWorld(ex); }}
+              className="rounded-full border border-cyan-400/20 bg-cyan-400/5 px-2 py-0.5 text-cyan-200/70 hover:border-cyan-400/50 hover:text-cyan-100 disabled:opacity-40 transition-colors"
+            >
+              {ex}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* transcript, now hosted inside the F1 cockpit grid — left/right panel
           lanes (e.g. conkay.telemetry) flank the SAME transcript content,
