@@ -40490,6 +40490,11 @@ async function governorTick(reason="heartbeat") {
     try { METRICS?.counters?.heartbeatSkipped?.inc(); } catch { /* metrics best-effort */ }
     return { ok: false, reason: "tick_already_running" };
   }
+  // Loop-liveness stamp — set on EVERY firing, including an idle-skip below,
+  // so "is the 15s interval alive" is observable separately from "did heavy
+  // maintenance run this tick". Consumed by /api/system/health's heartbeat.
+  STATE.__governorTickAt = Date.now();
+
   // Sprint 60+ — idle gate on governor heartbeat. autogen/dream/evolution/synth
   // plus jobs/queue/ingest all do real CPU work (macros, embeddings,
   // cluster detection). With no users, there's no one to notice the result.
@@ -54952,15 +54957,20 @@ app.get("/api/system/health", (_req, res) => {
     const brainStatus = typeof getBrainStatus === "function" ? getBrainStatus() : {};
     const uptime = process.uptime();
 
-    // Heartbeat liveness — the governorTick loop. `_tickHistory` gets a row
-    // every ~15s; a stale `lastTickAt` means the emergent sim has frozen.
+    // Heartbeat liveness. `__governorTickAt` is stamped on EVERY governorTick
+    // firing (including idle-skips), so this reflects "is the 15s interval
+    // alive" — not "did heavy maintenance run" (which is correctly skipped
+    // when no users are active). `_tickHistory` only grows on non-idle ticks.
+    const _govAt = STATE.__governorTickAt || null;
     const _lastTick = _tickHistory.length ? _tickHistory[_tickHistory.length - 1] : null;
+    const _agoMs = _govAt ? (Date.now() - _govAt) : null;
     const heartbeat = {
       tick: STATE.__bgTickCounter || 0,
-      lastTickAt: _lastTick?.at || null,
-      lastTickAgoMs: _lastTick?.at ? (Date.now() - new Date(_lastTick.at).getTime()) : null,
+      lastTickAt: _govAt ? new Date(_govAt).toISOString() : null,
+      lastTickAgoMs: _agoMs,
       // ≤ 3 missed 15s intervals => alive
-      alive: _lastTick?.at ? (Date.now() - new Date(_lastTick.at).getTime()) < 48000 : false,
+      alive: _agoMs != null ? _agoMs < 48000 : false,
+      lastMaintenanceAt: _lastTick?.at || null,
     };
 
     // Substrate tier mix — regular DTUs consolidate into MEGA then HYPER, so
