@@ -36,6 +36,7 @@ import { runFeaBeamToWorld } from '@/lib/conkay/fea-beam-to-world';
 import { runPartMeshToWorld } from '@/lib/conkay/part-mesh-to-world';
 import { designViaApiOrClient } from '@/lib/conkay/nlp-design-to-world';
 import { runEvoGlbToWorld } from '@/lib/conkay/evo-glb-to-world';
+import { runAssemblyChatRevise } from '@/lib/conkay/assembly-to-world';
 import { ConKayActionConfirm } from './ConKayActionConfirm';
 import { ConKayCockpit } from './ConKayCockpit';
 import { CONKAY_SIGNATURE_GREETING, CONKAY_PERSONA_PROMPT, type ConKayState } from './conkay-persona';
@@ -279,6 +280,8 @@ export function ConKayOverlay() {
   const [nlpDesignText, setNlpDesignText] = useState('simply supported steel I-beam 6m, 5kN midspan');
   const [nlpBuilding, setNlpBuilding] = useState(false);
   const [evoGlbBusy, setEvoGlbBusy] = useState(false);
+  const [assemblyId, setAssemblyId] = useState<string | null>(null);
+  const [assemblyBusy, setAssemblyBusy] = useState(false);
   useEffect(() => {
     if (!open) {
       setUnityPresent(false);
@@ -289,7 +292,7 @@ export function ConKayOverlay() {
     const t = window.setInterval(refresh, 2000);
     const off = onUnityEvent((msg) => {
       // Honest telemetry only — never invent a CAD/physics result.
-      if (msg.event === 'ready' || msg.event === 'pong' || msg.event === 'ack' || msg.event === 'spawned' || msg.event === 'mesh_applied' || msg.event === 'glb_loaded') {
+      if (msg.event === 'ready' || msg.event === 'pong' || msg.event === 'ack' || msg.event === 'spawned' || msg.event === 'mesh_applied' || msg.event === 'glb_loaded' || msg.event === 'transform_set') {
         const kind = msg.payload && typeof msg.payload.kind === 'string' ? ` · ${msg.payload.kind}` : '';
         setWorkStatus(`Unity bridge: ${msg.event}${kind}${msg.id ? ` · ${msg.id}` : ''}`);
       }
@@ -480,6 +483,43 @@ export function ConKayOverlay() {
       setNlpBuilding(false);
     }
   }, [nlpDesignText]);
+
+  /**
+   * CAD Wave 1: assembly chat revise.
+   * "build assembly" / "add beam …" / "move part X to x,y,z" → APIs → Unity apply_mesh/set_transform.
+   * Honesty: ASSEMBLY LIVE — not full CAD suite.
+   */
+  const runAssemblyRevise = useCallback(async () => {
+    if (!unityIframePresent()) {
+      setWorkStatus('Assembly: no Unity iframe (open world lens with unity-webgl)');
+      return;
+    }
+    const text = nlpDesignText.trim();
+    if (!text) {
+      setWorkStatus('Assembly: enter revise text (build assembly | add steel I-beam 6m | move part … to 2,1.2,0)');
+      return;
+    }
+    setAssemblyBusy(true);
+    setWorkStatus(`Assembly revise: “${text.slice(0, 56)}”…`);
+    try {
+      const res = await runAssemblyChatRevise({ text, assemblyId, syncUnity: true });
+      if (!res.ok) {
+        setWorkStatus(`Assembly: failed — ${res.error || 'unknown'}`);
+        return;
+      }
+      if (res.assemblyId) setAssemblyId(res.assemblyId);
+      const n = res.parts?.length ?? 0;
+      setWorkStatus(
+        `ASSEMBLY LIVE: action=${res.action || '?'} parts=${n} id=${(res.assemblyId || '').slice(0, 8)}… · Unity synced (not full CAD suite)`,
+      );
+    } catch (e) {
+      setWorkStatus(`Assembly: error — ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setAssemblyBusy(false);
+    }
+  }, [nlpDesignText, assemblyId]);
+
+
 
 
 
@@ -1230,6 +1270,15 @@ export function ConKayOverlay() {
                   className="rounded-lg px-2 py-1 text-[10px] text-violet-100 hover:bg-violet-400/15 border border-violet-400/30 disabled:opacity-50 flex items-center gap-1">
                   <Type className="h-3 w-3" />
                   {nlpBuilding ? '…' : 'Build'}
+                </button>
+                <button type="button" onClick={() => { void runAssemblyRevise(); }}
+                  disabled={assemblyBusy}
+                  title="Assembly revise: build assembly | add beam… | move part X to x,y,z → APIs + Unity (ASSEMBLY LIVE — not full suite)"
+                  aria-label="Assembly chat revise"
+                  data-testid="ck-assembly-revise"
+                  className="rounded-lg px-2 py-1 text-[10px] text-fuchsia-100 hover:bg-fuchsia-400/15 border border-fuchsia-400/30 disabled:opacity-50 flex items-center gap-1">
+                  <Layers className="h-3 w-3" />
+                  {assemblyBusy ? '…' : 'Asm'}
                 </button>
               </div>
               <button type="button" onClick={dropWorldMarker}

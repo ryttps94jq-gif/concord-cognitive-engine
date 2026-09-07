@@ -7,6 +7,7 @@
 // child). F0 markers: spawn_primitive / set_color / clear_temp.
 // Mesh: apply_mesh / spawn_from_spec → MeshFilter (partMesh arrays) — not full CAD.
 // GLB: load_glb { url, position?, scale?, name? } → Unity glTFast URL fetch → glb_loaded.
+// Transform: set_transform { id|name, position?, scale?, rotation? } → transform_set.
 //
 // No-op safe: if the iframe is missing / not yet loaded / cross-origin without
 // contentWindow, send returns false and does nothing.
@@ -29,7 +30,8 @@ export type ConcordiaCmdName =
   | 'clear_temp'
   | 'apply_mesh'
   | 'spawn_from_spec'
-  | 'load_glb';
+  | 'load_glb'
+  | 'set_transform';
 
 /** Events the iframe / Unity build may post back to the parent. */
 export type ConcordiaEventName =
@@ -40,7 +42,8 @@ export type ConcordiaEventName =
   | 'error'
   | 'spawned'
   | 'mesh_applied'
-  | 'glb_loaded';
+  | 'glb_loaded'
+  | 'transform_set';
 
 export type SpawnPrimitiveKind = 'cube' | 'sphere';
 
@@ -110,6 +113,18 @@ export interface LoadGlbPayload {
   scale?: number | Vec3Payload;
   /** Optional GameObject name hint. */
   name?: string;
+}
+
+
+/**
+ * Payload for `set_transform` — move/scale/rotate an existing ConKayTemp child by id/name.
+ */
+export interface SetTransformPayload {
+  id?: string;
+  name?: string;
+  position?: Vec3Payload;
+  scale?: number | Vec3Payload;
+  rotation?: Vec3Payload;
 }
 
 export interface ConcordiaCmdMessage {
@@ -237,6 +252,16 @@ export function loadGlb(payload: LoadGlbPayload, id?: string): boolean {
  * Subscribe to `concordia:event` messages from the Unity iframe (or any
  * same-origin child). Returns an unsubscribe function. No-op safe on SSR.
  */
+
+/**
+ * Set transform on an existing named mesh/GLB under ConKayTemp.
+ * Returns true if postMessage attempted — wait for `transform_set` (or `error`).
+ */
+export function setTransform(payload: SetTransformPayload, id?: string): boolean {
+  if (!payload?.id && !payload?.name) return false;
+  return postUnityCmd('set_transform', payload as unknown as Record<string, unknown>, id);
+}
+
 export function onUnityEvent(
   handler: (msg: ConcordiaEventMessage, raw: MessageEvent) => void,
 ): () => void {

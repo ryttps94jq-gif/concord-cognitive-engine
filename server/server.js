@@ -38298,6 +38298,9 @@ app.use("/api/blueprints", createBlueprintsRouter({ requireAuth, db }));
 // ConKay free-text NLP → design intent → FEA/partMesh mesh arrays (v1 apply_mesh path)
 import createConkayDesignRouter from "./routes/conkay-design.js";
 app.use("/api/conkay", createConkayDesignRouter({ requireAuth, db }));
+// ConKay CAD Wave 1 — multi-part assembly store + revise
+import createConkayAssemblyRouter from "./routes/conkay-assembly.js";
+app.use("/api/conkay", createConkayAssemblyRouter({ requireAuth, db }));
 app.use("/api/wagers", createWagersRouter({ requireAuth, db, realtimeEmit }));
 app.use("/api/npc-shop", createNPCShopRouter({ requireAuth, db }));
 
