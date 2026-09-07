@@ -103,16 +103,20 @@ export function SovereignHealthRibbon() {
     : `${online}/5 cognitive brains online (${mode})` +
       (consciousMs ? ` · conscious avg ${(consciousMs / 1000).toFixed(1)}s` : '');
 
-  // Heartbeat
+  // Heartbeat — the governorTick loop only starts ~50s after boot, so a
+  // fresh process legitimately has no tick yet: that's "warming", not "stalled".
   const hb = h?.heartbeat;
   const hbAlive = !!hb?.alive;
-  const hbTone: Tone = !reachable ? 'dim' : hbAlive ? 'live' : 'warn';
-  const hbLabel = !reachable ? '—' : hbAlive ? `tick ${hb?.tick ?? 0}` : 'stalled';
+  const warming = (h?.uptime ?? 0) < 90;
+  const hbTone: Tone = !reachable ? 'dim' : hbAlive ? 'live' : warming ? 'dim' : 'warn';
+  const hbLabel = !reachable ? '—' : hbAlive ? `tick ${hb?.tick ?? 0}` : warming ? 'warming' : 'stalled';
   const hbTitle = !reachable
     ? 'Heartbeat status unavailable'
     : hbAlive
       ? `governorTick alive — tick ${hb?.tick ?? 0}, ${Math.round((hb?.lastTickAgoMs ?? 0) / 1000)}s ago`
-      : `Heartbeat stale (last tick ${Math.round((hb?.lastTickAgoMs ?? 0) / 1000)}s ago)`;
+      : warming
+        ? 'Heartbeat loop starting (boot + ~50s)'
+        : `Heartbeat stale (last tick ${Math.round((hb?.lastTickAgoMs ?? 0) / 1000)}s ago)`;
 
   // Substrate
   const sub = h?.substrate;
