@@ -21,7 +21,7 @@ import { getApiBase } from '@/lib/api/base';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import dynamic from 'next/dynamic';
-import { X, Send, Mic, MicOff, Sparkles, Volume2, VolumeX, Box, MapPin, Activity, Layers, Type, Package } from 'lucide-react';
+import { X, Send, Mic, MicOff, Sparkles, Volume2, VolumeX, Box, MapPin, Activity, Layers, Type, Package, Sword } from 'lucide-react';
 import { ConKayMessage, type ConKayReplyFields } from './ConKayViz';
 import { useConKayVoice } from './useConKayVoice';
 import { matchConKaySkill, type ConKaySkill } from './conkay-skills';
@@ -35,6 +35,7 @@ import { onUnityEvent, postUnityCmd, spawnPrimitive, clearTempPrimitives, unityI
 import { runFeaBeamToWorld } from '@/lib/conkay/fea-beam-to-world';
 import { runPartMeshToWorld } from '@/lib/conkay/part-mesh-to-world';
 import { designViaApiOrClient } from '@/lib/conkay/nlp-design-to-world';
+import { runEvoGlbToWorld } from '@/lib/conkay/evo-glb-to-world';
 import { ConKayActionConfirm } from './ConKayActionConfirm';
 import { ConKayCockpit } from './ConKayCockpit';
 import { CONKAY_SIGNATURE_GREETING, CONKAY_PERSONA_PROMPT, type ConKayState } from './conkay-persona';
@@ -277,6 +278,7 @@ export function ConKayOverlay() {
   const [unityPresent, setUnityPresent] = useState(false);
   const [nlpDesignText, setNlpDesignText] = useState('simply supported steel I-beam 6m, 5kN midspan');
   const [nlpBuilding, setNlpBuilding] = useState(false);
+  const [evoGlbBusy, setEvoGlbBusy] = useState(false);
   useEffect(() => {
     if (!open) {
       setUnityPresent(false);
@@ -409,6 +411,35 @@ export function ConKayOverlay() {
         : 'GLB load: post failed',
     );
   }, []);
+
+  /**
+   * evo-asset.generate → resolve URL → Unity load_glb.
+   * Prompt must include archetype keyword (sword/spear/staff/mace/shield).
+   * Honesty: archetypes only — not full free-text CAD.
+   */
+  const evoGlbToWorld = useCallback(async () => {
+    if (!unityIframePresent()) {
+      setWorkStatus('Evo GLB: no Unity iframe (open world lens with unity-webgl)');
+      return;
+    }
+    const text = (nlpDesignText || '').trim() || 'steel sword';
+    setEvoGlbBusy(true);
+    setWorkStatus(`Evo GLB: generating “${text.slice(0, 48)}”…`);
+    try {
+      const res = await runEvoGlbToWorld({ text, waitMs: 20000 });
+      if (!res.ok) {
+        setWorkStatus(`Evo GLB: failed — ${res.error || 'unknown'}${res.glbUrl ? ` · ${res.glbUrl}` : ''}`);
+        return;
+      }
+      setWorkStatus(
+        `Evo GLB LIVE: ${res.archetype} → ${res.glbUrl} · glb_loaded · ${res.loadId || ''} (archetypes only — not full CAD)`,
+      );
+    } catch (e) {
+      setWorkStatus(`Evo GLB: error — ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setEvoGlbBusy(false);
+    }
+  }, [nlpDesignText]);
 
   /**
    * NLP CAD v1: free-text → deterministic intent → partMesh/FEA → apply_mesh.
@@ -1227,6 +1258,14 @@ export function ConKayOverlay() {
                 data-testid="ck-load-glb"
                 className="rounded-lg p-2 text-sky-200 hover:bg-sky-400/10">
                 <Package className="h-4 w-4" />
+              </button>
+              <button type="button" onClick={() => { void evoGlbToWorld(); }}
+                disabled={evoGlbBusy}
+                title="Evo-asset generate → resolve → load_glb (archetype keyword in prompt: sword/spear/staff/mace/shield)"
+                aria-label="Evo asset GLB to world"
+                data-testid="ck-evo-glb-world"
+                className="rounded-lg p-2 text-orange-200 hover:bg-orange-400/10 disabled:opacity-50">
+                <Sword className="h-4 w-4" />
               </button>
               <button type="button" onClick={() => {
                 const ok = clearTempPrimitives(`clear-${Date.now()}`);
