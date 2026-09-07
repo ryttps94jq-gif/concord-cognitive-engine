@@ -3265,8 +3265,9 @@ export default function ChatLensPage() {
                 <MessageSquare className="w-5 h-5" />
               </button>
 
-              {/* Brain Mode Pill — Private ↔ High Power, in-chat toggle */}
-              <BrainModePanel />
+              {/* Brain Mode Pill — Private ↔ High Power, in-chat toggle.
+                  compact: full disclosure wall stays in Settings / byo-keys. */}
+              <BrainModePanel compact />
 
               {/* Cycle Telemetry Ribbon — honest-by-construction "I'm
                   healthy" surface that reads the real /api/admin/heartbeat-stats
@@ -4664,13 +4665,13 @@ export default function ChatLensPage() {
           they don't touch existing chat state. */}
       <button
         onClick={() => setAgentPanelOpen(true)}
-        className="fixed bottom-6 right-6 z-30 flex items-center gap-2 px-4 py-2.5 rounded-full bg-amber-500 hover:bg-amber-400 text-amber-50 shadow-2xl ring-2 ring-amber-700/30 text-sm font-medium"
+        className="fixed bottom-20 right-4 sm:bottom-6 sm:right-6 z-30 flex items-center gap-2 px-3 py-2 sm:px-4 sm:py-2.5 rounded-full bg-amber-500 hover:bg-amber-400 text-amber-50 shadow-2xl ring-2 ring-amber-700/30 text-sm font-medium"
         title="Agent Mode — give Concord a task. It will use any of 200+ apps + web + compute to complete it."
       >
         <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <path d="M12 8V4H8M4 8h4v4M16 4v4h4M20 16h-4v4" strokeLinecap="round" strokeLinejoin="round"/>
         </svg>
-        Agent Mode
+        <span className="hidden sm:inline">Agent Mode</span>
       </button>
       <AgentModePanel open={agentPanelOpen} onClose={() => setAgentPanelOpen(false)} />
       <ProjectsPanel

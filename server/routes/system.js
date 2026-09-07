@@ -696,30 +696,54 @@ export default function registerSystemRoutes(app, {
 
   // ---- DTU Paginated ----
   app.get("/api/dtus/paginated", (req, res) => {
-    const page = clamp(Number(req.query.page || 1), 1, 10000);
-    const pageSize = clamp(Number(req.query.pageSize || 20), 1, 100);
+    // Accept both {page,pageSize} and the {offset,limit} the frontend client sends.
+    const pageSize = clamp(Number(req.query.pageSize || req.query.limit || 20), 1, 100);
+    const offset = Number(req.query.offset);
+    const page = Number.isFinite(offset) && offset >= 0
+      ? Math.floor(offset / pageSize) + 1
+      : clamp(Number(req.query.page || 1), 1, 10000);
     const tier = req.query.tier || null;
     const tag = req.query.tag || null;
+    const query = String(req.query.query || req.query.q || "").trim().toLowerCase();
     const scopeFilter = req.query.scope || null;
     const userId = req.user?.id || null;
 
-    let dtus = userVisibleDTUs();
+    // Pass the viewer so the user's OWN private DTUs are visible (a bare
+    // userVisibleDTUs() call hides every private DTU, including their own).
+    let dtus = userVisibleDTUs(userId);
 
-    // Scope-aware filtering: same logic as dtu.list macro
+    // Scope filter. DEFAULT is now "mine" — a new user's locker shows only
+    // what they created, not the whole shared global substrate (which carries
+    // feed-ingested + system DTUs a user never made). Opt into the library
+    // with ?scope=global or ?scope=all.
     if (scopeFilter === "global") {
       dtus = dtus.filter(d => d.scope === "global");
-    } else if (scopeFilter === "local") {
-      dtus = dtus.filter(d => d.scope !== "global" && (!userId || !d.ownerId || d.ownerId === userId));
+    } else if (scopeFilter === "all") {
+      dtus = userId
+        ? dtus.filter(d => d.scope === "global" || !d.ownerId || d.ownerId === userId)
+        : dtus.filter(d => !d.scope || d.scope === "global");
     } else if (userId) {
-      // Default view: user's own local/personal DTUs + all global DTUs
-      dtus = dtus.filter(d => d.scope === "global" || !d.ownerId || d.ownerId === userId);
+      // "mine" (default + explicit scope=local/mine): the viewer's own DTUs only.
+      dtus = dtus.filter(d => {
+        const owner = d.ownerId || d.createdBy || d.authorId;
+        return owner === userId;
+      });
     } else {
-      // Anonymous: only global DTUs
+      // Anonymous: only global DTUs.
       dtus = dtus.filter(d => !d.scope || d.scope === "global");
     }
 
     if (tier) dtus = dtus.filter(d => d.tier === tier);
     if (tag) dtus = dtus.filter(d => (d.tags || []).includes(tag));
+    if (query) {
+      dtus = dtus.filter(d => {
+        const hay = [
+          d.title, d.human?.summary, d.cretiHuman,
+          ...(d.tags || []),
+        ].filter(Boolean).join(" ").toLowerCase();
+        return hay.includes(query);
+      });
+    }
     const result = paginateResults(dtus, { page, pageSize });
     return res.json({ ok: true, ...result });
   });

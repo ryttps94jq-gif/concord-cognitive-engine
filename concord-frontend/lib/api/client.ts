@@ -513,15 +513,20 @@ api.interceptors.response.use(
         } else if (toastStatus === 401) {
           store.addToast({ type: 'warning', message: 'Session expired. Please log in again.' });
         } else if (toastStatus === 403) {
-          // CSRF failures used to look like a permission gate on normal buttons
-          // when the Secure cookie never stuck on local HTTP.
           const code = data?.code;
-          const msg = code === 'CSRF_FAILED'
-            ? 'Session security token expired. Refresh the page and try again.'
-            : (code === 'PERMISSION_DENIED' && data?.permission)
-              ? `Permission denied: ${data.permission}`
-              : "You don't have permission to do that.";
-          store.addToast({ type: 'error', message: msg });
+          if (code === 'CSRF_FAILED') {
+            store.addToast({ type: 'warning', message: 'Session security token expired. Refresh the page and try again.' });
+          } else if (code === 'PERMISSION_DENIED' && data?.permission) {
+            store.addToast({ type: 'error', message: `Permission denied: ${data.permission}` });
+          } else if (!isBackgroundFetch) {
+            // A user action hit a bare 403 (no PERMISSION_DENIED code). Far more
+            // often a stale CSRF cookie — common on mobile Safari's stricter
+            // SameSite/Secure/partitioned-cookie handling — than a real authz
+            // denial. Don't cry "permission denied"; tell them to refresh.
+            store.addToast({ type: 'warning', message: 'That action was blocked — your session may have expired. Refresh the page and try again.' });
+          }
+          // Background GET 403 (e.g. role-gated telemetry polls hitting a
+          // non-admin session): stay silent — the caller handles it.
         } else if (toastStatus === 429) {
           store.addToast({ type: 'warning', message: 'Too many requests. Please wait a moment.' });
         } else if (toastStatus && toastStatus >= 500 && !isBackgroundFetch) {

@@ -33,6 +33,7 @@ import { DTUQuickCreate } from '@/components/dtu/DTUQuickCreate';
 import { LiveDTUFeed } from '@/components/live/LiveDTUFeed';
 import { Skeleton, SkeletonTableRows, EmptyState, ErrorState } from '@/components/ui';
 import { useLatticeStore, selectDTUsByTier, selectFilteredDTUs } from '@/store/lattice';
+import { useShallow } from 'zustand/react/shallow';
 import { cn } from '@/lib/utils';
 import {
   Database, Plus, RefreshCw, ChevronLeft, ChevronRight,
@@ -121,6 +122,9 @@ export default function DTUBrowserPage() {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [showFeed, setShowFeed] = useState(true);
+  // Default to the viewer's own vault — not the shared global substrate, which
+  // carries feed-ingested + system DTUs a user never created.
+  const [scope, setScope] = useState<'mine' | 'global'>('mine');
 
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -163,9 +167,10 @@ export default function DTUBrowserPage() {
   const queryParams = useMemo(() => ({
     limit: PAGE_SIZE,
     offset: page * PAGE_SIZE,
+    scope: scope === 'global' ? 'global' : 'mine',
     ...(searchQuery ? { query: searchQuery } : {}),
     ...(tierFilter !== 'all' ? { tier: tierFilter } : {}),
-  }), [page, searchQuery, tierFilter]);
+  }), [page, searchQuery, tierFilter, scope]);
 
   // Fetch paginated DTUs
   const { data, isLoading, isError, error, refetch } = useQuery({
@@ -213,7 +218,11 @@ export default function DTUBrowserPage() {
   }, [selectedDtuId, dtus]);
 
   // Real-time tier counts from the lattice store (populated by socket events)
-  const tierCounts = useLatticeStore(selectDTUsByTier);
+  // zustand v5: these selectors build a fresh object/array each call, so they
+  // MUST go through useShallow or v5's useSyncExternalStore throws the
+  // "maximum update depth" infinite-loop error (React #185) — which is exactly
+  // what was crashing this lens.
+  const tierCounts = useLatticeStore(useShallow(selectDTUsByTier));
 
   // Sync page filters into the lattice store so selectFilteredDTUs stays current
   const setTierFilterStore = useLatticeStore((s) => s.setTierFilter);
@@ -222,7 +231,7 @@ export default function DTUBrowserPage() {
   useEffect(() => { setSearchQueryStore(searchQuery); }, [searchQuery, setSearchQueryStore]);
 
   // Filtered DTUs from the lattice store (real-time, reflecting socket-pushed DTUs)
-  const filteredStoreDTUs = useLatticeStore(selectFilteredDTUs);
+  const filteredStoreDTUs = useLatticeStore(useShallow(selectFilteredDTUs));
 
   const total = data?.total || 0;
   const totalPages = Math.ceil(total / PAGE_SIZE);
@@ -349,6 +358,24 @@ export default function DTUBrowserPage() {
                 {isLoading ? 'Searching...' : 'Search'}
               </button>
             </form>
+
+            {/* Scope toggle — the viewer's own vault vs. the shared global library */}
+            <div className="flex items-center gap-1">
+              {(['mine', 'global'] as const).map(s => (
+                <button
+                  key={s}
+                  onClick={() => { setScope(s); setPage(0); }}
+                  className={cn(
+                    'px-2.5 py-1 text-xs rounded transition-colors capitalize',
+                    scope === s
+                      ? 'bg-neon-cyan/20 text-neon-cyan'
+                      : 'text-gray-400 hover:text-white'
+                  )}
+                >
+                  {s === 'mine' ? 'My vault' : 'Global library'}
+                </button>
+              ))}
+            </div>
 
             {/* Tier filter */}
             <div className="flex items-center gap-1">
