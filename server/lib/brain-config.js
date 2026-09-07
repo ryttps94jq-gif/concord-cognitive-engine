@@ -68,6 +68,16 @@ const _vision_urls = _parseEndpoints(
   "http://ollama-vision:11434",
 );
 
+// 4-lane cutover: vision/multimodal may be Cloudflare Workers AI (not A40 VRAM).
+const _visionProvider = String(process.env.BRAIN_VISION_PROVIDER || "").toLowerCase().trim();
+const _visionIsCloudflare = _visionProvider === "cloudflare"
+  || _visionProvider === "workers-ai"
+  || _visionProvider === "cf"
+  || String(_vision_urls[0] || "").startsWith("cloudflare://");
+const _visionEffectiveUrls = _visionIsCloudflare
+  ? [process.env.BRAIN_VISION_URL || process.env.BRAIN_MULTIMODAL_URL || "cloudflare://workers-ai"]
+  : _vision_urls;
+
 export const BRAIN_CONFIG = Object.freeze({
   conscious: {
     url: _conscious_urls[0],
@@ -123,6 +133,8 @@ contextWindow: Math.min(Number(process.env.BRAIN_CONSCIOUS_CONTEXT) || 8192, 819
     maxTokens: 800,    // GPU: more complete outputs for entity actions
   },
   repair: {
+    // 4-lane: repair is NOT a separate VRAM brain — set BRAIN_REPAIR_URL/MODEL
+    // to the subconscious endpoint+model (alias). Call sites prefix REPAIR_MODE.
     url: _repair_urls[0],
     urls: _repair_urls,
     // Default matches the inline BRAIN declaration in server.js
@@ -130,7 +142,7 @@ contextWindow: Math.min(Number(process.env.BRAIN_CONSCIOUS_CONTEXT) || 8192, 819
     // of truth — see Phase 12 audit). 0.5b was the pre-Sprint-D
     // choice; 1.5b proved necessary for the auto-repair quality bar.
     model: process.env.BRAIN_REPAIR_MODEL || "qwen2.5:1.5b",
-    role: "error detection, auto-fix, runtime repair",
+    role: "error detection, auto-fix, runtime repair (aliased to subconscious when env matches)",
     temperature: 0.1,
     timeout: Number(process.env.BRAIN_REPAIR_TIMEOUT_MS) || 10000,
     priority: 0,       // HIGHEST — system health
@@ -146,15 +158,16 @@ contextWindow: Math.min(Number(process.env.BRAIN_CONSCIOUS_CONTEXT) || 8192, 819
     //   2. BRAIN_MULTIMODAL_URL — legacy alias.
     //   3. OLLAMA_URL / OLLAMA_HOST — single-Ollama deployments.
     //   4. ollama-vision:11434 — docker-compose default.
-    url: _vision_urls[0],
-    urls: _vision_urls,
+    url: _visionEffectiveUrls[0],
+    urls: _visionEffectiveUrls,
     // Default Qwen2.5-VL 7B (Apache-2.0) — unifies the stack on the Qwen family
     // and removes the LLaVA/Vicuna→LLaMA + GPT-4-instruction-data license ambiguity
     // (CC-BY-NC heritage) that made the old `llava:13b-v1.6-vicuna` a commercial
     // exposure. q4-class quant ≈ 7GB VRAM; with OLLAMA_FLASH_ATTENTION + the RTX PRO
     // 4500's 5th-gen tensor cores this stays well within the vision container budget.
     // Override with BRAIN_VISION_MODEL to pin a different vision model per deployment.
-    model: process.env.BRAIN_VISION_MODEL || process.env.OLLAMA_VISION_MODEL || "qwen2.5vl:7b",
+    model: process.env.BRAIN_VISION_MODEL || process.env.OLLAMA_VISION_MODEL || (_visionIsCloudflare ? "@cf/meta/llama-3.2-11b-vision-instruct" : "qwen2.5vl:7b"),
+    provider: _visionIsCloudflare ? "cloudflare" : "ollama",
     role: "vision analysis, image understanding, document layout, visual reasoning",
     temperature: 0.1,
     // Vision queries can take longer than chat — bumped 60s → 120s.

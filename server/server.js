@@ -19374,7 +19374,11 @@ const BRAIN = {
   },
   multimodal: {
     // Honesty 2026-09-05: BRAIN_CONFIG is imported before dotenv; honor env here.
-    url: process.env.BRAIN_VISION_URL || process.env.BRAIN_MULTIMODAL_URL || BRAIN_CONFIG.multimodal.url,
+    // 4-lane: BRAIN_VISION_PROVIDER=cloudflare → Workers AI (not A40 VRAM vision).
+    provider: (process.env.BRAIN_VISION_PROVIDER || BRAIN_CONFIG.multimodal?.provider || "ollama"),
+    url: (["cloudflare", "workers-ai", "cf"].includes(String(process.env.BRAIN_VISION_PROVIDER || "").toLowerCase())
+      ? (process.env.BRAIN_VISION_URL || process.env.BRAIN_MULTIMODAL_URL || "cloudflare://workers-ai")
+      : (process.env.BRAIN_VISION_URL || process.env.BRAIN_MULTIMODAL_URL || BRAIN_CONFIG.multimodal.url)),
     model: process.env.BRAIN_VISION_MODEL || process.env.OLLAMA_VISION_MODEL || BRAIN_CONFIG.multimodal.model,
     role: BRAIN_CONFIG.multimodal.role,
     systemPrompt: "",
@@ -19411,6 +19415,21 @@ async function initFiveBrains() {
 
   for (const [name, brain] of Object.entries(BRAIN)) {
     try {
+      // 4-lane: multimodal on Cloudflare Workers AI — no Ollama /api/tags probe.
+      const _isCfVision = name === "multimodal" && (
+        String(brain.provider || process.env.BRAIN_VISION_PROVIDER || "").toLowerCase() === "cloudflare"
+        || String(brain.url || "").startsWith("cloudflare://")
+      );
+      if (_isCfVision) {
+        const tok = process.env.CLOUDFLARE_API_TOKEN;
+        const acct = process.env.CLOUDFLARE_ACCOUNT_ID;
+        brain.enabled = Boolean(tok && acct);
+        structuredLog("info", brain.enabled ? "brain_online" : "brain_offline", {
+          brain: name, url: brain.url, model: brain.model, provider: "cloudflare",
+          modelPresent: brain.enabled,
+        });
+        continue;
+      }
       const r = await fetch(`${brain.url}/api/tags`, { signal: AbortSignal.timeout(15000) });
       if (r.ok) {
         const tags = await r.json().catch(() => ({}));
@@ -19507,16 +19526,35 @@ if (!_brainsDisabled) {
     const _brainHealthLoop = setInterval(async () => {
       for (const [name, brain] of Object.entries(BRAIN)) {
         try {
-          const probe = await fetch(`${brain.url}/api/tags`, { signal: AbortSignal.timeout(5000) });
-          if (probe.ok) {
-            _brainHealthFailures[name] = 0;
-            if (!brain.enabled) {
-              brain.enabled = true;
-              _refreshLlmReady();
-              structuredLog("info", "brain_health_recovered", { brain: name, source: "health_loop" });
+          // 4-lane: multimodal on Cloudflare — do not Ollama-probe cloudflare:// URLs.
+          const _isCfVision = name === "multimodal" && (
+            String(brain.provider || process.env.BRAIN_VISION_PROVIDER || "").toLowerCase() === "cloudflare"
+            || String(brain.url || "").startsWith("cloudflare://")
+          );
+          if (_isCfVision) {
+            const online = Boolean(process.env.CLOUDFLARE_API_TOKEN && process.env.CLOUDFLARE_ACCOUNT_ID);
+            if (online) {
+              _brainHealthFailures[name] = 0;
+              if (!brain.enabled) {
+                brain.enabled = true;
+                _refreshLlmReady();
+                structuredLog("info", "brain_health_recovered", { brain: name, source: "health_loop", provider: "cloudflare" });
+              }
+            } else {
+              _brainHealthFailures[name] = (_brainHealthFailures[name] || 0) + 1;
             }
           } else {
-            _brainHealthFailures[name] = (_brainHealthFailures[name] || 0) + 1;
+            const probe = await fetch(`${brain.url}/api/tags`, { signal: AbortSignal.timeout(5000) });
+            if (probe.ok) {
+              _brainHealthFailures[name] = 0;
+              if (!brain.enabled) {
+                brain.enabled = true;
+                _refreshLlmReady();
+                structuredLog("info", "brain_health_recovered", { brain: name, source: "health_loop" });
+              }
+            } else {
+              _brainHealthFailures[name] = (_brainHealthFailures[name] || 0) + 1;
+            }
           }
         } catch {
           _brainHealthFailures[name] = (_brainHealthFailures[name] || 0) + 1;
@@ -20862,11 +20900,55 @@ ${_sharedToolRules}` : "";
   const _doBrainCall = async () => {
     const start = Date.now();
     // Use /api/chat with proper system message — never concatenate system into prompt
-    const systemContent = (options.system || brain.systemPrompt || "") + _brainToolPrompt;
+    let systemContent = (options.system || brain.systemPrompt || "") + _brainToolPrompt;
+    // 4-lane: repair is aliased to subconscious model — stamp REPAIR_MODE so jobs stay distinct.
+    if (brainName === "repair" && !String(systemContent).includes("REPAIR_MODE")) {
+      systemContent = `REPAIR_MODE\n${systemContent}`.trim();
+    }
     const messages = [
       ...(systemContent ? [{ role: "system", content: systemContent }] : []),
       { role: "user", content: prompt },
     ];
+
+    // 4-lane vision: multimodal via Cloudflare Workers AI (not A40 Ollama).
+    const _cfVision = brainName === "multimodal" && (
+      String(brain.provider || process.env.BRAIN_VISION_PROVIDER || "").toLowerCase() === "cloudflare"
+      || String(_dispatchUrl || brain.url || "").startsWith("cloudflare://")
+    );
+    if (_cfVision) {
+      const { default: cloudflareChat } = await import("./lib/cloudflare-ai-provider.js");
+      const apiKey = process.env.CLOUDFLARE_API_TOKEN;
+      const activeModel = (typeof db !== "undefined" && db)
+        ? getActiveBrainModel(db, brainName, brain.model)
+        : brain.model;
+      const r = await cloudflareChat({
+        apiKey,
+        modelId: activeModel,
+        messages,
+        opts: {
+          temperature: options.temperature || 0.1,
+          maxTokens: options.maxTokens || 1500,
+          timeoutMs: options.timeout || Number(process.env.CONCORD_LLM_TIMEOUT_FLOOR_MS || 120000),
+          images: options.images || undefined,
+        },
+      });
+      brain.stats.requests++;
+      brain.stats.lastCallAt = nowISO();
+      const elapsed = Date.now() - start;
+      brain.stats.totalMs += elapsed;
+      if (!r.ok) {
+        brain.stats.errors++;
+        throw new Error(r.error || "cloudflare_vision_failed");
+      }
+      return {
+        ok: true,
+        content: r.text || "",
+        source: brainName,
+        model: r.model || activeModel,
+        provider: "cloudflare",
+        elapsed,
+      };
+    }
     // Brain self-training: consult brain_active_models for the currently-
     // routed model name. Daily refresh swaps these by inserting a row with
     // active=1; getActiveBrainModel returns brain.model as fallback when
@@ -22343,6 +22425,7 @@ function getBrainStatus() {
       url: brain.url,
       model: brain.model,
       role: brain.role,
+      ...(brain.provider ? { provider: brain.provider } : {}),
       stats: { ...brain.stats },
       avgResponseMs: brain.stats.requests > 0
         ? Math.round(brain.stats.totalMs / brain.stats.requests)
@@ -57042,33 +57125,20 @@ function processVoiceNote(audioBuffer, options = {}) {
 
 // ---- Image Analysis ----
 async function analyzeImage(imageBuffer, prompt = "Describe this image in detail.") {
-  // Use multimodal brain config — respects BRAIN_MULTIMODAL_URL + OLLAMA_VISION_MODEL
-  const brain = BRAIN_CONFIG.multimodal;
-  const OLLAMA_URL = brain.url || process.env.OLLAMA_HOST || "";
-  const VISION_MODEL = brain.model || "qwen2.5vl:7b";
-
+  // 4-lane: routes through vision-inference (CF Workers AI when BRAIN_VISION_PROVIDER=cloudflare)
   try {
     const base64 = imageBuffer.toString("base64");
-
-    // Use /api/chat (not deprecated /api/generate) with images array
-    const response = await fetch(`${OLLAMA_URL}/api/chat`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: VISION_MODEL,
-        messages: [{ role: "user", content: prompt, images: [base64] }],
-        stream: false,
-        options: { temperature: brain.temperature ?? 0.1 },
-      })
-    });
-
-    if (!response.ok) {
-      return { ok: false, error: `Ollama error: ${response.status}` };
+    const { callVision } = await import("./lib/vision-inference.js");
+    const visionResult = await callVision(base64, prompt);
+    if (!visionResult.ok) {
+      return { ok: false, error: visionResult.error || "vision_failed", model: visionResult.model };
     }
-
-    const data = await response.json();
-    const content = data.message?.content || data.response || "";
-    return { ok: true, description: content, model: VISION_MODEL };
+    return {
+      ok: true,
+      description: visionResult.content || "",
+      model: visionResult.model || process.env.BRAIN_VISION_MODEL,
+      source: visionResult.source,
+    };
   } catch (e) {
     return { ok: false, error: String(e.message || e) };
   }
@@ -65607,6 +65677,27 @@ app.get("/api/brain/health", asyncHandler(async (_req, res) => {
   const health = {};
   const probes = Object.entries(BRAIN).map(async ([name, brain]) => {
     try {
+      const _isCfVision = name === "multimodal" && (
+        String(brain.provider || process.env.BRAIN_VISION_PROVIDER || "").toLowerCase() === "cloudflare"
+        || String(brain.url || "").startsWith("cloudflare://")
+      );
+      if (_isCfVision) {
+        const online = Boolean(process.env.CLOUDFLARE_API_TOKEN && process.env.CLOUDFLARE_ACCOUNT_ID);
+        if (online) {
+          _brainHealthFailures[name] = 0;
+          brain.enabled = true;
+        }
+        health[name] = {
+          online,
+          healthy: online,
+          model: brain.model,
+          provider: "cloudflare",
+          avgResponseTime: brain.stats.requests > 0 ? Math.round(brain.stats.totalMs / brain.stats.requests) : 0,
+          totalRequests: brain.stats.requests,
+          status: online ? 200 : 0,
+        };
+        return;
+      }
       const probe = await fetch(`${brain.url}/api/tags`, { signal: AbortSignal.timeout(8000) });
       if (probe.ok) {
         _brainHealthFailures[name] = 0; // Reset failure counter on success
