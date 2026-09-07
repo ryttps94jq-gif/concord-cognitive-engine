@@ -21,7 +21,7 @@ import { getApiBase } from '@/lib/api/base';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import dynamic from 'next/dynamic';
-import { X, Send, Mic, MicOff, Sparkles, Volume2, VolumeX, Box, MapPin, Activity, Layers } from 'lucide-react';
+import { X, Send, Mic, MicOff, Sparkles, Volume2, VolumeX, Box, MapPin, Activity, Layers, Type } from 'lucide-react';
 import { ConKayMessage, type ConKayReplyFields } from './ConKayViz';
 import { useConKayVoice } from './useConKayVoice';
 import { matchConKaySkill, type ConKaySkill } from './conkay-skills';
@@ -34,6 +34,7 @@ import { isMutatingMacro } from '@/lib/conkay/mutating-macros';
 import { onUnityEvent, postUnityCmd, spawnPrimitive, clearTempPrimitives, unityIframePresent } from '@/lib/conkay/unity-bridge';
 import { runFeaBeamToWorld } from '@/lib/conkay/fea-beam-to-world';
 import { runPartMeshToWorld } from '@/lib/conkay/part-mesh-to-world';
+import { designViaApiOrClient } from '@/lib/conkay/nlp-design-to-world';
 import { ConKayActionConfirm } from './ConKayActionConfirm';
 import { ConKayCockpit } from './ConKayCockpit';
 import { CONKAY_SIGNATURE_GREETING, CONKAY_PERSONA_PROMPT, type ConKayState } from './conkay-persona';
@@ -274,6 +275,8 @@ export function ConKayOverlay() {
   // build intents (spawn_primitive / set_color / clear_temp) are F0 markers
   // only — not free-text CAD. No-op if iframe missing.
   const [unityPresent, setUnityPresent] = useState(false);
+  const [nlpDesignText, setNlpDesignText] = useState('simply supported steel I-beam 6m, 5kN midspan');
+  const [nlpBuilding, setNlpBuilding] = useState(false);
   useEffect(() => {
     if (!open) {
       setUnityPresent(false);
@@ -284,7 +287,7 @@ export function ConKayOverlay() {
     const t = window.setInterval(refresh, 2000);
     const off = onUnityEvent((msg) => {
       // Honest telemetry only — never invent a CAD/physics result.
-      if (msg.event === 'ready' || msg.event === 'pong' || msg.event === 'ack' || msg.event === 'spawned') {
+      if (msg.event === 'ready' || msg.event === 'pong' || msg.event === 'ack' || msg.event === 'spawned' || msg.event === 'mesh_applied') {
         const kind = msg.payload && typeof msg.payload.kind === 'string' ? ` · ${msg.payload.kind}` : '';
         setWorkStatus(`Unity bridge: ${msg.event}${kind}${msg.id ? ` · ${msg.id}` : ''}`);
       }
@@ -376,6 +379,48 @@ export function ConKayOverlay() {
       );
     }
   }, []);
+
+  /**
+   * NLP CAD v1: free-text → deterministic intent → partMesh/FEA → apply_mesh.
+   * Prefer POST /api/conkay/design; fall back to client parse + lensRun.
+   */
+  const buildNlpDesignWorld = useCallback(async () => {
+    if (!unityIframePresent()) {
+      setWorkStatus('NLP CAD: no Unity iframe (open world lens with unity-webgl)');
+      return;
+    }
+    const text = nlpDesignText.trim();
+    if (!text) {
+      setWorkStatus('NLP CAD: enter a design prompt (e.g. steel I-beam 6m, 5kN midspan)');
+      return;
+    }
+    setNlpBuilding(true);
+    setWorkStatus(`NLP CAD: parsing “${text.slice(0, 64)}”…`);
+    try {
+      const res = await designViaApiOrClient({ text, spawn: true });
+      if (!res.ok) {
+        setWorkStatus(`NLP CAD: failed — ${res.error || 'unknown'}`);
+        return;
+      }
+      const kind = res.intent?.meshKind ?? res.partMesh?.kind ?? '?';
+      const span = res.intent?.spans?.[0];
+      const util = res.fea?.maxUtilization != null ? res.fea.maxUtilization.toFixed(4) : (res.partMesh?.maxUtilization?.toFixed(4) ?? '?');
+      const hex = res.fea?.color?.hex ?? res.partMesh?.color?.hex ?? res.applyPayload?.color ?? '?';
+      if (res.applyPosted) {
+        setWorkStatus(
+          `NLP CAD LIVE: “${text.slice(0, 40)}” → ${kind}${span != null ? ` ${span}m` : ''} util=${util} color=${hex} · apply_mesh · ${res.applyId || ''} (not industrial CAD suite / GLB)`,
+        );
+      } else {
+        setWorkStatus(
+          `NLP CAD: intent ok ${kind} — apply skipped: ${res.error || 'iframe/post failed'}`,
+        );
+      }
+    } finally {
+      setNlpBuilding(false);
+    }
+  }, [nlpDesignText]);
+
+
 
 
   useEffect(() => {
@@ -1100,6 +1145,32 @@ export function ConKayOverlay() {
         <div className="ml-auto flex items-center gap-1.5">
           {unityPresent && (
             <>
+              <div className="flex items-center gap-1 mr-1">
+                <input
+                  type="text"
+                  value={nlpDesignText}
+                  onChange={(e) => setNlpDesignText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      void buildNlpDesignWorld();
+                    }
+                  }}
+                  placeholder="steel I-beam 6m, 5kN midspan"
+                  aria-label="NLP design prompt"
+                  data-testid="ck-nlp-design-text"
+                  className="w-40 lg:w-56 rounded-md border border-cyan-400/25 bg-black/40 px-2 py-1 text-[10px] text-cyan-100 placeholder:text-cyan-300/40"
+                />
+                <button type="button" onClick={() => { void buildNlpDesignWorld(); }}
+                  disabled={nlpBuilding}
+                  title="Build in world: free-text NLP → partMesh/FEA → apply_mesh (not industrial CAD suite)"
+                  aria-label="Build NLP design in world"
+                  data-testid="ck-nlp-build-world"
+                  className="rounded-lg px-2 py-1 text-[10px] text-violet-100 hover:bg-violet-400/15 border border-violet-400/30 disabled:opacity-50 flex items-center gap-1">
+                  <Type className="h-3 w-3" />
+                  {nlpBuilding ? '…' : 'Build'}
+                </button>
+              </div>
               <button type="button" onClick={dropWorldMarker}
                 title="Drop marker in world (F0 cube via spawn_primitive — not CAD)"
                 aria-label="Drop marker in world"

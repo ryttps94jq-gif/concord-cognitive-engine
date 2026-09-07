@@ -38294,6 +38294,10 @@ import createWagersRouter from "./routes/wagers.js";
 import createNPCShopRouter from "./routes/npc-shop.js";
 app.use("/api/tools", createToolsRouter({ requireAuth, db }));
 app.use("/api/blueprints", createBlueprintsRouter({ requireAuth, db }));
+
+// ConKay free-text NLP → design intent → FEA/partMesh mesh arrays (v1 apply_mesh path)
+import createConkayDesignRouter from "./routes/conkay-design.js";
+app.use("/api/conkay", createConkayDesignRouter({ requireAuth }));
 app.use("/api/wagers", createWagersRouter({ requireAuth, db, realtimeEmit }));
 app.use("/api/npc-shop", createNPCShopRouter({ requireAuth, db }));
 

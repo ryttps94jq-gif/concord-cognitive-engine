@@ -131,6 +131,8 @@ const PUBLIC_PATHS = new Set([
   '/conkay-industrial-smoke.html',
   // Mesh apply smoke: partMesh positions/indices → apply_mesh (public HTML).
   '/conkay-apply-mesh-smoke.html',
+  // NLP CAD smoke: free-text → intent → apply_mesh (public HTML).
+  '/conkay-nlp-cad-smoke.html',
 ]);
 
 const PUBLIC_PREFIXES = [
@@ -265,7 +267,8 @@ export function middleware(request: NextRequest) {
       pathname.startsWith('/concordia-webgl/') ||
       pathname === '/conkay-bridge-smoke.html' ||
       pathname === '/conkay-industrial-smoke.html' ||
-      pathname === '/conkay-apply-mesh-smoke.html'
+      pathname === '/conkay-apply-mesh-smoke.html' ||
+      pathname === '/conkay-nlp-cad-smoke.html'
     ) {
       effectiveCsp = csp
         .replace(/frame-ancestors 'none'/, "frame-ancestors 'self'")
