@@ -4,7 +4,7 @@
 
 import { getPart, listParts, transformPart, getAssembly } from './assembly-store.js';
 
-const MATE_TYPES = Object.freeze(['fixed', 'coincident', 'offset']);
+const MATE_TYPES = Object.freeze(['fixed', 'coincident', 'offset', 'aligned']);
 
 /**
  * Apply a mate between two parts (or part→world origin).
@@ -60,6 +60,13 @@ export function applyMate(db, assemblyId, spec) {
   } else if (type === 'offset') {
     // Place A on axis at B[axis] + offset (other coords unchanged relative intent: keep A's other axes)
     aPos[axis] = bPos[axis] + offset;
+  } else if (type === 'aligned') {
+    // Stub: match the two axes orthogonal to `axis` (leave `axis` free / A's value).
+    // e.g. axis=y → align X+Z to B (vertical column align). NOT a constraint solver.
+    for (const ax of ['x', 'y', 'z']) {
+      if (ax !== axis) aPos[ax] = bPos[ax];
+    }
+    if (offset) aPos[axis] = (aPos[axis] ?? 0) + offset;
   }
 
   const xf = transformPart(db, assemblyId, a.id, { position: aPos });

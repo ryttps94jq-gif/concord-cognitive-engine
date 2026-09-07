@@ -2909,10 +2909,32 @@ function sanitizeObject(obj, options = {}) {
   return result;
 }
 
+// Path-prefix overrides for sanitizeString's default 10,000-char truncation.
+// The default is right for chat/comment/title-shaped fields (and INPUT_LIMITS
+// below enforces those deliberately, with a real error instead of a silent
+// cut). It is WRONG for routes whose body legitimately carries a large text
+// blob as data, not prose — e.g. ConKay's STEP CAD export/import, which POSTs
+// the full ASCII STEP file as a JSON string field. Before this fix, any
+// generated part/assembly `.step` text over 10,000 chars got silently
+// truncated by this middleware, chopping off the `END-ISO-10303-21;` footer
+// and making a verifiably-valid STEP file fail `stepToMesh`'s envelope check
+// on re-import with a misleading "missing ISO-10303-21 envelope" error —
+// found 2026-09-07 by reproducing the import 422 directly (server-side debug
+// log showed `stepText.length === 10000` exactly, on an export the client had
+// just fetched at its real, longer size). Silent truncation is exactly the
+// kind of fabricated-success failure mode CLAUDE.md's "honest by construction"
+// invariant exists to catch — extend this map for the next such route rather
+// than raising the global default.
+const SANITIZE_MAXLEN_OVERRIDES = [
+  { prefix: "/api/conkay/", maxLength: 5_000_000 },
+];
+
 function sanitizationMiddleware(req, res, next) {
   // Sanitize body
   if (req.body && typeof req.body === "object") {
-    req.body = sanitizeObject(req.body);
+    const reqPath = req.path || req.originalUrl || "";
+    const override = SANITIZE_MAXLEN_OVERRIDES.find((o) => reqPath.startsWith(o.prefix));
+    req.body = sanitizeObject(req.body, override ? { maxLength: override.maxLength } : {});
   }
 
   // Sanitize query params

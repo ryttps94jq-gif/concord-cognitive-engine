@@ -36,7 +36,7 @@ import { runFeaBeamToWorld } from '@/lib/conkay/fea-beam-to-world';
 import { runPartMeshToWorld } from '@/lib/conkay/part-mesh-to-world';
 import { designViaApiOrClient } from '@/lib/conkay/nlp-design-to-world';
 import { runEvoGlbToWorld } from '@/lib/conkay/evo-glb-to-world';
-import { runAssemblyChatRevise, downloadStl, downloadAssemblyBom } from '@/lib/conkay/assembly-to-world';
+import { runAssemblyChatRevise, downloadStl, downloadAssemblyBom, downloadStep } from '@/lib/conkay/assembly-to-world';
 import { ConKayActionConfirm } from './ConKayActionConfirm';
 import { ConKayCockpit } from './ConKayCockpit';
 import { CONKAY_SIGNATURE_GREETING, CONKAY_PERSONA_PROMPT, type ConKayState } from './conkay-persona';
@@ -529,6 +529,20 @@ export function ConKayOverlay() {
       setWorkStatus(`STL download LIVE: ${r.filename} (${r.size} bytes) — Wave 2 export`);
     } catch (e) {
       setWorkStatus(`STL download failed — ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }, [assemblyId]);
+
+
+  const downloadAssemblyStep = useCallback(async () => {
+    if (!assemblyId) {
+      setWorkStatus('STEP: no assembly yet — Asm revise first');
+      return;
+    }
+    try {
+      const r = await downloadStep({ assemblyId });
+      setWorkStatus(`STEP download LIVE: ${r.filename} (${r.size} bytes) — faceted AP214 (not OCC B-rep)`);
+    } catch (e) {
+      setWorkStatus(`STEP download failed — ${e instanceof Error ? e.message : String(e)}`);
     }
   }, [assemblyId]);
 
@@ -1327,6 +1341,14 @@ export function ConKayOverlay() {
                   data-testid="ck-assembly-bom"
                   className="rounded-lg px-2 py-1 text-[10px] text-lime-100 hover:bg-lime-400/15 border border-lime-400/30 disabled:opacity-40">
                   BOM
+                </button>
+                <button type="button" onClick={() => { void downloadAssemblyStep(); }}
+                  disabled={!assemblyId}
+                  title="Download assembly faceted STEP (AP214-style MANIFOLD_SOLID_BREP from triangles — not SolidWorks B-rep)"
+                  aria-label="Download assembly STEP"
+                  data-testid="ck-export-step"
+                  className="rounded-lg px-2 py-1 text-[10px] text-orange-100 hover:bg-orange-400/15 border border-orange-400/30 disabled:opacity-40">
+                  STEP
                 </button>
 
               </div>

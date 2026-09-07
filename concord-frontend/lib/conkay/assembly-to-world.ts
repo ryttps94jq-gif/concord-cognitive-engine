@@ -244,3 +244,26 @@ export async function downloadAssemblyBom(assemblyId: string) {
   }
   return { ok: true, filename, bom };
 }
+
+/** Trigger browser download of assembly or part faceted STEP. */
+export async function downloadStep(opts: { assemblyId: string; partId?: string; filename?: string }) {
+  const path = opts.partId
+    ? `/api/conkay/assemblies/${opts.assemblyId}/parts/${opts.partId}/export.step`
+    : `/api/conkay/assemblies/${opts.assemblyId}/export.step`;
+  const res = await api.get(path, { responseType: 'blob' });
+  const blob = res?.data instanceof Blob ? res.data : new Blob([res?.data], { type: 'application/step' });
+  const filename =
+    opts.filename ||
+    (opts.partId
+      ? `conkay-part-${opts.partId.slice(0, 8)}.step`
+      : `conkay-assembly-${opts.assemblyId.slice(0, 8)}.step`);
+  if (typeof window !== 'undefined') {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+  return { ok: true, filename, size: blob.size };
+}

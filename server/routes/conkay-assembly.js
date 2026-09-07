@@ -26,6 +26,9 @@ import { parseAssemblyUtterance } from '../lib/conkay/assembly-nlp.js';
 import {
   exportPartStl,
   exportAssemblyStl,
+  exportPartStep,
+  exportAssemblyStep,
+  importStepMesh,
   buildBom,
 } from '../lib/conkay/assembly-export.js';
 import { applyMate, MATE_TYPES } from '../lib/conkay/assembly-mates.js';
@@ -365,6 +368,119 @@ export default function createConkayAssemblyRouter({ requireAuth, db }) {
     return res.send(stl.buffer);
   });
 
+
+  /** GET /api/conkay/assemblies/:id/parts/:partId/export.step — faceted ASCII STEP */
+  router.get('/assemblies/:id/parts/:partId/export.step', auth, (req, res) => {
+    if (!needDb(res)) return;
+    const part = getPart(db, req.params.id, req.params.partId);
+    if (!part) return res.status(404).json({ ok: false, error: 'part_not_found', code: 'NOT_FOUND' });
+    const step = exportPartStep(part);
+    if (!step.ok) return res.status(422).json(step);
+    const filename = `conkay-part-${part.name || part.id}.step`.replace(/[^\w.\-]+/g, '_');
+    res.setHeader('Content-Type', 'application/step');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('X-ConKay-Triangle-Count', String(step.triangleCount));
+    res.setHeader('X-ConKay-Vertex-Count', String(step.vertexCount));
+    res.setHeader('X-ConKay-STEP-Format', 'faceted-AP214-MANIFOLD_SOLID_BREP');
+    return res.send(step.buffer);
+  });
+
+  /** GET /api/conkay/assemblies/:id/export.step — merged assembly faceted STEP */
+  router.get('/assemblies/:id/export.step', auth, (req, res) => {
+    if (!needDb(res)) return;
+    const step = exportAssemblyStep(db, req.params.id);
+    if (!step.ok) return res.status(422).json(step);
+    const filename = `conkay-assembly-${req.params.id.slice(0, 8)}.step`;
+    res.setHeader('Content-Type', 'application/step');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('X-ConKay-Triangle-Count', String(step.triangleCount));
+    res.setHeader('X-ConKay-Included-Parts', String(step.included?.length || 0));
+    res.setHeader('X-ConKay-Skipped-Parts', String(step.skipped?.length || 0));
+    res.setHeader('X-ConKay-STEP-Format', 'faceted-AP214-MANIFOLD_SOLID_BREP');
+    return res.send(step.buffer);
+  });
+
+  /**
+   * POST /api/conkay/assemblies/:id/import.step
+   * body: raw STEP text (Content-Type: application/step|text/plain) OR JSON { step|text, name?, material? }
+   * Creates a part with mesh from faceted POLY_LOOP STEP.
+   */
+  router.post('/assemblies/:id/import.step', auth, async (req, res) => {
+    if (!needDb(res)) return;
+    try {
+      const assemblyId = req.params.id;
+      if (!getAssembly(db, assemblyId)) {
+        return res.status(404).json({ ok: false, error: 'assembly_not_found', code: 'NOT_FOUND' });
+      }
+      let stepText = '';
+      let name = req.query?.name || null;
+      let material = req.query?.material || null;
+      const ct = String(req.headers['content-type'] || '');
+      if (ct.includes('application/json')) {
+        stepText = req.body?.step || req.body?.text || req.body?.data || '';
+        name = req.body?.name || name;
+        material = req.body?.material || material;
+      } else if (Buffer.isBuffer(req.body)) {
+        stepText = req.body.toString('utf8');
+      } else if (typeof req.body === 'string') {
+        stepText = req.body;
+      } else if (req.body?.step || req.body?.text) {
+        stepText = req.body.step || req.body.text;
+        name = req.body?.name || name;
+        material = req.body?.material || material;
+      } else {
+        stepText = '';
+      }
+      if (!stepText || !String(stepText).includes('ISO-10303-21')) {
+        return res.status(400).json({
+          ok: false,
+          error: 'need_step_body',
+          code: 'MISSING_STEP',
+          detail: 'POST ASCII STEP (ISO-10303-21) as raw body or JSON { step }',
+        });
+      }
+      const parsed = importStepMesh(stepText);
+      if (!parsed.ok) return res.status(422).json(parsed);
+
+      const transform = defaultTransform(req.body?.transform);
+      if (!req.body?.transform?.position) {
+        const existing = listParts(db, assemblyId);
+        transform.position.x = existing.length * 1.5;
+        transform.position.y = 1.2;
+      }
+      const out = addPart(db, assemblyId, {
+        name: name || 'step-import',
+        kind: 'step-faceted',
+        source: 'step-import',
+        transform,
+        mate: { type: 'fixed' },
+        mesh: {
+          positions: parsed.positions,
+          indices: parsed.indices,
+          kind: 'step-faceted',
+          vertexCount: parsed.vertexCount,
+          triangleCount: parsed.triangleCount,
+        },
+        material: material || null,
+        meta: { importedFrom: 'faceted-step', honesty: parsed.honesty },
+      });
+      if (!out.ok) return res.status(400).json(out);
+      return res.json({
+        ok: true,
+        part: out.part,
+        mesh: {
+          vertexCount: parsed.vertexCount,
+          triangleCount: parsed.triangleCount,
+        },
+        honesty: {
+          wave: 'STEP',
+          note: 'Faceted STEP import → triangle mesh part. NOT full B-rep CAD kernel.',
+        },
+      });
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: e instanceof Error ? e.message : String(e) });
+    }
+  });
 
   /** GET /api/conkay/materials */
   router.get('/materials', auth, (_req, res) => {

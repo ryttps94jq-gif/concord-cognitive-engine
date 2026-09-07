@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-07T02:11:51.781Z",
+  "generatedAt": "2026-09-07T16:02:13.232Z",
   "mode": "honest",
   "totals": {
     "raw": 1,
@@ -7892,11 +7892,11 @@
       "lens": "world",
       "tier": "polished",
       "fileCount": 190,
-      "totalLoc": 39922,
-      "pageLoc": 7582,
+      "totalLoc": 39989,
+      "pageLoc": 7649,
       "bespokeComponentLoc": 32340,
       "maxBespokeComponentLoc": 1297,
-      "bespokeRatio": 0.81,
+      "bespokeRatio": 0.809,
       "importsGenericTrio": false,
       "usesGenericBody": false,
       "hasMacroButtonWall": false,
