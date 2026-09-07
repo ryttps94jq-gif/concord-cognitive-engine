@@ -365,6 +365,53 @@ namespace Concordia
         public Task SendMove(float x, float y, float z, string cityId) =>
             SendEvt("player:move", "{\"cityId\":\"" + Escape(cityId) + "\",\"x\":" + x + ",\"y\":" + y + ",\"z\":" + z + ",\"direction\":0}");
 
+
+        /// <summary>
+        /// HTTP server-authority probe (thin stub). Kitchen: GET /api/combat/probe
+        /// with Bearer. Proves auth + advertises WS/REST bind paths. Does not hit.
+        /// Returns raw JSON or empty on failure — never fabricates ok:true.
+        /// Next bind: on Connected use SendAttack; else keep offline no_gateway.
+        /// </summary>
+        public async Task<string> ProbeCombatAuthorityHttp(string httpBase = null)
+        {
+            var bas = httpBase;
+            if (string.IsNullOrEmpty(bas))
+            {
+#if UNITY_EDITOR
+                bas = "http://127.0.0.1:5050";
+#else
+                bas = "http://127.0.0.1:5050";
+#endif
+            }
+            var url = bas.TrimEnd('/') + "/api/combat/probe";
+            try
+            {
+                using (var req = UnityEngine.Networking.UnityWebRequest.Get(url))
+                {
+                    var token = string.IsNullOrEmpty(bearerToken) ? "unity-local-guest" : bearerToken;
+                    req.SetRequestHeader("Authorization", "Bearer " + token);
+                    req.SetRequestHeader("Accept", "application/json");
+                    var op = req.SendWebRequest();
+                    while (!op.isDone) await Task.Yield();
+#if UNITY_2020_2_OR_NEWER
+                    if (req.result != UnityEngine.Networking.UnityWebRequest.Result.Success)
+#else
+                    if (req.isNetworkError || req.isHttpError)
+#endif
+                    {
+                        Debug.LogWarning("combat probe failed: " + req.error + " " + req.downloadHandler?.text);
+                        return "";
+                    }
+                    return req.downloadHandler != null ? req.downloadHandler.text : "";
+                }
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning("combat probe exception: " + e.Message);
+                return "";
+            }
+        }
+
         public Task SendAttack(string targetId, float baseDamage = 20, float range = 5, string weapon = "sword") =>
             SendEvt("combat:attack", "{\"targetId\":\"" + Escape(targetId) + "\",\"baseDamage\":" + baseDamage + ",\"range\":" + range + ",\"weapon\":\"" + Escape(weapon) + "\"}");
 

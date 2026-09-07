@@ -118,6 +118,42 @@ export default function createCombatRouter({ requireAuth, REALTIME, getUserPosit
     }
   });
 
+  // GET /api/combat/probe — auth-gated server-authority handshake for
+  // Unity/WebGL/Editor. Does not resolve a hit; returns structured OK so
+  // clients can prove the kitchen kernel is reachable + which bind paths
+  // to use next (WS combat:attack or POST /hit / worlds combat/attack).
+  // Offline Editor without this call still stays honest {ok:false, reason:'no_gateway'}.
+  router.get("/probe", auth, (req, res) => {
+    try {
+      const userId = _userId(req);
+      if (!userId) return res.status(401).json({ ok: false, error: "auth_required" });
+      const presence = typeof getUserPosition === "function" ? getUserPosition(userId) : null;
+      res.json({
+        ok: true,
+        authority: "server",
+        userId,
+        presence: presence ? { cityId: presence.cityId ?? null, x: presence.x, y: presence.y, z: presence.z } : null,
+        gateways: {
+          godotWs: "/godot-ws",
+          unityWs: "/unity-ws",
+          combatEvt: "combat:attack",
+          combatAck: "combat:attack:ack",
+        },
+        http: {
+          hit: "POST /api/combat/hit",
+          death: "POST /api/combat/death",
+          recent: "GET /api/combat/recent",
+          worldsAttack: "POST /api/worlds/:worldId/combat/attack",
+          questsActive: "GET /api/worlds/:worldId/quests/active",
+        },
+        note: "WS combat:attack is preferred when Connected; HTTP hit/worldsAttack are the REST bind. Probe is not a damage event.",
+        ts: new Date().toISOString(),
+      });
+    } catch {
+      res.status(500).json({ ok: false, error: "An unexpected error occurred" });
+    }
+  });
+
   // GET /api/combat/recent — combat history feed.
   // Migration 066's damage_events table receives every validated hit
   // (3 dedicated indexes for {world_id, target_id, attacker_id} suggest
