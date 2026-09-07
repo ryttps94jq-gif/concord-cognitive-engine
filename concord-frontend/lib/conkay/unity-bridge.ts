@@ -4,8 +4,8 @@
 // ConKay (or any client) posts typed `concordia:cmd` envelopes into the
 // iframe that world/page.tsx mounts when NEXT_PUBLIC_CONCORDIA_RENDERER=unity-webgl.
 // Reverse path listens for `concordia:event` from the iframe (or same-origin
-// child). Structured build intents (spawn_primitive / set_color / clear_temp)
-// are F0 markers only — not free-text CAD / physics / industrial mesh.
+// child). F0 markers: spawn_primitive / set_color / clear_temp.
+// Mesh: apply_mesh / spawn_from_spec → MeshFilter (partMesh arrays) — not full CAD.
 //
 // No-op safe: if the iframe is missing / not yet loaded / cross-origin without
 // contentWindow, send returns false and does nothing.
@@ -25,7 +25,9 @@ export type ConcordiaCmdName =
   | 'intent'
   | 'spawn_primitive'
   | 'set_color'
-  | 'clear_temp';
+  | 'clear_temp'
+  | 'apply_mesh'
+  | 'spawn_from_spec';
 
 /** Events the iframe / Unity build may post back to the parent. */
 export type ConcordiaEventName =
@@ -34,7 +36,8 @@ export type ConcordiaEventName =
   | 'ack'
   | 'status'
   | 'error'
-  | 'spawned';
+  | 'spawned'
+  | 'mesh_applied';
 
 export type SpawnPrimitiveKind = 'cube' | 'sphere';
 
@@ -66,6 +69,30 @@ export interface SetColorPayload {
   color: string | RgbaPayload;
   /** When true, recolor every child under ConKayTemp; else last spawned. */
   all?: boolean;
+}
+
+/**
+ * Payload for `apply_mesh` — flat positions [x,y,z,…] + triangle indices.
+ * Mirrors engineering.partMesh result shape. Not GLB / free-text CAD.
+ */
+export interface ApplyMeshPayload {
+  positions: number[];
+  indices: number[];
+  /** CSS hex (#rrggbb) or 0–1 rgba channels. */
+  color?: string | RgbaPayload;
+  /** Optional stable id for the spawned mesh GameObject name. */
+  id?: string;
+  position?: Vec3Payload;
+  /** Optional scale (uniform or per-axis). */
+  scale?: number | Vec3Payload;
+}
+
+/**
+ * Payload for `spawn_from_spec` — same as apply_mesh, or `{ spec: ApplyMeshPayload }`.
+ * Alias for industrial pipeline wiring; Unity treats both as MeshFilter path.
+ */
+export interface SpawnFromSpecPayload extends ApplyMeshPayload {
+  spec?: ApplyMeshPayload;
 }
 
 export interface ConcordiaCmdMessage {
@@ -151,6 +178,33 @@ export function setPrimitiveColor(
 /** Destroy the ConKayTemp root and all spawned markers. */
 export function clearTempPrimitives(id?: string): boolean {
   return postUnityCmd('clear_temp', {}, id);
+}
+
+/**
+ * Push a triangle mesh into Unity WebGL MeshFilter under ConKayTemp.
+ * Returns true if postMessage was attempted — wait for `mesh_applied` event.
+ */
+export function applyMesh(payload: ApplyMeshPayload, id?: string): boolean {
+  return postUnityCmd('apply_mesh', payload as unknown as Record<string, unknown>, id);
+}
+
+/**
+ * Alias path: spawn_from_spec → same MeshFilter apply as apply_mesh.
+ * Accepts flat ApplyMeshPayload or `{ spec: { positions, indices, … } }`.
+ */
+export function spawnFromSpec(payload: SpawnFromSpecPayload, id?: string): boolean {
+  const flat: ApplyMeshPayload =
+    payload.spec && Array.isArray(payload.spec.positions)
+      ? {
+          positions: payload.spec.positions,
+          indices: payload.spec.indices ?? [],
+          color: payload.spec.color ?? payload.color,
+          id: payload.spec.id ?? payload.id,
+          position: payload.spec.position ?? payload.position,
+          scale: payload.spec.scale ?? payload.scale,
+        }
+      : payload;
+  return postUnityCmd('spawn_from_spec', flat as unknown as Record<string, unknown>, id);
 }
 
 /**

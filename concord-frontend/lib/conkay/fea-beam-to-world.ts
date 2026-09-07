@@ -2,8 +2,8 @@
 //
 // Industrial slice v1 (honest): FEA_FRAME → engineering.runFEA → util band
 // color → Unity WebGL spawn_primitive cube (beam proxy). NOT full CAD.
-// apply_mesh / spawn_from_spec / partMesh are follow-on slices — this path
-// reuses LIVE build-intents (spawn_primitive + set_color).
+// Companion path: part-mesh-to-world.ts posts apply_mesh (real MeshFilter).
+// This file stays the cube-proxy FEA util→color path (spawn_primitive).
 
 import { lensRun } from '@/lib/api/client';
 import { feaUtilToColor, type FeaBandColor, type FeaUtilBand } from './fea-util-color';

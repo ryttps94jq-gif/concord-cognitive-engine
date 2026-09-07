@@ -129,6 +129,8 @@ const PUBLIC_PATHS = new Set([
   '/conkay-bridge-smoke.html',
   // Industrial slice smoke: FEA util→color→spawn_primitive (public HTML).
   '/conkay-industrial-smoke.html',
+  // Mesh apply smoke: partMesh positions/indices → apply_mesh (public HTML).
+  '/conkay-apply-mesh-smoke.html',
 ]);
 
 const PUBLIC_PREFIXES = [
@@ -262,7 +264,8 @@ export function middleware(request: NextRequest) {
     if (
       pathname.startsWith('/concordia-webgl/') ||
       pathname === '/conkay-bridge-smoke.html' ||
-      pathname === '/conkay-industrial-smoke.html'
+      pathname === '/conkay-industrial-smoke.html' ||
+      pathname === '/conkay-apply-mesh-smoke.html'
     ) {
       effectiveCsp = csp
         .replace(/frame-ancestors 'none'/, "frame-ancestors 'self'")

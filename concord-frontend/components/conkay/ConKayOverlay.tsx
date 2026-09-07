@@ -21,7 +21,7 @@ import { getApiBase } from '@/lib/api/base';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import dynamic from 'next/dynamic';
-import { X, Send, Mic, MicOff, Sparkles, Volume2, VolumeX, Box, MapPin, Activity } from 'lucide-react';
+import { X, Send, Mic, MicOff, Sparkles, Volume2, VolumeX, Box, MapPin, Activity, Layers } from 'lucide-react';
 import { ConKayMessage, type ConKayReplyFields } from './ConKayViz';
 import { useConKayVoice } from './useConKayVoice';
 import { matchConKaySkill, type ConKaySkill } from './conkay-skills';
@@ -33,6 +33,7 @@ import { detectArtifact } from '@/lib/conkay/artifact-kinds';
 import { isMutatingMacro } from '@/lib/conkay/mutating-macros';
 import { onUnityEvent, postUnityCmd, spawnPrimitive, clearTempPrimitives, unityIframePresent } from '@/lib/conkay/unity-bridge';
 import { runFeaBeamToWorld } from '@/lib/conkay/fea-beam-to-world';
+import { runPartMeshToWorld } from '@/lib/conkay/part-mesh-to-world';
 import { ConKayActionConfirm } from './ConKayActionConfirm';
 import { ConKayCockpit } from './ConKayCockpit';
 import { CONKAY_SIGNATURE_GREETING, CONKAY_PERSONA_PROMPT, type ConKayState } from './conkay-persona';
@@ -342,6 +343,36 @@ export function ConKayOverlay() {
     } else {
       setWorkStatus(
         `Industrial slice: FEA util=${util} band=${band} — spawn skipped: ${res.error || 'iframe/post failed'}`,
+      );
+    }
+  }, []);
+
+  /**
+   * Industrial mesh slice: engineering.partMesh (i-beam) → apply_mesh MeshFilter.
+   * Optional FEA util tint. Not free-text CAD / GLB.
+   */
+  const dropPartMeshWorld = useCallback(async () => {
+    if (!unityIframePresent()) {
+      setWorkStatus('Mesh slice: no Unity iframe (open world lens with unity-webgl)');
+      return;
+    }
+    setWorkStatus('Mesh slice: engineering.partMesh (i-beam) + apply_mesh…');
+    const res = await runPartMeshToWorld({ kind: 'i-beam', spawn: true, colorFromFea: true });
+    if (!res.ok) {
+      setWorkStatus(`Mesh slice: failed — ${res.error || 'unknown'}`);
+      return;
+    }
+    const verts = res.vertexCount ?? '?';
+    const tris = res.triangleCount ?? '?';
+    const hex = res.color?.hex ?? '?';
+    const band = res.band ?? '?';
+    if (res.applyPosted) {
+      setWorkStatus(
+        `Mesh apply LIVE: kind=${res.kind} verts=${verts} tris=${tris} band=${band} color=${hex} · apply_mesh posted · ${res.applyId || ''}`,
+      );
+    } else {
+      setWorkStatus(
+        `Mesh slice: partMesh ok verts=${verts} — apply skipped: ${res.error || 'iframe/post failed'}`,
       );
     }
   }, []);
@@ -1076,11 +1107,18 @@ export function ConKayOverlay() {
                 <MapPin className="h-4 w-4" />
               </button>
               <button type="button" onClick={() => { void dropFeaBeamWorld(); }}
-                title="FEA beam → world: runFEA(FEA_FRAME) → util band color → spawn_primitive cube proxy (not full CAD / apply_mesh)"
+                title="FEA beam → world: runFEA(FEA_FRAME) → util band color → spawn_primitive cube proxy (not full CAD)"
                 aria-label="FEA beam to world"
                 data-testid="ck-fea-beam-world"
                 className="rounded-lg p-2 text-emerald-200 hover:bg-emerald-400/10">
                 <Activity className="h-4 w-4" />
+              </button>
+              <button type="button" onClick={() => { void dropPartMeshWorld(); }}
+                title="partMesh i-beam → apply_mesh MeshFilter (real triangle mesh — not full CAD)"
+                aria-label="Apply part mesh to world"
+                data-testid="ck-part-mesh-world"
+                className="rounded-lg p-2 text-amber-200 hover:bg-amber-400/10">
+                <Layers className="h-4 w-4" />
               </button>
               <button type="button" onClick={() => {
                 const ok = clearTempPrimitives(`clear-${Date.now()}`);
