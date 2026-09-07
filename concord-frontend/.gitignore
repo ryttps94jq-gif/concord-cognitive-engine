@@ -12,6 +12,11 @@ out/
 
 # Production
 build/
+# Exception: Unity WebGL gzip build served from public/ (prod needs it)
+!public/concordia-webgl/
+!public/concordia-webgl/**
+!public/concordia-webgl/Build/
+!public/concordia-webgl/Build/**
 
 # Misc
 .DS_Store

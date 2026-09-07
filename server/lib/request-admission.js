@@ -178,15 +178,25 @@ export function createLoadSheddingMiddleware(deps = {}) {
     const retryAfterS = getRetryAfterSeconds();
     try { onShed(priority, decision.reason); } catch { /* observability best-effort */ }
 
+    // Clarity only — does NOT change admit/shed thresholds. Post-restart lag
+    // often trips the same path; clients can toast "warming up" instead of
+    // treating this like a permission gate or permanent outage.
+    const uptimeS = (typeof process !== "undefined" && typeof process.uptime === "function")
+      ? process.uptime()
+      : null;
+    const warming = uptimeS != null && uptimeS < 120;
+
     res.set("Retry-After", String(retryAfterS));
     return res.status(503).json({
       ok: false,
       error: "service_overloaded",
+      code: warming ? "service_warming" : "service_overloaded",
       reason: decision.reason,
       priority,
       lagMs: Math.round(decision.lagMs || 0),
       thresholdMs: decision.thresholdMs,
       retryAfterS,
+      warming,
     });
   };
 }

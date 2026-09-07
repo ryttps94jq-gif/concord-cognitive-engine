@@ -111,6 +111,7 @@ import queue from './queue.js';
 import schema from './schema.js';
 import tick from './tick.js';
 import lock from './lock.js';
+import usbLease from './usb-lease.js';
 import fork from './fork.js';
 import creationSingularity from './creation-singularity.js';
 import invariant from './invariant.js';
@@ -212,6 +213,14 @@ import voice from './voice.js';
 import wallet from './wallet.js';
 import welding from './welding.js';
 import whiteboard from './whiteboard.js';
+import predict from './predict.js';
+import dila from './dila.js';
+import browserOrgan from './browser-organ.js';
+import sentinel from './sentinel.js';
+import traceFabric from './trace-fabric.js';
+import incidentEngine from './incident-engine.js';
+import researchFrontier from './research-frontier.js';
+import opportunityEngine from './opportunity-engine.js';
 import world from './world.js';
 import all from './all.js';
 import crafting from './crafting.js';
@@ -410,6 +419,7 @@ export default [
   schema,
   tick,
   lock,
+  usbLease,
   fork,
   creationSingularity,
   invariant,
@@ -563,4 +573,12 @@ export default [
   registerCobuildActions,
   registerCompanionActions,
   hub,
+  predict,
+  dila,
+  browserOrgan,
+  sentinel,
+  traceFabric,
+  incidentEngine,
+  researchFrontier,
+  opportunityEngine,
 ];

@@ -180,7 +180,20 @@ module.exports = {
         BRAIN_CONSCIOUS_MODEL: 'concord-conscious:latest',
         BRAIN_SUBCONSCIOUS_MODEL: 'qwen2.5:7b-instruct-q4_K_M',
         BRAIN_UTILITY_MODEL: 'qwen2.5:3b',
-        BRAIN_REPAIR_MODEL: 'qwen2.5:1.5b',
+        // Brain verification pass (2026-08-27) — this said 'qwen2.5:1.5b',
+        // contradicting the comment 4 lines up in this same block (which
+        // already documented the intended set as "... + qwen2.5:0.5b +
+        // ...") and .env.runpod's BRAIN_REPAIR_MODEL, both of which say
+        // 0.5b. Same silent-drift shape the vision fix below and the
+        // CONCORD_SHARD_WORLDS fix elsewhere in this file both already
+        // hit — pm2's env_runpod wins over .env.runpod for any key set in
+        // both, and nothing cross-checks this specific file pair (the
+        // ENV_CONFLICT detector in server.js's dotenv loader only compares
+        // against the plain `.env` file, never `.env.runpod` — `.env.runpod`
+        // is shell-sourced by scripts/runpod-cognition.sh, not dotenv-loaded
+        // by the app itself, so a drift here is invisible to that detector).
+        // Corrected to match.
+        BRAIN_REPAIR_MODEL: 'qwen2.5:0.5b',
         // Stability audit (2026-07-20) — FIXED a real licensing-exposure
         // bug: this was still 'llava:13b-v1.6-vicuna-q4_K_M', but
         // .env.runpod (and CLAUDE.md's "five-brain architecture" section)
@@ -192,6 +205,15 @@ module.exports = {
         // loader this same audit), this stale value would have silently
         // reintroduced the exact licensing risk the swap was meant to close.
         BRAIN_VISION_MODEL: 'qwen2.5vl:7b',
+        // Brain verification pass (2026-08-27) — see the matching
+        // LLM_REQUEST_TIMEOUT_MS comment in .env.runpod for the measured
+        // cold-boot vision latency this covers. Declared here too (not
+        // just .env.runpod) because this env_runpod block is what a
+        // pm2-managed launch actually receives — .env.runpod's copy only
+        // takes effect for whatever explicitly shell-sources it first
+        // (scripts/runpod-up.sh / runpod-cognition.sh), same reasoning as
+        // every BRAIN_* pair in this file.
+        LLM_REQUEST_TIMEOUT_MS: '90000',
         // Stability audit (2026-07-20) — real bare-metal Ollama topology is
         // 5 SEPARATE processes, each OLLAMA_NUM_PARALLEL=1 (see
         // .env.runpod's "Phase F" / scripts/runpod-cognition.sh) — the true
@@ -212,6 +234,11 @@ module.exports = {
         CONCORD_HEARTBEAT_TIMING_HISTORY: '60',
         CONCORD_HEARTBEAT_POOL_SIZE: '4',
         CONCORD_HEARTBEAT_WORKER_TIMEOUT_MS: '25000',
+        // Dila runtime — F0 enforce for autonomous missions + mission runtime on.
+        CONCORD_AUTH_GATE_ENFORCE_AUTONOMOUS: 'true',
+        CONCORD_DILA_RUNTIME_ENFORCE: '1',
+        CONCORD_SELF_IMPROVE_AUTO: '1',
+        CONCORD_REPO_GRAPH_CYCLE: '1',
         // World sharding — REVERTED to 'false' (2026-07-20 stability audit).
         // This was briefly set 'true' earlier the same day (the sharding
         // activation itself — routes/worlds.js#POST /travel wiring — is real

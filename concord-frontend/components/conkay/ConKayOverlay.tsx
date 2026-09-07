@@ -1,5 +1,7 @@
 'use client';
 
+import { getApiBase } from '@/lib/api/base';
+
 // concord-frontend/components/conkay/ConKayOverlay.tsx
 //
 // ConKay, summonable on ANY lens — the cross-lens "take over and operate" surface
@@ -459,7 +461,7 @@ export function ConKayOverlay() {
   // "show its work and the task it was provided" → a real, reopenable record.
   const persistArtifact = useCallback((title: string, work: Record<string, unknown>) => {
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || '';
+      const base = getApiBase();
       fetch(`${base}/api/dtus`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
@@ -529,10 +531,10 @@ export function ConKayOverlay() {
     ]);
     try {
       const result = await match.skill.run(match.args, {
-        apiBase: process.env.NEXT_PUBLIC_API_URL || '',
+        apiBase: getApiBase(),
         fetchJson: async (path: string) => {
           try {
-            const r = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ''}${path}`, { credentials: 'include' });
+            const r = await fetch(`${getApiBase()}${path}`, { credentials: 'include' });
             return await r.json();
           } catch { return null; }
         },
@@ -656,7 +658,7 @@ export function ConKayOverlay() {
       { id: 'render', label: 'Rendering the result', state: 'pending' },
     ]);
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || '';
+      const base = getApiBase();
       let actions: string[] = [];
       try {
         const r = await fetch(`${base}/api/lens-actions/${encodeURIComponent(domain)}`, { credentials: 'include' });
@@ -750,7 +752,7 @@ export function ConKayOverlay() {
       }
     };
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || '';
+      const base = getApiBase();
       const history = messages.slice(-20).map((m) => ({ role: m.role, content: m.content }));
       const res = await fetch(`${base}/api/chat-agent/stream`, {
         method: 'POST', credentials: 'include',

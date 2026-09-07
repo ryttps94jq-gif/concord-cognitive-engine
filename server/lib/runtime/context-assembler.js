@@ -5,7 +5,9 @@
 import { compactLedgerForContext } from "./execution-ledger.js";
 import { gatherObservationSnapshot } from "./continuous-observation.js";
 import { compileExecutiveCognition } from "./dhtp-compiler.js";
-import { getEconomicPathConfig } from "./cognitive-economics.js";
+import { getEconomicPathConfig, getBlindPathConfig } from "./cognitive-economics.js";
+import { compileToolUniverse } from "./tool-universe-compiler.js";
+import { buildRepoContextForTask } from "./repository-world-model.js";
 
 export async function assembleExecutiveContext({
   db, mission, step, stepIndex, route, ledger, dispatchMCP, lessons = [],
@@ -58,10 +60,44 @@ export async function assembleExecutiveContext({
     if (obs.ok) base.observation = obs.snapshot;
   } catch { /* optional */ }
 
+  const goal = mission?.goal || mission?.title || "";
+  const taskClass = route?.taskClass || mission?.template || "";
+  const isCodingTask = /code|repo|swe|coding|debug|implement|refactor/i.test(`${taskClass} ${goal} ${step?.tool || ""}`);
+
+  if (isCodingTask && db) {
+    try {
+      base.repoContext = buildRepoContextForTask(db, {
+        intent: goal,
+        symbol: step?.tool,
+        keywords: [taskClass, step?.tool].filter(Boolean),
+      });
+    } catch { /* optional */ }
+  }
+
+  try {
+    const compiledTools = compileToolUniverse(`${goal} ${step?.tool || ""}`, {
+      budget: 8,
+      includeReflected: false,
+      alwaysInclude: ["dtu_search", "trace_recent", "dhtp_compress"],
+    });
+    if (compiledTools.tools?.length) {
+      base.toolHints = compiledTools.tools.map((t) => t.name);
+      base.toolCompile = {
+        selectedCount: compiledTools.selectedCount,
+        catalogSize: compiledTools.catalogSize,
+        compressionRatio: compiledTools.compressionRatio,
+      };
+    }
+  } catch { /* optional */ }
+
   let cognition = null;
   try {
+    const blindPath = mission?.spawn_context?.blindPath || process.env.COGNITIVE_BLIND_PATH;
     const econPath = mission?.spawn_context?.econPath || process.env.COGNITIVE_ECON_PATH;
-    const pathCfg = econPath ? getEconomicPathConfig(econPath) : null;
+    const pathId = blindPath || econPath;
+    const pathCfg = pathId
+      ? (blindPath ? getBlindPathConfig(pathId) : getEconomicPathConfig(pathId))
+      : null;
     cognition = await compileExecutiveCognition({
       db, mission, step, stepIndex, route, ledger, lessons, context: base,
       ...(pathCfg?.compile || {}),

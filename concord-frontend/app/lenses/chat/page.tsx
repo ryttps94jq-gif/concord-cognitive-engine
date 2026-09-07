@@ -878,7 +878,9 @@ export default function ChatLensPage() {
   } = useQuery({
     queryKey: ['cognitive-status'],
     queryFn: () => apiHelpers.cognitive.status().then((r) => r.data),
-    refetchInterval: 10000,
+    refetchInterval: 30000,
+    retry: 1,
+    staleTime: 15_000,
   });
 
   // Persist selectedConversation to localStorage whenever it changes
@@ -1337,7 +1339,7 @@ export default function ChatLensPage() {
       setAttachments([]);
       setQuotedMessage(null);
 
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || '';
+      const apiUrl = getApiBase();
 
       // Abort any previous in-flight request and create a new controller
       chatAbortControllerRef.current?.abort();
@@ -1955,7 +1957,7 @@ export default function ChatLensPage() {
   // fallback when no vision model is connected. Reuses JARVIS-style perception.
   const conkayVisionMutation = useMutation({
     mutationFn: async ({ file, prompt }: { file: File; prompt: string }) => {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || '';
+      const apiUrl = getApiBase();
       const res = await fetch(`${apiUrl}/api/vision/analyze?prompt=${encodeURIComponent(prompt)}`, {
         method: 'POST',
         headers: { 'Content-Type': file.type || 'image/png' },
@@ -2000,7 +2002,7 @@ export default function ChatLensPage() {
     setConkaySkillRunning(true);
     setConkayActing(true);
     try {
-      const apiBase = process.env.NEXT_PUBLIC_API_URL || '';
+      const apiBase = getApiBase();
       const result = await match.skill.run(match.args, {
         apiBase,
         fetchJson: async (path: string) => {
@@ -3006,29 +3008,7 @@ export default function ChatLensPage() {
   // Loading / Error states
   // ──────────────────────────────────────────────
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-full p-8">
-        <div className="text-center space-y-3">
-          <div className="w-8 h-8 border-2 border-neon-cyan border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-sm text-gray-400">Loading...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (isError) {
-    return (
-      <div className="flex items-center justify-center h-full p-8">
-        <ErrorState
-          error={error?.message}
-          onRetry={() => {
-            refetch();
-          }}
-        />
-      </div>
-    );
-  }
+  const modelOffline = isError || (cogStatus && cogStatus.llm && cogStatus.llm.enabled === false);
 
   // ──────────────────────────────────────────────
   // Render
@@ -3039,6 +3019,11 @@ export default function ChatLensPage() {
       <FirstRunTour lensId="chat" />
       <DepthBadge lensId="chat" size="sm" className="ml-2" />
     <div data-lens-theme="chat" className="relative h-full flex flex-col bg-lattice-bg">
+      {modelOffline && (
+        <div className="px-4 py-2 text-xs bg-amber-500/10 border-b border-amber-500/30 text-amber-200">
+          Language model is offline — you can still type. Replies may not generate.
+        </div>
+      )}
       <div className="flex-1 flex overflow-hidden relative">
         {/* Mobile sidebar backdrop */}
         {chatSidebarOpen && (

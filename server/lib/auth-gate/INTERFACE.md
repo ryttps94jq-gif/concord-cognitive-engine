@@ -10,7 +10,7 @@ The auth-gate is a composition layer over existing authority systems. It does NO
 
 ### `dispatchMCP(tool, args, ctx) → Promise<AuthGateResult>`
 
-The single integration point. Wraps every MCP tool call with the 8-gate composition.
+The single integration point. Wraps every MCP tool call with the auth-gate composition (10 gate modules; evaluate runs 10 pre-dispatch checks; verification is post-tool).
 
 ```js
 import { dispatchMCP } from "./lib/auth-gate/dispatch.js";
@@ -31,7 +31,7 @@ const result = await dispatchMCP("web_search", { query: "test" }, {
 
 ### `evaluate(envelope, ctx) → Promise<AuthGateResult>`
 
-The orchestrator. Calls 8 gates in canonical order. Returns one of ALLOW | DENY | DEFER | OBSERVE | ESCALATE.
+The orchestrator. Calls 10 pre-dispatch checks in canonical order (incl. inline risk + resource + rollback). Returns one of ALLOW | DENY | DEFER | OBSERVE | ESCALATE. Verification runs after the tool in dispatch.
 
 ### `buildEnvelope(input) → frozen envelope`
 
@@ -96,18 +96,23 @@ DECISION = {
 }
 ```
 
-## The 8 gates (canonical order)
+## The gates (canonical order) — honest count
 
-| # | Gate | Tier | Owner | Composition |
-|---|------|------|-------|-------------|
-| 1 | sovereignty | IMMUTABLE | `grc/sovereignty-invariants.js` | wraps `checkSovereigntyInvariants` |
-| 2 | capability | POLICY | `lib/runtime/capability-registry.js` | wraps `getCapabilityDescriptor` + `checkCapabilityHealth` |
-| 3 | risk | POLICY | `lib/runtime/capability-registry.js` | `descriptor.risk === "high"` → ESCALATE |
-| 4 | refusal | CONSTITUTIONAL | `lib/refusal-field.js` | wraps `isRefusedForDb` |
-| 5 | provenance | CONSTITUTIONAL | `lib/provenance-guard.js` | wraps `screenAction` |
-| 6 | expiration | (NEW) | self | TTL check |
-| 7 | preconditions | (NEW) | self | state checks |
-| 8 | idempotency | (NEW) | self | hash-based replay protection |
+`gates/` has **10 modules**. `evaluate()` runs **10** pre-dispatch checks (risk is inline from capability; there is no `risk.js`). `verification` runs **after** the tool in `dispatch.js`. Do not say "eight-gate."
+
+| # | Gate | Where | Tier | Owner | Composition |
+|---|------|-------|------|-------|-------------|
+| 1 | sovereignty | evaluate | IMMUTABLE | `grc/sovereignty-invariants.js` | wraps `checkSovereigntyInvariants` |
+| 2 | capability | evaluate | POLICY | `lib/runtime/capability-registry.js` | wraps `getCapabilityDescriptor` + `checkCapabilityHealth` |
+| 3 | risk | evaluate (inline) | POLICY | capability result | `descriptor.risk === "high"` → ESCALATE |
+| 4 | refusal | evaluate | CONSTITUTIONAL | `lib/refusal-field.js` | wraps `isRefusedForDb` |
+| 5 | provenance | evaluate | CONSTITUTIONAL | `lib/provenance-guard.js` | wraps `screenAction` |
+| 6 | expiration | evaluate | self | `gates/expiration.js` | TTL check |
+| 7 | preconditions | evaluate | self | `gates/preconditions.js` | state checks |
+| 8 | idempotency | evaluate | self | `gates/idempotency.js` | hash-based replay protection |
+| 9 | resource | evaluate | self | `gates/resource.js` | budget / resource limits |
+| 10 | rollback | evaluate | self | `gates/rollback.js` | mutation rollback spec |
+| — | verification | dispatch (post-tool) | self | `gates/verification.js` | post-condition probe |
 
 ## AuthGateResult shape
 

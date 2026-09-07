@@ -96,16 +96,17 @@ server/lib/auth-gate/
 ├── envelope.js               ← F0.4 (envelope construction)
 ├── dispatch.js               ← F0.2 + F0.5 (chokepoint)
 ├── index.js                  ← F0.3 (AuthGate.evaluate)
-├── gates/
+├── gates/                    ← 10 modules (not eight; risk is inline in evaluate)
 │   ├── sovereignty.js        ← wraps sovereignty_invariants
-│   ├── capability.js         ← wraps capability-registry
+│   ├── capability.js         ← wraps capability-registry (+ risk escalate inline)
 │   ├── refusal.js            ← wraps refusal-field
 │   ├── provenance.js         ← wraps provenance-guard.screenAction
-│   ├── risk.js               ← wraps risk tier logic
-│   ├── expiration.js         ← NEW: TTL check
-│   ├── preconditions.js      ← NEW: state check
-│   ├── idempotency.js        ← NEW: replay protection
-│   └── verification.js       ← NEW: post-condition probe
+│   ├── expiration.js         ← TTL check
+│   ├── preconditions.js      ← state check
+│   ├── idempotency.js        ← replay protection
+│   ├── resource.js           ← budget / resource limits
+│   ├── rollback.js           ← mutation rollback spec
+│   └── verification.js       ← post-condition probe (dispatch, not evaluate)
 └── INTERFACE.md              ← F0.8
 ```
 

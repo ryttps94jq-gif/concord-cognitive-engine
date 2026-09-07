@@ -50,6 +50,8 @@ export function buildCognitiveIR({
   constraints = [],
   request = "execute_step",
   expectedOutput = "structured_action",
+  repoContext = null,
+  toolHints = [],
 } = {}) {
   const ir = {
     MISSION: mission?.id || null,
@@ -110,6 +112,18 @@ export function buildCognitiveIR({
       ? `missions:${observation.missions_running || 0} alerts:${observation.alerts_open || 0}`
       : String(observation).slice(0, 120);
     ir.EVIDENCE.push(snap);
+  }
+
+  if (repoContext?.files?.length) {
+    ir.EVIDENCE.push(`repo_files:${repoContext.files.slice(0, 5).join(",")}`);
+  }
+  if (repoContext?.symbolHits) {
+    ir.EVIDENCE.push(`repo_symbol_hits:${repoContext.symbolHits}`);
+  }
+
+  if (toolHints?.length) {
+    const caps = ir.AVAILABLE_CAPABILITIES ? `${ir.AVAILABLE_CAPABILITIES},` : "";
+    ir.AVAILABLE_CAPABILITIES = `${caps}tools:${toolHints.slice(0, 8).join(",")}`;
   }
 
   return ir;

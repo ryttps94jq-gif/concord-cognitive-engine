@@ -99,6 +99,18 @@ import {
   type ServerStateMsg,
 } from '@/lib/concordia/netcode';
 
+// Renderer gate (2026-09-07): default hub so heavy Three.js ConcordiaScene
+// does not crash the site. Set NEXT_PUBLIC_CONCORDIA_RENDERER=three|unity-webgl
+// and optionally NEXT_PUBLIC_UNITY_WEBGL_URL / NEXT_PUBLIC_CONCORDIA_UNITY_URL.
+const CONCORDIA_RENDERER = (process.env.NEXT_PUBLIC_CONCORDIA_RENDERER || 'hub') as
+  | 'hub'
+  | 'three'
+  | 'unity-webgl';
+const UNITY_WEBGL_URL =
+  process.env.NEXT_PUBLIC_UNITY_WEBGL_URL ||
+  process.env.NEXT_PUBLIC_CONCORDIA_UNITY_URL ||
+  '';
+
 const ConcordiaScene = dynamic(() => import('@/components/world-lens/ConcordiaScene'), {
   ssr: false,
 });
@@ -2024,9 +2036,13 @@ export default function WorldLensPage() {
   const dialogueCtx = useDialogue(DEFAULT_SPECIAL);
 
   // ── State ─────────────────────────────────────────────────────
-  // 3D-first: land in the 3D world by default. Downgraded to the 2D hub on mount
-  // only when WebGL is unavailable (see webglAvailable + the effect below).
-  const [viewMode, setViewMode] = useState<ViewMode>('explore');
+  // Default to 2D hub unless renderer explicitly wants 3D/Unity WebGL.
+  // Legacy Three.js ConcordiaScene is opt-in (NEXT_PUBLIC_CONCORDIA_RENDERER=three).
+  const [viewMode, setViewMode] = useState<ViewMode>(() => {
+    if (CONCORDIA_RENDERER === 'three') return 'explore';
+    if (CONCORDIA_RENDERER === 'unity-webgl' && UNITY_WEBGL_URL) return 'explore';
+    return 'concordia';
+  });
   // Set when the 3D scene throws and the ErrorBoundary below silently drops
   // viewMode to 'concordia' — without this, a crash just looks like "the
   // world lens is a 2D panel app" with no indication anything went wrong or
@@ -2127,12 +2143,51 @@ export default function WorldLensPage() {
   const [engineChunkReady, setEngineChunkReady] = useState(false);
   const [sceneReady, setSceneReady] = useState(false);
   useEffect(() => {
+    if (CONCORDIA_RENDERER !== 'three') {
+      setEngineChunkReady(true);
+      return;
+    }
     let cancelled = false;
     import('@/components/world-lens/ConcordiaScene')
       .then(() => { if (!cancelled) setEngineChunkReady(true); })
       .catch(() => { /* the dynamic <ConcordiaScene> mount reports its own failure */ });
     return () => { cancelled = true; };
   }, []);
+
+  // Scene-build stall watchdog. The two failure modes already handled above
+  // — a thrown render error (ErrorBoundary below) and a lost WebGL context
+  // (the window listener above) — both actively SIGNAL failure. But
+  // ConcordiaScene's init() chain also awaits several network-dependent
+  // steps (world data, models, textures) with no timeout of their own; if
+  // any one of those simply never resolves (the exact shape of failure the
+  // signup-latency investigation found for bcrypt — a stalled promise under
+  // backend event-loop lag, not a thrown error), onSceneReady never fires
+  // and neither existing guard trips. The player is then left on
+  // WorldEntryOverlay's "Building the world…" spinner forever with no
+  // escape hatch — indistinguishable from the app being broken.
+  //
+  // This is a bounded, honest fallback for that third case: once the first
+  // two real stages (engine chunk parsed, world data resolved) are done and
+  // the scene has had a generous window to paint its first frame, if it
+  // still hasn't, treat it the same as a caught crash — drop to the working
+  // 2D Hub with the existing "Retry 3D" banner instead of hanging silently.
+  // This does NOT fake progress (WorldEntryOverlay's bar is still a pure
+  // function of real signals) — it only bounds how long "still loading" is
+  // allowed to mean "no feedback at all."
+  const SCENE_BUILD_STALL_MS = 25000;
+  useEffect(() => {
+    if (sceneReady || sceneCrashed) return;
+    if (!engineChunkReady || worldDataState === 'loading') return;
+    const t = setTimeout(() => {
+      reportFrontendError(
+        { message: `scene_build_stalled after ${SCENE_BUILD_STALL_MS}ms`, name: 'ConcordiaSceneStall' },
+        { lens: 'world:concordia-scene' }
+      );
+      setSceneCrashed(true);
+      setViewMode('concordia');
+    }, SCENE_BUILD_STALL_MS);
+    return () => clearTimeout(t);
+  }, [engineChunkReady, worldDataState, sceneReady, sceneCrashed]);
 
   // 2026 parity polish — slide-overs surfacing existing simulation.
   // Mirrors the systemsPanel pattern from the chat lens.
@@ -4978,7 +5033,14 @@ export default function WorldLensPage() {
             {/* 3D world is the home — first + default. The 2D hub/district/streams
                 views are menus over it, reachable but secondary. */}
             <button
-              onClick={() => { setSceneCrashed(false); setViewMode('explore'); }}
+              onClick={() => {
+                if (CONCORDIA_RENDERER === 'three' || (CONCORDIA_RENDERER === 'unity-webgl' && UNITY_WEBGL_URL)) {
+                  setSceneCrashed(false);
+                  setViewMode('explore');
+                } else {
+                  setViewMode('concordia');
+                }
+              }}
               className={`px-3 py-1.5 text-xs ${viewMode === 'explore' ? 'bg-emerald-500/20 text-emerald-300' : 'text-gray-400 hover:text-white'}`}
             >
               <Globe className="w-3.5 h-3.5 inline mr-1" />
@@ -5026,7 +5088,14 @@ export default function WorldLensPage() {
                 The 3D scene hit an error and was closed to keep the app responsive. Showing the 2D Hub instead — this has been reported.
               </span>
               <button
-                onClick={() => { setSceneCrashed(false); setViewMode('explore'); }}
+                onClick={() => {
+                if (CONCORDIA_RENDERER === 'three' || (CONCORDIA_RENDERER === 'unity-webgl' && UNITY_WEBGL_URL)) {
+                  setSceneCrashed(false);
+                  setViewMode('explore');
+                } else {
+                  setViewMode('concordia');
+                }
+              }}
                 className="shrink-0 px-3 py-1 rounded-lg bg-amber-500/20 border border-amber-500/40 hover:bg-amber-500/30 transition-colors"
               >
                 Retry 3D
@@ -5126,6 +5195,17 @@ export default function WorldLensPage() {
               reportFrontendError (RepairBoundary never sees these) and flip
               sceneCrashed so the Hub view can say what happened instead of
               silently looking like "the world lens is just panels." */}
+                    {CONCORDIA_RENDERER === 'unity-webgl' && UNITY_WEBGL_URL ? (
+            <div className="absolute inset-0 z-10 bg-black">
+              <iframe
+                title="Concordia Unity WebGL"
+                src={UNITY_WEBGL_URL}
+                className="w-full h-full border-0"
+                allow="fullscreen; gamepad; autoplay"
+                referrerPolicy="no-referrer"
+              />
+            </div>
+          ) : CONCORDIA_RENDERER === 'three' ? (
           <ErrorBoundary
             fallback={null}
             onError={(error, errorInfo) => {
@@ -5170,6 +5250,27 @@ export default function WorldLensPage() {
             height="100%"
           />
           </ErrorBoundary>
+          ) : (
+            <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/90 text-center p-8">
+              <div className="max-w-md space-y-3">
+                <p className="text-sm text-amber-200">
+                  Legacy browser 3D (Three.js) is off so it cannot crash the site.
+                </p>
+                <p className="text-xs text-white/60">
+                  Unity WebGL is the target player. Set NEXT_PUBLIC_CONCORDIA_RENDERER=unity-webgl
+                  and NEXT_PUBLIC_UNITY_WEBGL_URL when the build is hosted — or use the 2D Hub tab.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('concordia')}
+                  className="px-3 py-1.5 rounded-lg bg-emerald-500/20 border border-emerald-500/40 text-emerald-200 text-xs"
+                >
+                  Open 2D Hub
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Theme picker — 3 swatches + PBR/Toon toggle top-right */}
           <div style={hudCornerStyle('theme-picker')} className={`absolute right-4 z-20 flex items-center gap-1.5 bg-black/50 border border-white/10 rounded-xl px-2 py-1.5 pointer-events-auto ${hudHidden ? 'hidden' : ''}`}>
             {[

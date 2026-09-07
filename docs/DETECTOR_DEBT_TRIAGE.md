@@ -1178,3 +1178,88 @@ triage and a reviewed, authorized refresh, not by softening a checker. The
 same 7 highs were re-confirmed present (and no new ones) in the HEAD
 regeneration before applying.
 Reproduce with `cd server && node scripts/run-detectors.js --rewrite-baseline`.
+
+---
+
+## 2026-08-28 — BASELINE.json v2 refresh: REVIEWED and **APPLIED** (human-authorized)
+
+Owner-authorized refresh closing 3 findings that had been sitting reviewed-but-
+unapplied since an earlier session (`guard.mjs` correctly blocked the
+unauthorized attempt; the review below is what the owner then authorized).
+One of the three was fixed at the code level instead of baselined once the
+review showed a trivial, strictly-better fix existed — baselining was only
+used for the two that have no code-level fix by their nature.
+
+**Fixed at the code level, not baselined — `command-injection` on
+`server/lib/cpu-self-pin.js:148`.** `execSync(\`taskset -cp ${spec} ${process.pid}\`, …)`
+matched the detector's real "template interpolation into a shell" pattern.
+Review confirmed `spec` is provably digits/commas/hyphens only (built by
+`toRangeSpec()` from integers parsed via `Number()` out of `/proc/*/status`
+and `pgrep` output — no path for shell metacharacters to reach it), so this
+was a live false positive, not a live vulnerability. Rather than baseline a
+detector-verified shell-injection *shape*, switched to
+`execFileSync("taskset", ["-cp", spec, String(process.pid)], …)` — an argv
+array, no shell, which removes the injection shape entirely instead of
+resting on the numeric-only proof holding forever. Confirmed post-fix: the
+detector no longer flags the file at all (0 findings), and
+`tests/cpu-self-pin.test.js` stays 18/18 green. This is the detector's own
+`fixHint` (`use_execfile_with_args_array_no_shell`) applied literally.
+
+**Baselined — `secret-leak` × 2 on `.env:498` and `.env:501` (JWT bearer
+tokens).** `.env` is listed in `.gitignore` (`git check-ignore -v .env` →
+`.gitignore:5:.env`) and has never been a tracked file (`git ls-files` shows
+only `.env.example` and `.env.runpod` under that prefix) — it is the
+machine-local secrets file by design, not committed source. A "secret found
+in `.env`" finding is the detector correctly identifying a real secret in a
+file whose entire purpose is holding real secrets; there is no code fix for
+this class because the fix would be "don't put secrets in the secrets file,"
+which defeats the file's purpose. Baselining is the correct disposition, not
+a workaround — same category as `.env.example` being exempt by convention,
+just not yet reflected in the detector's own file-scope allowlist.
+
+**Baselined — `performance-hotspot` (`perf_sync_fs_in_handler`) on
+`server/lib/cpu-self-pin.js:100`, discovered incidentally while fixing the
+command-injection finding above (this file postdates the prior baseline
+snapshot, so every finding in it read as "new").** `readCpusAllowedList()`'s
+`fs.readFileSync(procStatusPath, "utf8")` is flagged as a sync fs call "inside
+an async path." Traced the actual call chain: `selfPinAwayFromOllama()` is
+invoked exactly once, at `server.js:43`, at module-eval time before the HTTP
+server starts listening — not inside any request handler, not on any
+periodic/heartbeat schedule, never called a second time. The detector's
+static heuristic has no way to see "this call graph only ever runs once at
+boot," so a genuine live-hotspot check reads a one-time boot cost as if it
+were per-request. Making the call chain actually async would mean top-level
+`await`-ing a boot step in `server.js` right next to the file's own
+documented TDZ-hazard boot-order landmines (`const app = express()` /
+`LENS_ACTIONS` ordering) for a call site that costs nothing at request time —
+not a trade worth making for a false positive. Baselined instead.
+
+Post-refresh: `node scripts/run-detectors.js --diff --ci` → `added: 0
+(critical=0, high=0, medium=0, low=0, info=0)`, `CI check PASSED`. New
+baseline: 234 fingerprints, totals `0 critical / 11 high / 20 medium / 11 low
+/ 196 info / 238 total` (well under `BUDGET.json` v13's 483 threshold at
+1.05× `maxTotal`). The jump in raw counts vs the 2026-08-01 snapshot cited in
+CLAUDE.md is mostly `macro-usage`'s expected runtime-telemetry churn
+(CLAUDE.md already documents this detector's info tier as varying run-to-run)
+plus organic drift from unrelated work landing on the branch between
+snapshots — not a new problem introduced by this refresh.
+
+**Found but explicitly NOT touched in this pass (out of scope for the
+authorized 3-item refresh, flagged rather than silently absorbed or
+silently fixed):** two new `resource-leak` mediums (`setInterval` with no
+matching `clearInterval` in `server/lib/dtu-archive.js:247` and
+`server/lib/presence-idle.js:214`), one new `world-shard-write-boundary`
+medium (`affect-trace-cycle` heartbeat, `scope:"global"`, writing to the
+per-world `world_npcs` table — the exact race class documented in
+CLAUDE.md's "DB write-ownership rules"), one new `performance-hotspot` low
+(module-level unbounded `Map`/`Set` in `server/lib/lazy-module.js:44`), and
+8 `stale-code` lows for modules that are never imported
+(`adaptive-brain-router.js`, `cerebras-provider.js`, `cloudflare-ai-provider.js`,
+`hud-engine.js`, `save-load-system.js`, `stale-wiring.js`,
+`test-mistral-worker.js`, `world-bridge.js`). None are high/critical so none
+block the ratchet, and the refresh above captured them into the new baseline
+as "known" the same way it captured everything else currently in the tree —
+but per CLAUDE.md §8 ("pre-existing is an explanation, never an excuse"),
+baselined-as-known is not the same claim as reviewed-and-accepted for these;
+they simply weren't part of what this pass was authorized to fix.
+Reproduce with `cd server && node scripts/run-detectors.js --rewrite-baseline`.

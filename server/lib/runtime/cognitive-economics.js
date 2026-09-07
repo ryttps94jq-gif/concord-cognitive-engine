@@ -125,6 +125,116 @@ export function getEconomicPathConfig(pathId) {
 }
 
 /**
+ * Blind quality benchmark paths — isolate where quality changes.
+ * A Raw LLM · B Raw+DTU · C Raw+DHTP · D DTU+DHTP · E Full Dila
+ */
+export const BLIND_BENCHMARK_PATHS = Object.freeze({
+  A: {
+    id: "A",
+    label: "raw_llm",
+    description: "Full context JSON to LLM — no DTU, DHTP, PCE, or cache",
+    stack: "raw",
+    compile: {
+      pathVariant: "raw_json",
+      useRawJson: true,
+      skipDhtp: true,
+      skipCache: true,
+      skipDtuFilter: false,
+    },
+    mission: {
+      enableCache: false,
+      enablePce: false,
+      enableRecovery: false,
+    },
+  },
+  B: {
+    id: "B",
+    label: "raw_plus_dtu",
+    description: "DTU retrieval pack — no DHTP compression",
+    stack: "raw",
+    compile: {
+      pathVariant: "dtu_only",
+      useRawJson: false,
+      skipDhtp: true,
+      skipCache: true,
+      skipDtuFilter: false,
+    },
+    mission: {
+      enableCache: false,
+      enablePce: false,
+      enableRecovery: false,
+    },
+  },
+  C: {
+    id: "C",
+    label: "raw_plus_dhtp",
+    description: "Full corpus + DHTP — no DTU retrieval filter",
+    stack: "raw",
+    compile: {
+      pathVariant: "dhtp_only",
+      useRawJson: false,
+      skipDhtp: false,
+      skipCache: true,
+      skipDtuFilter: true,
+    },
+    mission: {
+      enableCache: false,
+      enablePce: false,
+      enableRecovery: false,
+    },
+  },
+  D: {
+    id: "D",
+    label: "dtu_dhtp",
+    description: "DTU retrieval + DHTP cognitive packet + critic",
+    stack: "dila",
+    compile: {
+      pathVariant: "dtu_dhtp",
+      useRawJson: false,
+      skipDhtp: false,
+      skipCache: true,
+      skipDtuFilter: false,
+    },
+    mission: {
+      enableCache: false,
+      enablePce: false,
+      enableRecovery: false,
+    },
+  },
+  E: {
+    id: "E",
+    label: "full_dila",
+    description: "DTU + DHTP + PCE + cache + critic + recovery",
+    stack: "dila",
+    compile: {
+      pathVariant: "dtu_dhtp_cache",
+      useRawJson: false,
+      skipDhtp: false,
+      skipCache: false,
+      skipDtuFilter: false,
+    },
+    mission: {
+      enableCache: true,
+      enablePce: true,
+      enableRecovery: true,
+    },
+  },
+});
+
+export function getBlindPathConfig(pathId) {
+  const key = String(pathId || "").toUpperCase();
+  return BLIND_BENCHMARK_PATHS[key] || null;
+}
+
+/**
+ * Resolve path config for bench runs — blind paths take precedence when suite=blind.
+ */
+export function getBenchmarkPathConfig(pathId, { suite = "economics" } = {}) {
+  if (suite === "blind") return getBlindPathConfig(pathId);
+  return getEconomicPathConfig(pathId);
+}
+
+/**
  * Estimate billed cost for one cognitive invocation.
  */
 export function estimateInvocationCost({

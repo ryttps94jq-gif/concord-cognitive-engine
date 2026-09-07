@@ -221,7 +221,7 @@ export default function CourtshipLensPage() {
       } else if (j?.heartEvent) {
         setHeartEvent({
           scene: j.heartEvent as HeartEventScene,
-          partnerLabel: `${c.partner_kind}:${c.partner_id.slice(0, 14)}`,
+          partnerLabel: `${c.partner_kind}:${String(c.partner_id ?? "").slice(0, 14)}`,
         });
       }
       await refresh();
@@ -415,7 +415,7 @@ export default function CourtshipLensPage() {
               <h2 id="courtships-heading" className="flex items-center gap-1 text-sm font-semibold text-pink-300">
                 <SvgIcon name="heart" size={14} className="text-pink-300" /> Active courtships ({courtships.length})
               </h2>
-              {courtships.length === 0 ? (
+              {!Array.isArray(courtships) || courtships.length === 0 ? (
                 <p data-testid="courtship-empty" className="text-xs text-zinc-500">
                   No active courtships yet. Initiate one from an NPC&apos;s context menu in the world,
                   then return here to track affinity, propose, and wed.
@@ -423,16 +423,17 @@ export default function CourtshipLensPage() {
               ) : (
                 <ul data-testid="courtship-list" className="space-y-2">
                   {courtships.map((c) => {
-                    const pct = Math.round((c.affinity || 0) * 100);
+                    const partnerId = String(c?.partner_id ?? '');
+                    const pct = Math.round(Number(c?.affinity || 0) * 100);
                     const canPropose =
-                      c.affinity >= engageThreshold && c.status !== 'engaged' &&
+                      Number(c?.affinity || 0) >= engageThreshold && c.status !== 'engaged' &&
                       c.status !== 'married' && c.status !== 'estranged' && c.status !== 'widowed';
-                    const canWed = c.status === 'engaged' && c.affinity >= marryThreshold;
+                    const canWed = c.status === 'engaged' && Number(c?.affinity || 0) >= marryThreshold;
                     return (
-                      <li key={`${c.partner_kind}:${c.partner_id}`} className="rounded-lg border border-pink-500/30 bg-zinc-900/50 p-3">
+                      <li key={`${c.partner_kind}:${partnerId || 'unknown'}`} className="rounded-lg border border-pink-500/30 bg-zinc-900/50 p-3">
                         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
                           <div>
-                            <div className="font-mono text-sm text-pink-100">{c.partner_kind}:{c.partner_id.slice(0, 14)}</div>
+                            <div className="font-mono text-sm text-pink-100">{c.partner_kind}:{partnerId.slice(0, 14)}</div>
                             <div className="text-[10px] text-pink-300/60">status: {c.status}</div>
                           </div>
                           <div className="font-mono text-base text-pink-200" aria-label={`affinity ${pct} percent`}>{pct}%</div>
@@ -482,7 +483,7 @@ export default function CourtshipLensPage() {
                   {marriages.map((m) => (
                     <li key={m.id} className="flex flex-col gap-1 rounded border border-amber-500/30 bg-amber-950/30 p-2 text-xs sm:flex-row sm:items-center sm:justify-between">
                       <div className="flex flex-col">
-                        <span className="font-mono text-amber-100">{m.partner_kind}:{m.partner_id.slice(0, 14)}</span>
+                        <span className="font-mono text-amber-100">{m.partner_kind}:{String(m.partner_id ?? "").slice(0, 14)}</span>
                         <span className="text-amber-300/70">since {new Date(m.married_at * 1000).toLocaleDateString()}</span>
                       </div>
                       <div className="flex gap-1 self-start sm:self-auto">
@@ -521,7 +522,7 @@ export default function CourtshipLensPage() {
                 <ul data-testid="past-marriage-list" className="space-y-1">
                   {pastMarriages.map((m) => (
                     <li key={m.id} className="flex flex-col gap-0.5 rounded border border-zinc-700/50 bg-zinc-900/40 p-2 text-xs">
-                      <span className="font-mono text-zinc-300">{m.partner_kind}:{m.partner_id.slice(0, 14)}</span>
+                      <span className="font-mono text-zinc-300">{m.partner_kind}:{String(m.partner_id ?? "").slice(0, 14)}</span>
                       <span className="text-zinc-500">
                         {new Date(m.married_at * 1000).toLocaleDateString()}
                         {m.dissolved_at ? ` – ${new Date(m.dissolved_at * 1000).toLocaleDateString()}` : ''}
@@ -544,7 +545,7 @@ export default function CourtshipLensPage() {
                     return (
                       <li key={p.pregnancyId} className="flex flex-col gap-1 rounded border border-fuchsia-500/30 bg-fuchsia-950/20 p-2 text-xs sm:flex-row sm:items-center sm:justify-between">
                         <div className="flex flex-col">
-                          <span className="font-mono text-fuchsia-100">{p.partnerKind}:{p.partnerId.slice(0, 14)}</span>
+                          <span className="font-mono text-fuchsia-100">{p.partnerKind}:{String(p.partnerId ?? "").slice(0, 14)}</span>
                           <span className="text-fuchsia-300/70">
                             {due ? 'ready to birth' : `due ${new Date(p.dueAt * 1000).toLocaleDateString()}`}
                           </span>
@@ -577,7 +578,7 @@ export default function CourtshipLensPage() {
                 <ul className="space-y-1">
                   {children.map((c) => (
                     <li key={c.id} className="flex flex-col gap-1 rounded border border-emerald-500/30 bg-emerald-950/30 p-2 text-xs sm:flex-row sm:justify-between">
-                      <span className="font-mono text-emerald-100">{c.name || c.id.slice(0, 16)}</span>
+                      <span className="font-mono text-emerald-100">{c.name || String(c.id ?? "").slice(0, 16)}</span>
                       <span className="text-emerald-300/70">{c.maturity}</span>
                     </li>
                   ))}
@@ -604,7 +605,7 @@ export default function CourtshipLensPage() {
 
       {dissolveTarget && (
         <ConfirmDissolveModal
-          partnerLabel={`${dissolveTarget.partner_kind}:${dissolveTarget.partner_id.slice(0, 14)}`}
+          partnerLabel={`${dissolveTarget.partner_kind}:${String(dissolveTarget.partner_id ?? "").slice(0, 14)}`}
           pending={pending}
           onConfirm={confirmDissolve}
           onCancel={() => setDissolveTarget(null)}

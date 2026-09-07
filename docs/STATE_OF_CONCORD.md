@@ -1,3 +1,5 @@
+> See [`STACK_REALITY.md`](./STACK_REALITY.md) for measured LIVE vs OVERCLAIM (2026-09-05).
+
 # State of Concord — verified snapshot (2026-08-01)
 
 > Every number here is reproduced from a command, not memory. Re-run the command
@@ -26,18 +28,18 @@ reclassifies 10 data-modules (172k lines, e.g. the deprecated 145k-line
 
 | Surface | Verified (2026-08-01) | Reproduce |
 |---|---|---|
-| Frontend lens directories | **266** | `ls -d concord-frontend/app/lenses/*/ \| wc -l` |
+| Frontend lens directories | **267** | `ls -d concord-frontend/app/lenses/*/ \| wc -l` |
 | Lens wiring | **263 WIRED · 0 broken · 2 by-design** | `node scripts/verify-lens-backends.mjs` |
 | Macro domains | **547** | verifier `macroDomains` |
 | Route prefixes | **2,983** | verifier `routePrefixes` |
-| Backend domain files | **420** | `ls server/domains/*.js \| wc -l` |
-| Numbered migrations | **398 files** (highest `399`) | `ls server/migrations/[0-9]*.js \| wc -l` |
-| Route files | **131** | `ls server/routes/*.js \| wc -l` |
-| Lib modules | **691** top (`ls server/lib/*.js \| wc -l`) · **1,052** recursive (`find server/lib -name '*.js' \| wc -l`) | see cell |
-| `server/server.js` | **83,290 lines** | `wc -l server/server.js` |
+| Backend domain files | **430** | `ls server/domains/*.js \| wc -l` |
+| Numbered migrations | **440 files** (highest `441`) | `ls server/migrations/[0-9]*.js \| wc -l` |
+| Route files | **132** | `ls server/routes/*.js \| wc -l` |
+| Lib modules | **768** top (`ls server/lib/*.js \| wc -l`) · **1,257** recursive (`find server/lib -name '*.js' \| wc -l`) | see cell |
+| `server/server.js` | **85,366 lines** | `wc -l server/server.js` |
 | DB tables (cartographer) | **765** | `cd server && npm run cartograph:static` |
 | Socket events (cartographer) | **337** | cartographer |
-| Heartbeats (registered) | **168** | `grep -rohE "registerHeartbeat\(['\"][a-z0-9-]+['\"]" server/ \| sort -u \| wc -l` |
+| Heartbeats (registered) | **140** | `grep -rohE "registerHeartbeat\(['\"][a-z0-9-]+['\"]" server/ \| sort -u \| wc -l` |
 | Macros (graded) | **9,495 pairs** | `npm run grade-macros` |
 
 ## 3. Macro depth — read BOTH numbers (reproduce: `npm run grade-macros[:honest]`)

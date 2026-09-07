@@ -15,6 +15,7 @@
 import logger from '../logger.js';
 import crypto from 'node:crypto';
 import { detectKind } from './dtu-attachment.js';
+import { enrichDtuOnWrite } from './dtu-cognitive-schema.js';
 
 
 /**
@@ -223,6 +224,10 @@ export function createDTUStore(db, memoryMap, opts = {}) {
           logger.debug?.('[dtu-store] Could not store binary payload (column may not exist yet)', { id: dtu.id, error: e.message });
         }
       }
+
+      try {
+        enrichDtuOnWrite(db, dtu);
+      } catch { /* cognitive enrichment is best-effort */ }
     } catch (e) {
       log("error", "dtu_store_persist_failed", { id: dtu.id, error: e.message });
     }

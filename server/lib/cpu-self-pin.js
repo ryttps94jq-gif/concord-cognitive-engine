@@ -22,7 +22,7 @@
 // requirement — every failure mode (non-Linux, missing taskset, too few
 // cores, exec error) degrades to a no-op with a logged reason.
 
-import { execSync } from "node:child_process";
+import { execSync, execFileSync } from "node:child_process";
 import fs from "node:fs";
 
 /** Parse a Linux CPU list spec ("0-3,7,9-11") into a flat array of ints. Pure. */
@@ -145,7 +145,12 @@ export function selfPinAwayFromOllama(opts = {}) {
     const decision = computeSelfPinCores(allowed, ollamaUsed, opts);
     if (!decision.ok) return { pinned: false, reason: decision.reason, freeCoreCount: decision.freeCoreCount };
     const spec = toRangeSpec(decision.cores);
-    execSync(`taskset -cp ${spec} ${process.pid}`, { stdio: "ignore", timeout: 5000 });
+    // execFileSync (argv array, no shell) rather than execSync's template
+    // string — spec/pid are provably numeric here (toRangeSpec only ever
+    // emits digits/commas/hyphens), but the shell-free form removes the
+    // injection *shape* entirely rather than relying on that proof holding
+    // forever.
+    execFileSync("taskset", ["-cp", spec, String(process.pid)], { stdio: "ignore", timeout: 5000 });
     return {
       pinned: true,
       cores: spec,

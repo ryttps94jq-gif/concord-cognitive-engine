@@ -46,7 +46,7 @@ function buildCsp(nonce: string): string {
     // 'wasm-unsafe-eval' is required for @dimforge/rapier3d-compat's
     // client-side WASM physics (world-lens) — narrower than 'unsafe-eval',
     // it permits WASM instantiation only, not arbitrary string-to-JS eval.
-    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' 'wasm-unsafe-eval'`,
+    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' 'wasm-unsafe-eval'${process.env.NODE_ENV === 'production' ? '' : " 'unsafe-eval'"}`,
     // See header comment: nonces cannot cover the `style` HTML attribute,
     // and this app's React components use it pervasively.
     `style-src 'self' 'unsafe-inline'`,
@@ -120,6 +120,7 @@ const PUBLIC_PATHS = new Set([
   '/explore',        // public "look around first" showcase — no account needed
   '/login',
   '/register',
+  '/signup',         // alias → /register
   '/forgot-password',
   '/reset-password',  // token arrives via ?token= — the page itself must be public
   '/onboarding',
@@ -127,6 +128,7 @@ const PUBLIC_PATHS = new Set([
 
 const PUBLIC_PREFIXES = [
   '/api/',
+  '/socket.io',
   '/_next/',
   '/icons/',
   '/legal/',
@@ -152,6 +154,11 @@ const PUBLIC_PREFIXES = [
   // /meshes/ above: these are asset bytes, not a page route, and the real
   // auth happens inside the client via the gateway token it's given at boot.
   '/godot-client/',
+  // Unity WebGL build (public/concordia-webgl/) — same carve-out as
+  // /godot-client/: index.html + Build/*.gz must load inside the world-lens
+  // iframe without a 307→/login (loader fetches are unauthenticated asset
+  // bytes; real auth is the parent /lenses/world session).
+  '/concordia-webgl/',
   '/manifest.json',
   '/manifest.webmanifest',
   '/robots.txt',
@@ -211,6 +218,24 @@ const STATIC_ASSET_RE =
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  const ALIASES: Record<string, string> = {
+    '/signup': '/register',
+    '/chat': '/lenses/chat',
+    '/dashboard': '/hub',
+    '/marketplace': '/lenses/marketplace',
+    '/world': '/lenses/world',
+    '/graph': '/lenses/graph',
+    '/hermes': '/agents',
+    '/dila': '/agents',
+    '/lenses': '/hub',
+  };
+  if (ALIASES[pathname]) {
+    const dest = new URL(ALIASES[pathname], request.url);
+    dest.search = request.nextUrl.search;
+    const status = pathname === '/signup' ? 308 : 307;
+    return NextResponse.redirect(dest, status);
+  }
+
   // Nonce is generated for every request (not just authenticated ones) —
   // the CSP must cover the public /login, /explore, etc. pages too. Base64
   // of a random UUID, the standard pattern (128 bits of entropy, never
@@ -226,12 +251,32 @@ export function middleware(request: NextRequest) {
   forwardedHeaders.set('x-nonce', nonce);
 
   function withCspHeaders(response: NextResponse): NextResponse {
-    response.headers.set('Content-Security-Policy', csp);
+    let effectiveCsp = csp;
+    // Unity WebGL iframe document must allow same-origin framing. Global
+    // frame-ancestors 'none' would otherwise block /lenses/world embedding
+    // even after X-Frame-Options was relaxed to SAMEORIGIN.
+    if (pathname.startsWith('/concordia-webgl/')) {
+      effectiveCsp = csp.replace(
+        /frame-ancestors 'none'/,
+        "frame-ancestors 'self'",
+      );
+    }
+    response.headers.set('Content-Security-Policy', effectiveCsp);
     response.headers.set('x-nonce', nonce);
     return response;
   }
 
   const passThroughOptions = { request: { headers: forwardedHeaders } };
+
+  const hasSessionCookie =
+    request.cookies.has('concord_auth') ||
+    request.cookies.has('concord_refresh');
+
+  // Authed home must never paint marketing landing. Cookie check is
+  // first-party (httpOnly) so this 307 happens before HTML.
+  if (pathname === '/' && hasSessionCookie) {
+    return withCspHeaders(NextResponse.redirect(new URL('/hub', request.url), 307));
+  }
 
   // Allow public paths through
   if (PUBLIC_PATHS.has(pathname)) {

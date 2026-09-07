@@ -190,10 +190,10 @@ function SliderRow({ label, value, min, max, step, onChange }: { label: string; 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0' }}>
       <span style={{ flex: 1 }}>{label}</span>
-      <input type="range" min={min} max={max} step={step} value={value}
+      <input type="range" min={min} max={max} step={step} value={Number(value ?? 0)}
              onChange={(e) => onChange(parseFloat(e.target.value))}
              style={{ flex: 2 }} />
-      <span style={{ width: 40, textAlign: 'right', color: '#aaa' }}>{value.toFixed(2)}</span>
+      <span style={{ width: 40, textAlign: 'right', color: '#aaa' }}>{Number(value ?? 0).toFixed(2)}</span>
     </div>
   );
 }

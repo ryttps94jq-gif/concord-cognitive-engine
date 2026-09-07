@@ -8,12 +8,12 @@ import { loadRecallPack, bumpRecallCounts } from "../dila-recall.js";
 import { estimateTokens } from "../token-budget-assembler.js";
 import {
   buildCognitiveIR,
-  serializeCognitivePacket,
   parseCognitiveDelta,
   validateCognitiveDelta,
 } from "../dhtp-cognitive-ir.js";
 import { buildCompressionPolicy, minimumRepresentationForTask } from "./dhtp-policy.js";
 import { recordDhtpMetric } from "./dhtp-metrics.js";
+import { recordFieldOutcomes } from "./dhtp-policy-learner.js";
 import { tryCognitiveCache, fingerprintCognition } from "./cognitive-cache.js";
 import {
   buildCognitiveSavingsSnapshot,
@@ -21,6 +21,10 @@ import {
   countDtuCorpus,
   estimateRecallPackTokens,
 } from "./cognitive-savings-ledger.js";
+import { compileCognitivePacket } from "./dhtp-cognitive-compiler.js";
+import { compileMinimumSufficientCognition } from "./cognitive-compiler-v2.js";
+import { reasoningLevelToRouteHints } from "./reasoning-ladder.js";
+import { recordProviderBilling } from "./provider-billing.js";
 
 const DILA_EXECUTIVE_IDENTITY = [
   "You are Dila, Concord's executive agent.",
@@ -109,6 +113,8 @@ export async function compileExecutiveCognition({
     priorSteps: context?.priorSteps,
     request: request || `execute:${step?.tool || "step"}`,
     expectedOutput: expectedOutput || "structured_delta",
+    repoContext: context?.repoContext,
+    toolHints: context?.toolHints,
   });
 
   const fingerprint = fingerprintCognition({ mission, step, ir, goal });
@@ -124,6 +130,7 @@ export async function compileExecutiveCognition({
   });
 
   let serialized;
+  let cognitiveCompilerMeta = null;
   if (useRawJson) {
     const corpus = countDtuCorpus(db);
     const rawPayload = {
@@ -168,9 +175,40 @@ export async function compileExecutiveCognition({
       compressionRatio: 1,
     };
   } else {
-    serialized = serializeCognitivePacket(ir, {
-      policyFn: (field, value) => policy[field] || { compressionLevel: "compact", decisionImpact: 0.5 },
+    const policyFn = (field, value) => {
+      const p = policy[field];
+      if (p) return p;
+      return { compressionLevel: "compact", decisionImpact: 0.5, importance: 0.5, freshness: 0.5 };
+    };
+    const v2 = compileMinimumSufficientCognition({
+      ir,
+      mission,
+      step,
+      stepIndex,
+      route,
+      db,
+      recallPack,
+      context,
+      cacheHit: cognitiveCache.cacheHit,
+      pceEligible: step?.tool === "pce_execute",
     });
+    serialized = v2.compiled || compileCognitivePacket(ir, { policyFn });
+    cognitiveCompilerMeta = {
+      version: v2.version || "v1",
+      tierCounts: serialized.tierCounts,
+      forbiddenCount: serialized.forbiddenCount,
+      fieldTiers: serialized.fieldTiers,
+      recoveryContracts: v2.recoveryContracts,
+      recoverableFieldCount: v2.recoverableFieldCount,
+      anticipation: v2.anticipation?.predictiveGraph,
+      governor: v2.governor ? {
+        promoted: v2.governor.promoted,
+        tokenSavingsPct: v2.governor.metrics?.tokenSavingsPct,
+      } : null,
+      reasoningLadder: v2.reasoningLadder,
+      selfModel: v2.selfModel,
+      optimization: v2.optimization,
+    };
   }
 
   const workingSetDtus = recallToDhtpDtus(recallPack);
@@ -199,10 +237,16 @@ export async function compileExecutiveCognition({
     ? `@REQUEST execute\n@OBJECTIVE ${goal}`
     : `@REQUEST ${ir.REQUEST}\n@OBJECTIVE ${ir.OBJECTIVE}`;
 
-  const minRep = minimumRepresentationForTask({
-    taskClass: route?.taskClass,
-    deterministicEligible: step?.tool === "pce_execute",
-  });
+  const minRep = cognitiveCompilerMeta?.reasoningLadder
+    ? cognitiveCompilerMeta.reasoningLadder
+    : minimumRepresentationForTask({
+      taskClass: route?.taskClass,
+      deterministicEligible: step?.tool === "pce_execute",
+    });
+
+  const routeHintsFromLadder = cognitiveCompilerMeta?.reasoningLadder
+    ? reasoningLevelToRouteHints(cognitiveCompilerMeta.reasoningLadder)
+    : null;
 
   const compiled = {
     ok: true,
@@ -226,7 +270,11 @@ export async function compileExecutiveCognition({
       maxResponseTokens: dhtpLayer.maxResponseTokens || 800,
       dtuBudgetPct: dhtpLayer.dtuBudgetPct || 35,
       taskClass: route?.taskClass,
-      minimumRepresentation: minRep,
+      minimumRepresentation: routeHintsFromLadder?.minimumRepresentation || minRep,
+      reasoningLevel: routeHintsFromLadder?.reasoningLevel,
+      reasoningPath: routeHintsFromLadder?.reasoningPath,
+      llmRequired: routeHintsFromLadder?.llmRequired,
+      escalate: routeHintsFromLadder?.escalate,
     },
     metrics: {
       fullContextTokens: null,
@@ -235,6 +283,7 @@ export async function compileExecutiveCognition({
       compressionRatio: null,
       cacheHit: block.fromCache || cognitiveCache.cacheHit,
     },
+    cognitiveCompiler: cognitiveCompilerMeta,
   };
 
   const savingsSnapshot = buildCognitiveSavingsSnapshot({
@@ -317,6 +366,32 @@ export async function compileExecutiveCognition({
       tokensAfterDtu: savingsSnapshot.tokensAfterDtu,
       actualModelInputTokens: savingsSnapshot.actualModelInputTokens,
       totalTokensAvoided: savingsSnapshot.totalTokensAvoided,
+    });
+
+    // Adaptive Field Compression: record per-field outcomes at compile time
+    // so dhtp_field_outcomes fills even when delta execution is skipped.
+    if (policy) {
+      recordFieldOutcomes(db, {
+        missionId: mission?.id,
+        stepIndex,
+        taskClass: route?.taskClass,
+        policy,
+        taskSuccess: true, // compile succeeded; execution outcome may refine later
+        recoveryRequired: false,
+      });
+    }
+  }
+
+  if (db && process.env.COGNITIVE_ECON_MODE === "billed" && savingsSnapshot.actualModelInputTokens > 0) {
+    recordProviderBilling(db, {
+      missionId: mission?.id,
+      stepIndex,
+      path: pathVariant,
+      promptTokens: savingsSnapshot.actualModelInputTokens,
+      completionTokens: cognitiveCache.cacheHit ? 0 : (compiled.routeHints?.maxResponseTokens || 120),
+      cachedPromptTokens: cognitiveCache.cacheHit ? savingsSnapshot.actualModelInputTokens : 0,
+      latencyMs: savingsSnapshot.latencyMs,
+      billingSource: cognitiveCache.cacheHit ? "cache_zero_cost" : "compile_derived",
     });
   }
 

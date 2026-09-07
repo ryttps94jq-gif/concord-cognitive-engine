@@ -1,3 +1,5 @@
+> See [`docs/STACK_REALITY.md`](docs/STACK_REALITY.md) for measured LIVE vs OVERCLAIM (2026-09-05).
+
 <div align="center">
 
 # 🜂 Concord Cognitive Engine
@@ -81,7 +83,7 @@ The closest one-liner: **Wolfram × Roblox, built by one person** — a verified
 | Backend domains | **420** | `ls server/domains/*.js` |
 | Macro domains · pairs | **547 · ~10,399** | `node scripts/verify-lens-backends.mjs` |
 | DB tables · migrations | **765 · 398** | `cd server && npm run cartograph:static` |
-| Heartbeats (live sim) | **168** | cartographer / `registerHeartbeat` grep |
+| Heartbeats (live sim) | **140** | cartographer / `registerHeartbeat` grep |
 | AI brains | **5** (4 cognitive + vision) | `server/lib/brain-config.js` |
 | Catalogued novelties | **326 / 34 groups** | [`docs/NOVELTY_INVENTORY.md`](docs/NOVELTY_INVENTORY.md) |
 | Tests passing | **38,371** | `cd server && npm test` |
@@ -98,7 +100,7 @@ Concord is best read as **concentric rings** — inner rings are the substrate, 
 ```mermaid
 flowchart TD
     subgraph R1["🧬 Substrate"]
-        DTU["DTU — 4-layer self-compressing<br/>knowledge unit · auto MEGA→HYPER 33:1"]
+        DTU["DTU — 4-layer knowledge unit<br/>measured DHTP ~1.2× (33:1 was target; densification not proven dense LIVE)"]
     end
     subgraph R2["🧠 Cognition"]
         BRAINS["5-brain router + custom model<br/>HLR 7-mode reasoning · 5-voice council"]
@@ -146,7 +148,7 @@ The knowledge graph, the economy, the game, and the codebase's own self-repair a
 
 Concord carries a **running model of itself** and acts on it — the part that's genuinely hard to find anywhere:
 
-- **Cartographer** auto-maps its own anatomy (765 tables, 168 heartbeats, ~10,399 macros) every pass.
+- **Cartographer** auto-maps its own anatomy (765 tables, 140 heartbeats, ~10,399 macros) every pass.
 - **51 detectors + a baseline-ratchet** audit its own honesty — CI fails on any new high/critical. *(It's why this repo's docs are falsifiable.)*
 - **Drift monitor** watches the corpus for 6 ways the system can lie to itself.
 - **Repair cortex** proposes its own surgery but **can't perform it unsupervised** — every code fix routes through a governance gate.

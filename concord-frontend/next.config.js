@@ -5,10 +5,15 @@ const { withSentryConfig } = require("@sentry/nextjs");
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  skipTrailingSlashRedirect: true,
   output: 'standalone',
+  // Local next dev: Chrome hits 127.0.0.1:3000; Next 15 blocks that host for HMR
+  // unless listed. Without it the client never hydrates and the splash never drops.
+  allowedDevOrigins: ['127.0.0.1', 'localhost'],
   images: {
     remotePatterns: [
       { protocol: 'http', hostname: 'localhost' },
+      { protocol: 'http', hostname: '127.0.0.1' },
       { protocol: 'https', hostname: 'concord-os.org' },
     ],
     unoptimized: process.env.NODE_ENV === 'development',
@@ -53,7 +58,7 @@ const nextConfig = {
           },
           {
             key: 'X-Frame-Options',
-            value: 'DENY',
+            value: 'SAMEORIGIN',
           },
           {
             key: 'X-XSS-Protection',
@@ -72,6 +77,33 @@ const nextConfig = {
             key: 'Permissions-Policy',
             value: 'xr-spatial-tracking=(self)',
           },
+        ],
+      },
+
+      {
+        // Unity WebGL gzip builds: browser must see Content-Encoding: gzip
+        // so it decompresses .wasm.gz / .framework.js.gz / .data.gz.
+        source: '/concordia-webgl/Build/concordia-webgl-out.wasm.gz',
+        headers: [
+          { key: 'Content-Type', value: 'application/wasm' },
+          { key: 'Content-Encoding', value: 'gzip' },
+          { key: 'Cache-Control', value: 'public, max-age=31536000, immutable' },
+        ],
+      },
+      {
+        source: '/concordia-webgl/Build/concordia-webgl-out.framework.js.gz',
+        headers: [
+          { key: 'Content-Type', value: 'application/javascript' },
+          { key: 'Content-Encoding', value: 'gzip' },
+          { key: 'Cache-Control', value: 'public, max-age=31536000, immutable' },
+        ],
+      },
+      {
+        source: '/concordia-webgl/Build/concordia-webgl-out.data.gz',
+        headers: [
+          { key: 'Content-Type', value: 'application/octet-stream' },
+          { key: 'Content-Encoding', value: 'gzip' },
+          { key: 'Cache-Control', value: 'public, max-age=31536000, immutable' },
         ],
       },
       {
@@ -164,12 +196,33 @@ const nextConfig = {
   //     that mode points at nginx, not directly at this frontend.
   // Both topologies are real and coexist in the repo; this file's rewrites
   // are harmless in either since they forward to the same BACKEND_URL.
+  async redirects() {
+    return [
+      { source: '/signup', destination: '/register', permanent: true },
+      { source: '/chat', destination: '/lenses/chat', permanent: false },
+      { source: '/dashboard', destination: '/hub', permanent: false },
+      { source: '/marketplace', destination: '/lenses/marketplace', permanent: false },
+      { source: '/world', destination: '/lenses/world', permanent: false },
+      { source: '/graph', destination: '/lenses/graph', permanent: false },
+      { source: '/hermes', destination: '/agents', permanent: false },
+      { source: '/dila', destination: '/agents', permanent: false },
+      { source: '/lenses', destination: '/hub', permanent: false },
+    ];
+  },
   async rewrites() {
     const backendUrl = process.env.BACKEND_URL || 'http://127.0.0.1:5050';
     return [
       {
         source: '/api/:path*',
         destination: `${backendUrl}/api/:path*`,
+      },
+      // HTTP/engine.io polling only. Next 16 `next dest` (launchd) does not
+      // proxy WebSocket upgrades; browser sockets use same-origin + polling
+      // first (lib/realtime/socket.ts). Production custom server is
+      // server-proxy.js which DOES upgrade /socket.io to :5050.
+      {
+        source: '/socket.io',
+        destination: `${backendUrl}/socket.io/`,
       },
       {
         source: '/socket.io/:path*',
