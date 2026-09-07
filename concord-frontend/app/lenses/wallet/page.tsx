@@ -17,6 +17,8 @@ import { LensShell } from '@/components/lens/LensShell';
 import { CrossLensRecentsPanel } from '@/components/lens/CrossLensRecentsPanel';
 import { FirstRunTour } from '@/components/lens/FirstRunTour';
 import { DepthBadge } from '@/components/lens/DepthBadge';
+import { DTUExportButton } from '@/components/lens/DTUExportButton';
+import { RecentMineCard } from '@/components/lens/RecentMineCard';
 import { WalletMarkets } from '@/components/wallet/WalletMarkets';
 import { WalletActionPanel } from '@/components/wallet/WalletActionPanel';
 import { WalletParityHub } from '@/components/wallet/WalletParityHub';
@@ -745,6 +747,18 @@ function WalletPageInner() {
                   <ArrowDownToLine className="w-3.5 h-3.5" />
                   CSV
                 </button>
+                <DTUExportButton
+                  domain="wallet"
+                  data={{
+                    balance,
+                    totalCredits,
+                    totalDebits,
+                    transactions: visibleTransactions,
+                  }}
+                  title="Wallet snapshot"
+                  tags={['wallet', 'economy', 'export']}
+                  compact
+                />
                 {txQuery && (
                   <span className="text-[10px] text-gray-400 whitespace-nowrap">
                     {visibleTransactions.length} of {transactions.length}
@@ -1085,6 +1099,7 @@ export default function WalletPage() {
       )}
     </div>
 
+          <RecentMineCard domain="wallet" limit={10} hideWhenEmpty className="mt-4" />
           <CrossLensRecentsPanel lensId="wallet" sinceDays={7} limit={6} hideWhenEmpty className="mt-4" />
     </LensShell>
   );
