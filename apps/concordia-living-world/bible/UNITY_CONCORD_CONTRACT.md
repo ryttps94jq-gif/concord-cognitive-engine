@@ -20,3 +20,5 @@ Envelope: `{ evt, data }`. Combat intent: `combat:attack`. Never `unity:` as a s
 ## Gap
 
 Close local damage and travel. Honest fail `{ ok:false, reason:'no_gateway' }` when socket down — no fabricated success.
+
+> 2026-09-07: server-authority **LIVE** for combat hit + quest interact (see `apps/concordia-living-world/bible/NETWORK.md`, proof `~/.zuko/remaining-work/concordia-server-authority-proof.json`).

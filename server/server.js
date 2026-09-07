@@ -7317,6 +7317,13 @@ function validateCsrfToken(token, cookieToken) {
 function csrfMiddleware(req, res, next) {
   // Skip CSRF for non-browser requests (API keys, no cookies)
   if (req.authMethod === "apiKey") return next();
+  // Bearer JWT / Unity kitchen guest without a browser session cookie — API
+  // clients (curl harness, ConcordClient HTTP hit/quest) are not CSRF-vulnerable
+  // the way cookie-authenticated browsers are.
+  if ((req.authMethod === "jwt" || req.authMethod === "unity-local-guest")
+      && !req.cookies?.concord_auth) {
+    return next();
+  }
 
   // Skip for safe methods
   const safeMethods = ["GET", "HEAD", "OPTIONS"];
@@ -8035,6 +8042,19 @@ function authMiddleware(req, res, next) {
         auditLog("auth", "api_key_used", { userId: user.id, keyName: keyData.name, ip: req.ip });
         return _sovereignGate();
       }
+    }
+  }
+
+  // Kitchen/Editor Unity loopback guest — mirrors /unity-ws `unity-local-guest`
+  // (unity-bridge.js). Allowed when NODE_ENV !== production OR the request is
+  // loopback (Editor → :5050 on this box). Never invents a remote production session.
+  if (authHeader === "Bearer unity-local-guest") {
+    const ip = String(req.ip || req.socket?.remoteAddress || "");
+    const loopback = ip === "127.0.0.1" || ip === "::1" || ip === "::ffff:127.0.0.1" || ip.endsWith("127.0.0.1");
+    if (NODE_ENV !== "production" || loopback) {
+      req.user = { id: "unity-local-guest", username: "unity-local", role: "member", scopes: [] };
+      req.authMethod = "unity-local-guest";
+      return _sovereignGate();
     }
   }
 
@@ -38664,6 +38684,11 @@ app.use("/api/combat", createCombatRouter({
   getNearbyUserIds: _combatGetNearbyUserIds,
   db,
 }));
+
+// Concordia FULL server-authority — quest interact returns authored branching
+// text from content store (not Unity-only offline LoreStone strings).
+import createQuestAuthorityRouter from "./routes/quest-authority.js";
+app.use("/api/quests", createQuestAuthorityRouter({ requireAuth }));
 
 // Procedural creatures + emergent skills. Creatures are physics-validated
 // procedural spawns from in-fiction descriptions (a dragon described in

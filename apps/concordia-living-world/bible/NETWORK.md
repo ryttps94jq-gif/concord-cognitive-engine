@@ -1,6 +1,6 @@
 # NETWORK
 
-**Status:** LIVE (mount + kingdom snapshot) · PARTIAL (needs a listening server)  
+**Status:** LIVE (mount + kingdom snapshot + combat/quest HTTP authority)  
 **Authority:** Concord  
 **Source:** `ConcordClient.cs`; `server/lib/unity-bridge.js`; `server/lib/godot-gateway.js`; `server/lib/concordia-kingdom-snapshot.js`; `server.js` Unity mount
 
@@ -12,8 +12,12 @@ Kitchen/Editor may auth as `unity-local-guest` when `NODE_ENV !== production`. P
 
 TARGET: same validation as socket.io combat. Honest disconnect. No second physics.
 
-## HTTP combat probe (2026-09-07)
+## HTTP combat + quest authority (2026-09-07 FULL)
 
-`GET /api/combat/probe` (auth required) → structured `{ ok:true, authority:"server", gateways, http }`.
-Does not resolve damage. Next bind: Unity/WebGL call probe on boot, then prefer WS `combat:attack` when Connected; REST `POST /api/combat/hit` or `POST /api/worlds/:worldId/combat/attack` as fallback. Offline stays `{ok:false, reason:no_gateway}`.
-Thin FE stub: `concord-frontend/lib/concordia/combat-authority.ts`.
+- `GET /api/combat/probe` (auth) → `{ ok:true, authority:"server", gateways, http }` including `questsInteract`.
+- `POST /api/combat/hit` (auth) → authoritative `{ damage, hpBefore, hpAfter }` via `combat-hp-authority`. Hub → `refused:true` (Great Refusal).
+- `POST /api/quests/interact` (auth) → authored branching text from content store (not Unity-only offline LoreStone).
+- Unity: prefer WS `combat:attack` when Connected; HTTP hit/quest when `HttpAuthorityOk`; offline `{ok:false, reason:no_gateway}`.
+- FE: `concord-frontend/lib/concordia/combat-authority.ts` helpers complete.
+- Proof: `~/.zuko/remaining-work/concordia-server-authority-proof.json`.
+

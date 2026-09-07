@@ -35,6 +35,8 @@ namespace Concordia
 #endif
         public static string StatusJson { get; private set; } = "{\"ok\":false,\"reason\":\"no_gateway\"}";
         public static string LastReason { get; private set; } = "no_gateway";
+        public static bool HttpAuthorityOk { get; private set; }
+        public static string LastProbeJson { get; private set; } = "";
         public static string HudLine { get; private set; } = "";
         public static string SnapshotJson { get; private set; } = "";
         public static ConcordClient Live { get; private set; }
@@ -402,12 +404,94 @@ namespace Concordia
                         Debug.LogWarning("combat probe failed: " + req.error + " " + req.downloadHandler?.text);
                         return "";
                     }
+                    var body = req.downloadHandler != null ? req.downloadHandler.text : "";
+                    LastProbeJson = body ?? "";
+                    HttpAuthorityOk = !string.IsNullOrEmpty(body) && body.Contains("\"ok\":true") && body.Contains("\"authority\":\"server\"");
+                    return body;
+                }
+            }
+            catch (Exception e)
+            {
+                HttpAuthorityOk = false;
+                Debug.LogWarning("combat probe exception: " + e.Message);
+                return "";
+            }
+        }
+
+        public async Task<string> PostCombatHitHttp(string targetId, float damage, string weapon = "sword", string worldIdOverride = null, string httpBase = null)
+        {
+            var bas = string.IsNullOrEmpty(httpBase) ? "http://127.0.0.1:5050" : httpBase;
+            var url = bas.TrimEnd('/') + "/api/combat/hit";
+            var wid = string.IsNullOrEmpty(worldIdOverride) ? worldId : worldIdOverride;
+            var payload = "{"victimId":"" + Escape(targetId) + "","damage":" + damage.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                + ","weapon":"" + Escape(weapon) + "","worldId":"" + Escape(wid) + ""}";
+            try
+            {
+                using (var req = UnityEngine.Networking.UnityWebRequest.Put(url, payload))
+                {
+                    req.method = "POST";
+                    req.SetRequestHeader("Content-Type", "application/json");
+                    req.SetRequestHeader("Accept", "application/json");
+                    var token = string.IsNullOrEmpty(bearerToken) ? "unity-local-guest" : bearerToken;
+                    req.SetRequestHeader("Authorization", "Bearer " + token);
+                    var op = req.SendWebRequest();
+                    while (!op.isDone) await Task.Yield();
+#if UNITY_2020_2_OR_NEWER
+                    if (req.result != UnityEngine.Networking.UnityWebRequest.Result.Success)
+#else
+                    if (req.isNetworkError || req.isHttpError)
+#endif
+                    {
+                        Debug.LogWarning("combat hit http failed: " + req.responseCode + " " + req.downloadHandler?.text);
+                        return req.downloadHandler != null ? req.downloadHandler.text : "";
+                    }
                     return req.downloadHandler != null ? req.downloadHandler.text : "";
                 }
             }
             catch (Exception e)
             {
-                Debug.LogWarning("combat probe exception: " + e.Message);
+                Debug.LogWarning("combat hit http exception: " + e.Message);
+                return "";
+            }
+        }
+
+        /// <summary>
+        /// POST /api/quests/interact — authored branching text from server store.
+        /// </summary>
+        public async Task<string> QuestInteractHttp(string questIdOrTitle, string optionId = null, string httpBase = null)
+        {
+            var bas = string.IsNullOrEmpty(httpBase) ? "http://127.0.0.1:5050" : httpBase;
+            var url = bas.TrimEnd('/') + "/api/quests/interact";
+            var payload = "{"questId":"" + Escape(questIdOrTitle) + "","title":"" + Escape(questIdOrTitle)
+                + "","worldId":"" + Escape(worldId) + """;
+            if (!string.IsNullOrEmpty(optionId)) payload += ","optionId":"" + Escape(optionId) + """;
+            payload += "}";
+            try
+            {
+                using (var req = UnityEngine.Networking.UnityWebRequest.Put(url, payload))
+                {
+                    req.method = "POST";
+                    req.SetRequestHeader("Content-Type", "application/json");
+                    req.SetRequestHeader("Accept", "application/json");
+                    var token = string.IsNullOrEmpty(bearerToken) ? "unity-local-guest" : bearerToken;
+                    req.SetRequestHeader("Authorization", "Bearer " + token);
+                    var op = req.SendWebRequest();
+                    while (!op.isDone) await Task.Yield();
+#if UNITY_2020_2_OR_NEWER
+                    if (req.result != UnityEngine.Networking.UnityWebRequest.Result.Success)
+#else
+                    if (req.isNetworkError || req.isHttpError)
+#endif
+                    {
+                        Debug.LogWarning("quest interact http failed: " + req.responseCode + " " + req.downloadHandler?.text);
+                        return req.downloadHandler != null ? req.downloadHandler.text : "";
+                    }
+                    return req.downloadHandler != null ? req.downloadHandler.text : "";
+                }
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning("quest interact http exception: " + e.Message);
                 return "";
             }
         }

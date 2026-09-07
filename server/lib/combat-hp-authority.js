@@ -65,6 +65,7 @@ export function applyAuthoritativeHit({
     authority: "combat-hp-authority",
     damage,
     hpBefore: before,
+    hpAfter: target.hp,
     targetHealth: target.hp,
     targetMaxHealth: target.maxHp,
     targetKilled: target.hp <= 0,
