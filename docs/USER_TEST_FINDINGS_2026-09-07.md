@@ -1,7 +1,22 @@
 # concord-os.org — user-test findings (2026-09-07)
 
-Tester: owner (mobile Safari, iPhone) + Claude (API repro, mobile UA).
+Tester: owner (mobile Safari, iPhone) + Claude (API repro, mobile UA) + a
+headless-Chrome browser-agent walkthrough (49 lenses).
 Deploy under test: production standalone build, commits `63cc665` + `c1127eb`.
+
+## Fix status (commit `ce4b004`)
+
+| Finding | Status |
+|---|---|
+| **Memory leak** | Not a leak — event-loop starvation under load on the shared box. Blueprint written: `docs/OFF_MAC_MIGRATION_BLUEPRINT.md`. |
+| R2 — `/lenses/dtus` React #185 crash | **FIXED** — `useShallow` on the zustand v5 selectors. |
+| B4 — locker shows global/junk | **FIXED** — locker defaults to "My vault" (owner-only) + toggle; backend passes viewer id + honors offset/limit/query. 14 harness-junk DTUs purged from `dtu_store` during the redeploy. |
+| B1/R4 — "You don't have permission" toast | **FIXED** — silent for background-GET 403s; bare user-action 403 now reads as a session/CSRF expiry, not authz. |
+| B2 — mobile chat layout | **PARTLY FIXED** — BrainModePanel `compact` pill (was rendering the full disclosure wall in the header); toasts clear the tab bar + span width; Agent Mode FAB above the tab bar. A full mobile chat pass is still owed. |
+| B3 — onboarding forces Concordia | **FIXED** — `/onboarding/location` → `/hub`; character creation deferred to first World-lens open. |
+| R3 — `127.0.0.1:5050` in prod bundle | **FIXED** — `concord-frontend/.env.production.local` blanks the two `NEXT_PUBLIC_*` vars for builds. |
+| B1 (agent numbering) — 503 load-shedding | **ROOT-CAUSED, not yet fixed** — needs the off-Mac migration. |
+| R1 world lens, R5 code-lens CSP, D1 privacy copy, D2 brains, D3 user-menu, Fallback chip | logged, not yet addressed |
 
 ## TL;DR — "what's the deal"
 
