@@ -28,6 +28,12 @@ import {
   exportAssemblyStl,
   buildBom,
 } from '../lib/conkay/assembly-export.js';
+import { applyMate, MATE_TYPES } from '../lib/conkay/assembly-mates.js';
+import {
+  listMaterials,
+  attachMaterialToPart,
+  resolveMaterial,
+} from '../lib/conkay/material-library.js';
 
 export default function createConkayAssemblyRouter({ requireAuth, db }) {
   const router = Router();
@@ -357,6 +363,50 @@ export default function createConkayAssemblyRouter({ requireAuth, db }) {
     res.setHeader('X-ConKay-Included-Parts', String(stl.included?.length || 0));
     res.setHeader('X-ConKay-Skipped-Parts', String(stl.skipped?.length || 0));
     return res.send(stl.buffer);
+  });
+
+
+  /** GET /api/conkay/materials */
+  router.get('/materials', auth, (_req, res) => {
+    return res.json({
+      ok: true,
+      materials: listMaterials(),
+      honesty: { wave: 3, note: 'Material library catalog — attach via POST …/parts/:id/material' },
+    });
+  });
+
+  /** POST /api/conkay/assemblies/:id/parts/:partId/material  { material } */
+  router.post('/assemblies/:id/parts/:partId/material', auth, (req, res) => {
+    if (!needDb(res)) return;
+    const material = req.body?.material || req.body?.materialId || req.body?.id;
+    const out = attachMaterialToPart(db, req.params.id, req.params.partId, material);
+    if (!out.ok) {
+      const code = out.code === 'NOT_FOUND' ? 404 : 400;
+      return res.status(code).json(out);
+    }
+    return res.json(out);
+  });
+
+  /** POST /api/conkay/assemblies/:id/mates  { type, aPartId, bPartId?, axis?, offset? } */
+  router.post('/assemblies/:id/mates', auth, (req, res) => {
+    if (!needDb(res)) return;
+    const out = applyMate(db, req.params.id, {
+      type: req.body?.type,
+      aPartId: req.body?.aPartId || req.body?.a,
+      bPartId: req.body?.bPartId || req.body?.b || null,
+      axis: req.body?.axis,
+      offset: req.body?.offset,
+    });
+    if (!out.ok) {
+      const code = out.code === 'NOT_FOUND' ? 404 : 400;
+      return res.status(code).json(out);
+    }
+    return res.json(out);
+  });
+
+  /** GET /api/conkay/mate-types */
+  router.get('/mate-types', auth, (_req, res) => {
+    return res.json({ ok: true, types: MATE_TYPES, honesty: { wave: 3, note: 'Kinematic stubs only' } });
   });
 
   return router;
