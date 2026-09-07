@@ -127,6 +127,8 @@ const PUBLIC_PATHS = new Set([
   // ConKay <-> Unity WebGL postMessage smoke (public/conkay-bridge-smoke.html).
   // Must stay public so headless proof can load without a session cookie.
   '/conkay-bridge-smoke.html',
+  // Industrial slice smoke: FEA util→color→spawn_primitive (public HTML).
+  '/conkay-industrial-smoke.html',
 ]);
 
 const PUBLIC_PREFIXES = [
@@ -259,7 +261,8 @@ export function middleware(request: NextRequest) {
     // (no nonce). Also allow same-origin framing for world lens / smoke iframe.
     if (
       pathname.startsWith('/concordia-webgl/') ||
-      pathname === '/conkay-bridge-smoke.html'
+      pathname === '/conkay-bridge-smoke.html' ||
+      pathname === '/conkay-industrial-smoke.html'
     ) {
       effectiveCsp = csp
         .replace(/frame-ancestors 'none'/, "frame-ancestors 'self'")

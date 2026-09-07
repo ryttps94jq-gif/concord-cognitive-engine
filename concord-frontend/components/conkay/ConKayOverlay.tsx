@@ -21,7 +21,7 @@ import { getApiBase } from '@/lib/api/base';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import dynamic from 'next/dynamic';
-import { X, Send, Mic, MicOff, Sparkles, Volume2, VolumeX, Box, MapPin } from 'lucide-react';
+import { X, Send, Mic, MicOff, Sparkles, Volume2, VolumeX, Box, MapPin, Activity } from 'lucide-react';
 import { ConKayMessage, type ConKayReplyFields } from './ConKayViz';
 import { useConKayVoice } from './useConKayVoice';
 import { matchConKaySkill, type ConKaySkill } from './conkay-skills';
@@ -32,6 +32,7 @@ import { useConkayAttentionStore } from './conkayAttentionStore';
 import { detectArtifact } from '@/lib/conkay/artifact-kinds';
 import { isMutatingMacro } from '@/lib/conkay/mutating-macros';
 import { onUnityEvent, postUnityCmd, spawnPrimitive, clearTempPrimitives, unityIframePresent } from '@/lib/conkay/unity-bridge';
+import { runFeaBeamToWorld } from '@/lib/conkay/fea-beam-to-world';
 import { ConKayActionConfirm } from './ConKayActionConfirm';
 import { ConKayCockpit } from './ConKayCockpit';
 import { CONKAY_SIGNATURE_GREETING, CONKAY_PERSONA_PROMPT, type ConKayState } from './conkay-persona';
@@ -314,6 +315,35 @@ export function ConKayOverlay() {
       id,
     );
     setWorkStatus(ok ? `Unity bridge: spawn_primitive posted · ${id}` : 'Unity bridge: spawn post failed');
+  }, []);
+
+  /**
+   * Industrial slice v1: engineering.runFEA(FEA_FRAME) → util band color →
+   * Unity spawn_primitive cube (beam proxy). Not apply_mesh / full CAD.
+   */
+  const dropFeaBeamWorld = useCallback(async () => {
+    if (!unityIframePresent()) {
+      setWorkStatus('Industrial slice: no Unity iframe (open world lens with unity-webgl)');
+      return;
+    }
+    setWorkStatus('Industrial slice: running engineering.runFEA (FEA_FRAME)…');
+    const res = await runFeaBeamToWorld({ spawn: true });
+    if (!res.ok) {
+      setWorkStatus(`Industrial slice: FEA failed — ${res.error || 'unknown'}`);
+      return;
+    }
+    const util = res.maxUtilization != null ? res.maxUtilization.toFixed(4) : '?';
+    const band = res.band ?? '?';
+    const hex = res.color?.hex ?? '?';
+    if (res.spawnPosted) {
+      setWorkStatus(
+        `Industrial slice LIVE: util=${util} band=${band} color=${hex} · spawn_primitive posted · ${res.spawnId || ''} (cube proxy — not apply_mesh)`,
+      );
+    } else {
+      setWorkStatus(
+        `Industrial slice: FEA util=${util} band=${band} — spawn skipped: ${res.error || 'iframe/post failed'}`,
+      );
+    }
   }, []);
 
 
@@ -1044,6 +1074,13 @@ export function ConKayOverlay() {
                 aria-label="Drop marker in world"
                 className="rounded-lg p-2 text-cyan-200 hover:bg-cyan-400/10">
                 <MapPin className="h-4 w-4" />
+              </button>
+              <button type="button" onClick={() => { void dropFeaBeamWorld(); }}
+                title="FEA beam → world: runFEA(FEA_FRAME) → util band color → spawn_primitive cube proxy (not full CAD / apply_mesh)"
+                aria-label="FEA beam to world"
+                data-testid="ck-fea-beam-world"
+                className="rounded-lg p-2 text-emerald-200 hover:bg-emerald-400/10">
+                <Activity className="h-4 w-4" />
               </button>
               <button type="button" onClick={() => {
                 const ok = clearTempPrimitives(`clear-${Date.now()}`);
