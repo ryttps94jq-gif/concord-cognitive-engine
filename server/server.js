@@ -1875,7 +1875,7 @@ const _DTU_SIDECAR_LAG_BYPASS_MS = Number(process.env.CONCORD_DTU_SIDECAR_LAG_BY
 function _dtuSidecarLagBypass() {
   try { return getEventLoopLagMs() > _DTU_SIDECAR_LAG_BYPASS_MS; } catch { return false; }
 }
-import { BRAIN_CONFIG, SYSTEM_TO_BRAIN, BRAIN_PRIORITY, getBrainForSystem, getActiveBrainConfig, getSystemStatus, pickBrainEndpoint, noteEndpointStart, noteEndpointFinish } from "./lib/brain-config.js";
+import { BRAIN_CONFIG, SYSTEM_TO_BRAIN, BRAIN_PRIORITY, getBrainForSystem, getActiveBrainConfig, getSystemStatus, pickBrainEndpoint, noteEndpointStart, noteEndpointFinish, resolveBrainModel } from "./lib/brain-config.js";
 import { preloadBrains, getBrainPriority, resolveBrain } from "./lib/brain-router.js";
 // BYO key router — when a user has plugged their own provider key into a
 // brain slot, ctx.llm.chat() routes through this instead of the default.
@@ -19066,8 +19066,12 @@ function initLLMPipeline() {
   // Use BRAIN_CONSCIOUS_URL as the primary Ollama URL (matches 4-brain architecture)
   const ollamaUrl = process.env.OLLAMA_URL || process.env.BRAIN_CONSCIOUS_URL || process.env.OLLAMA_HOST || "http://ollama:11434";
   LLM_PIPELINE.providers.ollama.url = ollamaUrl;
-  // Use BRAIN_CONSCIOUS_MODEL if set; fall back to OLLAMA_MODEL; last resort llama3.2
-  LLM_PIPELINE.providers.ollama.model = process.env.OLLAMA_MODEL || process.env.BRAIN_CONSCIOUS_MODEL || "concord-conscious:latest";
+  // Use BRAIN_CONSCIOUS_MODEL if set; fall back to OLLAMA_MODEL; last resort
+  // llama3.2. resolveBrainModel folds in BRAIN_LOCAL_UNIFIED_MODEL so a
+  // single-Ollama box doesn't hot-swap this pipeline's model against the
+  // 4 brains'.
+  LLM_PIPELINE.providers.ollama.model = process.env.OLLAMA_MODEL
+    || resolveBrainModel(process.env.BRAIN_CONSCIOUS_MODEL, "concord-conscious:latest", ollamaUrl);
   LLM_PIPELINE.providers.ollama.enabled = Boolean(ollamaUrl);
 
   structuredLog("info", "llm_pipeline_initialized", {
@@ -19463,7 +19467,7 @@ const _singleOllamaFallback = process.env.OLLAMA_URL || process.env.OLLAMA_HOST;
 const BRAIN = {
   conscious: {
     url: process.env.BRAIN_CONSCIOUS_URL || _singleOllamaFallback || "http://ollama-conscious:11434",
-    model: process.env.BRAIN_CONSCIOUS_MODEL || "concord-conscious:latest",
+    model: resolveBrainModel(process.env.BRAIN_CONSCIOUS_MODEL, "concord-conscious:latest", process.env.BRAIN_CONSCIOUS_URL || _singleOllamaFallback || "http://ollama-conscious:11434"),
     role: "chat, deep reasoning, complex queries",
     systemPrompt: BRAIN_IDENTITY.conscious,
     enabled: false,
@@ -19471,7 +19475,7 @@ const BRAIN = {
   },
   subconscious: {
     url: process.env.BRAIN_SUBCONSCIOUS_URL || _singleOllamaFallback || "http://ollama-subconscious:11434",
-    model: process.env.BRAIN_SUBCONSCIOUS_MODEL || "qwen2.5:7b-instruct-q4_K_M",
+    model: resolveBrainModel(process.env.BRAIN_SUBCONSCIOUS_MODEL, "qwen2.5:7b-instruct-q4_K_M", process.env.BRAIN_SUBCONSCIOUS_URL || _singleOllamaFallback || "http://ollama-subconscious:11434"),
     role: "autogen, dream, evolution, synthesis, birth",
     systemPrompt: BRAIN_IDENTITY.subconscious,
     enabled: false,
@@ -19479,7 +19483,7 @@ const BRAIN = {
   },
   utility: {
     url: process.env.BRAIN_UTILITY_URL || _singleOllamaFallback || "http://ollama-utility:11434",
-    model: process.env.BRAIN_UTILITY_MODEL || "qwen2.5:3b",
+    model: resolveBrainModel(process.env.BRAIN_UTILITY_MODEL, "qwen2.5:3b", process.env.BRAIN_UTILITY_URL || _singleOllamaFallback || "http://ollama-utility:11434"),
     role: "lens interactions, entity actions, quick domain tasks",
     systemPrompt: BRAIN_IDENTITY.utility,
     enabled: false,
@@ -19487,7 +19491,7 @@ const BRAIN = {
   },
   repair: {
     url: process.env.BRAIN_REPAIR_URL || _singleOllamaFallback || "http://ollama-repair:11434",
-    model: process.env.BRAIN_REPAIR_MODEL || "qwen2.5:1.5b",
+    model: resolveBrainModel(process.env.BRAIN_REPAIR_MODEL, "qwen2.5:1.5b", process.env.BRAIN_REPAIR_URL || _singleOllamaFallback || "http://ollama-repair:11434"),
     role: "error detection, auto-fix, runtime repair",
     systemPrompt: BRAIN_IDENTITY.repair,
     enabled: false,
