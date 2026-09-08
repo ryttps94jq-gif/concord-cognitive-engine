@@ -9,6 +9,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { listParts, getPart, getAssembly, addPart, defaultTransform, updatePartMeta, setPartMesh, pushAssemblyRevision } from './assembly-store.js';
+import * as occDaemon from '../sidecars/occ-daemon-client.js'; // Concurrency Refactor Phase 2 — warm OCC daemon, off the per-request execFile path
 
 const execFileAsync = promisify(execFile);
 
@@ -40,6 +41,25 @@ function brepDataDir() {
  * Run CLI command; returns parsed JSON object.
  */
 export async function runOccCli(cmd, payload = {}, opts = {}) {
+  const timeout = opts.timeoutMs || 60000;
+
+  // Concurrency Refactor Phase 2: prefer the warm daemon so we don't pay a cold
+  // `import OCP` per call and don't stack processes under a burst. Fail soft —
+  // any transport error drops through to the execFile path below unchanged.
+  if (process.env.CONCORD_OCC_DAEMON_DISABLE !== '1') {
+    try {
+      if (await occDaemon.isAvailable()) {
+        const r = await occDaemon.runCommand(cmd, payload || {}, { timeoutMs: timeout });
+        if (r && r.reason !== 'occ_daemon_empty_response' && r.reason !== 'occ_daemon_dispatch_error') {
+          if (opts.includeStderr && r.stderr == null) r.stderr = undefined;
+          return r;
+        }
+      }
+    } catch {
+      /* daemon down / errored — fall through to cold execFile */
+    }
+  }
+
   const python = resolvePython();
   const cli = resolveCli();
   if (!fs.existsSync(python)) {
@@ -57,7 +77,6 @@ export async function runOccCli(cmd, payload = {}, opts = {}) {
       detail: `CLI not found at ${cli}`,
     };
   }
-  const timeout = opts.timeoutMs || 60000;
   try {
     const { stdout, stderr } = await execFileAsync(
       python,
