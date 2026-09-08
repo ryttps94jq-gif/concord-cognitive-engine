@@ -30,8 +30,14 @@ export function gatherObservationSnapshot(db) {
   snapshot.opportunities = safeCount(
     `SELECT COUNT(*) AS c FROM opportunity_signals WHERE status = 'open'`,
   );
+  // prediction_tickets is Concord Predict's immutable-forecast table
+  // (418_prediction_tickets) — it has no 'status' column. A ticket is "open"
+  // until its outcome is recorded in prediction_outcomes. (The Dila-runtime
+  // migration that would have given this table a status column was a
+  // name-collision bug, now removed — see 445_runtime_stack_closure.js.)
   snapshot.predictions = safeCount(
-    `SELECT COUNT(*) AS c FROM prediction_tickets WHERE status = 'open'`,
+    `SELECT COUNT(*) AS c FROM prediction_tickets t
+     WHERE NOT EXISTS (SELECT 1 FROM prediction_outcomes o WHERE o.prediction_id = t.id)`,
   );
   snapshot.initiatives = safeCount(
     `SELECT COUNT(*) AS c FROM initiatives WHERE status = 'submitted'`,

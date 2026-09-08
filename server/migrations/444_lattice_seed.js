@@ -1,4 +1,17 @@
-// server/migrations/416_lattice_seed.js
+// server/migrations/444_lattice_seed.js
+//
+// RENUMBERED 2026-09-08 from 416_lattice_seed.js — it collided with
+// 416_world_consequences.js. The runner records ONE row per version number
+// (schema_version.version is the PK), so on every existing DB
+// `416_world_consequences` recorded first and this file was then silently
+// skipped (`version <= currentVersion`) — it has NEVER applied anywhere, which
+// is why server/lib/lattice-seed.js's whole subsystem has been dead
+// (`tableExists('lattice_seed_sources')` false → every call returns
+// `{ ok:false, reason:'no_table' }`). Renumbering to a free slot lets it apply
+// on the next migrate and actually activates that subsystem. Every statement
+// is `CREATE TABLE IF NOT EXISTS` with zero overlap with any other migration,
+// so applying it late is safe. Same collision-fix pattern as the audited
+// 209/213/226 renames (see CLAUDE.md "Migrations are append-only").
 //
 // Persistent Auto-DTU + ingest-scheduler substrate recovered from an
 // older ConcordOS backend (the "Auto-DTUs + Ingest Scheduler" patch

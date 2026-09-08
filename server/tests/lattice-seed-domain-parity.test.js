@@ -10,7 +10,7 @@ import { describe, it, before, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import Database from "better-sqlite3";
 
-import { up as upLatticeSeed } from "../migrations/416_lattice_seed.js";
+import { up as upLatticeSeed } from "../migrations/444_lattice_seed.js";
 import registerLatticeSeedActions from "../domains/lattice-seed.js";
 
 const ACTIONS = new Map();

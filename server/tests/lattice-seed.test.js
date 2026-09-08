@@ -11,7 +11,7 @@ import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import Database from "better-sqlite3";
 
-import { up as upLatticeSeed } from "../migrations/416_lattice_seed.js";
+import { up as upLatticeSeed } from "../migrations/444_lattice_seed.js";
 import {
   MEMBER_PAGES_PER_DAY,
   ADMIN_PAGES_PER_DAY,
