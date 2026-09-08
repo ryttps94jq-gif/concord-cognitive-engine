@@ -36,6 +36,12 @@ import {
   buildBom,
 } from '../lib/conkay/assembly-export.js';
 import {
+  probeOcc,
+  exportAssemblyBrepStep,
+  exportPartBrepStep,
+  importBrepStepToAssembly,
+} from '../lib/conkay/occ-bridge.js';
+import {
   exportAssemblyDrawing,
   exportPartDrawing,
   exportAssemblyDrawingPdf,
@@ -406,11 +412,23 @@ export default function createConkayAssemblyRouter({ requireAuth, db }) {
   });
 
 
-  /** GET /api/conkay/assemblies/:id/parts/:partId/export.step — faceted ASCII STEP */
-  router.get('/assemblies/:id/parts/:partId/export.step', auth, (req, res) => {
+  /** GET /api/conkay/assemblies/:id/parts/:partId/export.step — faceted ASCII STEP (?kernel=occ → B-rep) */
+  router.get('/assemblies/:id/parts/:partId/export.step', auth, async (req, res) => {
     if (!needDb(res)) return;
     const part = getPart(db, req.params.id, req.params.partId);
     if (!part) return res.status(404).json({ ok: false, error: 'part_not_found', code: 'NOT_FOUND' });
+    const kernel = String(req.query?.kernel || '').toLowerCase();
+    if (kernel === 'occ' || kernel === 'brep' || kernel === 'ocp') {
+      const step = await exportPartBrepStep(part);
+      if (!step.ok) return res.status(422).json(step);
+      const filename = `conkay-part-${part.name || part.id}-brep.step`.replace(/[^\w.\-]+/g, '_');
+      res.setHeader('Content-Type', 'application/step');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.setHeader('X-ConKay-STEP-Format', 'occ-advanced-brep');
+      res.setHeader('X-ConKay-Advanced-BRep', String(!!step.advanced_brep));
+      if (step.path) res.setHeader('X-ConKay-BRep-Path', step.path);
+      return res.send(step.buffer);
+    }
     const step = exportPartStep(part);
     if (!step.ok) return res.status(422).json(step);
     const filename = `conkay-part-${part.name || part.id}.step`.replace(/[^\w.\-]+/g, '_');
@@ -422,9 +440,22 @@ export default function createConkayAssemblyRouter({ requireAuth, db }) {
     return res.send(step.buffer);
   });
 
-  /** GET /api/conkay/assemblies/:id/export.step — merged assembly faceted STEP */
-  router.get('/assemblies/:id/export.step', auth, (req, res) => {
+  /** GET /api/conkay/assemblies/:id/export.step — faceted STEP (?kernel=occ → B-rep) */
+  router.get('/assemblies/:id/export.step', auth, async (req, res) => {
     if (!needDb(res)) return;
+    const kernel = String(req.query?.kernel || '').toLowerCase();
+    if (kernel === 'occ' || kernel === 'brep' || kernel === 'ocp') {
+      const step = await exportAssemblyBrepStep(db, req.params.id);
+      if (!step.ok) return res.status(422).json(step);
+      const filename = `conkay-assembly-${req.params.id.slice(0, 8)}-brep.step`;
+      res.setHeader('Content-Type', 'application/step');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.setHeader('X-ConKay-STEP-Format', 'occ-advanced-brep');
+      res.setHeader('X-ConKay-Advanced-BRep', String(!!step.advanced_brep));
+      res.setHeader('X-ConKay-Solids', String(step.solids || 0));
+      if (step.path) res.setHeader('X-ConKay-BRep-Path', step.path);
+      return res.send(step.buffer);
+    }
     const step = exportAssemblyStep(db, req.params.id);
     if (!step.ok) return res.status(422).json(step);
     const filename = `conkay-assembly-${req.params.id.slice(0, 8)}.step`;
@@ -448,6 +479,36 @@ export default function createConkayAssemblyRouter({ requireAuth, db }) {
       const assemblyId = req.params.id;
       if (!getAssembly(db, assemblyId)) {
         return res.status(404).json({ ok: false, error: 'assembly_not_found', code: 'NOT_FOUND' });
+      }
+      const kernel = String(req.query?.kernel || req.body?.kernel || '').toLowerCase();
+      if (kernel === 'occ' || kernel === 'brep' || kernel === 'ocp') {
+        let stepTextOcc = '';
+        let nameOcc = req.query?.name || null;
+        let materialOcc = req.query?.material || null;
+        const ctOcc = String(req.headers['content-type'] || '');
+        if (ctOcc.includes('application/json')) {
+          stepTextOcc = req.body?.step || req.body?.text || req.body?.data || '';
+          nameOcc = req.body?.name || nameOcc;
+          materialOcc = req.body?.material || materialOcc;
+        } else if (Buffer.isBuffer(req.body)) {
+          stepTextOcc = req.body.toString('utf8');
+        } else if (typeof req.body === 'string') {
+          stepTextOcc = req.body;
+        } else if (req.body?.step || req.body?.text) {
+          stepTextOcc = req.body.step || req.body.text;
+          nameOcc = req.body?.name || nameOcc;
+          materialOcc = req.body?.material || materialOcc;
+        }
+        const outOcc = await importBrepStepToAssembly(db, assemblyId, stepTextOcc, {
+          name: nameOcc,
+          material: materialOcc,
+          transform: req.body?.transform,
+        });
+        if (!outOcc.ok) {
+          const code = outOcc.code === 'MISSING_STEP' || outOcc.reason === 'need_step_body' ? 400 : 422;
+          return res.status(code).json(outOcc);
+        }
+        return res.json(outOcc);
       }
       let stepText = '';
       let name = req.query?.name || null;
@@ -514,6 +575,75 @@ export default function createConkayAssemblyRouter({ requireAuth, db }) {
           note: 'Faceted STEP import → triangle mesh part. NOT full B-rep CAD kernel.',
         },
       });
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: e instanceof Error ? e.message : String(e) });
+    }
+  });
+
+  /** GET /api/conkay/occ/status — OCP/cadquery-ocp probe */
+  router.get('/occ/status', auth, async (_req, res) => {
+    const st = await probeOcc();
+    return res.status(st.ok ? 200 : 503).json(st);
+  });
+
+  /**
+   * POST|GET /api/conkay/assemblies/:id/export.brep.step — OCC advanced B-rep STEP
+   * Alias of export.step?kernel=occ
+   */
+  async function handleExportBrep(req, res) {
+    if (!needDb(res)) return;
+    const step = await exportAssemblyBrepStep(db, req.params.id);
+    if (!step.ok) return res.status(422).json(step);
+    const filename = `conkay-assembly-${req.params.id.slice(0, 8)}-brep.step`;
+    res.setHeader('Content-Type', 'application/step');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('X-ConKay-STEP-Format', 'occ-advanced-brep');
+    res.setHeader('X-ConKay-Advanced-BRep', String(!!step.advanced_brep));
+    res.setHeader('X-ConKay-Solids', String(step.solids || 0));
+    if (step.path) res.setHeader('X-ConKay-BRep-Path', step.path);
+    return res.send(step.buffer);
+  }
+  router.get('/assemblies/:id/export.brep.step', auth, handleExportBrep);
+  router.post('/assemblies/:id/export.brep.step', auth, handleExportBrep);
+
+  /**
+   * POST /api/conkay/assemblies/:id/import.brep.step
+   * OCC B-rep STEP → tessellated mesh part + keep B-rep under data/conkay-brep/
+   */
+  router.post('/assemblies/:id/import.brep.step', auth, async (req, res) => {
+    if (!needDb(res)) return;
+    try {
+      const assemblyId = req.params.id;
+      if (!getAssembly(db, assemblyId)) {
+        return res.status(404).json({ ok: false, error: 'assembly_not_found', code: 'NOT_FOUND' });
+      }
+      let stepText = '';
+      let name = req.query?.name || null;
+      let material = req.query?.material || null;
+      const ct = String(req.headers['content-type'] || '');
+      if (ct.includes('application/json')) {
+        stepText = req.body?.step || req.body?.text || req.body?.data || '';
+        name = req.body?.name || name;
+        material = req.body?.material || material;
+      } else if (Buffer.isBuffer(req.body)) {
+        stepText = req.body.toString('utf8');
+      } else if (typeof req.body === 'string') {
+        stepText = req.body;
+      } else if (req.body?.step || req.body?.text) {
+        stepText = req.body.step || req.body.text;
+        name = req.body?.name || name;
+        material = req.body?.material || material;
+      }
+      const out = await importBrepStepToAssembly(db, assemblyId, stepText, {
+        name,
+        material,
+        transform: req.body?.transform,
+      });
+      if (!out.ok) {
+        const code = out.code === 'MISSING_STEP' || out.reason === 'need_step_body' ? 400 : 422;
+        return res.status(code).json(out);
+      }
+      return res.json(out);
     } catch (e) {
       return res.status(500).json({ ok: false, error: e instanceof Error ? e.message : String(e) });
     }
