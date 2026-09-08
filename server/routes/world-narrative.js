@@ -30,6 +30,14 @@ const LORE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 const _loreFailAt = new Map();
 const LORE_FAIL_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
 
+// In-flight de-dupe: worldId → the pending buildLore promise. A slow/degraded
+// brain makes each synthesis attempt take tens of seconds; without this,
+// history-engine's every-20-tick trigger + the 10-min interval + any HTTP GET
+// all fire concurrently BEFORE the first attempt completes and records its
+// failure, so the negative cache above never gets a chance to short-circuit
+// them. Coalesce concurrent callers onto one attempt per world.
+const _loreInflight = new Map();
+
 function getCachedLore(worldId) {
   const entry = _loreCache.get(worldId);
   if (!entry) return null;
@@ -52,17 +60,30 @@ async function buildLore(worldId, { force = false } = {}) {
     if (failedAt && Date.now() - failedAt < LORE_FAIL_COOLDOWN_MS) {
       return { ok: false, error: "lore_synthesis_cooldown", cooldown: true };
     }
+    // Coalesce concurrent callers onto the single pending attempt for this world.
+    const pending = _loreInflight.get(worldId);
+    if (pending) return pending;
   }
-  const result = await synthesizeArcLore(worldId);
-  if (result.ok) {
-    setCachedLore(worldId, result.lore);
-    _loreFailAt.delete(worldId);
-    logger.info({ worldId }, "lore_synthesized");
-  } else {
-    _loreFailAt.set(worldId, Date.now());
-    logger.warn({ worldId, error: result.error }, "lore_synthesis_failed");
+
+  const run = (async () => {
+    const result = await synthesizeArcLore(worldId);
+    if (result.ok) {
+      setCachedLore(worldId, result.lore);
+      _loreFailAt.delete(worldId);
+      logger.info({ worldId }, "lore_synthesized");
+    } else {
+      _loreFailAt.set(worldId, Date.now());
+      logger.warn({ worldId, error: result.error }, "lore_synthesis_failed");
+    }
+    return result;
+  })();
+
+  _loreInflight.set(worldId, run);
+  try {
+    return await run;
+  } finally {
+    _loreInflight.delete(worldId);
   }
-  return result;
 }
 
 /**
