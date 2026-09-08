@@ -36,7 +36,7 @@ import { runFeaBeamToWorld } from '@/lib/conkay/fea-beam-to-world';
 import { runPartMeshToWorld } from '@/lib/conkay/part-mesh-to-world';
 import { designViaApiOrClient } from '@/lib/conkay/nlp-design-to-world';
 import { runEvoGlbToWorld } from '@/lib/conkay/evo-glb-to-world';
-import { runAssemblyChatRevise, downloadStl, downloadAssemblyBom, downloadStep, runAssemblyUndo, runAssemblyRedo, downloadAssemblyDrawing, downloadAssemblyDrawingPdf, explodeAssemblyApi, fetchMaterials, attachPartMaterial, listParts } from '@/lib/conkay/assembly-to-world';
+import { runAssemblyChatRevise, downloadStl, downloadAssemblyBom, downloadStep, downloadBrepStep, occFeatureRebuild, rebuildPartSolid, occFeatureAppend, fetchOccStatus, runAssemblyUndo, runAssemblyRedo, downloadAssemblyDrawing, downloadAssemblyDrawingPdf, explodeAssemblyApi, fetchMaterials, attachPartMaterial, listParts } from '@/lib/conkay/assembly-to-world';
 import { ConKayActionConfirm } from './ConKayActionConfirm';
 import { ConKayCockpit } from './ConKayCockpit';
 import { CONKAY_SIGNATURE_GREETING, CONKAY_PERSONA_PROMPT, type ConKayState } from './conkay-persona';
@@ -591,6 +591,101 @@ export function ConKayOverlay() {
       setWorkStatus(`STEP download failed — ${e instanceof Error ? e.message : String(e)}`);
     }
   }, [assemblyId]);
+
+  const downloadAssemblyBrep = useCallback(async () => {
+    if (!assemblyId) {
+      setWorkStatus('B-rep: no assembly yet — Asm revise first');
+      return;
+    }
+    try {
+      const r = await downloadBrepStep({ assemblyId });
+      setWorkStatus(`OCC B-rep LIVE: ${r.filename} (${r.size} bytes) — advanced B-rep STEP (not SolidWorks)`);
+    } catch (e) {
+      setWorkStatus(`B-rep download failed — ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }, [assemblyId]);
+
+  const addFeatureDemo = useCallback(async () => {
+    setAssemblyBusy(true);
+    try {
+      const partId = `ui_feat_${Date.now().toString(36)}`;
+      const created = await occFeatureRebuild({
+        partId,
+        features: [
+          { type: 'box', dx: 40, dy: 30, dz: 20 },
+          { type: 'cut', tool: { type: 'cylinder', r: 5, h: 30, position: { x: 20, y: 15, z: -5 } } },
+        ],
+        include_mesh: false,
+      });
+      if (!created?.ok) {
+        setWorkStatus(`Add feature failed — ${created?.reason || created?.error || 'unknown'}`);
+        return;
+      }
+      const appended = await occFeatureAppend({ partId, feature: { type: 'fillet', radius: 1 } });
+      setWorkStatus(
+        `Add feature LIVE: part=${partId} features=${appended?.count ?? created.featureCount} (box+cut+fillet tree) — Rebuild to tessellate`,
+      );
+    } catch (e) {
+      setWorkStatus(`Add feature failed — ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setAssemblyBusy(false);
+    }
+  }, []);
+
+  const rebuildSolidDemo = useCallback(async () => {
+    setAssemblyBusy(true);
+    try {
+      // Prefer assembly part with featureTree; else demo rebuild
+      let usedAssembly = false;
+      if (assemblyId) {
+        const partsRes = await listParts(assemblyId);
+        const parts = partsRes?.parts || partsRes || [];
+        const withTree = Array.isArray(parts) ? parts.find((p: any) => p?.meta?.featureTree?.length) : null;
+        if (withTree?.id) {
+          const out = await rebuildPartSolid(assemblyId, withTree.id, {});
+          if (out?.ok) {
+            usedAssembly = true;
+            setWorkStatus(
+              `Rebuild solid LIVE: part=${withTree.id} solids=${out.solids} tris=${out.mesh?.triangleCount ?? '?'} advanced=${!!out.export?.advanced_brep}`,
+            );
+          }
+        }
+      }
+      if (!usedAssembly) {
+        const out = await occFeatureRebuild({
+          partId: 'ui_rebuild_demo',
+          features: [
+            { type: 'box', dx: 40, dy: 30, dz: 20 },
+            { type: 'cut', tool: { type: 'cylinder', r: 5, h: 30, position: { x: 20, y: 15, z: -5 } } },
+            { type: 'fillet', radius: 1 },
+          ],
+          mesh_summary_only: true,
+        });
+        if (!out?.ok) {
+          setWorkStatus(`Rebuild solid failed — ${out?.reason || out?.error || 'unknown'}`);
+          return;
+        }
+        setWorkStatus(
+          `Rebuild solid LIVE: demo tris=${out.mesh?.triangleCount ?? '?'} advanced=${!!out.export?.advanced_brep} — Unity apply via mesh path`,
+        );
+      }
+    } catch (e) {
+      setWorkStatus(`Rebuild solid failed — ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setAssemblyBusy(false);
+    }
+  }, [assemblyId]);
+
+  const showCertStatus = useCallback(async () => {
+    try {
+      const st = await fetchOccStatus();
+      setWorkStatus(
+        `OCC cert probe: ok=${!!st?.ok} kernel=${st?.kernel || '?'} — full CERTIFIED via scripts/conkay-solid-world-cert.mjs (geometry verification harness; not ISO CMM)`,
+      );
+    } catch (e) {
+      setWorkStatus(`OCC status failed — ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }, []);
 
   const downloadBomJson = useCallback(async () => {
     if (!assemblyId) {
@@ -1493,6 +1588,37 @@ export function ConKayOverlay() {
                   data-testid="ck-export-step"
                   className="rounded-lg px-2 py-1 text-[10px] text-orange-100 hover:bg-orange-400/15 border border-orange-400/30 disabled:opacity-40">
                   STEP
+                </button>
+                <button type="button" onClick={() => { void downloadAssemblyBrep(); }}
+                  disabled={!assemblyId}
+                  title="Download OCC advanced B-rep STEP (cadquery-ocp) — not SolidWorks"
+                  aria-label="Download OCC B-rep STEP"
+                  data-testid="ck-export-brep"
+                  className="rounded-lg px-2 py-1 text-[10px] text-violet-100 hover:bg-violet-400/15 border border-violet-400/30 disabled:opacity-40">
+                  B-rep
+                </button>
+                <button type="button" onClick={() => { void addFeatureDemo(); }}
+                  disabled={assemblyBusy}
+                  title="Add feature to OCC parametric tree (box/cut/fillet demo)"
+                  aria-label="Add solid feature"
+                  data-testid="ck-add-feature"
+                  className="rounded-lg px-2 py-1 text-[10px] text-fuchsia-100 hover:bg-fuchsia-400/15 border border-fuchsia-400/30 disabled:opacity-40">
+                  Feat
+                </button>
+                <button type="button" onClick={() => { void rebuildSolidDemo(); }}
+                  disabled={assemblyBusy}
+                  title="Rebuild OCC solid from feature tree + tessellate for Unity"
+                  aria-label="Rebuild solid"
+                  data-testid="ck-rebuild-solid"
+                  className="rounded-lg px-2 py-1 text-[10px] text-fuchsia-100 hover:bg-fuchsia-400/15 border border-fuchsia-400/30 disabled:opacity-40">
+                  Rebuild
+                </button>
+                <button type="button" onClick={() => { void showCertStatus(); }}
+                  title="OCC / solid-world cert probe (geometry verification harness — not ISO CMM)"
+                  aria-label="Solid world cert status"
+                  data-testid="ck-solid-cert"
+                  className="rounded-lg px-2 py-1 text-[10px] text-emerald-100 hover:bg-emerald-400/15 border border-emerald-400/30">
+                  Cert
                 </button>
                 <button type="button" onClick={() => { void downloadAssemblyDrawingSvg(); }}
                   disabled={!assemblyId}

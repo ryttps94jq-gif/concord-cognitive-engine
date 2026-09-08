@@ -118,6 +118,126 @@ export function projectMeshView(positions, indices, view = 'front', { silhouette
   };
 }
 
+
+/**
+ * Gate E — pull dimensions from solid feature params when present.
+ * box → dx/dy/dz; cylinder → diameter + height; extrude → distance.
+ */
+export function buildFeatureDimensions(features, view = 'front', { origin = { x: 0, y: 0 } } = {}) {
+  if (!Array.isArray(features) || !features.length) return [];
+  const fmt = (n) => (Math.abs(n) >= 100 ? n.toFixed(1) : n.toFixed(3)).replace(/\.?0+$/, '') || '0';
+  const dims = [];
+  let cursor = 0;
+  for (const f of features) {
+    const type = String(f.type || f.op || f.kind || '').toLowerCase();
+    const params = f.params || f;
+    const idBase = f.id || `feat-${cursor}`;
+    if (type === 'box' || type === 'cube' || type === 'beam' || type === 'rect') {
+      const dx = Number(params.dx || params.width || 0);
+      const dy = Number(params.dy || params.depth || 0);
+      const dz = Number(params.dz || params.height || 0);
+      if (view === 'front' || view === 'top') {
+        if (dx > 0) {
+          dims.push({
+            id: `${idBase}-dx`,
+            kind: 'feature',
+            featureType: 'box',
+            axis: 'x',
+            view,
+            x1: origin.x,
+            y1: origin.y - 8 - cursor * 6,
+            x2: origin.x + dx,
+            y2: origin.y - 8 - cursor * 6,
+            value: dx,
+            label: `box.dx ${fmt(dx)}`,
+            auto: true,
+            fromFeature: true,
+          });
+        }
+      }
+      if (view === 'front' || view === 'side') {
+        const vspan = view === 'side' ? dy : dz;
+        const label = view === 'side' ? 'box.dy' : 'box.dz';
+        if (vspan > 0) {
+          dims.push({
+            id: `${idBase}-dv`,
+            kind: 'feature',
+            featureType: 'box',
+            axis: 'y',
+            view,
+            x1: origin.x - 8 - cursor * 6,
+            y1: origin.y,
+            x2: origin.x - 8 - cursor * 6,
+            y2: origin.y + vspan,
+            value: vspan,
+            label: `${label} ${fmt(vspan)}`,
+            auto: true,
+            fromFeature: true,
+          });
+        }
+      }
+    } else if (type === 'cylinder' || type === 'cyl') {
+      const r = Number(params.r || params.radius || 0);
+      const h = Number(params.h || params.height || 0);
+      if (r > 0) {
+        dims.push({
+          id: `${idBase}-dia`,
+          kind: 'feature',
+          featureType: 'cylinder',
+          axis: 'x',
+          view,
+          x1: origin.x,
+          y1: origin.y + h + 6 + cursor * 4,
+          x2: origin.x + 2 * r,
+          y2: origin.y + h + 6 + cursor * 4,
+          value: 2 * r,
+          label: `⌀${fmt(2 * r)}`,
+          auto: true,
+          fromFeature: true,
+        });
+      }
+      if (h > 0 && (view === 'front' || view === 'side')) {
+        dims.push({
+          id: `${idBase}-h`,
+          kind: 'feature',
+          featureType: 'cylinder',
+          axis: 'y',
+          view,
+          x1: origin.x + 2 * r + 6,
+          y1: origin.y,
+          x2: origin.x + 2 * r + 6,
+          y2: origin.y + h,
+          value: h,
+          label: `cyl.h ${fmt(h)}`,
+          auto: true,
+          fromFeature: true,
+        });
+      }
+    } else if (type === 'extrude' || type === 'pad') {
+      const dist = Number(f.distance || f.dz || f.height || params.distance || 0);
+      if (dist > 0) {
+        dims.push({
+          id: `${idBase}-ex`,
+          kind: 'feature',
+          featureType: 'extrude',
+          axis: 'y',
+          view,
+          x1: origin.x - 12,
+          y1: origin.y,
+          x2: origin.x - 12,
+          y2: origin.y + dist,
+          value: dist,
+          label: `extrude ${fmt(dist)}`,
+          auto: true,
+          fromFeature: true,
+        });
+      }
+    }
+    cursor += 1;
+  }
+  return dims;
+}
+
 /** Auto overall X (horizontal) + Y (vertical) dimensions from view bounds. */
 export function buildOverallDimensions(bounds, view) {
   const { minU, minV, maxU, maxV } = bounds;
@@ -354,7 +474,7 @@ function meshFromParts(parts) {
   return { allPos, allIdx, included, skipped };
 }
 
-function collectAnnotationOpts(asm, opts = {}) {
+function collectAnnotationOpts(asm, opts = {}, parts = []) {
   const meta = asm?.meta || {};
   const userDims = Array.isArray(opts.dimensions)
     ? opts.dimensions
@@ -369,6 +489,27 @@ function collectAnnotationOpts(asm, opts = {}) {
         ? meta.gdtAnnotations
         : [];
   const dimensionsByView = { front: [], top: [], side: [] };
+  // Gate E — solid feature dims first (when featureTree present), then user dims
+  if (opts.featureDims !== false) {
+    for (const part of parts || []) {
+      const feats = part?.meta?.featureTree || part?.featureTree || opts.features || [];
+      if (!Array.isArray(feats) || !feats.length) continue;
+      for (const view of ['front', 'top', 'side']) {
+        const fd = buildFeatureDimensions(feats, view);
+        for (const d of fd) {
+          dimensionsByView[view].push({ ...d, partId: part.id || null });
+        }
+      }
+    }
+    // bare features on opts (no part)
+    if ((!parts || !parts.length) && Array.isArray(opts.features) && opts.features.length) {
+      for (const view of ['front', 'top', 'side']) {
+        for (const d of buildFeatureDimensions(opts.features, view)) {
+          dimensionsByView[view].push(d);
+        }
+      }
+    }
+  }
   for (const d of userDims) {
     const v = d.view || 'front';
     if (!dimensionsByView[v]) dimensionsByView[v] = [];
@@ -420,7 +561,7 @@ export function exportPartDrawing(part, opts = {}) {
     projectMeshView(positions, part.mesh.indices, v, { silhouette: opts.silhouette !== false }),
   );
   const fakeAsm = { meta: part.meta || {} };
-  const ann = collectAnnotationOpts(fakeAsm, opts);
+  const ann = collectAnnotationOpts(fakeAsm, opts, part ? [part] : []);
   const svg = viewsToSvg(views, {
     ...opts,
     dimensionsByView: ann.dimensionsByView,
@@ -453,7 +594,7 @@ export function exportAssemblyDrawing(db, assemblyId, opts = {}) {
   const views = ['front', 'top', 'side'].map((v) =>
     projectMeshView(allPos, allIdx, v, { silhouette: opts.silhouette !== false }),
   );
-  const ann = collectAnnotationOpts(asm, opts);
+  const ann = collectAnnotationOpts(asm, opts, parts);
   const svg = viewsToSvg(views, {
     ...opts,
     dimensionsByView: ann.dimensionsByView,

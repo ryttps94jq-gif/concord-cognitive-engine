@@ -40,6 +40,15 @@ import {
   exportAssemblyBrepStep,
   exportPartBrepStep,
   importBrepStepToAssembly,
+  featureRebuild,
+  featureCreate,
+  featureAppend,
+  featureList,
+  featureUndo,
+  sketchExtrude,
+  measureGeometry,
+  mateSolids,
+  rebuildPartFromFeatures,
 } from '../lib/conkay/occ-bridge.js';
 import {
   exportAssemblyDrawing,
@@ -50,6 +59,7 @@ import { explodeAssembly } from '../lib/conkay/assembly-explode.js';
 import {
   listGdt,
   addGdt,
+  verifyGeometryCallout,
   updateGdt,
   removeGdt,
   listDimensions,
@@ -871,6 +881,64 @@ export default function createConkayAssemblyRouter({ requireAuth, db }) {
       return res.status(code).json(out);
     }
     return res.json(out);
+  });
+
+
+  // ── Solid world (OCC feature tree / sketch / mates / measure) ──────────
+
+  /** POST /api/conkay/occ/feature-rebuild */
+  router.post('/occ/feature-rebuild', auth, async (req, res) => {
+    const out = await featureRebuild(req.body || {});
+    return res.status(out.ok ? 200 : 422).json(out);
+  });
+
+  router.post('/occ/feature-create', auth, async (req, res) => {
+    const out = await featureCreate(req.body || {});
+    return res.status(out.ok ? 200 : 422).json(out);
+  });
+
+  router.post('/occ/feature-append', auth, async (req, res) => {
+    const out = await featureAppend(req.body || {});
+    return res.status(out.ok ? 200 : 422).json(out);
+  });
+
+  router.get('/occ/feature-list/:partId', auth, async (req, res) => {
+    const out = await featureList({ partId: req.params.partId });
+    return res.status(out.ok ? 200 : 422).json(out);
+  });
+
+  router.post('/occ/feature-undo', auth, async (req, res) => {
+    const out = await featureUndo(req.body || {});
+    return res.status(out.ok ? 200 : 422).json(out);
+  });
+
+  router.post('/occ/sketch-extrude', auth, async (req, res) => {
+    const out = await sketchExtrude(req.body || {});
+    return res.status(out.ok ? 200 : 422).json(out);
+  });
+
+  router.post('/occ/measure', auth, async (req, res) => {
+    const out = await measureGeometry(req.body || {});
+    return res.status(out.ok ? 200 : 422).json(out);
+  });
+
+  router.post('/occ/mate-solids', auth, async (req, res) => {
+    const out = await mateSolids(req.body || {});
+    return res.status(out.ok ? 200 : 422).json(out);
+  });
+
+  /** POST /api/conkay/assemblies/:id/parts/:partId/rebuild-solid */
+  router.post('/assemblies/:id/parts/:partId/rebuild-solid', auth, async (req, res) => {
+    if (!needDb(res)) return;
+    const out = await rebuildPartFromFeatures(db, req.params.id, req.params.partId, req.body || {});
+    return res.status(out.ok ? 200 : 422).json(out);
+  });
+
+  /** POST /api/conkay/assemblies/:id/gdt/verify — geometry verification harness */
+  router.post('/assemblies/:id/gdt/verify', auth, async (req, res) => {
+    if (!needDb(res)) return;
+    const out = await verifyGeometryCallout(db, req.params.id, req.body || {});
+    return res.status(out.ok ? 200 : 422).json(out);
   });
 
   return router;

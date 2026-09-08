@@ -148,3 +148,49 @@ export function removeDimension(db, assemblyId, dimId) {
   if (!out.ok) return out;
   return { ok: true, removed: dimId, dimensions };
 }
+
+/**
+ * Gate D — geometry verification harness (NOT ISO CMM lab certification).
+ * Delegates measured value to OCC measure when features/kind available; else bbox from mesh.
+ */
+export async function verifyGeometryCallout(db, assemblyId, body = {}) {
+  const asm = getAssembly(db, assemblyId);
+  if (!asm) return { ok: false, error: 'assembly_not_found', code: 'NOT_FOUND' };
+  const callout = body.callout || body.gdt || body;
+  let features = body.features || null;
+  if (!features && body.partId) {
+    const { getPart } = await import('./assembly-store.js');
+    const part = getPart(db, assemblyId, body.partId);
+    features = part?.meta?.featureTree || null;
+  }
+  try {
+    const { measureGeometry } = await import('./occ-bridge.js');
+    const measured = await measureGeometry({
+      features: features || undefined,
+      kind: body.kind,
+      params: body.params,
+      partId: body.occPartId || body.featurePartId,
+      callout,
+    });
+    if (measured?.ok) {
+      return {
+        ...measured,
+        assemblyId,
+        honesty: {
+          harness: 'geometry verification harness',
+          note: 'Measured from OCC solid/feature geometry vs callout ±tol. NOT ISO CMM lab certification.',
+        },
+      };
+    }
+    return measured;
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : String(e),
+      honesty: {
+        harness: 'geometry verification harness',
+        note: 'NOT ISO CMM lab certification',
+      },
+    };
+  }
+}

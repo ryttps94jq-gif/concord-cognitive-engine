@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { listParts, getPart, getAssembly, addPart, defaultTransform } from './assembly-store.js';
+import { listParts, getPart, getAssembly, addPart, defaultTransform, updatePartMeta, setPartMesh, pushAssemblyRevision } from './assembly-store.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -360,6 +360,107 @@ export async function importBrepStepToAssembly(db, assemblyId, stepTextOrPath, o
   };
 }
 
+
+/**
+ * Feature-tree solid rebuild via OCC CLI (Gate A).
+ */
+export async function featureRebuild(payload = {}) {
+  return runOccCli('feature_rebuild', {
+    include_mesh: payload.include_mesh !== false && !payload.omit_mesh,
+    mesh_summary_only: !!payload.mesh_summary_only,
+    ...payload,
+  });
+}
+
+export async function featureCreate(payload = {}) {
+  return runOccCli('feature_create', payload);
+}
+
+export async function featureAppend(payload = {}) {
+  return runOccCli('feature_append', payload);
+}
+
+export async function featureList(payload = {}) {
+  return runOccCli('feature_list', payload);
+}
+
+export async function featureUndo(payload = {}) {
+  return runOccCli('feature_undo', payload);
+}
+
+/** Gate B — sketch → extrude/revolve */
+export async function sketchExtrude(payload = {}) {
+  return runOccCli('sketch_extrude', {
+    include_mesh: payload.include_mesh !== false && !payload.omit_mesh,
+    ...payload,
+  });
+}
+
+/** Gate D — geometry verification harness (NOT ISO CMM) */
+export async function measureGeometry(payload = {}) {
+  return runOccCli('measure', payload);
+}
+
+/** Gate C — solid-instance mates (stronger than mesh-only mates v2) */
+export async function mateSolids(payload = {}) {
+  return runOccCli('mate_solids', {
+    include_mesh: payload.include_mesh !== false && !payload.omit_mesh,
+    ...payload,
+  });
+}
+
+/**
+ * Persist feature tree on part meta + rebuild B-rep + tessellate into part mesh.
+ */
+export async function rebuildPartFromFeatures(db, assemblyId, partId, opts = {}) {
+  const part = getPart(db, assemblyId, partId);
+  if (!part) return { ok: false, reason: 'part_not_found' };
+  const features = opts.features || part.meta?.featureTree || [];
+  if (!features.length) return { ok: false, reason: 'empty_feature_tree' };
+  const outPath = path.join(brepDataDir(), `part-${partId}-features.step`);
+  const result = await featureRebuild({
+    partId,
+    features,
+    out: outPath,
+    name: `feat_${part.name || partId}`,
+    deflection: opts.deflection || 0.5,
+  });
+  if (!result.ok) return result;
+  if (!opts.skipHistory) pushAssemblyRevision(db, assemblyId, opts.label || 'rebuildSolid');
+  updatePartMeta(db, assemblyId, partId, {
+    featureTree: result.features,
+    brepPath: outPath,
+    advanced_brep: result.export?.advanced_brep,
+    bbox: result.bbox,
+    solids: result.solids,
+    honesty: result.honesty,
+  });
+  let meshPayload = null;
+  if (result.mesh?.positions?.length) {
+    meshPayload = {
+      positions: result.mesh.positions,
+      indices: result.mesh.indices,
+      kind: 'occ-feature-brep',
+      vertexCount: result.mesh.vertexCount,
+      triangleCount: result.mesh.triangleCount,
+    };
+    setPartMesh(db, assemblyId, partId, meshPayload, { skipHistory: true, kind: 'occ-feature-brep' });
+  }
+  return {
+    ok: true,
+    partId,
+    assemblyId,
+    features: result.features,
+    export: result.export,
+    bbox: result.bbox,
+    solids: result.solids,
+    mesh: meshPayload,
+    part: getPart(db, assemblyId, partId),
+    honesty: result.honesty,
+  };
+}
+
+
 export { resolvePython, resolveCli, brepDataDir };
 export default {
   runOccCli,
@@ -367,4 +468,13 @@ export default {
   exportAssemblyBrepStep,
   exportPartBrepStep,
   importBrepStepToAssembly,
+  featureRebuild,
+  featureCreate,
+  featureAppend,
+  featureList,
+  featureUndo,
+  sketchExtrude,
+  measureGeometry,
+  mateSolids,
+  rebuildPartFromFeatures,
 };

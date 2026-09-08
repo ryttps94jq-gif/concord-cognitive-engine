@@ -399,3 +399,43 @@ export async function addAssemblyDimension(assemblyId: string, body: Record<stri
   return res?.data;
 }
 
+/** Download OCC advanced B-rep STEP (kernel=occ). */
+export async function downloadBrepStep(opts: { assemblyId: string; filename?: string }) {
+  const path = `/api/conkay/assemblies/${opts.assemblyId}/export.brep.step`;
+  const res = await api.get(path, { responseType: 'blob' });
+  const blob = res?.data instanceof Blob ? res.data : new Blob([res?.data], { type: 'application/step' });
+  const filename = opts.filename || `conkay-assembly-${opts.assemblyId.slice(0, 8)}-brep.step`;
+  if (typeof window !== 'undefined') {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+  return { ok: true, filename, size: blob.size };
+}
+
+/** OCC feature-rebuild (Gate A) — body: { partId, features, out?, ... } */
+export async function occFeatureRebuild(body: Record<string, unknown>) {
+  const res = await api.post('/api/conkay/occ/feature-rebuild', body);
+  return res?.data;
+}
+
+/** Rebuild solid for assembly part from feature tree; returns mesh for Unity apply. */
+export async function rebuildPartSolid(assemblyId: string, partId: string, body: Record<string, unknown> = {}) {
+  const res = await api.post(`/api/conkay/assemblies/${assemblyId}/parts/${partId}/rebuild-solid`, body);
+  return res?.data;
+}
+
+/** Append feature to OCC feature tree. */
+export async function occFeatureAppend(body: Record<string, unknown>) {
+  const res = await api.post('/api/conkay/occ/feature-append', body);
+  return res?.data;
+}
+
+/** Probe OCC + local cert status text (best-effort). */
+export async function fetchOccStatus() {
+  const res = await api.get('/api/conkay/occ/status');
+  return res?.data;
+}

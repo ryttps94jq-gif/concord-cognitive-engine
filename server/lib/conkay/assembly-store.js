@@ -268,6 +268,21 @@ export function updatePartMeta(db, assemblyId, partId, patch) {
   return { ok: true, part: getPart(db, assemblyId, partId) };
 }
 
+
+export function setPartMesh(db, assemblyId, partId, mesh, opts = {}) {
+  const part = getPart(db, assemblyId, partId);
+  if (!part) return { ok: false, error: 'part_not_found', code: 'NOT_FOUND' };
+  if (!opts.skipHistory) pushAssemblyRevision(db, assemblyId, opts.label || 'setPartMesh');
+  const ts = nowIso();
+  const meshJson = mesh ? JSON.stringify(mesh) : null;
+  const kind = opts.kind || part.kind || 'mesh';
+  db.prepare(
+    `UPDATE conkay_assembly_parts SET mesh_json = ?, kind = ?, updated_at = ? WHERE assembly_id = ? AND id = ?`,
+  ).run(meshJson, kind, ts, assemblyId, partId);
+  db.prepare(`UPDATE conkay_assemblies SET updated_at = ? WHERE id = ?`).run(ts, assemblyId);
+  return { ok: true, part: getPart(db, assemblyId, partId) };
+}
+
 export function deleteAssembly(db, assemblyId) {
   ensureAssemblyTables(db);
   const asm = getAssembly(db, assemblyId);
