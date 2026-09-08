@@ -10,10 +10,52 @@ import {
   aeroPanel,
 } from '@/lib/conkay/verticals/api';
 import { applyMesh } from '@/lib/conkay/unity-bridge';
+import { mintConkayArtifactDtu } from '@/lib/conkay/mint-artifact-dtu';
 
 type Props = {
   setWorkStatus?: (s: string) => void;
 };
+
+function summarizeVerticalJson(label: string, json: Record<string, unknown>) {
+  const summary: Record<string, unknown> = {
+    channel: 'vertical',
+    vertical: label.toLowerCase(),
+    action: label.toLowerCase(),
+    ok: json?.ok,
+    ms: json?.ms ?? (json?.latencyMs as { p50?: number } | undefined)?.p50,
+  };
+  if (json?.proxy != null) summary.proxy = json.proxy;
+  if (json?.coefficients != null) summary.coefficients = json.coefficients;
+  if (json?.latencyMs != null) summary.latencyMs = json.latencyMs;
+  if (json?.metrologyPass != null) summary.metrologyPass = json.metrologyPass;
+  if (json?.shot != null) summary.shot = json.shot;
+  if (json?.gcode != null || json?.gcodePath != null || json?.path != null) {
+    const gcode = typeof json.gcode === 'string' ? json.gcode : '';
+    summary.gcode = {
+      bytes: gcode ? gcode.length : json.gcodeBytes ?? null,
+      path: json.gcodePath || json.path || null,
+    };
+  }
+  if (json?.mesh && typeof json.mesh === 'object') {
+    const mesh = json.mesh as Record<string, unknown>;
+    summary.mesh = {
+      id: mesh.id,
+      color: mesh.color,
+      positionsCount: Array.isArray(mesh.positions) ? mesh.positions.length : undefined,
+      indicesCount: Array.isArray(mesh.indices) ? mesh.indices.length : undefined,
+    };
+  }
+  // Keep a small generic preview without megabyte bodies
+  try {
+    const raw = JSON.stringify(json);
+    summary.previewBytes = raw.length;
+    if (raw.length <= 2500) summary.result = json;
+    else summary.resultPreview = raw.slice(0, 1500);
+  } catch {
+    /* ignore */
+  }
+  return summary;
+}
 
 export function ConKayVerticalsBar({ setWorkStatus }: Props) {
   const [busy, setBusy] = useState(false);
@@ -55,7 +97,18 @@ export function ConKayVerticalsBar({ setWorkStatus }: Props) {
                   : json.shot
                     ? ` shot=${json.shot.archetype}`
                     : '';
-        status(`${label} OK${extra} (${json.ms ?? json.latencyMs?.p50 ?? '?'}ms) — PROXY/synthetic`);
+        let line = `${label} OK${extra} (${json.ms ?? json.latencyMs?.p50 ?? '?'}ms) — PROXY/synthetic`;
+        status(line);
+        const mint = await mintConkayArtifactDtu({
+          title: `Vertical · ${label}`,
+          work: summarizeVerticalJson(label, json),
+          tags: ['conkay', 'vertical', label.toLowerCase(), 'artifact'],
+        });
+        if (mint.ok && mint.id) {
+          status(`${line} · dtu=${mint.id.slice(0, 8)}…`);
+        } else if (!mint.ok) {
+          status(`${line} · mint failed: ${mint.error || 'error'}`);
+        }
       } catch (e: any) {
         status(`${label} error: ${e?.message || e}`);
       } finally {

@@ -39,6 +39,7 @@ import { runEvoGlbToWorld } from '@/lib/conkay/evo-glb-to-world';
 import { runAssemblyChatRevise, downloadStl, downloadAssemblyBom, downloadStep, downloadBrepStep, occFeatureRebuild, rebuildPartSolid, occFeatureAppend, fetchOccStatus, runAssemblyUndo, runAssemblyRedo, downloadAssemblyDrawing, downloadAssemblyDrawingPdf, explodeAssemblyApi, fetchMaterials, attachPartMaterial, listParts, mateSolveDof, sketchSolve, gdtDigital, occFeatureList } from '@/lib/conkay/assembly-to-world';
 import { ConKayActionConfirm } from './ConKayActionConfirm';
 import { ConKayVerticalsBar } from './ConKayVerticalsBar';
+import { mintConkayArtifactDtu } from '@/lib/conkay/mint-artifact-dtu';
 import { ConKayCockpit } from './ConKayCockpit';
 import { CONKAY_SIGNATURE_GREETING, CONKAY_PERSONA_PROMPT, type ConKayState } from './conkay-persona';
 import { getLensById } from '@/lib/lens-registry';
@@ -202,6 +203,23 @@ export function ConKayOverlay() {
   // ConKay works (the JARVIS "you can see it building" surface).
   const [steps, setSteps] = useState<WorkStep[]>([]);
   const [workStatus, setWorkStatus] = useState('');
+
+  /** CAD/vertical toolbar: set status line AND mint inspectable locker DTU (same shape as chat persistArtifact). */
+  const reportCadAction = useCallback((label: string, payload: Record<string, unknown> = {}) => {
+    setWorkStatus(label);
+    const action = typeof payload.action === 'string' ? payload.action : 'cad_toolbar';
+    void mintConkayArtifactDtu({
+      title: label.slice(0, 100),
+      work: { channel: 'cad', action, status: label, ...payload },
+      tags: ['conkay', 'cad', 'artifact', `action:${action}`],
+    }).then((r) => {
+      if (r.ok && r.id) {
+        setWorkStatus(`${label} · dtu=${r.id.slice(0, 8)}…`);
+      } else if (!r.ok) {
+        setWorkStatus(`${label} · mint failed: ${r.error || 'error'}`);
+      }
+    });
+  }, []);
   const inputRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const spokeRef = useRef<string | null>(null);
@@ -326,7 +344,8 @@ export function ConKayOverlay() {
       },
       id,
     );
-    setWorkStatus(ok ? `Unity bridge: spawn_primitive posted · ${id}` : 'Unity bridge: spawn post failed');
+    if (ok) reportCadAction(`Unity bridge: spawn_primitive posted · ${id}`, { action: 'spawn_primitive', id });
+    else setWorkStatus('Unity bridge: spawn post failed');
   }, []);
 
   /**
@@ -348,8 +367,9 @@ export function ConKayOverlay() {
     const band = res.band ?? '?';
     const hex = res.color?.hex ?? '?';
     if (res.spawnPosted) {
-      setWorkStatus(
+      reportCadAction(
         `Industrial slice LIVE: util=${util} band=${band} color=${hex} · spawn_primitive posted · ${res.spawnId || ''} (cube proxy — not apply_mesh)`,
+        { action: 'fea_beam', util, band, hex, spawnId: res.spawnId || null },
       );
     } else {
       setWorkStatus(
@@ -378,8 +398,9 @@ export function ConKayOverlay() {
     const hex = res.color?.hex ?? '?';
     const band = res.band ?? '?';
     if (res.applyPosted) {
-      setWorkStatus(
+      reportCadAction(
         `Mesh apply LIVE: kind=${res.kind} verts=${verts} tris=${tris} band=${band} color=${hex} · apply_mesh posted · ${res.applyId || ''}`,
+        { action: 'part_mesh', kind: res.kind, verts, tris, band, hex, applyId: res.applyId || null },
       );
     } else {
       setWorkStatus(
@@ -411,11 +432,8 @@ export function ConKayOverlay() {
       },
       id,
     );
-    setWorkStatus(
-      ok
-        ? `GLB load: load_glb posted · ${id} · ${url} (wait glb_loaded)`
-        : 'GLB load: post failed',
-    );
+    if (ok) reportCadAction(`GLB load: load_glb posted · ${id} · ${url} (wait glb_loaded)`, { action: 'load_glb', id, url });
+    else setWorkStatus('GLB load: post failed');
   }, []);
 
   /**
@@ -437,8 +455,9 @@ export function ConKayOverlay() {
         setWorkStatus(`Evo GLB: failed — ${res.error || 'unknown'}${res.glbUrl ? ` · ${res.glbUrl}` : ''}`);
         return;
       }
-      setWorkStatus(
+      reportCadAction(
         `Evo GLB LIVE: ${res.archetype} → ${res.glbUrl} · glb_loaded · ${res.loadId || ''} (archetypes only — not full CAD)`,
+        { action: 'evo_glb', archetype: res.archetype, glbUrl: res.glbUrl, loadId: res.loadId || null },
       );
     } catch (e) {
       setWorkStatus(`Evo GLB: error — ${e instanceof Error ? e.message : String(e)}`);
@@ -474,8 +493,9 @@ export function ConKayOverlay() {
       const util = res.fea?.maxUtilization != null ? res.fea.maxUtilization.toFixed(4) : (res.partMesh?.maxUtilization?.toFixed(4) ?? '?');
       const hex = res.fea?.color?.hex ?? res.partMesh?.color?.hex ?? res.applyPayload?.color ?? '?';
       if (res.applyPosted) {
-        setWorkStatus(
+        reportCadAction(
           `NLP CAD LIVE: “${text.slice(0, 40)}” → ${kind}${span != null ? ` ${span}m` : ''} util=${util} color=${hex} · apply_mesh · ${res.applyId || ''} (not industrial CAD suite / GLB)`,
+          { action: 'nlp_design', kind, span: span ?? null, util, hex, applyId: res.applyId || null, prompt: text.slice(0, 120) },
         );
       } else {
         setWorkStatus(
@@ -512,8 +532,9 @@ export function ConKayOverlay() {
       }
       if (res.assemblyId) setAssemblyId(res.assemblyId);
       const n = res.parts?.length ?? 0;
-      setWorkStatus(
+      reportCadAction(
         `ASSEMBLY LIVE: action=${res.action || '?'} parts=${n} id=${(res.assemblyId || '').slice(0, 8)}… · Unity synced (not full CAD suite)`,
+        { action: 'assembly_revise', assemblyAction: res.action || null, parts: n, assemblyId: res.assemblyId || null },
       );
     } catch (e) {
       setWorkStatus(`Assembly: error — ${e instanceof Error ? e.message : String(e)}`);
@@ -536,7 +557,7 @@ export function ConKayOverlay() {
         return;
       }
       const n = res.parts?.length ?? 0;
-      setWorkStatus(`UNDO LIVE: parts=${n} canRedo=${res.canRedo ? 'yes' : 'no'} · not parametric CAD history`);
+      reportCadAction(`UNDO LIVE: parts=${n} canRedo=${res.canRedo ? 'yes' : 'no'} · not parametric CAD history`, { action: 'assembly_undo', parts: n, canRedo: !!res.canRedo });
     } catch (e) {
       setWorkStatus(`Undo error: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
@@ -558,7 +579,7 @@ export function ConKayOverlay() {
         return;
       }
       const n = res.parts?.length ?? 0;
-      setWorkStatus(`REDO LIVE: parts=${n} canUndo=${res.canUndo ? 'yes' : 'no'} · not parametric CAD history`);
+      reportCadAction(`REDO LIVE: parts=${n} canUndo=${res.canUndo ? 'yes' : 'no'} · not parametric CAD history`, { action: 'assembly_redo', parts: n, canUndo: !!res.canUndo });
     } catch (e) {
       setWorkStatus(`Redo error: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
@@ -573,7 +594,7 @@ export function ConKayOverlay() {
     }
     try {
       const r = await downloadStl({ assemblyId });
-      setWorkStatus(`STL download LIVE: ${r.filename} (${r.size} bytes) — Wave 2 export`);
+      reportCadAction(`STL download LIVE: ${r.filename} (${r.size} bytes) — Wave 2 export`, { action: 'export_stl', filename: r.filename, size: r.size });
     } catch (e) {
       setWorkStatus(`STL download failed — ${e instanceof Error ? e.message : String(e)}`);
     }
@@ -587,7 +608,7 @@ export function ConKayOverlay() {
     }
     try {
       const r = await downloadStep({ assemblyId });
-      setWorkStatus(`STEP download LIVE: ${r.filename} (${r.size} bytes) — faceted AP214 (not OCC B-rep)`);
+      reportCadAction(`STEP download LIVE: ${r.filename} (${r.size} bytes) — faceted AP214 (not OCC B-rep)`, { action: 'export_step', filename: r.filename, size: r.size });
     } catch (e) {
       setWorkStatus(`STEP download failed — ${e instanceof Error ? e.message : String(e)}`);
     }
@@ -600,7 +621,7 @@ export function ConKayOverlay() {
     }
     try {
       const r = await downloadBrepStep({ assemblyId });
-      setWorkStatus(`OCC B-rep LIVE: ${r.filename} (${r.size} bytes) — advanced B-rep STEP (not SolidWorks)`);
+      reportCadAction(`OCC B-rep LIVE: ${r.filename} (${r.size} bytes) — advanced B-rep STEP (not SolidWorks)`, { action: 'export_brep', filename: r.filename, size: r.size });
     } catch (e) {
       setWorkStatus(`B-rep download failed — ${e instanceof Error ? e.message : String(e)}`);
     }
@@ -627,9 +648,7 @@ export function ConKayOverlay() {
         return;
       }
       const listed = await occFeatureList(partId);
-      setWorkStatus(
-        `Add feature LIVE (industrial): part=${partId} ops=${(created.notes || []).join(',')} features=${listed?.count ?? created.featureCount} advanced=${!!created.export?.advanced_brep} — not SolidWorks UI parity`,
-      );
+      reportCadAction(`Add feature LIVE (industrial): part=${partId} ops=${(created.notes || []).join(',')} features=${listed?.count ?? created.featureCount} advanced=${!!created.export?.advanced_brep} — not SolidWorks UI parity`, { action: 'add_feature' });
     } catch (e) {
       setWorkStatus(`Add feature failed — ${e instanceof Error ? e.message : String(e)}`);
     } finally {
@@ -655,11 +674,20 @@ export function ConKayOverlay() {
         tol_rad: 0.001,
         include_mesh: false,
       });
-      setWorkStatus(
-        out?.pass
+      {
+        const mateLine = out?.pass
           ? `Industrial mate-solve-dof LIVE: bodies=${out.bodyCount} residual_max=${out?.remeasure_after_trsf?.max_abs ?? out?.residual?.max_abs} (gp_Trsf; not AABB snap)`
-          : `Industrial mate-solve-dof FAIL — ${out?.reason || out?.error || 'residual above tol'}`,
-      );
+          : `Industrial mate-solve-dof FAIL — ${out?.reason || out?.error || 'residual above tol'}`;
+        if (out?.pass) {
+          reportCadAction(mateLine, {
+            action: 'mate_solve_dof',
+            bodyCount: out.bodyCount,
+            residual_max: out?.remeasure_after_trsf?.max_abs ?? out?.residual?.max_abs,
+          });
+        } else {
+          setWorkStatus(mateLine);
+        }
+      }
     } catch (e) {
       setWorkStatus(`Mate-solve-dof failed — ${e instanceof Error ? e.message : String(e)}`);
     } finally {
@@ -682,11 +710,13 @@ export function ConKayOverlay() {
           { type: 'cylindricity', tol: 0.05 },
         ],
       });
-      setWorkStatus(
-        out?.pass
+      {
+        const gdtLine = out?.pass
           ? `Digital GD&T LIVE: harness=${out.harness} checks=${(out.checks || []).map((c: any) => c.type + ':' + (c.pass ? 'PASS' : 'FAIL')).join(',')} — NOT ISO CMM / ISO 17025`
-          : `Digital GD&T FAIL — ${out?.reason || 'check failed'} (still not physical CMM)`,
-      );
+          : `Digital GD&T FAIL — ${out?.reason || 'check failed'} (still not physical CMM)`;
+        if (out?.pass) reportCadAction(gdtLine, { action: 'gdt_digital', harness: out.harness, checks: (out.checks || []).map((c: any) => ({ type: c.type, pass: !!c.pass })) });
+        else setWorkStatus(gdtLine);
+      }
     } catch (e) {
       setWorkStatus(`Digital GD&T failed — ${e instanceof Error ? e.message : String(e)}`);
     } finally {
@@ -729,11 +759,13 @@ export function ConKayOverlay() {
       } catch {
         sketchNote = ' sketch-solve=ERR';
       }
-      setWorkStatus(
-        has
+      {
+        const certLine = has
           ? `INDUSTRIAL_CLASS probe LIVE: OCC ok=${!!st?.ok} cmds=mate-solve-dof|gdt-digital|sketch-solve${sketchNote} — run scripts/conkay-industrial-class-cert.mjs for CERTIFIED (NOT SolidWorks UI / NOT ISO 17025 CMM)`
-          : `INDUSTRIAL_CLASS probe incomplete — OCC ok=${!!st?.ok}; missing industrial cmds${sketchNote}`,
-      );
+          : `INDUSTRIAL_CLASS probe incomplete — OCC ok=${!!st?.ok}; missing industrial cmds${sketchNote}`;
+        if (has) reportCadAction(certLine, { action: 'industrial_cert', occOk: !!st?.ok, sketchNote });
+        else setWorkStatus(certLine);
+      }
     } catch (e) {
       setWorkStatus(`Industrial cert probe failed — ${e instanceof Error ? e.message : String(e)}`);
     }
@@ -752,8 +784,9 @@ export function ConKayOverlay() {
           const out = await rebuildPartSolid(assemblyId, withTree.id, {});
           if (out?.ok) {
             usedAssembly = true;
-            setWorkStatus(
+            reportCadAction(
               `Rebuild solid LIVE: part=${withTree.id} solids=${out.solids} tris=${out.mesh?.triangleCount ?? '?'} advanced=${!!out.export?.advanced_brep}`,
+              { action: 'rebuild_solid', partId: withTree.id, solids: out.solids, tris: out.mesh?.triangleCount ?? null, advanced: !!out.export?.advanced_brep },
             );
           }
         }
@@ -772,8 +805,9 @@ export function ConKayOverlay() {
           setWorkStatus(`Rebuild solid failed — ${out?.reason || out?.error || 'unknown'}`);
           return;
         }
-        setWorkStatus(
+        reportCadAction(
           `Rebuild solid LIVE: demo tris=${out.mesh?.triangleCount ?? '?'} advanced=${!!out.export?.advanced_brep} — Unity apply via mesh path`,
+          { action: 'rebuild_solid', mode: 'demo', tris: out.mesh?.triangleCount ?? null, advanced: !!out.export?.advanced_brep },
         );
       }
     } catch (e) {
@@ -786,8 +820,9 @@ export function ConKayOverlay() {
   const showCertStatus = useCallback(async () => {
     try {
       const st = await fetchOccStatus();
-      setWorkStatus(
+      reportCadAction(
         `OCC cert probe: ok=${!!st?.ok} kernel=${st?.kernel || '?'} — SOLID WORLD + INDUSTRIAL_CLASS via scripts/conkay-industrial-class-cert.mjs (digital ASME harness; NOT ISO 17025 CMM; NOT SolidWorks UI parity)`,
+        { action: 'solid_cert', occOk: !!st?.ok, kernel: st?.kernel || null },
       );
     } catch (e) {
       setWorkStatus(`OCC status failed — ${e instanceof Error ? e.message : String(e)}`);
@@ -805,7 +840,7 @@ export function ConKayOverlay() {
         setWorkStatus(`BOM failed — ${r.error}`);
         return;
       }
-      setWorkStatus(`BOM download LIVE: ${r.filename} parts=${r.bom?.totalParts ?? '?'} — Wave 2`);
+      reportCadAction(`BOM download LIVE: ${r.filename} parts=${r.bom?.totalParts ?? '?'} — Wave 2`, { action: 'export_bom', filename: r.filename, totalParts: r.bom?.totalParts ?? null });
     } catch (e) {
       setWorkStatus(`BOM download failed — ${e instanceof Error ? e.message : String(e)}`);
     }
@@ -818,7 +853,7 @@ export function ConKayOverlay() {
     }
     try {
       const r = await downloadAssemblyDrawing(assemblyId);
-      setWorkStatus(`DRAWING LIVE: ${r.filename} (${r.size} bytes) — orthographic SVG (not drafting CAD)`);
+      reportCadAction(`DRAWING LIVE: ${r.filename} (${r.size} bytes) — orthographic SVG (not drafting CAD)`, { action: 'export_drawing', filename: r.filename, size: r.size });
     } catch (e) {
       setWorkStatus(`Drawing download failed — ${e instanceof Error ? e.message : String(e)}`);
     }
@@ -831,7 +866,7 @@ export function ConKayOverlay() {
     }
     try {
       const r = await downloadAssemblyDrawingPdf(assemblyId);
-      setWorkStatus(`PDF PACK LIVE: ${r.filename} (${r.size} bytes) — 3 views + title/BOM (not CMM GD&T)`);
+      reportCadAction(`PDF PACK LIVE: ${r.filename} (${r.size} bytes) — 3 views + title/BOM (not CMM GD&T)`, { action: 'export_pdf', filename: r.filename, size: r.size });
     } catch (e) {
       setWorkStatus(`PDF download failed — ${e instanceof Error ? e.message : String(e)}`);
     }
@@ -850,7 +885,7 @@ export function ConKayOverlay() {
         return;
       }
       const n = out.updates?.length ?? out.parts?.length ?? 0;
-      setWorkStatus(`EXPLODE LIVE: factor=1 parts=${n} COM-centroid deltas — undoable · Unity set_transform/redraw`);
+      reportCadAction(`EXPLODE LIVE: factor=1 parts=${n} COM-centroid deltas — undoable · Unity set_transform/redraw`, { action: 'explode', parts: n, factor: 1 });
     } catch (e) {
       setWorkStatus(`Explode error — ${e instanceof Error ? e.message : String(e)}`);
     } finally {
@@ -891,7 +926,7 @@ export function ConKayOverlay() {
         setWorkStatus(`Material attach failed — ${out?.error || 'unknown'}`);
         return;
       }
-      setWorkStatus(`MATERIAL LIVE: ${out.material?.id || materialPicker} → part ${part.name || part.id.slice(0, 8)} (library attach — not FEM model)`);
+      reportCadAction(`MATERIAL LIVE: ${out.material?.id || materialPicker} → part ${part.name || part.id.slice(0, 8)} (library attach — not FEM model)`, { action: 'attach_material', materialId: out.material?.id || materialPicker, partId: part.id });
     } catch (e) {
       setWorkStatus(`Material error — ${e instanceof Error ? e.message : String(e)}`);
     } finally {
@@ -1102,19 +1137,12 @@ export function ConKayOverlay() {
   // result — as a DTU in the user's locker (fire-and-forget; never blocks the UX).
   // "show its work and the task it was provided" → a real, reopenable record.
   const persistArtifact = useCallback((title: string, work: Record<string, unknown>) => {
-    try {
-      const base = getApiBase();
-      fetch(`${base}/api/dtus`, {
-        method: 'POST', credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: `ConKay · ${title}`.slice(0, 120),
-          content: `**ConKay task artifact**\n\n\`\`\`json\n${JSON.stringify(work, null, 2)}\n\`\`\``,
-          tags: ['conkay', 'artifact', work.lens ? `lens:${work.lens}` : ''].filter(Boolean),
-          kind: 'conkay_artifact',
-        }),
-      }).catch(() => {});
-    } catch { /* never throws */ }
+    // Shared mint helper (same POST /api/dtus shape); fire-and-forget — never blocks UX.
+    void mintConkayArtifactDtu({
+      title,
+      work: { channel: 'chat', ...work },
+      tags: ['conkay', 'artifact', work.lens ? `lens:${work.lens}` : ''].filter(Boolean) as string[],
+    });
   }, []);
 
   // ── voice ───────────────────────────────────────────────────────────
