@@ -7,6 +7,15 @@
 **Runtime data/logs/db:** `/Users/dutch/concord/` (NOT a second git tree)  
 **Kitchen:** `~/.zuko/`
 
+> **PROGRESS (2026-09-08, Claude RC — branch `concurrency-refactor`):** Phases 0–2 **LIVE**
+> (Go audio/sandbox sidecar + warm OCC daemon, both on launchd, fail-soft). Phase 3 **carved,
+> not live** (DTUs are in-memory `STATE.dtus` here; inline better-sqlite3 is fine for the read
+> shape — see proof). Phase 4 **built + proven, opt-in** (`OLLAMA_PROXY_URL`; full cutover
+> A40-gated). Phase 5 **deferred** (gated on Phase 3 live + Rust toolchain). Phase 6 **done**
+> (audited — mostly already handled; 1 log-spam fix). Phase 7 **documented** (NEED_DUTCH).
+> Phase 8 **owned by another session** (peer has uncommitted rework). Rolling status +
+> per-phase proofs: `~/.zuko/remaining-work/CONCURRENCY_REFACTOR_STATUS.md`.
+
 ### Companion evidence (read first)
 | File | What |
 |------|------|
