@@ -20,6 +20,20 @@ fi
 
 set -euo pipefail
 
+# Single-instance lock (2026-09-08) — a slow `.backup` of a multi-GB DB must not
+# be re-triggered while running (stacked runs = stacked read locks + stacked
+# disk-doubling staging copies → box wedge on a near-full disk). See the fuller
+# note in scripts/db-backup.sh.
+_BKLOCK="${TMPDIR:-/tmp}/concord-backup-sh.lock.d"
+if ! mkdir "$_BKLOCK" 2>/dev/null; then
+  if [ -n "$(find "$_BKLOCK" -maxdepth 0 -mmin +120 2>/dev/null)" ]; then
+    rmdir "$_BKLOCK" 2>/dev/null && mkdir "$_BKLOCK" 2>/dev/null || { echo "[backup.sh] lock held — skipping"; exit 0; }
+  else
+    echo "[backup.sh] another backup is running — skipping this run"; exit 0
+  fi
+fi
+trap 'rmdir "$_BKLOCK" 2>/dev/null || true' EXIT
+
 DATA_DIR="${DATA_DIR:-/data}"
 DB_PATH="${DB_PATH:-$DATA_DIR/db/concord.db}"
 ARTIFACTS_DIR="$DATA_DIR/artifacts"
