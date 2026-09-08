@@ -1864,6 +1864,17 @@ import { getCurrentLagMs as getEventLoopLagMs } from "./lib/event-loop-pressure.
 import { createLoadSheddingMiddleware } from "./lib/request-admission.js";
 import * as goSidecar from "./lib/sidecars/go-sidecar-client.js"; // Concurrency Refactor Phase 1 — Whisper/Piper/sandbox off the event loop
 import * as dtuSidecar from "./lib/sidecars/dtu-sidecar-client.js"; // Concurrency Refactor Phase 3 — DTU get/list off the event loop (CONCORD_DTU_SIDECAR=1)
+// Concurrency Refactor (2026-09-08, session 2 finding): the sidecar's UDS
+// double-hop is a WIN under normal load but a LOSS under loop starvation — a
+// starved loop can't schedule the `await fetch(sidecar)` continuation promptly,
+// so the sidecar reply queues behind everything and dtu.list tail latency gets
+// WORSE than the pure in-memory path. When lag is already high, skip the
+// sidecar and read STATE.dtus inline (no await boundary). This picks between
+// two functionally-equivalent read paths — it does NOT gate macro execution.
+const _DTU_SIDECAR_LAG_BYPASS_MS = Number(process.env.CONCORD_DTU_SIDECAR_LAG_BYPASS_MS) || 250;
+function _dtuSidecarLagBypass() {
+  try { return getEventLoopLagMs() > _DTU_SIDECAR_LAG_BYPASS_MS; } catch { return false; }
+}
 import { BRAIN_CONFIG, SYSTEM_TO_BRAIN, BRAIN_PRIORITY, getBrainForSystem, getActiveBrainConfig, getSystemStatus, pickBrainEndpoint, noteEndpointStart, noteEndpointFinish } from "./lib/brain-config.js";
 import { preloadBrains, getBrainPriority, resolveBrain } from "./lib/brain-router.js";
 // BYO key router — when a user has plugged their own provider key into a
@@ -25237,7 +25248,7 @@ register("dtu", "get", async (ctx, input) => {
   // Concurrency Refactor Phase 3: read via the Rust sidecar (off the event
   // loop) when CONCORD_DTU_SIDECAR=1 and it's up. Fail soft to the in-memory
   // store. Correctness pinned by engines/concord-dtu-sidecar/proof/run-proof.mjs.
-  if (dtuSidecar.ENABLED) {
+  if (dtuSidecar.ENABLED && !_dtuSidecarLagBypass()) {
     try {
       if (await dtuSidecar.isAvailable()) {
         const r = await dtuSidecar.getDTU(id);
@@ -25458,7 +25469,7 @@ register("dtu", "list", async (ctx, input) => {
   // (off the event loop) when CONCORD_DTU_SIDECAR=1 and it's up. Fail soft to
   // the in-memory filter below. Behaviour pinned by the differential proof at
   // engines/concord-dtu-sidecar/proof/run-proof.mjs.
-  if (dtuSidecar.ENABLED) {
+  if (dtuSidecar.ENABLED && !_dtuSidecarLagBypass()) {
     try {
       if (await dtuSidecar.isAvailable()) {
         const loc = _resolveViewerLocation(userId);
