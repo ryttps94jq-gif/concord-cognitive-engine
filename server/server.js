@@ -17611,7 +17611,23 @@ const _SYSTEM_DTU_SOURCES = new Set([
 ]);
 
 /** All DTUs (including system/internal). Use for admin endpoints only. */
-function dtusArray() { return typeof STATE.dtus?.values === "function" ? Array.from(STATE.dtus.values()) : []; }
+// Version-keyed snapshot cache (Concurrency Refactor Tier 0). ~40 call sites
+// each did their own Array.from(STATE.dtus.values()) — a 12k-element copy per
+// call. The store's getVersion() bumps on every set()/delete(), so between
+// writes every caller can share one frozen-in-time array. Callers treat the
+// result as read-only (verified: the one `dtusArray().sort()` site was copied);
+// a plain Map (pre-boot / backup-restore) has no getVersion → no caching.
+let _dtusArrayCache = null;
+let _dtusArrayCacheVer = -2;
+function dtusArray() {
+  if (typeof STATE.dtus?.values !== "function") return [];
+  let ver = -1;
+  try { if (typeof STATE.dtus.getVersion === "function") ver = STATE.dtus.getVersion(); } catch { /* fall through */ }
+  if (ver >= 0 && ver === _dtusArrayCacheVer && _dtusArrayCache) return _dtusArrayCache;
+  const arr = Array.from(STATE.dtus.values());
+  if (ver >= 0) { _dtusArrayCache = arr; _dtusArrayCacheVer = ver; }
+  return arr;
+}
 
 /**
  * Defense-in-depth: refuse a session lookup if the requester doesn't
@@ -67279,7 +67295,7 @@ app.post("/api/command/nlp", asyncHandler(async (req, res) => {
       break;
     }
     case "recent": {
-      const recent = dtusArray()
+      const recent = [...dtusArray()]   // copy — dtusArray() may return a shared cached snapshot
         .sort((a, b) => new Date(b.updatedAt || b.createdAt || 0).getTime() - new Date(a.updatedAt || a.createdAt || 0).getTime())
         .slice(0, 10)
         .map(d => ({ id: d.id, title: d.title, freshness: calculateFreshness(d), updatedAt: d.updatedAt }));
