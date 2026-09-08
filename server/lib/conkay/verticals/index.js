@@ -1,5 +1,5 @@
 // server/lib/conkay/verticals/index.js
-export { buildMolecularCad, parseMolecularIntent } from './molecular-cad.js';
+export { buildMolecularCad, parseMolecularIntent, relaxMdProxy, forcesProxy } from './molecular-cad.js';
 export {
   generateSyntheticIntakeBatch,
   compressHospitalPackets,
@@ -12,5 +12,5 @@ export {
   emitBioprintToolpath,
   runProstheticsCert,
 } from './prosthetics.js';
-export { buildDefaultAirfoilMesh, aeroPanelProxy, runAeroCert } from './aerodynamics.js';
+export { buildDefaultAirfoilMesh, aeroPanelProxy, aeroAlphaCurve, runAeroCert } from './aerodynamics.js';
 export { compileStudioShot, compileStudioShotLive } from './studio.js';

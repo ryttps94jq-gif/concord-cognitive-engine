@@ -4,6 +4,7 @@
 
 import { applyDHTP } from '../../dhtp.js';
 import { createHash, randomUUID } from 'crypto';
+import { brotliCompressSync, constants as zlibConstants } from 'zlib';
 
 const CHIEFS = [
   'chest_pain', 'shortness_of_breath', 'abdominal_pain', 'fever', 'fall',
@@ -63,7 +64,7 @@ export function generateSyntheticIntakeBatch({ n = 200, seed = 42 } = {}) {
  * DHTP-style packetize: prefer live applyDHTP; always also emit a local
  * structural packet (JSON → refs + brotli-ish size via JSON fingerprint).
  */
-export function compressHospitalPackets(batch, { preferDhtp = true } = {}) {
+export function compressHospitalPackets(batch, { preferDhtp = true, concordLive = null } = {}) {
   const t0 = Date.now();
   const patients = batch?.patients || [];
   const rawJson = JSON.stringify(patients);
@@ -87,17 +88,40 @@ export function compressHospitalPackets(batch, { preferDhtp = true } = {}) {
   const packetBytes = Buffer.byteLength(packetJson, 'utf8');
   const localRatio = originalBytes / Math.max(packetBytes, 1);
 
+  // Measured brotli ratios (synthetic JSON → feature packets) — real byte ratios
+  let brotli = null;
+  try {
+    const q = { [zlibConstants.BROTLI_PARAM_QUALITY]: 5 };
+    const rawBr = brotliCompressSync(Buffer.from(rawJson, 'utf8'), { params: q });
+    const pktBr = brotliCompressSync(Buffer.from(packetJson, 'utf8'), { params: q });
+    brotli = {
+      rawBrotliBytes: rawBr.length,
+      packetBrotliBytes: pktBr.length,
+      ratioRawToPacketBrotli: originalBytes / Math.max(pktBr.length, 1),
+      ratioRawBrotliToPacketBrotli: rawBr.length / Math.max(pktBr.length, 1),
+      ratioRawToRawBrotli: originalBytes / Math.max(rawBr.length, 1),
+    };
+  } catch (e) {
+    brotli = { ok: false, error: e?.message || String(e) };
+  }
+
   let dhtp = null;
   if (preferDhtp) {
     try {
-      const workingSet = patients.slice(0, 64).map((p, i) => ({
+      // Larger working set when Concord is live (richer HASH-ref path measurement)
+      const live = concordLive === true;
+      const budget = live ? Math.min(patients.length, 128) : Math.min(patients.length, 64);
+      const workingSet = patients.slice(0, budget).map((p, i) => ({
         id: p.id,
-        title: `${p.chiefComplaint} age=${p.age} esi=${p.esiHint}`,
+        title: `${p.chiefComplaint} age=${p.age} esi=${p.esiHint} hr=${p.vitals?.hr} spo2=${p.vitals?.spo2}`,
         tier: p.esiHint <= 2 ? 'mega' : 'regular',
         updatedAt: String(1_700_000_000 + i),
+        content_hash: createHash('sha256').update(`${p.id}:${p.chiefComplaint}:${p.esiHint}`).digest('hex').slice(0, 16),
       }));
-      const prompt = 'summarize these hospital intake DTUs for triage board';
-      const base = ('Hospital ops synthetic context. '.repeat(40));
+      const prompt = live
+        ? 'summarize these hospital intake DTUs for triage board with bed occupancy forecast'
+        : 'summarize these hospital intake DTUs for triage board';
+      const base = ('Hospital ops synthetic context. '.repeat(live ? 60 : 40));
       const r = applyDHTP({ prompt, workingSetDtus: workingSet, baseSystemPrompt: base });
       dhtp = {
         ok: true,
@@ -108,6 +132,8 @@ export function compressHospitalPackets(batch, { preferDhtp = true } = {}) {
         ratio: r.ratio,
         matchTimeMs: r.matchTimeMs,
         dtuHash: r.dtuHash,
+        workingSetSize: workingSet.length,
+        concordLive: !!live,
         path: 'server/lib/dhtp.js applyDHTP',
       };
     } catch (e) {
@@ -121,16 +147,20 @@ export function compressHospitalPackets(batch, { preferDhtp = true } = {}) {
     originalBytes,
     packetBytes,
     localCompressionRatio: localRatio,
+    brotli,
     packets,
     packetFingerprint: createHash('sha256').update(packetJson).digest('hex').slice(0, 16),
     dhtp,
     // Prefer measured local ratio for hospital payload; DHTP ratio is HASH-DTU path (different denominator)
     reportedCompressionRatio: localRatio,
-    compressionPath: dhtp?.ok ? 'local_packetizer+dhtp_hash_refs' : 'local_packetizer',
+    brotliPacketRatio: brotli?.ratioRawToPacketBrotli ?? null,
+    compressionPath: dhtp?.ok
+      ? (dhtp.concordLive ? 'local_packetizer+brotli+dhtp_hash_refs_live' : 'local_packetizer+brotli+dhtp_hash_refs')
+      : 'local_packetizer+brotli',
     ms,
     honesty: {
       syntheticOnly: true,
-      note: 'Compression measured on synthetic intake JSON→feature packets; DHTP HASH refs reported separately — do not conflate with 10×–129× marketing claims',
+      note: 'Compression measured on SYNTHETIC intake JSON→feature packets (+ brotli). DHTP HASH refs reported separately — do not conflate with 10×–129× marketing claims',
     },
   };
 }
@@ -204,14 +234,20 @@ function percentile(arr, p) {
 }
 
 /** End-to-end hospital ops slice with latency samples for p50/p95. */
-export function runHospitalOpsCert({ n = 200, beds = 40, samples = 7 } = {}) {
+export function probeConcordLive(url = 'http://127.0.0.1:5050/health') {
+  // Sync-ish probe via child_process would be heavy; expose helper for cert + optional fetch.
+  // Callers may pass concordLive boolean; this async probe is for Node cert harness.
+  return { url, note: 'use runHospitalOpsCertAsync or pass concordLive' };
+}
+
+export function runHospitalOpsCert({ n = 200, beds = 40, samples = 7, concordLive = false } = {}) {
   const batch = generateSyntheticIntakeBatch({ n });
   const latencies = [];
   let last = null;
   const S = Math.max(3, Math.min(21, Number(samples) || 7));
   for (let i = 0; i < S; i++) {
     const t0 = Date.now();
-    const compressed = compressHospitalPackets(batch);
+    const compressed = compressHospitalPackets(batch, { concordLive: !!concordLive });
     const triage = predictiveTriage(compressed.packets, { beds });
     const ms = Date.now() - t0;
     latencies.push(ms);
@@ -222,10 +258,16 @@ export function runHospitalOpsCert({ n = 200, beds = 40, samples = 7 } = {}) {
     ok: true,
     n: batch.n,
     compressionRatio: last.compressed.reportedCompressionRatio,
+    brotliPacketRatio: last.compressed.brotliPacketRatio,
+    brotli: last.compressed.brotli,
     dhtpRatio: last.compressed.dhtp?.ratio ?? null,
     dhtpOk: !!last.compressed.dhtp?.ok,
+    dhtpWorkingSetSize: last.compressed.dhtp?.workingSetSize ?? null,
+    dhtpConcordLive: !!last.compressed.dhtp?.concordLive,
     originalBytes: last.compressed.originalBytes,
     packetBytes: last.compressed.packetBytes,
+    compressionPath: last.compressed.compressionPath,
+    concordLive: !!concordLive,
     triage: {
       occupancy: last.triage.occupancy,
       assignedCount: last.triage.assignedCount,
@@ -249,4 +291,5 @@ export default {
   compressHospitalPackets,
   predictiveTriage,
   runHospitalOpsCert,
+  probeConcordLive,
 };

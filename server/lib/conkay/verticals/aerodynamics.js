@@ -3,7 +3,7 @@
 // Honesty: NOT ANSYS/Fluent class.
 
 /** Build a coarse body mesh (NACA-ish airfoil extruded) if none provided. */
-export function buildDefaultAirfoilMesh({ chord = 1, span = 2, thickness = 0.12, chordPts = 21, spanPts = 5 } = {}) {
+export function buildDefaultAirfoilMesh({ chord = 1, span = 2, thickness = 0.12, chordPts = 41, spanPts = 9 } = {}) {
   const positions = [];
   const indices = [];
   // 2D NACA 00xx approx → extrude in Z
@@ -108,11 +108,35 @@ export function aeroPanelProxy(meshInput = {}, { alphaDeg = 5, U = 1, rho = 1.22
   const S = Math.max(area * 0.5, 1e-6); // reference roughly half surface
   const q = 0.5 * rho * U * U;
   const Cl = ClSum / (q * S);
-  const Cd = Math.max(0.005, CdSum / (q * S));
+  // Parasite + induced-drag PROXY (k*Cl^2) layered on pressure drag
+  const CdPress = Math.max(0.004, CdSum / (q * S));
+  const CdInd = 0.04 * Cl * Cl;
+  const Cd = CdPress + CdInd;
+  // Pitching moment PROXY about quarter-chord
+  let CmSum = 0;
+  const chord = mesh.params?.chord || 1;
+  const xRef = 0.25 * chord;
+  for (let t = 0; t < idx.length; t += 3) {
+    const i0 = idx[t], i1 = idx[t + 1], i2 = idx[t + 2];
+    const ax = pos[i0 * 3], ay = pos[i0 * 3 + 1];
+    const bx = pos[i1 * 3], by = pos[i1 * 3 + 1];
+    const cx_ = pos[i2 * 3], cy_ = pos[i2 * 3 + 1];
+    const abx = bx - ax, aby = by - ay;
+    const acx = cx_ - ax, acy = cy_ - ay;
+    const nz = abx * acy - aby * acx; // 2D-ish panel area proxy in XY
+    const a2 = 0.5 * Math.abs(nz);
+    const Cp = (pressureMap[i0].Cp + pressureMap[i1].Cp + pressureMap[i2].Cp) / 3;
+    const xbar = (ax + bx + cx_) / 3;
+    const ybar = (ay + by + cy_) / 3;
+    const fy = -Cp * q * (nz >= 0 ? 1 : -1) * a2; // normal force proxy
+    CmSum += -fy * (xbar - xRef) / Math.max(chord, 1e-6);
+  }
+  const Cm = CmSum / (q * S * Math.max(chord, 1e-6));
   const ms = Date.now() - t0;
+  const panelCount = Math.floor(idx.length / 3);
 
-  // Coarse grid pressure (downsample)
-  const grid = pressureMap.filter((_, i) => i % Math.max(1, Math.floor(nVerts / 64)) === 0).slice(0, 64);
+  // Richer pressure grid (up to 128 samples)
+  const grid = pressureMap.filter((_, i) => i % Math.max(1, Math.floor(nVerts / 128)) === 0).slice(0, 128);
 
   return {
     ok: true,
@@ -120,11 +144,15 @@ export function aeroPanelProxy(meshInput = {}, { alphaDeg = 5, U = 1, rho = 1.22
     coefficients: {
       Cl: Number(Cl.toFixed(4)),
       Cd: Number(Cd.toFixed(4)),
+      CdPress: Number(CdPress.toFixed(4)),
+      CdInduced: Number(CdInd.toFixed(4)),
+      Cm: Number(Cm.toFixed(4)),
       L_D: Number((Cl / Math.max(Cd, 1e-6)).toFixed(3)),
       alphaDeg: Number(alphaDeg),
       U,
       rho,
       area: Number(area.toFixed(4)),
+      panelCount,
     },
     pressureMap: grid,
     mesh: {
@@ -133,10 +161,61 @@ export function aeroPanelProxy(meshInput = {}, { alphaDeg = 5, U = 1, rho = 1.22
       id: mesh.id,
       positions: mesh.positions,
       indices: mesh.indices,
+      params: mesh.params,
     },
     ms,
     honesty: {
-      note: 'Coarse panel/Cp PROXY — NOT ANSYS/Fluent/RANS/LES class CFD',
+      note: 'Richer panel/Cp + induced-drag/Cm PROXY — NOT ANSYS/Fluent/RANS/LES class CFD',
+      ansys: false,
+      fluent: false,
+    },
+  };
+}
+
+/**
+ * Richer multi-α curve: sample panel PROXY across alphas, return Cl/Cd/Cm/L_D curve.
+ * Honesty: still PROXY — not ANSYS/Fluent polar.
+ */
+export function aeroAlphaCurve(meshInput = {}, {
+  alphasDeg = [-4, -2, 0, 2, 4, 5, 6, 8, 10, 12],
+  U = 1,
+  rho = 1.225,
+} = {}) {
+  const t0 = Date.now();
+  const mesh = meshInput?.positions ? meshInput : buildDefaultAirfoilMesh(meshInput);
+  const curve = [];
+  for (const a of alphasDeg) {
+    const r = aeroPanelProxy(mesh, { alphaDeg: a, U, rho });
+    curve.push({
+      alphaDeg: a,
+      Cl: r.coefficients.Cl,
+      Cd: r.coefficients.Cd,
+      Cm: r.coefficients.Cm,
+      L_D: r.coefficients.L_D,
+      ms: r.ms,
+    });
+  }
+  // Simple stall proxy: mark α where Cl peaks then drops >8%
+  let clMax = -Infinity, alphaStall = null;
+  for (const pt of curve) {
+    if (pt.Cl > clMax) { clMax = pt.Cl; alphaStall = null; }
+    else if (clMax > 0 && pt.Cl < clMax * 0.92 && alphaStall == null) alphaStall = pt.alphaDeg;
+  }
+  return {
+    ok: true,
+    label: 'PROXY',
+    curve,
+    clMax: Number(clMax.toFixed(4)),
+    alphaStallProxy: alphaStall,
+    mesh: {
+      vertexCount: mesh.vertexCount,
+      triangleCount: mesh.triangleCount,
+      id: mesh.id,
+      params: mesh.params,
+    },
+    ms: Date.now() - t0,
+    honesty: {
+      note: 'Multi-α panel PROXY polar — NOT ANSYS/Fluent wind-tunnel polar',
       ansys: false,
       fluent: false,
     },
@@ -145,7 +224,16 @@ export function aeroPanelProxy(meshInput = {}, { alphaDeg = 5, U = 1, rho = 1.22
 
 export function runAeroCert(opts = {}) {
   const mesh = buildDefaultAirfoilMesh(opts.mesh || {});
-  return aeroPanelProxy(mesh, opts);
+  const single = aeroPanelProxy(mesh, opts);
+  const alphas = opts.alphasDeg || [-4, -2, 0, 2, 4, 5, 6, 8, 10, 12];
+  const sweep = aeroAlphaCurve(mesh, { alphasDeg: alphas, U: opts.U, rho: opts.rho });
+  return {
+    ...single,
+    alphaCurve: sweep.curve,
+    clMax: sweep.clMax,
+    alphaStallProxy: sweep.alphaStallProxy,
+    sweepMs: sweep.ms,
+  };
 }
 
-export default { buildDefaultAirfoilMesh, aeroPanelProxy, runAeroCert };
+export default { buildDefaultAirfoilMesh, aeroPanelProxy, aeroAlphaCurve, runAeroCert };

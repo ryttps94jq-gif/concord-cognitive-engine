@@ -30,6 +30,11 @@ const FORMULA_ALIASES = Object.freeze({
   'polyethylene glycol': 'PEG',
   pla: 'PLA',
   'polylactic acid': 'PLA',
+  caffeine: 'C8H10N4O2',
+  aspirin: 'C9H8O4',
+  urea: 'CH4N2O',
+  propane: 'C3H8',
+  hexane: 'C6H14',
 });
 
 /** Parse simple molecular formulas like H2O, C2H5OH, CH3COOH (no parentheses nesting). */
@@ -351,6 +356,125 @@ export function densityEstimate(atoms) {
   return { massU: mass, volumeA3: volume, densityU_per_A3: mass / volume };
 }
 
+/** Simple PROXY force field: LJ pair + harmonic bonds → steepest-descent / damped Verlet.
+ * Honesty: NOT full MD / NOT quantum / NOT thermostatted NVT production run.
+ */
+export function forcesProxy(atoms, bonds, { kBond = 80 } = {}) {
+  const n = atoms.length;
+  const fx = new Float64Array(n);
+  const fy = new Float64Array(n);
+  const fz = new Float64Array(n);
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      const dx = atoms[i].x - atoms[j].x;
+      const dy = atoms[i].y - atoms[j].y;
+      const dz = atoms[i].z - atoms[j].z;
+      const r = Math.hypot(dx, dy, dz);
+      if (r < 1e-6) continue;
+      const sigma = ((atoms[i].r || 0.7) + (atoms[j].r || 0.7)) * 1.1;
+      const sr = sigma / r;
+      const sr6 = sr ** 6;
+      const sr12 = sr6 * sr6;
+      // dE/dr for 4*(sr12-sr6); force magnitude = -dE/dr
+      const dEdr = 4 * ((-12) * sr12 / r + 6 * sr6 / r);
+      const f = -dEdr / r;
+      fx[i] += f * dx; fy[i] += f * dy; fz[i] += f * dz;
+      fx[j] -= f * dx; fy[j] -= f * dy; fz[j] -= f * dz;
+    }
+  }
+  for (const [i, j] of bonds) {
+    const a = atoms[i], b = atoms[j];
+    const dx = a.x - b.x, dy = a.y - b.y, dz = a.z - b.z;
+    const r = Math.hypot(dx, dy, dz) || 1e-6;
+    const r0 = (a.r || 0.7) + (b.r || 0.7);
+    const f = -kBond * (r - r0) / r;
+    fx[i] += f * dx; fy[i] += f * dy; fz[i] += f * dz;
+    fx[j] -= f * dx; fy[j] -= f * dy; fz[j] -= f * dz;
+  }
+  return { fx, fy, fz };
+}
+
+/**
+ * PROXY MD relaxation steps (damped velocity Verlet). Geometry only — not production MD.
+ * @returns {{atoms, steps, energyBefore, energyAfter, deltaE, maxForceFinal, trajectorySample, label}}
+ */
+export function relaxMdProxy(atomsIn, bonds, { steps = 48, dt = 0.01, kBond = 80, fClip = 50, maxDisp = 0.08 } = {}) {
+  // Clipped steepest-descent PROXY — stable on coarse placements; NOT production MD.
+  const atoms = atomsIn.map((a) => ({
+    ...a,
+    x: a.x, y: a.y, z: a.z,
+    mass: a.mass || 12,
+  }));
+  const energyOf = () => ljEnergyProxy(atoms) + bondStretchProxy(atoms, bonds, kBond);
+  const energyBefore = energyOf();
+  const trajectorySample = [];
+  let maxForceFinal = 0;
+  let accepted = 0;
+  let stepSize = Number(dt) || 0.01;
+  const N = Math.max(1, Math.min(200, Number(steps) || 48));
+  for (let step = 0; step < N; step++) {
+    const { fx, fy, fz } = forcesProxy(atoms, bonds, { kBond });
+    maxForceFinal = 0;
+    const trial = atoms.map((a) => ({ ...a }));
+    for (let i = 0; i < atoms.length; i++) {
+      let fxi = fx[i], fyi = fy[i], fzi = fz[i];
+      const fmag = Math.hypot(fxi, fyi, fzi);
+      if (fmag > maxForceFinal) maxForceFinal = fmag;
+      if (fmag > fClip) {
+        const s = fClip / fmag;
+        fxi *= s; fyi *= s; fzi *= s;
+      }
+      let dx = fxi * stepSize, dy = fyi * stepSize, dz = fzi * stepSize;
+      const dmag = Math.hypot(dx, dy, dz);
+      if (dmag > maxDisp) {
+        const s = maxDisp / dmag;
+        dx *= s; dy *= s; dz *= s;
+      }
+      trial[i].x = atoms[i].x + dx;
+      trial[i].y = atoms[i].y + dy;
+      trial[i].z = atoms[i].z + dz;
+    }
+    const E0 = energyOf();
+    // swap in trial for energy eval
+    const backup = atoms.map((a) => ({ x: a.x, y: a.y, z: a.z }));
+    for (let i = 0; i < atoms.length; i++) {
+      atoms[i].x = trial[i].x; atoms[i].y = trial[i].y; atoms[i].z = trial[i].z;
+    }
+    const E1 = energyOf();
+    if (E1 <= E0 || !Number.isFinite(E0)) {
+      accepted++;
+      stepSize = Math.min(0.05, stepSize * 1.05);
+    } else {
+      // reject uphill — shrink step
+      for (let i = 0; i < atoms.length; i++) {
+        atoms[i].x = backup[i].x; atoms[i].y = backup[i].y; atoms[i].z = backup[i].z;
+      }
+      stepSize = Math.max(1e-4, stepSize * 0.5);
+    }
+    if (step % Math.max(1, Math.floor(N / 8)) === 0 || step === N - 1) {
+      trajectorySample.push({
+        step,
+        E: Number(energyOf().toFixed(6)),
+        maxF: Number(maxForceFinal.toFixed(4)),
+        stepSize: Number(stepSize.toFixed(5)),
+      });
+    }
+  }
+  const energyAfter = energyOf();
+  return {
+    atoms,
+    steps: N,
+    acceptedSteps: accepted,
+    energyBefore,
+    energyAfter,
+    deltaE: energyAfter - energyBefore,
+    maxForceFinal,
+    trajectorySample,
+    label: 'PROXY_RELAX',
+    note: 'Clipped steepest-descent LJ+bond PROXY — NOT full MD / NOT thermostatted production',
+  };
+}
+
 /**
  * text/NLP or structured formula → browser-ready molecular/polymer mesh + PROXY physics.
  */
@@ -365,6 +489,16 @@ export function buildMolecularCad(input = {}) {
     structure = placePolymer(intent.polymer, intent.n);
   } else {
     structure = placeMolecule(intent.tokens);
+  }
+
+  const relaxSteps = Math.max(0, Math.min(200, Number(input.relaxSteps ?? 48) || 0));
+  let mdRelax = null;
+  if (relaxSteps > 0 && structure.atoms.length >= 2) {
+    mdRelax = relaxMdProxy(structure.atoms, structure.bonds, {
+      steps: relaxSteps,
+      dt: Number(input.relaxDt) || 0.003,
+    });
+    structure = { atoms: mdRelax.atoms, bonds: structure.bonds };
   }
 
   const meshParts = [];
@@ -408,10 +542,24 @@ export function buildMolecularCad(input = {}) {
     },
     proxy: {
       label: 'PROXY',
-      note: 'Simple LJ + harmonic bond stretch + AABB density — NOT full MD / NOT quantum chemistry',
+      note: 'LJ + harmonic bond stretch + AABB density + optional damped-Verlet PROXY relax — NOT full MD / NOT quantum chemistry',
       ljEnergy: lj,
       bondStretchEnergy: stretch,
       density,
+      atomCount: structure.atoms.length,
+      bondCount: structure.bonds.length,
+      mdRelax: mdRelax
+        ? {
+            label: mdRelax.label,
+            steps: mdRelax.steps,
+            energyBefore: mdRelax.energyBefore,
+            energyAfter: mdRelax.energyAfter,
+            deltaE: mdRelax.deltaE,
+            maxForceFinal: mdRelax.maxForceFinal,
+            trajectorySample: mdRelax.trajectorySample,
+            note: mdRelax.note,
+          }
+        : null,
     },
     honesty: {
       domain: 'structural_molecular_geometry',
@@ -423,4 +571,4 @@ export function buildMolecularCad(input = {}) {
   };
 }
 
-export default { buildMolecularCad, parseMolecularIntent, parseFormula };
+export default { buildMolecularCad, parseMolecularIntent, parseFormula, relaxMdProxy, forcesProxy, ljEnergyProxy, bondStretchProxy };

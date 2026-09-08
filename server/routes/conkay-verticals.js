@@ -19,7 +19,7 @@ import {
   emitBioprintToolpath,
   runProstheticsCert,
 } from '../lib/conkay/verticals/prosthetics.js';
-import { aeroPanelProxy, buildDefaultAirfoilMesh } from '../lib/conkay/verticals/aerodynamics.js';
+import { aeroPanelProxy, aeroAlphaCurve, buildDefaultAirfoilMesh } from '../lib/conkay/verticals/aerodynamics.js';
 import { compileStudioShot } from '../lib/conkay/verticals/studio.js';
 
 export default function createConkayVerticalsRouter({ requireAuth }) {
@@ -142,13 +142,27 @@ export default function createConkayVerticalsRouter({ requireAuth }) {
     }
   });
 
-  /** POST /api/conkay/aero/panel  { mesh?, alphaDeg?, U? } */
+  /** POST /api/conkay/aero/panel  { mesh?, alphaDeg?, U?, sweep?, alphasDeg? } */
   router.post('/aero/panel', auth, (req, res) => {
     try {
       const mesh = req.body?.mesh?.positions
         ? req.body.mesh
         : buildDefaultAirfoilMesh(req.body?.airfoil || req.body || {});
-      return res.json(aeroPanelProxy(mesh, req.body || {}));
+      const single = aeroPanelProxy(mesh, req.body || {});
+      const wantSweep = req.body?.sweep !== false; // default on for richer vertical
+      if (!wantSweep) return res.json(single);
+      const sweep = aeroAlphaCurve(mesh, {
+        alphasDeg: req.body?.alphasDeg,
+        U: req.body?.U,
+        rho: req.body?.rho,
+      });
+      return res.json({
+        ...single,
+        alphaCurve: sweep.curve,
+        clMax: sweep.clMax,
+        alphaStallProxy: sweep.alphaStallProxy,
+        sweepMs: sweep.ms,
+      });
     } catch (e) {
       return res.status(500).json({ ok: false, error: e instanceof Error ? e.message : String(e) });
     }

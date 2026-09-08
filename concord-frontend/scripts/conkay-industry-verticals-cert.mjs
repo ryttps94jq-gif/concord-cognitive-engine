@@ -119,19 +119,31 @@ const overclaimsRejected = [
 {
   const samples = [];
   let last = null;
-  for (const text of ['H2O', 'C2H6O', 'PEG n=12', 'water']) {
+  let caffeine = null;
+  for (const text of ['H2O', 'C2H6O', 'PEG n=12', 'water', 'caffeine', 'C6H6']) {
     const t0 = Date.now();
-    const r = buildMolecularCad({ text });
+    const r = buildMolecularCad({ text, relaxSteps: 48 });
     const e2e = Date.now() - t0;
-    samples.push({ text, ok: !!r.ok, ms: r.ms ?? e2e, e2eMs: e2e, verts: r.mesh?.vertexCount, atoms: r.atoms?.length });
+    samples.push({
+      text,
+      ok: !!r.ok,
+      ms: r.ms ?? e2e,
+      e2eMs: e2e,
+      verts: r.mesh?.vertexCount,
+      atoms: r.atoms?.length,
+      bonds: r.bonds?.length,
+      relaxSteps: r.proxy?.mdRelax?.steps ?? null,
+      deltaE: r.proxy?.mdRelax?.deltaE ?? null,
+    });
     if (r.ok) last = r;
+    if (text === 'caffeine' && r.ok) caffeine = r;
   }
   const msList = samples.filter((s) => s.ok).map((s) => s.e2eMs).sort((a, b) => a - b);
   const apiToken = await tryLogin();
   let api = null;
   if (apiToken) {
     try {
-      api = await apiPost(apiToken, '/api/conkay/molecular/build', { text: 'H2O' });
+      api = await apiPost(apiToken, '/api/conkay/molecular/build', { text: 'caffeine', relaxSteps: 48 });
     } catch (e) {
       api = { error: e?.message || String(e) };
     }
@@ -142,9 +154,13 @@ const overclaimsRejected = [
     last.mesh.positions.length >= 9 &&
     Array.isArray(last.mesh?.indices) &&
     last.proxy?.label === 'PROXY' &&
-    msList.length >= 3;
+    msList.length >= 4 &&
+    !!last.proxy?.mdRelax &&
+    last.proxy.mdRelax.steps >= 24 &&
+    (caffeine?.atoms?.length || 0) >= 20 &&
+    (caffeine?.bonds?.length || 0) >= 20;
   gates.V1 = {
-    name: 'Molecular CAD (physics geometry PROXY)',
+    name: 'Molecular CAD (physics geometry PROXY + MD relax)',
     pass,
     measured: {
       samples,
@@ -153,31 +169,49 @@ const overclaimsRejected = [
       ljEnergy: last?.proxy?.ljEnergy ?? null,
       bondStretchEnergy: last?.proxy?.bondStretchEnergy ?? null,
       density: last?.proxy?.density ?? null,
+      atomCount: last?.proxy?.atomCount ?? last?.atoms?.length ?? null,
+      bondCount: last?.proxy?.bondCount ?? last?.bonds?.length ?? null,
+      mdRelax: last?.proxy?.mdRelax ?? null,
+      caffeineAtoms: caffeine?.atoms?.length ?? null,
+      caffeineBonds: caffeine?.bonds?.length ?? null,
       meshVertexCount: last?.mesh?.vertexCount ?? null,
       meshTriangleCount: last?.mesh?.triangleCount ?? null,
       apiLive: !!(api?.json?.ok),
       apiMs: api?.ms ?? null,
       apiStatus: api?.status ?? null,
+      apiRelaxSteps: api?.json?.proxy?.mdRelax?.steps ?? null,
     },
     route: 'POST /api/conkay/molecular/build',
     honesty: last?.honesty || null,
   };
-  fs.writeFileSync(path.join(PROOF_DIR, 'v1-molecular.json'), JSON.stringify({ last, samples, api }, null, 2));
+  fs.writeFileSync(path.join(PROOF_DIR, 'v1-molecular.json'), JSON.stringify({ last, samples, caffeine, api }, null, 2));
 }
 
 // ── V2 Hospital ───────────────────────────────────────────────
 {
-  const hosp = runHospitalOpsCert({ n: 200, beds: 40, samples: 9 });
+  let concordLive = false;
+  try {
+    const hr = await fetch('http://127.0.0.1:5050/health', { signal: AbortSignal.timeout(1500) });
+    const hj = await hr.json().catch(() => ({}));
+    concordLive = hr.ok && (hj?.status === 'healthy' || hj?.ok === true || !!hj?.checks);
+  } catch {
+    concordLive = false;
+  }
+  const hosp = runHospitalOpsCert({ n: 200, beds: 40, samples: 9, concordLive });
   // Guard: never promote DHTP HASH design ratio as hospital payload compression
   const ratio = hosp.compressionRatio;
+  const brotliRatio = hosp.brotliPacketRatio;
   const pass =
     hosp.ok &&
     hosp.n >= 200 &&
     Number.isFinite(ratio) &&
     ratio > 1 &&
+    Number.isFinite(brotliRatio) &&
+    brotliRatio > 1.5 &&
     Number.isFinite(hosp.latencyMs?.p50) &&
     Number.isFinite(hosp.latencyMs?.p95) &&
-    hosp.honesty?.syntheticOnly === true;
+    hosp.honesty?.syntheticOnly === true &&
+    hosp.dhtpOk === true;
   gates.V2 = {
     name: 'Hospital ops packets + triage (SYNTHETIC ONLY)',
     pass,
@@ -186,9 +220,15 @@ const overclaimsRejected = [
       originalBytes: hosp.originalBytes,
       packetBytes: hosp.packetBytes,
       compressionRatio_localPackets: ratio,
+      brotliPacketRatio: brotliRatio,
+      brotli: hosp.brotli,
       dhtpHashPathRatio_separate: hosp.dhtpRatio,
       dhtpOk: hosp.dhtpOk,
-      note: 'Hospital gate uses local feature-packet compression ratio. DHTP HASH DTU ref ratio is reported separately and MUST NOT be quoted as EHR compression.',
+      dhtpWorkingSetSize: hosp.dhtpWorkingSetSize,
+      dhtpConcordLive: hosp.dhtpConcordLive,
+      concordLive,
+      compressionPath: hosp.compressionPath,
+      note: 'Hospital gate uses local feature-packet + brotli ratios. DHTP HASH DTU ref ratio is reported separately and MUST NOT be quoted as EHR compression.',
       triage: hosp.triage,
       latencyMs: hosp.latencyMs,
     },
@@ -267,42 +307,50 @@ const overclaimsRejected = [
 
 // ── V5 Aerodynamics ───────────────────────────────────────────
 {
-  const samples = [];
-  for (const a of [0, 5, 10]) {
-    const r = runAeroCert({ alphaDeg: a });
-    samples.push({
-      alphaDeg: a,
-      ok: r.ok,
-      Cl: r.coefficients?.Cl,
-      Cd: r.coefficients?.Cd,
-      L_D: r.coefficients?.L_D,
-      ms: r.ms,
-      pressureSamples: r.pressureMap?.length,
-    });
-  }
   const last = runAeroCert({ alphaDeg: 5 });
+  const samples = (last.alphaCurve || []).map((pt) => ({
+    alphaDeg: pt.alphaDeg,
+    ok: true,
+    Cl: pt.Cl,
+    Cd: pt.Cd,
+    Cm: pt.Cm,
+    L_D: pt.L_D,
+    ms: pt.ms,
+  }));
   const pass =
     last.ok &&
     last.label === 'PROXY' &&
     Number.isFinite(last.coefficients?.Cl) &&
     Number.isFinite(last.coefficients?.Cd) &&
+    Number.isFinite(last.coefficients?.Cm) &&
     Array.isArray(last.pressureMap) &&
-    last.pressureMap.length >= 8;
+    last.pressureMap.length >= 32 &&
+    Array.isArray(last.alphaCurve) &&
+    last.alphaCurve.length >= 8 &&
+    (last.coefficients?.panelCount || 0) >= 200;
   gates.V5 = {
-    name: 'Aerodynamics panel CFD PROXY',
+    name: 'Aerodynamics panel CFD PROXY (multi-α)',
     pass,
     measured: {
       samples,
       Cl: last.coefficients?.Cl,
       Cd: last.coefficients?.Cd,
+      Cm: last.coefficients?.Cm,
+      CdInduced: last.coefficients?.CdInduced,
       L_D: last.coefficients?.L_D,
+      panelCount: last.coefficients?.panelCount,
+      clMax: last.clMax,
+      alphaStallProxy: last.alphaStallProxy,
+      alphaCurvePoints: last.alphaCurve?.length ?? 0,
       latencyMs: last.ms,
+      sweepMs: last.sweepMs,
       pressureMapCount: last.pressureMap?.length,
+      meshVerts: last.mesh?.vertexCount,
       meshTris: last.mesh?.triangleCount,
     },
     honesty: last.honesty,
   };
-  fs.writeFileSync(path.join(PROOF_DIR, 'v5-aero.json'), JSON.stringify({ samples, last }, null, 2));
+  fs.writeFileSync(path.join(PROOF_DIR, 'v5-aero.json'), JSON.stringify({ samples, last: { ...last, mesh: { ...last.mesh, positions: undefined, indices: undefined } } }, null, 2));
 }
 
 // ── V6 Cert pack itself ───────────────────────────────────────
@@ -378,11 +426,11 @@ const md = `# ConKay INDUSTRY VERTICALS CERT — ${status}
 
 | Gate | Name | Result | Key measurements |
 |------|------|--------|------------------|
-| V1 | Molecular CAD PROXY | ${gates.V1.pass ? 'PASS' : 'FAIL'} | p50=${gates.V1.measured.latencyMs_p50}ms · verts=${gates.V1.measured.meshVertexCount} · LJ=${gates.V1.measured.ljEnergy?.toFixed?.(3)} · apiLive=${gates.V1.measured.apiLive} |
-| V2 | Hospital SYNTHETIC triage | ${gates.V2.pass ? 'PASS' : 'FAIL'} | n=${gates.V2.measured.n} · ratio_local=${gates.V2.measured.compressionRatio_localPackets?.toFixed?.(3)} · p50=${gates.V2.measured.latencyMs?.p50}ms · p95=${gates.V2.measured.latencyMs?.p95}ms |
+| V1 | Molecular CAD PROXY+relax | ${gates.V1.pass ? 'PASS' : 'FAIL'} | p50=${gates.V1.measured.latencyMs_p50}ms · atoms=${gates.V1.measured.atomCount} · bonds=${gates.V1.measured.bondCount} · relax=${gates.V1.measured.mdRelax?.steps} · ΔE=${gates.V1.measured.mdRelax?.deltaE?.toFixed?.(3)} · caffeineAtoms=${gates.V1.measured.caffeineAtoms} · apiLive=${gates.V1.measured.apiLive} |
+| V2 | Hospital SYNTHETIC triage | ${gates.V2.pass ? 'PASS' : 'FAIL'} | n=${gates.V2.measured.n} · ratio_local=${gates.V2.measured.compressionRatio_localPackets?.toFixed?.(3)} · brotli=${gates.V2.measured.brotliPacketRatio?.toFixed?.(3)} · dhtpWS=${gates.V2.measured.dhtpWorkingSetSize} · live=${gates.V2.measured.concordLive} · p50=${gates.V2.measured.latencyMs?.p50}ms |
 | V3 | Prosthetics toolpath | ${gates.V3.pass ? 'PASS' : 'FAIL'} | metrology=${gates.V3.measured.metrologyPass} · residual=${gates.V3.measured.absMaxResidualMm}mm · gcodeBytes=${gates.V3.measured.gcodeBytes} |
 | V4 | Studio shot packet | ${gates.V4.pass ? 'PASS' : 'FAIL'} | archetype=${gates.V4.measured.archetype} · frames=${gates.V4.measured.frames} · liveGlb=${gates.V4.measured.liveGlb} |
-| V5 | Aero panel PROXY | ${gates.V5.pass ? 'PASS' : 'FAIL'} | Cl=${gates.V5.measured.Cl} · Cd=${gates.V5.measured.Cd} · ms=${gates.V5.measured.latencyMs} |
+| V5 | Aero panel PROXY multi-α | ${gates.V5.pass ? 'PASS' : 'FAIL'} | Cl=${gates.V5.measured.Cl} · Cd=${gates.V5.measured.Cd} · Cm=${gates.V5.measured.Cm} · panels=${gates.V5.measured.panelCount} · αpts=${gates.V5.measured.alphaCurvePoints} · clMax=${gates.V5.measured.clMax} |
 | V6 | Cert pack | ${gates.V6.pass ? 'PASS' : 'FAIL'} | missing=${(gates.V6.measured.missing || []).join(',') || 'none'} |
 
 ## Overclaims rejected
@@ -392,10 +440,10 @@ ${overclaimsRejected.map((x) => `- ${x}`).join('\n')}
 ${needDutch.map((x) => `- ${x}`).join('\n')}
 
 ## Honesty
-- Molecular / polymer: **PROXY** equations (LJ, bond stretch, density) — not full MD
+- Molecular / polymer: **PROXY** equations (LJ, bond stretch, density, damped-Verlet relax) — not full MD
 - Hospital: **SYNTHETIC ONLY** — not clinical advice / not FDA / not deployed clinical
 - Prosthetics: digital AABB/axis fit + G-code — **not** ISO CMM lab / not FDA
-- Aero: coarse panel **PROXY** — not ANSYS/Fluent
+- Aero: richer panel **PROXY** + multi-α curve + induced-drag/Cm — not ANSYS/Fluent
 - Compression: hospital gate quotes **local packet ratio** only; DHTP HASH path ratio is separate and must not be marketed as EHR compression
 `;
 
