@@ -16,13 +16,16 @@
 
 | Metric | Verified (2026-09-08) | Prior doc (2026-08-01) |
 |---|---|---|
-| Authored **source** LOC | **2,765,626** (10,142 files) | 2,624,326 (stale low) |
-| Authored **content** LOC | **2,067,714** (3,663 files) | 1,746,872 (stale low) |
-| **Total** | **4,833,340** | 4,371,198 (stale low) |
+| Authored **source** LOC | **2,804,927** (10,328 files) | 2,624,326 (stale low) |
+| Authored **content** LOC | **1,668,662** (2,907 files) | 1,746,872 |
+| **Total** | **4,473,589** | 4,371,198 |
 
-Top languages: js 1.49M · tsx 1.04M · ts 185k · mjs 38k · sh 8k · py 3.2k · rs 2.3k.
-The counter honestly reclassifies 10 data-modules (172k lines, e.g. the deprecated
-145k-line `server/dtus.js` seed pack at 0% code density) OUT of the source total.
+`count-loc` was reworked 2026-09-08: enumerates the tracked tree via `git ls-files`
+(no FS-walk over-count of gitignored Unity `Library`/vendored asset packs) and now
+counts the Unity `.cs` (16k) + Godot `.gd` (25k) game clients and the Go/Rust
+sidecars. Top languages: js 1.49M · tsx 1.04M · ts 185k · mjs 38k · gd 25k · cs 16k.
+Still reclassifies 10 data-modules (172k lines, e.g. the deprecated 145k-line
+`server/dtus.js` seed pack at 0% code density) OUT of the source total.
 
 ## 2. Surface (reproduce commands in each row)
 

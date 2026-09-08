@@ -126,7 +126,7 @@ Copying a primitive is easy. Copying the web is the years-long part. — [the fu
 
 ## For investors and partners
 
-**Stage:** Live at [concord-os.org](https://concord-os.org), pre-revenue. Built by **Concord Dev** — one founder, AI-accelerated, ~2.7M lines of authored source and a running product. Seeking design partners and pre-seed conversations.
+**Stage:** Live at [concord-os.org](https://concord-os.org), pre-revenue. Built by **Concord Dev** — one founder, AI-accelerated, ~2.8M lines of authored source and a running product. Seeking design partners and pre-seed conversations.
 
 **Why now.** Agents are shipping into everything in 2026, and the thing blocking adoption isn't capability — it's that you can't trust unchecked output in a workflow that matters. "Deterministic compute as a tool an agent can call, with a citation trail" is an unclaimed wedge. Concord is a working instance of it.
 
@@ -155,7 +155,7 @@ Copying a primitive is easy. Copying the web is the years-long part. — [the fu
 
 | Metric | Reproduce |
 |---|---|
-| Authored source (~2.7M LOC, excl. content) | `npm run count-loc` |
+| Authored source (~2.8M LOC, excl. content) | `npm run count-loc` |
 | Frontend lenses · backend domains | `ls -d concord-frontend/app/lenses/*/` · `ls server/domains/*.js` |
 | Macro domains · `(domain, macro)` pairs (~558 · ~10.6k) | `node scripts/verify-lens-backends.mjs` |
 | DB tables · numbered migrations | `cd server && npm run cartograph:static` · `ls server/migrations/[0-9]*.js` |
