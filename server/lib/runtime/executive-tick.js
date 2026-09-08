@@ -179,6 +179,21 @@ export async function evaluateExecutiveStep({
   } catch { /* optional */ }
 
   try {
+    const { recordCompilerLearning } = await import("./cognitive-compiler-v2.js");
+    recordCompilerLearning(db, {
+      missionId: mission.id,
+      stepIndex,
+      taskClass: route?.taskClass,
+      policy: gateResult?.cognition?.policy,
+      taskSuccess: stepOk,
+      verificationPassed: critic.progression === "advance",
+      recoveryRequired: !stepOk,
+      reasoningLevel: route?.routeHints?.reasoningLevel,
+      modelRoute: route,
+    });
+  } catch { /* optional */ }
+
+  try {
     db.prepare(`
       UPDATE mission_tasks SET executive_state_json = ?, updated_at = ? WHERE id = ?
     `).run(JSON.stringify({

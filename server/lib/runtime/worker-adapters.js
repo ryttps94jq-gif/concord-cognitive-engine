@@ -74,9 +74,12 @@ export async function executeWorkerTask({
   ];
 
   const started = Date.now();
-  const chat = await providerChat(route.provider, route.envKey, messages, {
+  const chat = await providerChat({
+    provider: route.provider,
+    apiKey: route.envKey,
     slot: taskClass === "coding" ? "repair" : "utility",
-    maxTokens: maxResponseTokens || 1024,
+    messages,
+    opts: { maxTokens: maxResponseTokens || 1024 },
   });
 
   return {

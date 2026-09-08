@@ -6,6 +6,9 @@
 //   node server/scripts/run-cognitive-mission-bench.mjs [--iterations N]
 //   node server/scripts/run-cognitive-mission-bench.mjs --generalization
 //   node server/scripts/run-cognitive-mission-bench.mjs --path-experiment
+//   node server/scripts/run-cognitive-mission-bench.mjs --economics --economics-iterations N
+//   node server/scripts/run-cognitive-mission-bench.mjs --blind-benchmark
+//   node server/scripts/run-cognitive-mission-bench.mjs --blind-benchmark --billed
 //   node server/scripts/run-cognitive-mission-bench.mjs --json
 
 import Database from "better-sqlite3";
@@ -20,6 +23,8 @@ import { up as upCausal } from "../migrations/429_dila_tier2_brain.js";
 import { up as upDhtp } from "../migrations/435_dhtp_metrics.js";
 import { up as upCognitive } from "../migrations/436_dhtp_cognitive.js";
 import { up as upSavings } from "../migrations/437_cognitive_savings_ledger.js";
+import { up as upBilling } from "../migrations/438_provider_billing_telemetry.js";
+import { up as upCompilerV2 } from "../migrations/439_cognitive_compiler_v2.js";
 import {
   runCognitiveMissionBench,
   runGeneralizationBenchmark,
@@ -28,6 +33,7 @@ import {
   runFullDgbBenchmark,
 } from "../lib/runtime/cognitive-mission-bench.js";
 import { runCognitiveEconomicsBench } from "../lib/runtime/cognitive-economics-bench.js";
+import { runDilaRawBlindBenchmark } from "../lib/runtime/dila-raw-blind-benchmark.js";
 import { seedBenchDtuCorpus } from "../lib/runtime/cognitive-savings-ledger.js";
 
 function parseArgs(argv) {
@@ -39,6 +45,8 @@ function parseArgs(argv) {
     dgbFull: false,
     economics: false,
     economicsIterations: 10,
+    blindBenchmark: false,
+    billed: false,
     pathExperiment: false,
     learningCurve: false,
     warmupIterations: 20,
@@ -52,6 +60,8 @@ function parseArgs(argv) {
     else if (argv[i] === "--dgb-full") opts.dgbFull = true;
     else if (argv[i] === "--economics") opts.economics = true;
     else if (argv[i] === "--economics-iterations" && argv[i + 1]) opts.economicsIterations = Number(argv[++i]);
+    else if (argv[i] === "--blind-benchmark") opts.blindBenchmark = true;
+    else if (argv[i] === "--billed") opts.billed = true;
     else if (argv[i] === "--learning-curve") opts.learningCurve = true;
     else if (argv[i] === "--path-experiment") opts.pathExperiment = true;
   }
@@ -62,7 +72,7 @@ function setupDb() {
   const db = new Database(":memory:");
   for (const up of [
     upMission, upPhases, upTier, upDila, upV2, upExec, upCausal,
-    upDhtp, upCognitive, upSavings,
+    upDhtp, upCognitive, upSavings, upBilling, upCompilerV2,
   ]) {
     up(db);
   }
@@ -288,6 +298,170 @@ function printGeneralization(dgb) {
   console.log(`${"=".repeat(72)}\n`);
 }
 
+function printBlindBenchmark(bench) {
+  console.log(`\n${"=".repeat(72)}`);
+  console.log("DILA-vs-RAW BLIND BENCHMARK — independent evaluator");
+  console.log(`${"=".repeat(72)}`);
+  console.log(`Run ID:     ${bench.runId}`);
+  console.log(`Result:     ${bench.ok ? "PASS" : "FAIL"}`);
+  console.log(`Workloads:  ${bench.workloads.join(", ")}`);
+  console.log(`\n${"Path".padEnd(6)} ${"Label".padEnd(18)} ${"Quality".padStart(8)} ${"Correct".padStart(8)} ${"Verify".padStart(8)} ${"Tokens".padStart(8)} ${"Latency".padStart(8)} ${"$/miss".padStart(10)}`);
+  for (const row of bench.pathQualityTable) {
+    console.log(
+      `${row.pathId.padEnd(6)} ${row.label.padEnd(18)} ${(row.avgComposite * 100).toFixed(1).padStart(7)}% ${(row.correctness * 100).toFixed(0).padStart(7)}% ${(row.verification * 100).toFixed(0).padStart(7)}% ${Math.round(row.avgTokens).toString().padStart(8)} ${row.avgLatencyMs.toFixed(0).padStart(7)}ms ${row.avgCostUsd.toFixed(6).padStart(10)}`,
+    );
+  }
+  console.log(`\nDHTP isolation (quality score by path):`);
+  for (const row of bench.dhtpIsolation) {
+    console.log(`  ${row.path} ${row.label}: quality=${row.quality}% tokens=${row.tokens}`);
+  }
+  console.log(`\nHead-to-head (Raw A vs Full Dila E):`);
+  console.log(`  Raw composite:   ${(bench.headline.rawComposite * 100).toFixed(1)}%`);
+  console.log(`  Dila composite:  ${(bench.headline.dilaComposite * 100).toFixed(1)}%`);
+  console.log(`  Quality delta:   ${bench.headline.qualityDelta >= 0 ? "+" : ""}${(bench.headline.qualityDelta * 100).toFixed(1)}pp`);
+  if (bench.headline.tokenSavingsPct != null) {
+    console.log(`  Token savings:   ${bench.headline.tokenSavingsPct.toFixed(1)}%`);
+  }
+  if (bench.headline.costSavingsPct != null) {
+    console.log(`  Cost savings:    ${bench.headline.costSavingsPct.toFixed(1)}%`);
+  }
+  console.log(`  Dila win rate:   ${bench.headToHead.total > 0 ? `${bench.headToHead.dilaWins}/${bench.headToHead.total}` : "n/a"}`);
+  console.log(`  Target met:      ${bench.headline.targetMet ? "YES" : "NO"}`);
+  console.log(`  Verdict:         ${bench.headline.verdict}`);
+  console.log(`  Evaluator:       ${bench.headline.principle}`);
+  if (bench.headline.caveat) console.log(`  Note: ${bench.headline.caveat}`);
+
+  if (bench.claims?.segments) {
+    console.log(`\n${"─".repeat(72)}`);
+    console.log("SEGMENTED CLAIMS (Raw A → Full Dila E)");
+    const s = bench.claims.segments;
+    const fmt = (v) => (v != null ? `${v.toFixed(1)}%` : "n/a");
+    const ci = (seg) => {
+      const p = seg?.perWorkload;
+      if (!p || p.n < 2) return "";
+      return ` [CI95: ${p.ci95Low.toFixed(1)}–${p.ci95High.toFixed(1)}%]`;
+    };
+    console.log(`  Token reduction:        ${fmt(s.tokenReduction.pointEstimate)}${ci(s.tokenReduction)}`);
+    console.log(`  Inference cost reduction: ${fmt(s.inferenceCostReduction.pointEstimate)}${ci(s.inferenceCostReduction)}`);
+    console.log(`  Latency reduction:      ${fmt(s.latencyReduction.pointEstimate)}${ci(s.latencyReduction)}`);
+    console.log(`  Quality retention:      ${fmt(s.qualityRetention.pointEstimate)}`);
+    console.log(`  Reliability (success):  Raw ${(s.reliability.rawSuccessRate * 100).toFixed(0)}% → Dila ${(s.reliability.dilaSuccessRate * 100).toFixed(0)}%`);
+    console.log(`  Human intervention:     Raw ${s.humanIntervention.rawRate} → Dila ${s.humanIntervention.dilaRate}`);
+  }
+
+  if (bench.commercial?.ok) {
+    const c = bench.commercial;
+    console.log(`\n${"─".repeat(72)}`);
+    console.log(`PRIMARY METRIC: ${bench.primaryMetric?.label || "Cost per Verified Success"}`);
+    console.log(`  ${bench.primaryMetric?.brutalRule || c.brutalRule.message}`);
+    console.log(`\n  ${"Baseline".padEnd(28)} ${"$ / verified success".padStart(18)} ${"Quality".padStart(8)} ${"Tokens".padStart(10)}`);
+    for (const b of c.baselines) {
+      const cps = b.costPerVerifiedSuccessUsd != null ? `$${b.costPerVerifiedSuccessUsd.toFixed(6)}` : "n/a";
+      console.log(`  ${b.label.padEnd(28)} ${cps.padStart(18)} ${((b.avgQuality ?? 0) * 100).toFixed(0).padStart(7)}% ${Math.round(b.avgTokens ?? 0).toString().padStart(10)}`);
+    }
+    if (c.primaryMetric.dilaVsRawReductionPct != null) {
+      console.log(`\n  Dila vs Raw cost reduction:            ${c.primaryMetric.dilaVsRawReductionPct.toFixed(1)}%`);
+    }
+    if (c.primaryMetric.dilaVsProviderCacheReductionPct != null) {
+      console.log(`  Dila vs Raw+provider-cache reduction:  ${c.primaryMetric.dilaVsProviderCacheReductionPct.toFixed(1)}%`);
+      console.log(`  Still wins after provider cache:       ${c.dilaStillWinsVsProviderCache ? "YES" : "NO"}`);
+    }
+    console.log(`  Ideal result matrix:                   ${c.idealScore}`);
+    console.log(`  Brutal rule:                         ${c.brutalRule.message}`);
+  }
+
+  if (bench.publishability) {
+    console.log(`\n${"─".repeat(72)}`);
+    console.log(`PUBLICATION STATUS: ${bench.publishability.status.toUpperCase()}`);
+    for (const g of bench.publishability.gates) {
+      console.log(`  ${g.passed ? "✓" : "✗"} ${g.label}${g.detail ? ` — ${g.detail}` : ""}`);
+    }
+    if (bench.publishability.refusalReason) {
+      console.log(`\n  ${bench.publishability.refusalReason}`);
+    }
+    if (bench.publishability.headlineClaim) {
+      console.log(`\n  Publishable claim: ${bench.publishability.headlineClaim.statement}`);
+    }
+  }
+
+  if (bench.illustrativeEconomics?.ok) {
+    const e = bench.illustrativeEconomics;
+    console.log(`\n${"─".repeat(72)}`);
+    console.log(`ILLUSTRATIVE ECONOMICS ($100k/mo inference spend)`);
+    console.log(`  ${e.disclaimer}`);
+    console.log(`  Projected spend:  $${e.projectedMonthlySpendUsd.toLocaleString(undefined, { maximumFractionDigits: 0 })}/mo`);
+    console.log(`  Projected savings: $${e.projectedMonthlySavingsUsd.toLocaleString(undefined, { maximumFractionDigits: 0 })}/mo ($${e.annualSavingsUsd.toLocaleString(undefined, { maximumFractionDigits: 0 })}/yr)`);
+  }
+
+  if (bench.moat?.pathComparison?.ok) {
+    const m = bench.moat;
+    console.log(`\n${"─".repeat(72)}`);
+    console.log("INFORMATION PATH — the moat equation");
+    console.log(`  Raw:  ${m.pathComparison.raw.narrative}`);
+    console.log(`  Dila: ${m.pathComparison.dila.narrative}`);
+    if (m.pathComparison.inferenceReductionPct != null) {
+      console.log(`  Inference reduction: ${m.pathComparison.inferenceReductionPct.toFixed(1)}%`);
+    }
+    if (m.layerAttribution) {
+      console.log(`  Verdict: ${m.layerAttribution.verdict}`);
+      if (m.layerAttribution.regressions?.length > 0) {
+        console.log("  Quality regressions detected:");
+        for (const r of m.layerAttribution.regressions) {
+          console.log(`    · ${r.label}: −${r.qualityLossPp.toFixed(1)}pp — ${r.recommendation}`);
+        }
+      } else if (m.layerAttribution.overallAtoE) {
+        const o = m.layerAttribution.overallAtoE;
+        console.log(`  A→E quality: ${o.qualityDeltaPp >= 0 ? "+" : ""}${o.qualityDeltaPp.toFixed(1)}pp | token reduction: ${o.tokenReductionPct?.toFixed(1) ?? "?"}%`);
+        console.log(`  80% inference target: ${o.target80PctInferenceReduction ? "MET" : "NOT YET"}`);
+      }
+      for (const t of m.layerAttribution.transitions || []) {
+        const qSign = t.qualityDeltaPp >= 0 ? "+" : "";
+        console.log(`  ${t.from}→${t.to} ${t.label}: quality ${qSign}${t.qualityDeltaPp.toFixed(1)}pp, tokens −${t.tokenDeltaPct?.toFixed(0) ?? "?"}%`);
+      }
+    }
+  }
+
+  if (bench.swe) {
+    console.log(`\n${"─".repeat(72)}`);
+    console.log("SWE MINI HARNESS (objective test verification)");
+    console.log(`  Passed: ${bench.swe.passed}/${bench.swe.total} (${(bench.swe.passRate * 100).toFixed(0)}%)`);
+  }
+
+  if (bench.counterfactual?.paths?.length) {
+    console.log(`\n${"─".repeat(72)}`);
+    console.log("COUNTERFACTUAL CONTEXT TESTS (FULL vs COMPRESSED promotion gate)");
+    for (const cf of bench.counterfactual.paths) {
+      console.log(`  Path ${cf.pathId}: promoted=${cf.promoted} fields=${cf.fields} promotionRate=${cf.promotionRate != null ? `${(cf.promotionRate * 100).toFixed(0)}%` : "n/a"} tokenSavings=${cf.tokenSavingsPct?.toFixed(1) ?? "n/a"}%`);
+    }
+    if (bench.counterfactual.overallPromotionRate != null) {
+      console.log(`  Overall promotion rate: ${(bench.counterfactual.overallPromotionRate * 100).toFixed(0)}%`);
+    }
+  }
+
+  if (bench.compilerV2) {
+    console.log(`\n${"─".repeat(72)}`);
+    console.log("COGNITIVE COMPILER V2");
+    console.log(`  Governor paths: ${bench.compilerV2.pathsWithGovernor}`);
+    if (bench.compilerV2.avgPromotionRate != null) {
+      console.log(`  Avg promotion rate: ${(bench.compilerV2.avgPromotionRate * 100).toFixed(0)}%`);
+    }
+    console.log(`  Recoverable fields: ${bench.compilerV2.recoverableFieldsTotal}`);
+    if (bench.compilerV2.reasoningLevels?.length) {
+      console.log(`  Reasoning levels: ${bench.compilerV2.reasoningLevels.map((r) => `${r.pathId}=L${r.level}`).join(", ")}`);
+    }
+  }
+
+  if (bench.cognitiveCompiler && Object.keys(bench.cognitiveCompiler).length) {
+    console.log(`\n${"─".repeat(72)}`);
+    console.log("DHTP COGNITIVE COMPILER TIERS");
+    for (const [tier, count] of Object.entries(bench.cognitiveCompiler)) {
+      console.log(`  ${tier}: ${count}`);
+    }
+  }
+
+  console.log(`${"=".repeat(72)}\n`);
+}
+
 function printEconomics(econ) {
   console.log(`\n${"=".repeat(72)}`);
   console.log("COGNITIVE ECONOMICS MULTIPLIER — A/B/C/D/E");
@@ -328,6 +502,26 @@ async function main() {
       printPathExperiment(exp);
     }
     process.exit(exp.ok !== false ? 0 : 1);
+    return;
+  }
+
+  if (opts.blindBenchmark) {
+    if (opts.billed) process.env.COGNITIVE_ECON_MODE = "billed";
+    console.log(`Starting Dila-vs-Raw blind benchmark (A–E paths, independent evaluator${opts.billed ? ", billed mode" : ""})...`);
+    const blind = await runDilaRawBlindBenchmark({
+      db,
+      dispatchMCP: mockDispatch,
+      minCacheUses: opts.minCacheUses,
+      pricing: opts.billed ? { mode: "billed" } : undefined,
+    });
+    if (opts.json) {
+      const outPath = `dila-raw-blind-${blind.runId}.json`;
+      writeFileSync(outPath, JSON.stringify(blind, null, 2));
+      console.log(`Wrote ${outPath}`);
+    } else {
+      printBlindBenchmark(blind);
+    }
+    process.exit(blind.ok ? 0 : 1);
     return;
   }
 

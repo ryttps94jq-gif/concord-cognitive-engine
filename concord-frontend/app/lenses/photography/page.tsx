@@ -36,6 +36,7 @@ import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { VisionAnalyzeButton } from '@/components/common/VisionAnalyzeButton';
+import { SaveAsDtuButton } from '@/components/dtu/SaveAsDtuButton';
 
 type PhotoTab = 'gallery' | 'upload' | 'capture' | 'collections' | 'editing' | 'stats';
 
@@ -133,30 +134,6 @@ export default function PhotographyPage() {
     ctx.drawImage(video, 0, 0);
     setCapturedImage(canvas.toDataURL('image/png'));
   }, []);
-
-  const saveCaptureAsDTU = useCallback(async () => {
-    if (!capturedImage) return;
-    const blob = await (await fetch(capturedImage)).blob();
-    const file = new File([blob], `capture-${Date.now()}.png`, { type: 'image/png' });
-    const arrayBuffer = await file.arrayBuffer();
-    const base64Data = btoa(new Uint8Array(arrayBuffer).reduce((d, byte) => d + String.fromCharCode(byte), ''));
-    const mediaResp = await api.post('/api/media/upload', {
-      title: `Capture ${new Date().toLocaleString()}`,
-      mediaType: 'image',
-      mimeType: 'image/png',
-      fileSize: file.size,
-      originalFilename: file.name,
-      tags: ['capture'],
-      description: 'Camera capture',
-      data: base64Data,
-    });
-    await createPhoto({
-      title: `Capture ${new Date().toLocaleString()}`,
-      data: { mediaId: mediaResp.data?.mediaDTU?.id || mediaResp.data?.id, createdAt: new Date().toISOString(), likes: 0, views: 0, tags: ['capture'] } as unknown as Record<string, unknown>,
-    });
-    setCapturedImage(null);
-    refetch();
-  }, [capturedImage, createPhoto, refetch]);
 
   // Cleanup camera stream on unmount
   useEffect(() => {
@@ -578,9 +555,16 @@ export default function PhotographyPage() {
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={capturedImage} alt="Captured" className="w-full rounded-lg border border-white/10" />
                 <div className="flex gap-2">
-                  <button onClick={saveCaptureAsDTU} className="flex-1 py-2 bg-green-500/20 border border-green-500/30 rounded-lg text-sm hover:bg-green-500/30 flex items-center justify-center gap-2">
-                    <Download className="w-4 h-4" /> Save as DTU
-                  </button>
+                  <SaveAsDtuButton
+                    apiSource="photography-lens"
+                    title={`Capture ${new Date().toLocaleString()}`}
+                    content={`Camera capture saved from Photography lens.\nCaptured at: ${new Date().toISOString()}\nMedia type: image/png`}
+                    extraTags={['photography', 'capture', 'camera']}
+                    rawData={{ type: 'camera-capture', mimeType: 'image/png', capturedAt: new Date().toISOString(), preview: capturedImage?.slice(0, 200) }}
+                    confirm
+                    onSaved={() => { setCapturedImage(null); refetch(); }}
+                    className="flex-1 !bg-green-500/20 !border !border-green-500/30 !text-sm hover:!bg-green-500/30 justify-center"
+                  />
                   <button onClick={() => setCapturedImage(null)} className="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-sm hover:bg-white/10">
                     Discard
                   </button>

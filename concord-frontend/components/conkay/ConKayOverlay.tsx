@@ -1,5 +1,7 @@
 'use client';
 
+import { getApiBase } from '@/lib/api/base';
+
 // concord-frontend/components/conkay/ConKayOverlay.tsx
 //
 // ConKay, summonable on ANY lens — the cross-lens "take over and operate" surface
@@ -19,7 +21,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import dynamic from 'next/dynamic';
-import { X, Send, Mic, MicOff, Sparkles, Volume2, VolumeX, Box } from 'lucide-react';
+import { X, Send, Mic, MicOff, Sparkles, Volume2, VolumeX, Box, MapPin, Activity, Layers, Type, Package, Sword } from 'lucide-react';
 import { ConKayMessage, type ConKayReplyFields } from './ConKayViz';
 import { useConKayVoice } from './useConKayVoice';
 import { matchConKaySkill, type ConKaySkill } from './conkay-skills';
@@ -29,6 +31,12 @@ import { useConkayRunStore, type RawToolCall } from './conkayRunStore';
 import { useConkayAttentionStore } from './conkayAttentionStore';
 import { detectArtifact } from '@/lib/conkay/artifact-kinds';
 import { isMutatingMacro } from '@/lib/conkay/mutating-macros';
+import { onUnityEvent, postUnityCmd, spawnPrimitive, clearTempPrimitives, unityIframePresent, loadGlb } from '@/lib/conkay/unity-bridge';
+import { runFeaBeamToWorld } from '@/lib/conkay/fea-beam-to-world';
+import { runPartMeshToWorld } from '@/lib/conkay/part-mesh-to-world';
+import { designViaApiOrClient } from '@/lib/conkay/nlp-design-to-world';
+import { runEvoGlbToWorld } from '@/lib/conkay/evo-glb-to-world';
+import { runAssemblyChatRevise, downloadStl, downloadAssemblyBom, downloadStep } from '@/lib/conkay/assembly-to-world';
 import { ConKayActionConfirm } from './ConKayActionConfirm';
 import { ConKayCockpit } from './ConKayCockpit';
 import { CONKAY_SIGNATURE_GREETING, CONKAY_PERSONA_PROMPT, type ConKayState } from './conkay-persona';
@@ -263,6 +271,305 @@ export function ConKayOverlay() {
   }, [running]);
   useEffect(() => () => { useConkayAttentionStore.getState().reset(); }, []);
 
+  // ── Unity WebGL postMessage (ConKay → iframe) ────────────────────────
+  // LIVE: typed `concordia:cmd` into #concordia-unity-webgl when present
+  // (world lens + NEXT_PUBLIC_CONCORDIA_RENDERER=unity-webgl). Structured
+  // build intents (spawn_primitive / set_color / clear_temp) are F0 markers
+  // only — not free-text CAD. No-op if iframe missing.
+  const [unityPresent, setUnityPresent] = useState(false);
+  const [nlpDesignText, setNlpDesignText] = useState('simply supported steel I-beam 6m, 5kN midspan');
+  const [nlpBuilding, setNlpBuilding] = useState(false);
+  const [evoGlbBusy, setEvoGlbBusy] = useState(false);
+  const [assemblyId, setAssemblyId] = useState<string | null>(null);
+  const [assemblyBusy, setAssemblyBusy] = useState(false);
+  useEffect(() => {
+    if (!open) {
+      setUnityPresent(false);
+      return;
+    }
+    const refresh = () => setUnityPresent(unityIframePresent());
+    refresh();
+    const t = window.setInterval(refresh, 2000);
+    const off = onUnityEvent((msg) => {
+      // Honest telemetry only — never invent a CAD/physics result.
+      if (msg.event === 'ready' || msg.event === 'pong' || msg.event === 'ack' || msg.event === 'spawned' || msg.event === 'mesh_applied' || msg.event === 'glb_loaded' || msg.event === 'transform_set') {
+        const kind = msg.payload && typeof msg.payload.kind === 'string' ? ` · ${msg.payload.kind}` : '';
+        setWorkStatus(`Unity bridge: ${msg.event}${kind}${msg.id ? ` · ${msg.id}` : ''}`);
+      }
+    });
+    if (unityIframePresent()) {
+      postUnityCmd('hello', { source: 'conkay-overlay', lens: lens?.id ?? null });
+      postUnityCmd('ping', { source: 'conkay-overlay' });
+    }
+    return () => {
+      window.clearInterval(t);
+      off();
+    };
+  }, [open, lens?.id]);
+
+  /** F0: drop a cyan cube marker in the Unity world when iframe is present. */
+  const dropWorldMarker = useCallback(() => {
+    if (!unityIframePresent()) {
+      setWorkStatus('Unity bridge: no iframe (open world lens with unity-webgl)');
+      return;
+    }
+    const id = `marker-${Date.now()}`;
+    const ok = spawnPrimitive(
+      {
+        kind: 'cube',
+        position: { x: (Math.random() - 0.5) * 2, y: 1.2, z: (Math.random() - 0.5) * 2 },
+        scale: 0.45,
+        color: '#3de0f5',
+      },
+      id,
+    );
+    setWorkStatus(ok ? `Unity bridge: spawn_primitive posted · ${id}` : 'Unity bridge: spawn post failed');
+  }, []);
+
+  /**
+   * Industrial slice v1: engineering.runFEA(FEA_FRAME) → util band color →
+   * Unity spawn_primitive cube (beam proxy). Not apply_mesh / full CAD.
+   */
+  const dropFeaBeamWorld = useCallback(async () => {
+    if (!unityIframePresent()) {
+      setWorkStatus('Industrial slice: no Unity iframe (open world lens with unity-webgl)');
+      return;
+    }
+    setWorkStatus('Industrial slice: running engineering.runFEA (FEA_FRAME)…');
+    const res = await runFeaBeamToWorld({ spawn: true });
+    if (!res.ok) {
+      setWorkStatus(`Industrial slice: FEA failed — ${res.error || 'unknown'}`);
+      return;
+    }
+    const util = res.maxUtilization != null ? res.maxUtilization.toFixed(4) : '?';
+    const band = res.band ?? '?';
+    const hex = res.color?.hex ?? '?';
+    if (res.spawnPosted) {
+      setWorkStatus(
+        `Industrial slice LIVE: util=${util} band=${band} color=${hex} · spawn_primitive posted · ${res.spawnId || ''} (cube proxy — not apply_mesh)`,
+      );
+    } else {
+      setWorkStatus(
+        `Industrial slice: FEA util=${util} band=${band} — spawn skipped: ${res.error || 'iframe/post failed'}`,
+      );
+    }
+  }, []);
+
+  /**
+   * Industrial mesh slice: engineering.partMesh (i-beam) → apply_mesh MeshFilter.
+   * Optional FEA util tint. Not free-text CAD / GLB.
+   */
+  const dropPartMeshWorld = useCallback(async () => {
+    if (!unityIframePresent()) {
+      setWorkStatus('Mesh slice: no Unity iframe (open world lens with unity-webgl)');
+      return;
+    }
+    setWorkStatus('Mesh slice: engineering.partMesh (i-beam) + apply_mesh…');
+    const res = await runPartMeshToWorld({ kind: 'i-beam', spawn: true, colorFromFea: true });
+    if (!res.ok) {
+      setWorkStatus(`Mesh slice: failed — ${res.error || 'unknown'}`);
+      return;
+    }
+    const verts = res.vertexCount ?? '?';
+    const tris = res.triangleCount ?? '?';
+    const hex = res.color?.hex ?? '?';
+    const band = res.band ?? '?';
+    if (res.applyPosted) {
+      setWorkStatus(
+        `Mesh apply LIVE: kind=${res.kind} verts=${verts} tris=${tris} band=${band} color=${hex} · apply_mesh posted · ${res.applyId || ''}`,
+      );
+    } else {
+      setWorkStatus(
+        `Mesh slice: partMesh ok verts=${verts} — apply skipped: ${res.error || 'iframe/post failed'}`,
+      );
+    }
+  }, []);
+
+  /**
+   * GLB URL → Unity glTFast under ConKayTemp. Same-origin public prop sample.
+   * Not evo-asset.generate auto-wire — proves load_glb path only.
+   */
+  const loadGlbWorld = useCallback(() => {
+    if (!unityIframePresent()) {
+      setWorkStatus('GLB load: no Unity iframe (open world lens with unity-webgl)');
+      return;
+    }
+    const id = `glb-${Date.now()}`;
+    const url =
+      typeof window !== 'undefined'
+        ? `${window.location.origin}/models/prop/furniture_table.glb`
+        : '/models/prop/furniture_table.glb';
+    const ok = loadGlb(
+      {
+        url,
+        name: 'furniture_table',
+        position: { x: 0.5, y: 0, z: 0.5 },
+        scale: 1,
+      },
+      id,
+    );
+    setWorkStatus(
+      ok
+        ? `GLB load: load_glb posted · ${id} · ${url} (wait glb_loaded)`
+        : 'GLB load: post failed',
+    );
+  }, []);
+
+  /**
+   * evo-asset.generate → resolve URL → Unity load_glb.
+   * Prompt must include archetype keyword (sword/spear/staff/mace/shield).
+   * Honesty: archetypes only — not full free-text CAD.
+   */
+  const evoGlbToWorld = useCallback(async () => {
+    if (!unityIframePresent()) {
+      setWorkStatus('Evo GLB: no Unity iframe (open world lens with unity-webgl)');
+      return;
+    }
+    const text = (nlpDesignText || '').trim() || 'steel sword';
+    setEvoGlbBusy(true);
+    setWorkStatus(`Evo GLB: generating “${text.slice(0, 48)}”…`);
+    try {
+      const res = await runEvoGlbToWorld({ text, waitMs: 20000 });
+      if (!res.ok) {
+        setWorkStatus(`Evo GLB: failed — ${res.error || 'unknown'}${res.glbUrl ? ` · ${res.glbUrl}` : ''}`);
+        return;
+      }
+      setWorkStatus(
+        `Evo GLB LIVE: ${res.archetype} → ${res.glbUrl} · glb_loaded · ${res.loadId || ''} (archetypes only — not full CAD)`,
+      );
+    } catch (e) {
+      setWorkStatus(`Evo GLB: error — ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setEvoGlbBusy(false);
+    }
+  }, [nlpDesignText]);
+
+  /**
+   * NLP CAD v1: free-text → deterministic intent → partMesh/FEA → apply_mesh.
+   * Prefer POST /api/conkay/design; fall back to client parse + lensRun.
+   */
+  const buildNlpDesignWorld = useCallback(async (overrideText?: string) => {
+    if (!unityIframePresent()) {
+      setWorkStatus('NLP CAD: no Unity iframe (open world lens with unity-webgl)');
+      return;
+    }
+    const text = (overrideText ?? nlpDesignText).trim();
+    if (!text) {
+      setWorkStatus('NLP CAD: enter a design prompt (e.g. steel I-beam 6m, 5kN midspan)');
+      return;
+    }
+    setNlpBuilding(true);
+    setWorkStatus(`NLP CAD: parsing “${text.slice(0, 64)}”…`);
+    try {
+      const res = await designViaApiOrClient({ text, spawn: true });
+      if (!res.ok) {
+        setWorkStatus(`NLP CAD: failed — ${res.error || 'unknown'}`);
+        return;
+      }
+      const kind = res.intent?.meshKind ?? res.partMesh?.kind ?? '?';
+      const span = res.intent?.spans?.[0];
+      const util = res.fea?.maxUtilization != null ? res.fea.maxUtilization.toFixed(4) : (res.partMesh?.maxUtilization?.toFixed(4) ?? '?');
+      const hex = res.fea?.color?.hex ?? res.partMesh?.color?.hex ?? res.applyPayload?.color ?? '?';
+      if (res.applyPosted) {
+        setWorkStatus(
+          `NLP CAD LIVE: “${text.slice(0, 40)}” → ${kind}${span != null ? ` ${span}m` : ''} util=${util} color=${hex} · apply_mesh · ${res.applyId || ''} (not industrial CAD suite / GLB)`,
+        );
+      } else {
+        setWorkStatus(
+          `NLP CAD: intent ok ${kind} — apply skipped: ${res.error || 'iframe/post failed'}`,
+        );
+      }
+    } finally {
+      setNlpBuilding(false);
+    }
+  }, [nlpDesignText]);
+
+  /**
+   * CAD Wave 1: assembly chat revise.
+   * "build assembly" / "add beam …" / "move part X to x,y,z" → APIs → Unity apply_mesh/set_transform.
+   * Honesty: ASSEMBLY LIVE — not full CAD suite.
+   */
+  const runAssemblyRevise = useCallback(async () => {
+    if (!unityIframePresent()) {
+      setWorkStatus('Assembly: no Unity iframe (open world lens with unity-webgl)');
+      return;
+    }
+    const text = nlpDesignText.trim();
+    if (!text) {
+      setWorkStatus('Assembly: enter revise text (build assembly | add steel I-beam 6m | move part … to 2,1.2,0)');
+      return;
+    }
+    setAssemblyBusy(true);
+    setWorkStatus(`Assembly revise: “${text.slice(0, 56)}”…`);
+    try {
+      const res = await runAssemblyChatRevise({ text, assemblyId, syncUnity: true });
+      if (!res.ok) {
+        setWorkStatus(`Assembly: failed — ${res.error || 'unknown'}`);
+        return;
+      }
+      if (res.assemblyId) setAssemblyId(res.assemblyId);
+      const n = res.parts?.length ?? 0;
+      setWorkStatus(
+        `ASSEMBLY LIVE: action=${res.action || '?'} parts=${n} id=${(res.assemblyId || '').slice(0, 8)}… · Unity synced (not full CAD suite)`,
+      );
+    } catch (e) {
+      setWorkStatus(`Assembly: error — ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setAssemblyBusy(false);
+    }
+  }, [nlpDesignText, assemblyId]);
+
+  const downloadAssemblyStl = useCallback(async () => {
+    if (!assemblyId) {
+      setWorkStatus('STL: no assembly yet — Asm revise first (build assembly / add …)');
+      return;
+    }
+    try {
+      const r = await downloadStl({ assemblyId });
+      setWorkStatus(`STL download LIVE: ${r.filename} (${r.size} bytes) — Wave 2 export`);
+    } catch (e) {
+      setWorkStatus(`STL download failed — ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }, [assemblyId]);
+
+
+  const downloadAssemblyStep = useCallback(async () => {
+    if (!assemblyId) {
+      setWorkStatus('STEP: no assembly yet — Asm revise first');
+      return;
+    }
+    try {
+      const r = await downloadStep({ assemblyId });
+      setWorkStatus(`STEP download LIVE: ${r.filename} (${r.size} bytes) — faceted AP214 (not OCC B-rep)`);
+    } catch (e) {
+      setWorkStatus(`STEP download failed — ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }, [assemblyId]);
+
+  const downloadBomJson = useCallback(async () => {
+    if (!assemblyId) {
+      setWorkStatus('BOM: no assembly yet — Asm revise first');
+      return;
+    }
+    try {
+      const r = await downloadAssemblyBom(assemblyId);
+      if (!r.ok) {
+        setWorkStatus(`BOM failed — ${r.error}`);
+        return;
+      }
+      setWorkStatus(`BOM download LIVE: ${r.filename} parts=${r.bom?.totalParts ?? '?'} — Wave 2`);
+    } catch (e) {
+      setWorkStatus(`BOM download failed — ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }, [assemblyId]);
+
+
+
+
+
+
+
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
   }, [messages.length, steps, workStatus]);
@@ -459,7 +766,7 @@ export function ConKayOverlay() {
   // "show its work and the task it was provided" → a real, reopenable record.
   const persistArtifact = useCallback((title: string, work: Record<string, unknown>) => {
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || '';
+      const base = getApiBase();
       fetch(`${base}/api/dtus`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
@@ -529,10 +836,10 @@ export function ConKayOverlay() {
     ]);
     try {
       const result = await match.skill.run(match.args, {
-        apiBase: process.env.NEXT_PUBLIC_API_URL || '',
+        apiBase: getApiBase(),
         fetchJson: async (path: string) => {
           try {
-            const r = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ''}${path}`, { credentials: 'include' });
+            const r = await fetch(`${getApiBase()}${path}`, { credentials: 'include' });
             return await r.json();
           } catch { return null; }
         },
@@ -613,6 +920,24 @@ export function ConKayOverlay() {
         const artifact = detectArtifact(domain, macro, inputObj, data?.result);
         if (artifact) useConkayHudStore.getState().setLastArtifact(artifact);
       }
+      if (ok) {
+        // LIVE stub: tell Unity iframe something happened (no-op if iframe absent).
+        // Not a CAD/mesh push — thin notify + optional F0 marker when WebGL present.
+        postUnityCmd('notify', {
+          source: 'conkay',
+          domain,
+          macro,
+          ok: true,
+        });
+        if (unityIframePresent()) {
+          spawnPrimitive({
+            kind: 'cube',
+            position: { x: 0, y: 1.1, z: 0 },
+            scale: 0.35,
+            color: '#5eead4',
+          }, `macro-${domain}-${macro}-${Date.now()}`);
+        }
+      }
       const resultStr = data?.result != null ? JSON.stringify(data.result, null, 2) : (ok ? '(done)' : (data?.error || 'no result'));
       const spoken = ok ? `Done — ran ${macro} on the ${domain} lens.` : `${macro} on ${domain} returned: ${data?.error || 'an error'}.`;
       const body = resultStr.length > 1200 ? resultStr.slice(0, 1200) + '\n…' : resultStr;
@@ -656,7 +981,7 @@ export function ConKayOverlay() {
       { id: 'render', label: 'Rendering the result', state: 'pending' },
     ]);
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || '';
+      const base = getApiBase();
       let actions: string[] = [];
       try {
         const r = await fetch(`${base}/api/lens-actions/${encodeURIComponent(domain)}`, { credentials: 'include' });
@@ -750,7 +1075,7 @@ export function ConKayOverlay() {
       }
     };
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL || '';
+      const base = getApiBase();
       const history = messages.slice(-20).map((m) => ({ role: m.role, content: m.content }));
       const res = await fetch(`${base}/api/chat-agent/stream`, {
         method: 'POST', credentials: 'include',
@@ -965,6 +1290,114 @@ export function ConKayOverlay() {
         </span>
         <ConKayTelemetryChip />
         <div className="ml-auto flex items-center gap-1.5">
+          {unityPresent && (
+            <>
+              <div className="flex items-center gap-1 mr-1">
+                <input
+                  type="text"
+                  value={nlpDesignText}
+                  onChange={(e) => setNlpDesignText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      void buildNlpDesignWorld();
+                    }
+                  }}
+                  placeholder="steel I-beam 6m, 5kN midspan"
+                  aria-label="NLP design prompt"
+                  data-testid="ck-nlp-design-text"
+                  className="w-40 lg:w-56 rounded-md border border-cyan-400/25 bg-black/40 px-2 py-1 text-[10px] text-cyan-100 placeholder:text-cyan-300/40"
+                />
+                <button type="button" onClick={() => { void buildNlpDesignWorld(); }}
+                  disabled={nlpBuilding}
+                  title="Build in world: free-text NLP → partMesh/FEA → apply_mesh (not industrial CAD suite)"
+                  aria-label="Build NLP design in world"
+                  data-testid="ck-nlp-build-world"
+                  className="rounded-lg px-2 py-1 text-[10px] text-violet-100 hover:bg-violet-400/15 border border-violet-400/30 disabled:opacity-50 flex items-center gap-1">
+                  <Type className="h-3 w-3" />
+                  {nlpBuilding ? '…' : 'Build'}
+                </button>
+                <button type="button" onClick={() => { void runAssemblyRevise(); }}
+                  disabled={assemblyBusy}
+                  title="Assembly revise: build assembly | add beam… | move part X to x,y,z → APIs + Unity (ASSEMBLY LIVE — not full suite)"
+                  aria-label="Assembly chat revise"
+                  data-testid="ck-assembly-revise"
+                  className="rounded-lg px-2 py-1 text-[10px] text-fuchsia-100 hover:bg-fuchsia-400/15 border border-fuchsia-400/30 disabled:opacity-50 flex items-center gap-1">
+                  <Layers className="h-3 w-3" />
+                  {assemblyBusy ? '…' : 'Asm'}
+                </button>
+                <button type="button" onClick={() => { void downloadAssemblyStl(); }}
+                  disabled={!assemblyId}
+                  title="Download assembly STL (Wave 2 — binary STL from part meshes)"
+                  aria-label="Download assembly STL"
+                  data-testid="ck-assembly-stl"
+                  className="rounded-lg px-2 py-1 text-[10px] text-teal-100 hover:bg-teal-400/15 border border-teal-400/30 disabled:opacity-40">
+                  STL
+                </button>
+                <button type="button" onClick={() => { void downloadBomJson(); }}
+                  disabled={!assemblyId}
+                  title="Download BOM JSON (Wave 2 — part id/kind/material/qty)"
+                  aria-label="Download assembly BOM"
+                  data-testid="ck-assembly-bom"
+                  className="rounded-lg px-2 py-1 text-[10px] text-lime-100 hover:bg-lime-400/15 border border-lime-400/30 disabled:opacity-40">
+                  BOM
+                </button>
+                <button type="button" onClick={() => { void downloadAssemblyStep(); }}
+                  disabled={!assemblyId}
+                  title="Download assembly faceted STEP (AP214-style MANIFOLD_SOLID_BREP from triangles — not SolidWorks B-rep)"
+                  aria-label="Download assembly STEP"
+                  data-testid="ck-export-step"
+                  className="rounded-lg px-2 py-1 text-[10px] text-orange-100 hover:bg-orange-400/15 border border-orange-400/30 disabled:opacity-40">
+                  STEP
+                </button>
+
+              </div>
+              <button type="button" onClick={dropWorldMarker}
+                title="Drop marker in world (F0 cube via spawn_primitive — not CAD)"
+                aria-label="Drop marker in world"
+                className="rounded-lg p-2 text-cyan-200 hover:bg-cyan-400/10">
+                <MapPin className="h-4 w-4" />
+              </button>
+              <button type="button" onClick={() => { void dropFeaBeamWorld(); }}
+                title="FEA beam → world: runFEA(FEA_FRAME) → util band color → spawn_primitive cube proxy (not full CAD)"
+                aria-label="FEA beam to world"
+                data-testid="ck-fea-beam-world"
+                className="rounded-lg p-2 text-emerald-200 hover:bg-emerald-400/10">
+                <Activity className="h-4 w-4" />
+              </button>
+              <button type="button" onClick={() => { void dropPartMeshWorld(); }}
+                title="partMesh i-beam → apply_mesh MeshFilter (real triangle mesh — not full CAD)"
+                aria-label="Apply part mesh to world"
+                data-testid="ck-part-mesh-world"
+                className="rounded-lg p-2 text-amber-200 hover:bg-amber-400/10">
+                <Layers className="h-4 w-4" />
+              </button>
+              <button type="button" onClick={loadGlbWorld}
+                title="Load public GLB via load_glb → Unity glTFast (furniture_table) — not evo-asset auto-wire"
+                aria-label="Load GLB into world"
+                data-testid="ck-load-glb"
+                className="rounded-lg p-2 text-sky-200 hover:bg-sky-400/10">
+                <Package className="h-4 w-4" />
+              </button>
+              <button type="button" onClick={() => { void evoGlbToWorld(); }}
+                disabled={evoGlbBusy}
+                title="Evo-asset generate → resolve → load_glb (archetype keyword in prompt: sword/spear/staff/mace/shield)"
+                aria-label="Evo asset GLB to world"
+                data-testid="ck-evo-glb-world"
+                className="rounded-lg p-2 text-orange-200 hover:bg-orange-400/10 disabled:opacity-50">
+                <Sword className="h-4 w-4" />
+              </button>
+              <button type="button" onClick={() => {
+                const ok = clearTempPrimitives(`clear-${Date.now()}`);
+                setWorkStatus(ok ? 'Unity bridge: clear_temp posted' : 'Unity bridge: clear post failed');
+              }}
+                title="Clear ConKayTemp markers in Unity"
+                aria-label="Clear world markers"
+                className="rounded-lg px-2 py-1 text-[10px] text-cyan-300/80 hover:bg-cyan-400/10 border border-cyan-400/20">
+                clear
+              </button>
+            </>
+          )}
           <button onClick={() => setInspecting((x) => !x)} title={inspecting ? 'Close inspector' : 'Inspect an AR artifact (exploded view)'} aria-label="Inspect artifact"
             className={`rounded-lg p-2 hover:bg-cyan-400/10 ${inspecting ? 'text-cyan-100 bg-cyan-400/15' : 'text-cyan-200'}`}>
             <Box className="h-4 w-4" />
@@ -979,6 +1412,31 @@ export function ConKayOverlay() {
           </button>
         </div>
       </div>
+
+      {/* Scaffolding library — worked examples for the "Build in world" field.
+          The physics parser needs real structural params ("make a house" fails);
+          these show the shape of a prompt it can actually run. Click = populate
+          the field + fire the NLP→partMesh/FEA→apply_mesh path. */}
+      {unityPresent && (
+        <div className="flex flex-wrap items-center gap-1.5 px-5 pb-2 text-[10px] text-cyan-300/50">
+          <span className="text-cyan-300/40">Try:</span>
+          {[
+            'simply supported steel I-beam 6m, 5kN midspan',
+            'cantilevered timber joist 3m, 2kN tip load',
+            'steel I-beam 4m, 8kN at 1m from left support',
+          ].map((ex) => (
+            <button
+              key={ex}
+              type="button"
+              disabled={nlpBuilding}
+              onClick={() => { setNlpDesignText(ex); void buildNlpDesignWorld(ex); }}
+              className="rounded-full border border-cyan-400/20 bg-cyan-400/5 px-2 py-0.5 text-cyan-200/70 hover:border-cyan-400/50 hover:text-cyan-100 disabled:opacity-40 transition-colors"
+            >
+              {ex}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* transcript, now hosted inside the F1 cockpit grid — left/right panel
           lanes (e.g. conkay.telemetry) flank the SAME transcript content,

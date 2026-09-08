@@ -48,7 +48,25 @@
     "repair-cortex:apply": "node scripts/repair-cortex-apply.js",
     "cartograph:reason": "node scripts/cartograph-reason.js",
     "cartograph:reason:stress": "node scripts/cartograph-reason.js --stress-only",
-    "cartograph:reason:diff": "node scripts/cartograph-reason.js --diff"
+    "cartograph:reason:diff": "node scripts/cartograph-reason.js --diff",
+    "bench:dhtp-rs": "node scripts/run-dhtp-rs.mjs",
+    "bench:dhtp-rs:status": "node scripts/run-dhtp-rs.mjs status",
+    "bench:dhtp-rs:resume": "node scripts/run-dhtp-rs.mjs resume",
+    "bench:dhtp-rs:run-all": "node scripts/run-dhtp-rs.mjs run-all --provider ollama",
+    "bench:dhtp-rs:phase2": "node scripts/run-dhtp-rs.mjs phase2",
+    "bench:dhtp-rs:test": "node scripts/run-dhtp-rs.mjs test",
+    "substrate:invoke-oracles": "node ../scripts/substrate-invoke-oracles.mjs",
+    "substrate:invoke-covered": "node ../scripts/substrate-invoke-oracles.mjs --covered --json-out audit/substrate-invocation.json",
+    "capability:manifest": "node ../scripts/macro-capability-manifest.mjs",
+    "capability:manifest:live": "node ../scripts/macro-capability-manifest.mjs --live",
+    "lens:behavioral": "node ../scripts/lens-behavioral-harness.mjs",
+    "lens:behavioral:sentinel": "node ../scripts/lens-behavioral-harness.mjs --lens sentinel",
+    "lens:behavioral:fast": "node ../scripts/lens-behavioral-harness.mjs --no-check-logging",
+    "capability:coverage": "node ../scripts/runtime-capability-coverage.mjs",
+    "capability:coverage:fast": "node ../scripts/runtime-capability-coverage.mjs --class A --no-check-logging",
+    "capability:coverage:sample": "node ../scripts/runtime-capability-coverage.mjs --limit 50 --no-check-logging",
+    "capability:coverage:interactive": "node ../scripts/runtime-interactive-coverage.mjs",
+    "capability:coverage:crosslayer": "node ../scripts/runtime-crosslayer-coverage.mjs"
   },
   "lint-staged": {
     "*.{js,mjs,cjs}": [
@@ -104,8 +122,8 @@
   "optionalDependencies": {
     "@huggingface/transformers": "^4.2.0",
     "meilisearch": "^0.60.0",
-    "pg": "^8.11.3",
-    "redis": "^6.1.0"
+    "pg": "^8.16.3",
+    "redis": "^6.2.1"
   },
   "overrides": {
     "protobufjs": "^7.5.5",

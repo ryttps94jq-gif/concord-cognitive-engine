@@ -5,15 +5,19 @@
 // Calls existing authority systems in canonical order. Does NOT define policy.
 // Returns one of: ALLOW | DENY | DEFER | OBSERVE | ESCALATE.
 //
-// Architecture (per locked F0.0 + F0.2 spec):
+// Architecture (honest count — gates/ has 10 modules; evaluate runs 10 checks):
 //   1. Sovereignty hard veto (IMMUTABLE — hard veto, no override)
 //   2. Capability existence + health (POLICY)
-//   3. Risk tier — high → ESCALATE
+//   3. Risk tier — high → ESCALATE (inline from capability result; no separate risk.js)
 //   4. Refusal field (CONSTITUTIONAL)
 //   5. Provenance action-time (CONSTITUTIONAL)
-//   6. Expiration TTL (NEW)
-//   7. Preconditions (NEW)
-//   8. Idempotency (NEW)
+//   6. Expiration TTL
+//   7. Preconditions
+//   8. Idempotency
+//   9. Resource / budget
+//  10. Rollback spec for mutations
+// Post-tool verification lives in dispatch.js (gates/verification.js) — not in evaluate().
+// Do not call this an "eight-gate" composition; that label is stale.
 
 import { applyDecision } from "./envelope.js";
 import * as sovereigntyGate from "./gates/sovereignty.js";

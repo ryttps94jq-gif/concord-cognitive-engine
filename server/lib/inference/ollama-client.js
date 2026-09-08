@@ -39,7 +39,7 @@ export async function ollamaChat(brainName, messages, opts = {}) {
   const temperature = opts.temperature ?? config.temperature ?? 0.7;
 
   const body = {
-    model: config.model,
+    model: opts.model || config.model,
     stream: false,
     messages: messages.map(m => ({ role: m.role, content: m.content })),
     options: {

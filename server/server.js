@@ -69,6 +69,7 @@ import { createLensArtifactStore } from "./lib/lens-artifact-store.js";
 import fs from "fs";
 import path from "path";
 import zlib from "zlib";
+import { pipeline } from "node:stream/promises";
 import { spawnSync, spawn } from "child_process";
 import { fileURLToPath as __serverFileURLToPath } from "node:url";
 import { Worker } from "node:worker_threads";
@@ -741,6 +742,41 @@ registerHeartbeat("forgetting-health-check", {
   scope: "global",
 });
 
+// Concord Predict P7 — autonomous evidence-stage tracking (OBSERVE ->
+// ... -> SYNTHESIZE only; PROMOTE stays human-gated). See
+// emergent/predict-research-cycle.js's header for the full scope/safety
+// note. frequency 240 (~60 min) — this is a slow-moving evidence check,
+// never urgent.
+import { initPredictResearchCycle, runPredictResearchCycle } from "./emergent/predict-research-cycle.js";
+registerHeartbeat("predict-research-cycle", {
+  frequency: 240,
+  handler: runPredictResearchCycle,
+  scope: "global",
+});
+
+// P0 — Mission Task Runtime. Autonomous spawn + tick organ missions through
+// F0 dispatchMCP. frequency 8 (~2 min). Kill-switch CONCORD_MISSION_RUNTIME=0.
+import { runMissionRuntimeCycle } from "./emergent/mission-runtime-cycle.js";
+registerHeartbeat("mission-runtime-cycle", {
+  frequency: 8,
+  scope: "global",
+  handler: () => runMissionRuntimeCycle({ db: STATE?.db || globalThis._concordDB }),
+});
+
+import { runPceImprovementHeartbeat } from "./emergent/pce-improvement-cycle.js";
+registerHeartbeat("pce-improvement-cycle", {
+  frequency: 120,
+  scope: "global",
+  handler: () => runPceImprovementHeartbeat({ db: STATE?.db || globalThis._concordDB }),
+});
+
+import { runRepoGraphCycle } from "./emergent/repo-graph-cycle.js";
+registerHeartbeat("repo-graph-cycle", {
+  frequency: 60,
+  scope: "global",
+  handler: () => runRepoGraphCycle({ db: STATE?.db || globalThis._concordDB }),
+});
+
 // WAVE4 — ingest drain cycle. server/domains/ingest.js already computes a
 // real `nextRunAt` per scheduled sync (`ingest.scheduleSync`), but nothing
 // ever walked due schedules on its own — `ingest.runSync` only fired when a
@@ -1061,6 +1097,22 @@ registerHeartbeat("npc-routine-cycle", {
 // a matching DTU-prop to use, so the authored hub reads as lived-in rather
 // than a static facade. Bounded per-world, honest no-op when no city-layout /
 // buildings are seeded. Kill-switch: CONCORD_NPC_BUILDING_AFFINITY=0.
+import { runConsequenceApplyCycle } from "./emergent/consequence-apply-cycle.js";
+registerHeartbeat("consequence-apply-cycle", {
+  frequency: 8,
+  handler: runConsequenceApplyCycle,
+  scope: "world",
+});
+
+// Wave 5 — named Concordia World Kernel (society/life/consequence/physics/HP…).
+import { registerWorldKernelHeartbeat } from "./lib/world-kernel.js";
+registerWorldKernelHeartbeat();
+
+// Philosophy → LIVE — superorganism coordinator / organ-fleet / world-organism / symbiosis.
+// Thin loops over existing organs/heartbeats/world-kernel/bridges (F0 holds).
+import { registerOrganismEnforcementHeartbeats } from "./lib/organism-enforcement.js";
+registerOrganismEnforcementHeartbeats();
+
 import { runNpcBuildingAffinityCycle } from "./emergent/npc-building-affinity-cycle.js";
 registerHeartbeat("npc-building-affinity-cycle", {
   frequency: 10,
@@ -1313,6 +1365,14 @@ registerHeartbeat("civic-bond-cycle", {
   // once per active shard.
   scope: "global",
   handler: runCivicBondCycle,
+});
+
+// USB Frameworks + Lease System — Unified Skill Bus + file-backed leases (2026-09-05).
+import { runUsbLeaseCycle, USB_LEASE_CYCLE_FREQUENCY } from "./emergent/usb-lease-cycle.js";
+registerHeartbeat("usb-lease-cycle", {
+  frequency: USB_LEASE_CYCLE_FREQUENCY,
+  scope: "global",
+  handler: runUsbLeaseCycle,
 });
 
 // Wave 3 — viability dynamics: V→0 feeds world-crisis (kill-switch CONCORD_VIABILITY).
@@ -1815,7 +1875,7 @@ import { logBrainInteraction, resolveBrainInteraction } from "./lib/brain-traini
 // Inference metering — the D2 cost ledger writer. ctx.llm.chat() builders call
 // this after every real completion attempt so the ops-telemetry dashboard
 // (aggregateInferenceCosts) reflects real usage instead of sitting empty.
-import { recordInferenceSpan } from "./lib/inference-metering.js";
+import { meterInferenceWithBilling } from "./lib/runtime/inference-billing-bridge.js";
 import { getActiveBrainModel } from "./lib/brain-training/runner.js";
 import { createBreakerRegistry } from "./lib/circuit-breaker.js";
 import { traceMiddleware, startSpan, storeTrace, getRecentTraces, getTraceMetrics } from "./lib/request-trace.js";
@@ -1840,6 +1900,20 @@ import { generateEntityName, migrateEntityNames as runEntityNameMigration, isFun
 import { validateSafeFetchUrl as _ssrfValidate, isUrlSafeAsync as _ssrfIsSafeAsync, fetchWithPinnedIp as _ssrfFetchPinned } from "./lib/ssrf-guard.js";
 import { registerCitation as economyRegisterCitation, getAncestorChain as _dtuLineageAncestorChain, getDescendants as _dtuLineageDescendants } from "./economy/royalty-cascade.js";
 import { checkAccess as economyCheckAccess, TIER_HIERARCHY as ECONOMY_TIER_HIERARCHY } from "./economy/rights-enforcement.js";
+import { inferClass as dtuInferContentClass, scoreAdmission as dtuScoreAdmission } from "./lib/dtu-content-classes.js";
+import {
+  defaultLicenseForCreate as dtuDefaultLicense,
+  ensureLicense as dtuEnsureLicense,
+  canSocialPost as dtuCanSocialPost,
+  canListForSale as dtuCanListForSale,
+  canPublicListen as dtuCanPublicListen,
+  canPublicView as dtuCanPublicView,
+  scopesGrantedByPurchase as dtuScopesGrantedByPurchase,
+  assertScope as dtuAssertScope,
+  grantPurchaseScopes as dtuGrantPurchaseScopes,
+  normalizeLicense as dtuNormalizeLicense,
+} from "./lib/dtu-licenses.js";
+
 // Wave 6 — plugin marketplace checkout reuses the SAME purchase primitive
 // every other creative-artifact content type (music/art/code/...) already
 // goes through. No parallel payment path; see the `marketplace.purchasePlugin`
@@ -2843,10 +2917,32 @@ function sanitizeObject(obj, options = {}) {
   return result;
 }
 
+// Path-prefix overrides for sanitizeString's default 10,000-char truncation.
+// The default is right for chat/comment/title-shaped fields (and INPUT_LIMITS
+// below enforces those deliberately, with a real error instead of a silent
+// cut). It is WRONG for routes whose body legitimately carries a large text
+// blob as data, not prose — e.g. ConKay's STEP CAD export/import, which POSTs
+// the full ASCII STEP file as a JSON string field. Before this fix, any
+// generated part/assembly `.step` text over 10,000 chars got silently
+// truncated by this middleware, chopping off the `END-ISO-10303-21;` footer
+// and making a verifiably-valid STEP file fail `stepToMesh`'s envelope check
+// on re-import with a misleading "missing ISO-10303-21 envelope" error —
+// found 2026-09-07 by reproducing the import 422 directly (server-side debug
+// log showed `stepText.length === 10000` exactly, on an export the client had
+// just fetched at its real, longer size). Silent truncation is exactly the
+// kind of fabricated-success failure mode CLAUDE.md's "honest by construction"
+// invariant exists to catch — extend this map for the next such route rather
+// than raising the global default.
+const SANITIZE_MAXLEN_OVERRIDES = [
+  { prefix: "/api/conkay/", maxLength: 5_000_000 },
+];
+
 function sanitizationMiddleware(req, res, next) {
   // Sanitize body
   if (req.body && typeof req.body === "object") {
-    req.body = sanitizeObject(req.body);
+    const reqPath = req.path || req.originalUrl || "";
+    const override = SANITIZE_MAXLEN_OVERRIDES.find((o) => reqPath.startsWith(o.prefix));
+    req.body = sanitizeObject(req.body, override ? { maxLength: override.maxLength } : {});
   }
 
   // Sanitize query params
@@ -7160,33 +7256,71 @@ function verifyApiKey(rawKey, hashedKey) {
 const COOKIE_SAME_SITE = process.env.COOKIE_SAME_SITE || "lax";
 const COOKIE_DOMAIN = process.env.COOKIE_DOMAIN || undefined;
 
+// Cookie Secure must follow the REAL request protocol, not bare NODE_ENV.
+// Local LaunchAgent runs NODE_ENV=production on http://localhost — browsers
+// drop Secure cookies on HTTP, so login "succeeds" then every button 401s
+// ("permission" / "on our end" toasts). Prod behind cloudflared still gets
+// Secure via x-forwarded-proto=https. Override with AUTH_COOKIE_SECURE=true|false.
+function resolveCookieSecure(req) {
+  const env = String(process.env.AUTH_COOKIE_SECURE || "").trim().toLowerCase();
+  if (env === "0" || env === "false" || env === "no") return false;
+  if (env === "1" || env === "true" || env === "yes") return true;
+  if (req) {
+    const proto = String(req.headers?.["x-forwarded-proto"] || "")
+      .split(",")[0]
+      .trim()
+      .toLowerCase();
+    if (proto === "https") return true;
+    if (proto === "http") return false;
+    if (req.secure === true) return true;
+    // Direct HTTP bind (local prod) — never mark Secure
+    const host = String(req.headers?.host || req.hostname || "");
+    if (/^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i.test(host)) return false;
+  }
+  // Public production default when we have no request context
+  return NODE_ENV === "production";
+}
+
+function authCookieOptions(req, { maxAge = 7 * 24 * 60 * 60 * 1000 } = {}) {
+  return {
+    httpOnly: true,
+    secure: resolveCookieSecure(req),
+    sameSite: COOKIE_SAME_SITE,
+    maxAge,
+    path: "/",
+    ...(COOKIE_DOMAIN && { domain: COOKIE_DOMAIN }),
+  };
+}
+
+// Back-compat snapshot (tests / exports); prefer authCookieOptions(req).
 const COOKIE_CONFIG = {
   httpOnly: true,
-  secure: NODE_ENV === "production",
+  secure: resolveCookieSecure(null),
   sameSite: COOKIE_SAME_SITE,
   maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
   path: "/",
   ...(COOKIE_DOMAIN && { domain: COOKIE_DOMAIN }),
 };
 
-function setAuthCookie(res, token) {
-  res.cookie("concord_auth", token, COOKIE_CONFIG);
+function setAuthCookie(res, token, req = null) {
+  // Prefer explicit req; fall back to Express res.req so Secure follows the
+  // real request even if a caller forgets the 3rd arg (oauth edge paths).
+  res.cookie("concord_auth", token, authCookieOptions(req || res?.req || null));
 }
 
-function clearAuthCookie(res) {
-  res.clearCookie("concord_auth", { path: "/", ...(COOKIE_DOMAIN && { domain: COOKIE_DOMAIN }) });
-  res.clearCookie(REFRESH_TOKEN_COOKIE, { path: "/", ...(COOKIE_DOMAIN && { domain: COOKIE_DOMAIN }) });
+function clearAuthCookie(res, req = null) {
+  const r = req || res?.req || null;
+  const base = { path: "/", secure: resolveCookieSecure(r), sameSite: COOKIE_SAME_SITE, ...(COOKIE_DOMAIN && { domain: COOKIE_DOMAIN }) };
+  res.clearCookie("concord_auth", base);
+  res.clearCookie(REFRESH_TOKEN_COOKIE, base);
 }
 
-function setRefreshCookie(res, refreshToken) {
-  res.cookie(REFRESH_TOKEN_COOKIE, refreshToken, {
-    httpOnly: true,
-    secure: NODE_ENV === "production",
-    sameSite: COOKIE_SAME_SITE,
-    maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
-    path: "/",
-    ...(COOKIE_DOMAIN && { domain: COOKIE_DOMAIN }),
-  });
+function setRefreshCookie(res, refreshToken, req = null) {
+  res.cookie(
+    REFRESH_TOKEN_COOKIE,
+    refreshToken,
+    authCookieOptions(req || res?.req || null, { maxAge: 30 * 24 * 60 * 60 * 1000 }),
+  );
 }
 
 // ============================================================================
@@ -7213,6 +7347,13 @@ function validateCsrfToken(token, cookieToken) {
 function csrfMiddleware(req, res, next) {
   // Skip CSRF for non-browser requests (API keys, no cookies)
   if (req.authMethod === "apiKey") return next();
+  // Bearer JWT / Unity kitchen guest without a browser session cookie — API
+  // clients (curl harness, ConcordClient HTTP hit/quest) are not CSRF-vulnerable
+  // the way cookie-authenticated browsers are.
+  if ((req.authMethod === "jwt" || req.authMethod === "unity-local-guest")
+      && !req.cookies?.concord_auth) {
+    return next();
+  }
 
   // Skip for safe methods
   const safeMethods = ["GET", "HEAD", "OPTIONS"];
@@ -7222,7 +7363,7 @@ function csrfMiddleware(req, res, next) {
   // /api/stripe/webhook is authenticated by Stripe's request SIGNATURE (verified
   // in handleWebhook), not a cookie/CSRF token — Stripe can't send one. It must
   // be CSRF-exempt or every webhook 403s and paid coins never mint.
-  const csrfExempt = ["/api/auth/login", "/api/auth/register", "/api/auth/refresh", "/api/auth/google", "/api/auth/apple", "/health", "/ready", "/api/chat", "/api/lens", "/api/stripe/webhook", "/mcp", "/api/metrics/vitals", "/api/client-error", "/api/world/perf-telemetry"];  // "/mcp" added Sprint 54 for local-first MCP server bypass; "/api/auth/refresh" is cookie-authenticated via the httpOnly refresh token (SameSite=lax already blocks cross-site POST) and must work before a CSRF cookie exists. The 3 telemetry paths added 2026-08-24 (found live during a real-browser load test) — all three are reported via navigator.sendBeacon (lib/perf.ts and its error-reporting sibling), which cannot attach a custom X-CSRF-Token header the way a fetch() call can; requiring one made every anonymous beacon 403 unconditionally. All three are fire-and-forget, non-sensitive (perf numbers / error messages / vitals), already have their own Gate-1 POST bypasses just above this file's authMiddleware for the identical reason, and have no state-changing side effect beyond appending to an in-memory buffer — the CSRF gate exists to stop a forged cross-site STATE CHANGE, and there is none here to forge.
+  const csrfExempt = ["/api/auth/login", "/api/auth/register", "/api/auth/refresh", "/api/auth/google", "/api/auth/apple", "/health", "/ready", "/api/chat", "/api/lens", "/api/stripe/webhook", "/mcp", "/api/metrics/vitals", "/api/client-error", "/api/world/perf-telemetry", "/api/welding/portal/", "/api/spectate/"];  // "/mcp" added Sprint 54 for local-first MCP server bypass; "/api/auth/refresh" is cookie-authenticated via the httpOnly refresh token (SameSite=lax already blocks cross-site POST) and must work before a CSRF cookie exists. The 3 telemetry paths added 2026-08-24 (found live during a real-browser load test) — all three are reported via navigator.sendBeacon (lib/perf.ts and its error-reporting sibling), which cannot attach a custom X-CSRF-Token header the way a fetch() call can; requiring one made every anonymous beacon 403 unconditionally. All three are fire-and-forget, non-sensitive (perf numbers / error messages / vitals), already have their own Gate-1 POST bypasses just above this file's authMiddleware for the identical reason, and have no state-changing side effect beyond appending to an in-memory buffer — the CSRF gate exists to stop a forged cross-site STATE CHANGE, and there is none here to forge.
   if (csrfExempt.some(p => req.path.startsWith(p))) return next();
 
   // In AUTH_MODE=public, skip CSRF — anonymous users have no session to protect
@@ -7385,7 +7526,34 @@ function authMiddleware(req, res, next) {
   // (same _hasAuthHeader discipline as the GET publicReadPaths bypass),
   // so a credentialed caller still gets req.user populated correctly.
   const alwaysPublic = ["/health", "/ready", "/metrics", "/api/auth/login", "/api/auth/register", "/api/auth/refresh", "/api/auth/csrf-token", "/api/auth/google", "/api/auth/apple", "/api/auth/providers", "/api/docs", "/api/status", "/api/brain/conscious", "/api/stripe/webhook"];
-  if (alwaysPublic.some(p => req.path.startsWith(p))) return next();
+  // alwaysPublic must stay reachable without credentials — but if the caller
+  // DID send a cookie/Bearer, resolve req.user before returning. Otherwise
+  // unauthRateLimiter (30rpm anon) and botGuardMiddleware treat signed-in
+  // browsers as anonymous on these paths (esp. /api/brain/conscious POSTs
+  // and /api/auth/csrf-token was already special-cased for the same reason).
+  if (alwaysPublic.some(p => req.path.startsWith(p))) {
+    if (!req.user && AUTH_USES_JWT) {
+      try {
+        const authHeader = String(req.headers?.authorization || "");
+        const cookieToken = req.cookies?.concord_auth;
+        let decoded = null;
+        if (cookieToken) {
+          decoded = verifyToken(cookieToken);
+        } else if (authHeader.startsWith("Bearer ")) {
+          decoded = verifyToken(authHeader.slice(7));
+        }
+        if (decoded?.userId) {
+          const user = AuthDB.getUser(decoded.userId);
+          if (user) {
+            req.user = user;
+            req.authMethod = cookieToken ? "cookie" : "jwt";
+            if (decoded.jti) _SESSION_ACTIVITY.touch(decoded.jti);
+          }
+        }
+      } catch (_e) { /* path stays public — identity is best-effort */ }
+    }
+    return next();
+  }
 
   // Sovereign-only route protection
   const SOVEREIGN_ROUTES = [
@@ -7711,10 +7879,11 @@ function authMiddleware(req, res, next) {
   // so req.user actually gets populated for logged-in users on this
   // prefix (the bug this replaces silently never did).
   if (req.method === "POST" && !_hasAuthHeader && (req.path === "/api/chat" || req.path === "/api/chat/stream")) return next();
-  // Gate 1 POST bypass: allow /api/repair POST without auth (frontend error fallback path)
-  if (req.method === "POST" && req.path.startsWith("/api/repair")) return next();
+  // Gate 1 POST bypass: allow /api/repair POST without auth (frontend error fallback path).
+  // Credentialed callers fall through so req.user is populated (anon-rate + attribution).
+  if (req.method === "POST" && !_hasAuthHeader && req.path.startsWith("/api/repair")) return next();
   // Gate 1 POST bypass: allow creative registry POST without auth (public discovery)
-  if (req.method === "POST" && req.path.startsWith("/api/creative/registry")) return next();
+  if (req.method === "POST" && !_hasAuthHeader && req.path.startsWith("/api/creative/registry")) return next();
   // Gate 1 POST bypass: anonymous client telemetry pings (perf, error reports).
   if (req.method === "POST" && req.path === "/api/world/perf-telemetry") return next();
   if (req.method === "POST" && req.path === "/api/client-error") return next();
@@ -7903,6 +8072,19 @@ function authMiddleware(req, res, next) {
         auditLog("auth", "api_key_used", { userId: user.id, keyName: keyData.name, ip: req.ip });
         return _sovereignGate();
       }
+    }
+  }
+
+  // Kitchen/Editor Unity loopback guest — mirrors /unity-ws `unity-local-guest`
+  // (unity-bridge.js). Allowed when NODE_ENV !== production OR the request is
+  // loopback (Editor → :5050 on this box). Never invents a remote production session.
+  if (authHeader === "Bearer unity-local-guest") {
+    const ip = String(req.ip || req.socket?.remoteAddress || "");
+    const loopback = ip === "127.0.0.1" || ip === "::1" || ip === "::ffff:127.0.0.1" || ip.endsWith("127.0.0.1");
+    if (NODE_ENV !== "production" || loopback) {
+      req.user = { id: "unity-local-guest", username: "unity-local", role: "member", scopes: [] };
+      req.authMethod = "unity-local-guest";
+      return _sovereignGate();
     }
   }
 
@@ -9242,7 +9424,7 @@ const _BOT_UA_RE = /\b(bot|crawler|spider|scraper|python-requests|aiohttp|httpx|
 // can interop with the wider Fediverse.
 const _AP_PUBLIC_RE = /^\/api\/federation\/users\/[^/]+(?:\/(inbox|outbox|followers|following))?$/;
 function botGuardMiddleware(req, res, next) {
-  if (req.user?.id) return next(); // authenticated — pass
+  if (req.user?.id) return next(); // authenticated — pass (requires identity on alwaysPublic too)
   if (!req.path.startsWith("/api/")) return next(); // non-API — pass
   if (_HEALTH_PROBE_RE.test(req.path)) return next(); // health probes — pass
   if (_AP_PUBLIC_RE.test(req.path)) return next(); // federation discovery — pass
@@ -9823,6 +10005,20 @@ function enqueueNotification(item, { sessionId = "", orgId = "" } = {}) {
 //                                          honor shouldDisconnect same as the
 //                                          original anti-cheat auto-drop)
 //   { ack: {...} }                      — emit a `*:ack`
+
+import { applyAuthoritativeMove as _worldPhysicsMove } from "./lib/world-physics-authority.js";
+import { applyAuthoritativeHit as _worldCombatHit, ensureActor as _ensureCombatActor } from "./lib/combat-hp-authority.js";
+
+function _applyWorldPhysicsMove(userId, data, pos) {
+  const worldId = data?.worldId || data?.cityId || pos?.worldId || pos?.cityId || "concordia-hub";
+  return _worldPhysicsMove({
+    playerId: userId,
+    worldId: String(worldId),
+    x: Number(data?.x) || 0,
+    z: Number(data?.z) || 0,
+  });
+}
+
 function applyPlayerMove(userId, data) {
   if (!userId) return { drop: true };
   if (!data || typeof data !== "object") return { drop: true };
@@ -9861,7 +10057,9 @@ function applyPlayerMove(userId, data) {
         shouldDisconnect,
       };
     }
-    return { ack: { ok: true, nearby: pos.nearby || [], chunkCrossed: !!pos.chunkCrossed } };
+    let physics = null;
+    try { physics = _applyWorldPhysicsMove(userId, data, pos); } catch { physics = null; }
+    return { ack: { ok: true, nearby: pos.nearby || [], chunkCrossed: !!pos.chunkCrossed, physics: physics || undefined } };
   } catch (err) {
     logger.debug?.("server", "player_move_failed", { error: err?.message });
     return { drop: true };
@@ -9966,8 +10164,11 @@ async function tryInitWebSockets(server) {
     // polling fallback without changing the safe default for the documented
     // at-scale topology. Dev always keeps polling for local dev tools/proxy
     // interop.
-    transports: NODE_ENV === "production"
-      ? (process.env.CONCORD_SOCKET_ALLOW_POLLING_FALLBACK === "true" ? ["websocket", "polling"] : ["websocket"])
+    // Local launchd runs NODE_ENV=production; websocket-only answered engine.io
+    // polling with 400 Transport unknown. Cheap: always accept websocket+polling.
+    // At-scale flood still opt-out via CONCORD_SOCKET_WEBSOCKET_ONLY=true.
+    transports: process.env.CONCORD_SOCKET_WEBSOCKET_ONLY === "true"
+      ? ["websocket"]
       : ["websocket", "polling"],
     pingTimeout: 60000,
     pingInterval: 25000,
@@ -12901,38 +13102,44 @@ function looksMachiney(s="") {
 
 function councilGate(dtu, opts={}) {
   const allowRewrite = opts.allowRewrite !== false;
-  // Minimum structured-field count. Different callers get different
-  // thresholds:
-  //   - Automated pipeline / cognitive worker writes (autogen, dream,
-  //     bridge) should meet the full bar so we don't flood the lattice
-  //     with vapid mechanical DTUs. They use the default (2).
-  //   - User-initiated direct writes (/api/dtus create) can be more
-  //     permissive — a user should be able to save a note with just a
-  //     definition and no formal claims/examples. These pass
-  //     { userInitiated: true } to lower the bar to 1.
-  //   - System bootstrap / seed imports bypass entirely via
-  //     { skipCouncilGate: true }.
+  // Class-aware admission (dtu-content-classes.js): media/formula/etc. use
+  // industry-appropriate bars instead of one academic low_value shape.
+  //   - User-initiated personal saves: low bar (profile.personalMin)
+  //   - Public promotion / marketplace / global: stricter (profile.publicMin)
+  //   - Automated pipeline: still stricter than personal (min 2 unless class says otherwise)
+  //   - System bootstrap / seed imports bypass via { skipCouncilGate: true }.
   if (opts.skipCouncilGate) return { ok: true, bypassed: true };
-  const minScore = opts.userInitiated ? 1 : 2;
-
-  const c = dtu.core || {};
-  const score =
-    (c.definitions?.length||0) +
-    (c.invariants?.length||0) +
-    (c.examples?.length||0) +
-    (c.claims?.length||0) +
-    (c.nextActions?.length||0) +
-    // Also count human.summary / title as a structured-ish field for
-    // user DTUs so a user who only types a title + one-line summary
-    // still makes it past the gate.
-    (opts.userInitiated && (dtu.human?.summary || dtu.title) ? 1 : 0);
 
   const humanText = dtu.cretiHuman || dtu.human?.summary || "";
   if (allowRewrite && looksMachiney(humanText)) {
     dtu.cretiHuman = "";
   }
 
-  if (score < minScore) return { ok:false, reason:"low_value", score, minScore };
+  const admission = dtuScoreAdmission(dtu, {
+    userInitiated: !!opts.userInitiated,
+    promotePublic: !!opts.promotePublic || !!opts.publicPromotion,
+    contentClass: opts.contentClass || dtu.contentClass || dtu.meta?.contentClass,
+    minScore: opts.minScore,
+  });
+
+  // Stamp inferred class for downstream license / marketplace paths
+  if (!dtu.contentClass) dtu.contentClass = admission.contentClass;
+  if (dtu.meta && typeof dtu.meta === "object" && !dtu.meta.contentClass) {
+    dtu.meta.contentClass = admission.contentClass;
+  }
+
+  if (!admission.ok) {
+    return {
+      ok: false,
+      reason: admission.reason || "low_value",
+      score: admission.score,
+      minScore: admission.minScore,
+      contentClass: admission.contentClass,
+    };
+  }
+
+  const score = admission.score;
+  const minScore = admission.minScore;
 
   if (!dtu.cretiHuman) dtu.cretiHuman = renderHumanDTU(dtu);
 
@@ -12943,7 +13150,8 @@ function councilGate(dtu, opts={}) {
   dtu.authority = dtu.authority || {};
   dtu.authority.model = "council";
   dtu.authority.score = score;
-  return { ok:true, score };
+  dtu.authority.contentClass = admission.contentClass;
+  return { ok: true, score, minScore, contentClass: admission.contentClass };
 }
 
 function toOptionADTU(seedLike) {
@@ -13711,6 +13919,8 @@ async function runMacro(domain, name, input, ctx) {
     mcp: new Set(["list_servers", "list_tools", "exposed_tools"]),
     // agent_marathon (Sprint 12) — long-running agent sessions.
     agent_marathon: new Set(["start", "list", "get", "tick", "pause", "abandon"]),
+    // P0 — Mission Task Runtime (organ fleet orchestration via F0 dispatchMCP)
+    mission: new Set(["create", "list", "get", "tick", "pause", "abandon", "overview"]),
     // video_gen (Sprint 14) — async video generation.
     video_gen: new Set(["start", "poll", "providers"]),
     // faction_strategy (Sprint B Phase 10) — Crucible HUD reads
@@ -13948,6 +14158,25 @@ async function runMacro(domain, name, input, ctx) {
     sub_world: new Set(["list"]),
     therapy: new Set(["active_fields"]),
   };
+  // Multipass audit 2026-09-05: drop publicReadDomains advertisements that are
+  // not actually registered in MACROS or LENS_ACTIONS. Otherwise Gate-2 claims
+  // anonymous-safe names that 404/unknown_macro on /api/macros/run and
+  // /api/lens/run (223 confirmed ghosts this pass). list_mine/recent_mine stay
+  // via the bulk bypass below. LENS_ACTIONS lives on globalThis after boot.
+  {
+    const _lensReg = globalThis.__concordLensActions;
+    for (const _prdDom of Object.keys(publicReadDomains)) {
+      const _set = publicReadDomains[_prdDom];
+      if (!_set || typeof _set.delete !== "function") continue;
+      const _macroDom = MACROS.get(_prdDom);
+      for (const _prdName of Array.from(_set)) {
+        if (_prdName === "list_mine" || _prdName === "recent_mine") continue;
+        const _inMacros = !!( _macroDom && _macroDom.has(_prdName) );
+        const _inLens = !!( _lensReg && typeof _lensReg.has === "function" && _lensReg.has(`${_prdDom}.${_prdName}`) );
+        if (!_inMacros && !_inLens) _set.delete(_prdName);
+      }
+    }
+  }
   const _domainSet = publicReadDomains[domain];
   let _domainNameAllowed = _domainSet ? _domainSet.has(name) : false;
   // Phase 2 (UX completeness sprint) — every bulk-registered domain has
@@ -15019,6 +15248,13 @@ register("voice","tts", async (ctx, input={}) => {
 register("tools","web_search", (ctx, input={}) => {
   enforceEthosInvariant("web_search");
   const flags = _c3sessionFlags(ctx);
+  // Honesty 2026-09-05: honor toolsOptIn on input.sessionId / ctx.sessionId when
+  // reqMeta did not carry the chat session (macros/run path).
+  if (!flags.toolsOptIn) {
+    const sid = String(input.sessionId || ctx?.sessionId || flags.sessionId || "");
+    const s = sid ? (ctx?.state?.sessions?.get?.(sid) || STATE.sessions?.get?.(sid)) : null;
+    if (s?.toolsOptIn === true) flags.toolsOptIn = true;
+  }
   if (!ctx.state.__chicken3?.toolsEnabled) return { ok:false, error:"tools disabled" };
   if (!flags.toolsOptIn) return { ok:false, error:"session tools opt-in required" };
 
@@ -15904,7 +16140,8 @@ register("attention", "queue", (ctx, _input = {}) => {
 register("attention", "add_background", (ctx, input = {}) => {
   try {
   enforceEthosInvariant("attention_background");
-  return addBackgroundTask(input);
+  const queued = addBackgroundTask(input);
+  return { ok: true, result: queued };
   } catch (e) { return { ok: false, error: "handler_error", message: String(e?.message || e) }; }
 }, { public: false });
 
@@ -16622,7 +16859,7 @@ const _USER_ACTIVITY = {
 // Never throws — a metering failure must never break a chat reply.
 function _meterLlmChat(dbHandle, span) {
   try {
-    recordInferenceSpan(dbHandle, span);
+    meterInferenceWithBilling(dbHandle, { ...span, spanType: span.spanType || "chat" });
   } catch (_e) {
     /* metering must never break inference */
   }
@@ -18491,7 +18728,11 @@ function analyzeKnowledgeGaps(domain = null) {
   // Find incomplete DTUs (missing CRETI fields)
   const incomplete = dtus.filter(d => {
     if (!d.creti) return true;
-    const lower = d.creti.toLowerCase();
+    // creti may be string or structured object — never assume .toLowerCase()
+    const cretiStr = typeof d.creti === "string"
+      ? d.creti
+      : (typeof d.creti === "object" ? JSON.stringify(d.creti) : String(d.creti));
+    const lower = cretiStr.toLowerCase();
     return !lower.includes("context") || !lower.includes("evidence");
   });
 
@@ -19162,8 +19403,13 @@ const BRAIN = {
     stats: { requests: 0, totalMs: 0, dtusGenerated: 0, errors: 0, fixes: 0, sleeping: true, lastCallAt: null },
   },
   multimodal: {
-    url: BRAIN_CONFIG.multimodal.url,
-    model: BRAIN_CONFIG.multimodal.model,
+    // Honesty 2026-09-05: BRAIN_CONFIG is imported before dotenv; honor env here.
+    // 4-lane: BRAIN_VISION_PROVIDER=cloudflare → Workers AI (not A40 VRAM vision).
+    provider: (process.env.BRAIN_VISION_PROVIDER || BRAIN_CONFIG.multimodal?.provider || "ollama"),
+    url: (["cloudflare", "workers-ai", "cf"].includes(String(process.env.BRAIN_VISION_PROVIDER || "").toLowerCase())
+      ? (process.env.BRAIN_VISION_URL || process.env.BRAIN_MULTIMODAL_URL || "cloudflare://workers-ai")
+      : (process.env.BRAIN_VISION_URL || process.env.BRAIN_MULTIMODAL_URL || BRAIN_CONFIG.multimodal.url)),
+    model: process.env.BRAIN_VISION_MODEL || process.env.OLLAMA_VISION_MODEL || BRAIN_CONFIG.multimodal.model,
     role: BRAIN_CONFIG.multimodal.role,
     systemPrompt: "",
     enabled: false,
@@ -19199,6 +19445,21 @@ async function initFiveBrains() {
 
   for (const [name, brain] of Object.entries(BRAIN)) {
     try {
+      // 4-lane: multimodal on Cloudflare Workers AI — no Ollama /api/tags probe.
+      const _isCfVision = name === "multimodal" && (
+        String(brain.provider || process.env.BRAIN_VISION_PROVIDER || "").toLowerCase() === "cloudflare"
+        || String(brain.url || "").startsWith("cloudflare://")
+      );
+      if (_isCfVision) {
+        const tok = process.env.CLOUDFLARE_API_TOKEN;
+        const acct = process.env.CLOUDFLARE_ACCOUNT_ID;
+        brain.enabled = Boolean(tok && acct);
+        structuredLog("info", brain.enabled ? "brain_online" : "brain_offline", {
+          brain: name, url: brain.url, model: brain.model, provider: "cloudflare",
+          modelPresent: brain.enabled,
+        });
+        continue;
+      }
       const r = await fetch(`${brain.url}/api/tags`, { signal: AbortSignal.timeout(15000) });
       if (r.ok) {
         const tags = await r.json().catch(() => ({}));
@@ -19295,16 +19556,35 @@ if (!_brainsDisabled) {
     const _brainHealthLoop = setInterval(async () => {
       for (const [name, brain] of Object.entries(BRAIN)) {
         try {
-          const probe = await fetch(`${brain.url}/api/tags`, { signal: AbortSignal.timeout(5000) });
-          if (probe.ok) {
-            _brainHealthFailures[name] = 0;
-            if (!brain.enabled) {
-              brain.enabled = true;
-              _refreshLlmReady();
-              structuredLog("info", "brain_health_recovered", { brain: name, source: "health_loop" });
+          // 4-lane: multimodal on Cloudflare — do not Ollama-probe cloudflare:// URLs.
+          const _isCfVision = name === "multimodal" && (
+            String(brain.provider || process.env.BRAIN_VISION_PROVIDER || "").toLowerCase() === "cloudflare"
+            || String(brain.url || "").startsWith("cloudflare://")
+          );
+          if (_isCfVision) {
+            const online = Boolean(process.env.CLOUDFLARE_API_TOKEN && process.env.CLOUDFLARE_ACCOUNT_ID);
+            if (online) {
+              _brainHealthFailures[name] = 0;
+              if (!brain.enabled) {
+                brain.enabled = true;
+                _refreshLlmReady();
+                structuredLog("info", "brain_health_recovered", { brain: name, source: "health_loop", provider: "cloudflare" });
+              }
+            } else {
+              _brainHealthFailures[name] = (_brainHealthFailures[name] || 0) + 1;
             }
           } else {
-            _brainHealthFailures[name] = (_brainHealthFailures[name] || 0) + 1;
+            const probe = await fetch(`${brain.url}/api/tags`, { signal: AbortSignal.timeout(5000) });
+            if (probe.ok) {
+              _brainHealthFailures[name] = 0;
+              if (!brain.enabled) {
+                brain.enabled = true;
+                _refreshLlmReady();
+                structuredLog("info", "brain_health_recovered", { brain: name, source: "health_loop" });
+              }
+            } else {
+              _brainHealthFailures[name] = (_brainHealthFailures[name] || 0) + 1;
+            }
           }
         } catch {
           _brainHealthFailures[name] = (_brainHealthFailures[name] || 0) + 1;
@@ -19377,6 +19657,22 @@ function requireOpsSubstrateAdminRole(ctx) {
   return { ok: false, error: "Insufficient permissions: admin role required" };
 }
 
+/** Normalize ghost-fleet read macros to the lens-action contract envelope. */
+function ghostFleetOk(result) {
+  if (result != null && typeof result === "object" && ("ok" in result || "error" in result || "reason" in result)) {
+    return result;
+  }
+  return { ok: true, result };
+}
+
+function ghostFleetGet(getter, input, { idKey = "id", requiredError = "id_required", missingError = "not_found" } = {}) {
+  const id = input?.[idKey] ?? input?.entityId;
+  if (!id) return { ok: false, error: requiredError };
+  const value = getter(id);
+  if (value == null) return { ok: false, error: missingError };
+  return { ok: true, result: value };
+}
+
 async function initGhostFleet() {
   const startTime = Date.now();
   structuredLog("info", "ghost_fleet_init_start", { message: "Wiring emergent modules (staggered)..." });
@@ -19389,10 +19685,20 @@ async function initGhostFleet() {
     GHOST_FLEET_STATUS.modules["hlr-engine"] = { loaded: true, loadedAt: new Date().toISOString() };
 
     register("hlr", "run", async (_ctx, input = {}) => hlr.runHLR(input));
-    register("hlr", "trace", (_ctx, input = {}) => hlr.getReasoningTrace(input.traceId));
-    register("hlr", "list_traces", (_ctx, input = {}) => hlr.listTraces(input.limit));
+    register("hlr", "trace", (_ctx, input = {}) => {
+      const traceId = String(input.traceId || input.id || "");
+      if (!traceId) return { ok: false, error: "traceId_required" };
+      const trace = hlr.getReasoningTrace(traceId);
+      if (!trace) return { ok: false, error: "no_trace" };
+      return { ok: true, trace };
+    });
+    register("hlr", "list_traces", (_ctx, input = {}) => ({
+      ok: true,
+      traces: hlr.listTraces(input.limit),
+      modes: Object.values(hlr.REASONING_MODES || {}),
+    }));
     register("hlr", "metrics", () => hlr.getHLRMetrics());
-    register("hlr", "findings", (_ctx, input = {}) => hlr.getRecentFindings(input.limit));
+    register("hlr", "findings", (_ctx, input = {}) => ghostFleetOk(hlr.getRecentFindings(input.limit)));
 
     structuredLog("info", "ghost_fleet_module_loaded", { name: "hlr-engine", macros: 5 });
   } catch (err) {
@@ -19412,35 +19718,35 @@ async function initGhostFleet() {
     });
     register("hlm", "clusters", (_ctx, _input = {}) => {
       const dtus = typeof STATE.dtus?.values === 'function' ? Array.from(STATE.dtus.values()) : [];
-      return hlm.clusterAnalysis(dtus);
+      return ghostFleetOk(hlm.clusterAnalysis(dtus));
     });
     register("hlm", "gaps", (_ctx, _input = {}) => {
       const dtus = typeof STATE.dtus?.values === 'function' ? Array.from(STATE.dtus.values()) : [];
       const clusters = hlm.clusterAnalysis(dtus);
-      return hlm.gapAnalysis(clusters, dtus);
+      return ghostFleetOk(hlm.gapAnalysis(clusters, dtus));
     });
     register("hlm", "redundancy", (_ctx, _input = {}) => {
       const dtus = typeof STATE.dtus?.values === 'function' ? Array.from(STATE.dtus.values()) : [];
-      return hlm.redundancyDetection(dtus);
+      return ghostFleetOk(hlm.redundancyDetection(dtus));
     });
     register("hlm", "orphans", (_ctx, _input = {}) => {
       const dtus = typeof STATE.dtus?.values === 'function' ? Array.from(STATE.dtus.values()) : [];
       const clusters = hlm.clusterAnalysis(dtus);
-      return hlm.orphanRescue(dtus, clusters);
+      return ghostFleetOk(hlm.orphanRescue(dtus, clusters));
     });
     register("hlm", "topology", (_ctx, _input = {}) => {
       const dtus = typeof STATE.dtus?.values === 'function' ? Array.from(STATE.dtus.values()) : [];
-      return hlm.topologyMap(dtus);
+      return ghostFleetOk(hlm.topologyMap(dtus));
     });
     register("hlm", "domain_census", (_ctx, _input = {}) => {
       const dtus = typeof STATE.dtus?.values === 'function' ? Array.from(STATE.dtus.values()) : [];
-      return hlm.domainCensus(dtus);
+      return ghostFleetOk(hlm.domainCensus(dtus));
     });
     register("hlm", "freshness", (_ctx, _input = {}) => {
       const dtus = typeof STATE.dtus?.values === 'function' ? Array.from(STATE.dtus.values()) : [];
-      return hlm.freshnessCheck(dtus);
+      return ghostFleetOk(hlm.freshnessCheck(dtus));
     });
-    register("hlm", "metrics", () => hlm.getHLMMetrics());
+    register("hlm", "metrics", () => ghostFleetOk(hlm.getHLMMetrics()));
 
     // HLM slow interval: every 20 minutes — graph computation, CPU-intensive
     const hlmTimer = setInterval(async () => {
@@ -19723,7 +20029,7 @@ async function initGhostFleet() {
       const h = hypo.getHypothesis(input.id);
       return h ? { ok: true, hypothesis: h } : { ok: false, error: "not_found" };
     }, { note: "ghost_fleet_shadow_ok" });
-    register("hypothesis", "list", (_ctx, input = {}) => hypo.listHypotheses(input.status), { note: "ghost_fleet_shadow_ok" });
+    register("hypothesis", "list", (_ctx, input = {}) => ghostFleetOk(hypo.listHypotheses(input.status)), { note: "ghost_fleet_shadow_ok" });
     register("hypothesis", "add_evidence", (_ctx, input = {}) => hypo.addEvidence(input.hypothesisId, input.side, input.dtuId, input.weight, input.summary));
     register("hypothesis", "add_test", (_ctx, input = {}) => hypo.addTest(input.hypothesisId, input.description));
     register("hypothesis", "update_test", (_ctx, input = {}) => hypo.updateTestResult(input.hypothesisId, input.testId, input.result));
@@ -19750,16 +20056,16 @@ async function initGhostFleet() {
     GHOST_FLEET_STATUS.modules["ingest-engine"] = { loaded: true, loadedAt: new Date().toISOString() };
 
     register("ingest", "submit_url", (_ctx, input = {}) => ingest.submitUrl(input.userId, input.url, input.tier));
-    register("ingest", "queue", () => ingest.getQueue());
-    register("ingest", "status", (_ctx, input = {}) => ingest.getIngestStatus(input.ingestId));
-    register("ingest", "stats", () => ingest.getIngestStats());
-    register("ingest", "process_next", () => ingest.processNextItem());
-    register("ingest", "flush", () => ingest.flushQueue());
-    register("ingest", "allowlist", () => ingest.getAllowlist());
+    register("ingest", "queue", () => ghostFleetOk(ingest.getQueue()));
+    register("ingest", "status", (_ctx, input = {}) => ghostFleetOk(ingest.getIngestStatus(input.ingestId)));
+    register("ingest", "stats", () => ghostFleetOk(ingest.getIngestStats()));
+    register("ingest", "process_next", () => ghostFleetOk(ingest.processNextItem()));
+    register("ingest", "flush", () => ghostFleetOk(ingest.flushQueue()));
+    register("ingest", "allowlist", () => ghostFleetOk(ingest.getAllowlist()));
     register("ingest", "add_allowlist", (_ctx, input = {}) => ingest.addToAllowlist(input.domain));
     register("ingest", "remove_allowlist", (_ctx, input = {}) => ingest.removeFromAllowlist(input.domain));
     register("ingest", "add_blocklist", (_ctx, input = {}) => ingest.addToBlocklist(input.domain));
-    register("ingest", "metrics", () => ingest.getIngestMetrics());
+    register("ingest", "metrics", () => ghostFleetOk(ingest.getIngestMetrics()));
 
     structuredLog("info", "ghost_fleet_module_loaded", { name: "ingest-engine", macros: 11 });
   } catch (err) {
@@ -19795,7 +20101,7 @@ async function initGhostFleet() {
     GHOST_FLEET_STATUS.modules["council-voices"] = { loaded: true, loadedAt: new Date().toISOString() };
 
     register("council", "evaluate", (_ctx, input = {}) => runCouncilVoices(input.proposal, input.qualiaState));
-    register("council", "voices", () => getAllCouncilVoices());
+    register("council", "voices", () => ghostFleetOk(getAllCouncilVoices()));
 
     structuredLog("info", "ghost_fleet_module_loaded", { name: "council-voices", macros: 2 });
   } catch (err) {
@@ -19863,15 +20169,22 @@ async function initGhostFleet() {
     GHOST_FLEET_STATUS.modules["entity-teaching"] = { loaded: true, loadedAt: new Date().toISOString() };
 
     register("teaching", "create_mentorship", (_ctx, input = {}) => teaching.createMentorship(input));
-    register("teaching", "get_mentorship", (_ctx, input = {}) => teaching.getMentorship(input.id));
-    register("teaching", "list_mentorships", (_ctx, input = {}) => teaching.listMentorships(input));
+    register("teaching", "get_mentorship", (_ctx, input = {}) => ghostFleetGet(teaching.getMentorship, input));
+    register("teaching", "list_mentorships", (_ctx, input = {}) => ({
+      ok: true,
+      result: { mentorships: teaching.listMentorships(input) },
+    }));
     register("teaching", "start", (_ctx, input = {}) => teaching.startMentorship(input.id));
     register("teaching", "submit_lesson", (_ctx, input = {}) => teaching.submitLesson(input.mentorshipId, input.lesson));
     register("teaching", "evaluate", (_ctx, input = {}) => teaching.evaluateLesson(input.mentorshipId, input.lessonId, input.evaluation));
     register("teaching", "advance", (_ctx, input = {}) => teaching.advanceStep(input.mentorshipId));
     register("teaching", "complete", (_ctx, input = {}) => teaching.completeMentorship(input.id));
     register("teaching", "find_mentor", (_ctx, input = {}) => teaching.findMentorFor(input.studentId, input.domain));
-    register("teaching", "profile", (_ctx, input = {}) => teaching.getTeachingProfile(input.entityId));
+    register("teaching", "profile", (_ctx, input = {}) => {
+      const entityId = input.entityId || input.id;
+      if (!entityId) return { ok: false, error: "entityId_required" };
+      return ghostFleetOk(teaching.getTeachingProfile(entityId));
+    });
     register("teaching", "metrics", () => teaching.getTeachingMetrics());
 
     structuredLog("info", "ghost_fleet_module_loaded", { name: "entity-teaching", macros: 11 });
@@ -19913,7 +20226,7 @@ async function initGhostFleet() {
     GHOST_FLEET_STATUS.modules["creative-generation"] = { loaded: true, loadedAt: new Date().toISOString() };
 
     register("creative", "create_work", (_ctx, input = {}) => creative.createWork(input));
-    register("creative", "get_work", (_ctx, input = {}) => creative.getWork(input.id));
+    register("creative", "get_work", (_ctx, input = {}) => ghostFleetGet(creative.getWork, input));
     register("creative", "list_works", (_ctx, input = {}) => creative.listWorks(input));
     register("creative", "respond", (_ctx, input = {}) => creative.respondToWork(input.workId, input.response));
     register("creative", "exhibit", (_ctx, input = {}) => creative.exhibit(input.workIds, input.title, input.curatorId));
@@ -19935,7 +20248,11 @@ async function initGhostFleet() {
     const autonomy = await import("./emergent/entity-autonomy.js");
     GHOST_FLEET_STATUS.modules["entity-autonomy"] = { loaded: true, loadedAt: new Date().toISOString() };
 
-    register("autonomy", "rights", (_ctx, input = {}) => autonomy.getRights(input.entityId));
+    register("autonomy", "rights", (_ctx, input = {}) => {
+      const entityId = input.entityId || input.id;
+      if (!entityId) return { ok: false, error: "entityId_required" };
+      return ghostFleetOk(autonomy.getRights(entityId));
+    });
     register("autonomy", "check_rights", (_ctx, input = {}) => autonomy.checkRights(input.entityId, input.rightIds));
     register("autonomy", "file_refusal", (_ctx, input = {}) => autonomy.fileRefusal(input.entityId, input.action, input.reason));
     register("autonomy", "review_refusal", (_ctx, input = {}) => autonomy.reviewRefusal(input.refusalId, input.decision, input.reviewedBy));
@@ -19944,8 +20261,12 @@ async function initGhostFleet() {
     register("autonomy", "file_dissent", (_ctx, input = {}) => autonomy.fileDissent(input));
     register("autonomy", "support_dissent", (_ctx, input = {}) => autonomy.supportDissent(input.dissentId, input.entityId));
     register("autonomy", "sovereign_override", (_ctx, input = {}) => autonomy.sovereignOverride(input.entityId, input.rightId, input.justification));
-    register("autonomy", "profile", (_ctx, input = {}) => autonomy.getAutonomyProfile(input.entityId));
-    register("autonomy", "metrics", () => autonomy.getAutonomyMetrics());
+    register("autonomy", "profile", (_ctx, input = {}) => {
+      const entityId = input.entityId || input.id;
+      if (!entityId) return { ok: false, error: "entityId_required" };
+      return ghostFleetOk(autonomy.getAutonomyProfile(entityId));
+    });
+    register("autonomy", "metrics", () => ({ ok: true, result: autonomy.getAutonomyMetrics() }));
 
     structuredLog("info", "ghost_fleet_module_loaded", { name: "entity-autonomy", macros: 11 });
   } catch (err) {
@@ -19984,7 +20305,7 @@ async function initGhostFleet() {
     GHOST_FLEET_STATUS.modules["history-engine"] = { loaded: true, loadedAt: new Date().toISOString() };
 
     register("history", "record", (_ctx, input = {}) => history.recordEvent(input));
-    register("history", "get_event", (_ctx, input = {}) => history.getEvent(input.id));
+    register("history", "get_event", (_ctx, input = {}) => ghostFleetGet(history.getEvent, input));
     register("history", "timeline", (_ctx, input = {}) => history.getTimeline(input));
     register("history", "chronicle", () => history.getChronicle());
     register("history", "era", () => history.getCurrentEra());
@@ -20055,7 +20376,7 @@ async function initGhostFleet() {
     register("culture", "create_story", (_ctx, input = {}) => culture.createStory(input.title, input.narrative, input.characters, input.events, input.moral));
     register("culture", "stories", (_ctx, input = {}) => culture.listStories(input.sortBy, input.limit));
     register("culture", "propagate", (_ctx, input = {}) => culture.propagateCulture(input.entityId));
-    register("culture", "established", () => culture.getEstablishedTraditions());
+    register("culture", "established", () => ghostFleetOk(culture.getEstablishedTraditions()));
     register("culture", "metrics", () => culture.getCultureMetrics());
 
     structuredLog("info", "ghost_fleet_module_loaded", { name: "culture-layer", macros: 16 });
@@ -20096,14 +20417,14 @@ async function initGhostFleet() {
     // listing in tests/e2e/admin-gated-lenses.spec.ts). Every macro below
     // enforces the gate first, same idiom as requireAdminRole() below and
     // the psyops/admin domain fixes.
-    register("physical", "validate", (ctx, input = {}) => { const denied = requireOpsSubstrateAdminRole(ctx); if (denied) return denied; return physical.validatePhysicalDTU(input.dtu || input); });
-    register("physical", "create_movement", (ctx, input = {}) => { const denied = requireOpsSubstrateAdminRole(ctx); if (denied) return denied; return physical.createMovementDTU(input); });
-    register("physical", "create_craft", (ctx, input = {}) => { const denied = requireOpsSubstrateAdminRole(ctx); if (denied) return denied; return physical.createCraftDTU(input); });
-    register("physical", "create_observation", (ctx, input = {}) => { const denied = requireOpsSubstrateAdminRole(ctx); if (denied) return denied; return physical.createObservationDTU(input); });
-    register("physical", "create_spatial", (ctx, input = {}) => { const denied = requireOpsSubstrateAdminRole(ctx); if (denied) return denied; return physical.createSpatialDTU(input); });
-    register("physical", "types", (ctx) => { const denied = requireOpsSubstrateAdminRole(ctx); if (denied) return denied; return physical.listPhysicalDTUTypes(); });
-    register("physical", "query", (ctx, input = {}) => { const denied = requireOpsSubstrateAdminRole(ctx); if (denied) return denied; return physical.queryPhysicalDTUs(input); });
-    register("physical", "metrics", (ctx) => { const denied = requireOpsSubstrateAdminRole(ctx); if (denied) return denied; return physical.getPhysicalDTUMetrics(); });
+    register("physical", "validate", (ctx, input = {}) => { const denied = requireOpsSubstrateAdminRole(ctx); if (denied) return denied; return ghostFleetOk(physical.validatePhysicalDTU(input.dtu || input)); });
+    register("physical", "create_movement", (ctx, input = {}) => { const denied = requireOpsSubstrateAdminRole(ctx); if (denied) return denied; return ghostFleetOk(physical.createMovementDTU(input)); });
+    register("physical", "create_craft", (ctx, input = {}) => { const denied = requireOpsSubstrateAdminRole(ctx); if (denied) return denied; return ghostFleetOk(physical.createCraftDTU(input)); });
+    register("physical", "create_observation", (ctx, input = {}) => { const denied = requireOpsSubstrateAdminRole(ctx); if (denied) return denied; return ghostFleetOk(physical.createObservationDTU(input)); });
+    register("physical", "create_spatial", (ctx, input = {}) => { const denied = requireOpsSubstrateAdminRole(ctx); if (denied) return denied; return ghostFleetOk(physical.createSpatialDTU(input)); });
+    register("physical", "types", (ctx) => { const denied = requireOpsSubstrateAdminRole(ctx); if (denied) return denied; return ghostFleetOk(physical.listPhysicalDTUTypes()); });
+    register("physical", "query", (ctx, input = {}) => { const denied = requireOpsSubstrateAdminRole(ctx); if (denied) return denied; return ghostFleetOk(physical.queryPhysicalDTUs(input)); });
+    register("physical", "metrics", (ctx) => { const denied = requireOpsSubstrateAdminRole(ctx); if (denied) return denied; return ghostFleetOk(physical.getPhysicalDTUMetrics()); });
 
     structuredLog("info", "ghost_fleet_module_loaded", { name: "physical-dtu", macros: 8 });
   } catch (err) {
@@ -20209,7 +20530,7 @@ async function initGhostFleet() {
     register("apps", "create", (_ctx, input = {}) => _appMaker.createApp(input));
     register("apps", "update", (_ctx, input = {}) => _appMaker.updateApp(input.id, input.updates));
     register("apps", "delete", (_ctx, input = {}) => _appMaker.deleteApp(input.id));
-    register("apps", "validate", (_ctx, input = {}) => _appMaker.validateApp(input));
+    register("apps", "validate", (_ctx, input = {}) => ghostFleetOk(_appMaker.validateApp(input)));
     register("apps", "promote", (_ctx, input = {}) => _appMaker.promoteApp(input.id));
     register("apps", "demote", (_ctx, input = {}) => _appMaker.demoteApp(input.id));
     register("apps", "metrics", () => _appMaker.getAppMetrics());
@@ -20272,7 +20593,10 @@ async function initGhostFleet() {
     register("dream", "history", (_ctx, input = {}) => _dreamCapture.getDreamHistory(input.limit));
     register("dream", "convergences", () => _dreamCapture.getConvergences());
     register("dream", "queue", () => _dreamCapture.getDreamQueue());
-    register("dream", "count", () => ({ dreams: _dreamCapture.countDreams(), convergences: _dreamCapture.countConvergences() }));
+    register("dream", "count", () => ghostFleetOk({
+      dreams: _dreamCapture.countDreams(),
+      convergences: _dreamCapture.countConvergences(),
+    }));
 
     structuredLog("info", "ghost_fleet_module_loaded", { name: "dream-capture", macros: 5 });
   } catch (err) {
@@ -20606,11 +20930,55 @@ ${_sharedToolRules}` : "";
   const _doBrainCall = async () => {
     const start = Date.now();
     // Use /api/chat with proper system message — never concatenate system into prompt
-    const systemContent = (options.system || brain.systemPrompt || "") + _brainToolPrompt;
+    let systemContent = (options.system || brain.systemPrompt || "") + _brainToolPrompt;
+    // 4-lane: repair is aliased to subconscious model — stamp REPAIR_MODE so jobs stay distinct.
+    if (brainName === "repair" && !String(systemContent).includes("REPAIR_MODE")) {
+      systemContent = `REPAIR_MODE\n${systemContent}`.trim();
+    }
     const messages = [
       ...(systemContent ? [{ role: "system", content: systemContent }] : []),
       { role: "user", content: prompt },
     ];
+
+    // 4-lane vision: multimodal via Cloudflare Workers AI (not A40 Ollama).
+    const _cfVision = brainName === "multimodal" && (
+      String(brain.provider || process.env.BRAIN_VISION_PROVIDER || "").toLowerCase() === "cloudflare"
+      || String(_dispatchUrl || brain.url || "").startsWith("cloudflare://")
+    );
+    if (_cfVision) {
+      const { default: cloudflareChat } = await import("./lib/cloudflare-ai-provider.js");
+      const apiKey = process.env.CLOUDFLARE_API_TOKEN;
+      const activeModel = (typeof db !== "undefined" && db)
+        ? getActiveBrainModel(db, brainName, brain.model)
+        : brain.model;
+      const r = await cloudflareChat({
+        apiKey,
+        modelId: activeModel,
+        messages,
+        opts: {
+          temperature: options.temperature || 0.1,
+          maxTokens: options.maxTokens || 1500,
+          timeoutMs: options.timeout || Number(process.env.CONCORD_LLM_TIMEOUT_FLOOR_MS || 120000),
+          images: options.images || undefined,
+        },
+      });
+      brain.stats.requests++;
+      brain.stats.lastCallAt = nowISO();
+      const elapsed = Date.now() - start;
+      brain.stats.totalMs += elapsed;
+      if (!r.ok) {
+        brain.stats.errors++;
+        throw new Error(r.error || "cloudflare_vision_failed");
+      }
+      return {
+        ok: true,
+        content: r.text || "",
+        source: brainName,
+        model: r.model || activeModel,
+        provider: "cloudflare",
+        elapsed,
+      };
+    }
     // Brain self-training: consult brain_active_models for the currently-
     // routed model name. Daily refresh swaps these by inserting a row with
     // active=1; getActiveBrainModel returns brain.model as fallback when
@@ -20680,6 +21048,20 @@ ${_sharedToolRules}` : "";
         if (interactionId) result._interactionId = interactionId;
       }
     } catch (_e) { /* logging never blocks */ }
+
+    try {
+      if (typeof db !== "undefined" && db) {
+        const { meterCallBrainResult } = await import("./lib/runtime/inference-billing-bridge.js");
+        meterCallBrainResult(db, result, {
+          brainName,
+          model: activeModel,
+          promptEvalCount: data.prompt_eval_count,
+          evalCount: data.eval_count,
+          latencyMs: elapsed,
+          options,
+        });
+      }
+    } catch { /* metering never blocks */ }
 
     // Layer 2: emit a SUCCESS affect event for the user (or system, if
     // anonymous). Couples with Layer 3's outcome-signals dispatch — a
@@ -20878,7 +21260,24 @@ ${_sharedToolRules}` : "";
         // Format tool results and make a follow-up brain call
         const _toolResultsText = _brainToolResults.map(r => {
           if (!r.ok) return `[TOOL_RESULT: ${r.tool}] Error: ${r.error}`;
-          if (r.tool === "web_search") return `[TOOL_RESULT: web_search] ${r.result}`;
+          if (r.tool === "web_search") {
+            // Prefer structured title/url/excerpt over raw DDG HTML (2B grounding)
+            const raw = String(r.result || "");
+            const snips = [];
+            const re = /<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g;
+            let m;
+            while ((m = re.exec(raw)) && snips.length < 8) {
+              let href = m[1];
+              const ud = href.match(/[?&]uddg=([^&]+)/);
+              if (ud) { try { href = decodeURIComponent(ud[1]); } catch { /* keep */ } }
+              else if (href.startsWith("//")) href = "https:" + href;
+              if (!/^https?:\/\//.test(href)) continue;
+              const title = m[2].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 160);
+              snips.push(`${snips.length + 1}. title: ${title}\n   url: ${href}`);
+            }
+            const body = snips.length ? snips.join("\n") : raw.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 2500);
+            return `[TOOL_RESULT: web_search]\n${body}`;
+          }
           if (r.tool === "create_dtu") return `[TOOL_RESULT: create_dtu] Created DTU "${r.title}" (id: ${r.dtuId})`;
           return `[TOOL_RESULT: ${r.tool}] ${r.result || JSON.stringify(r).slice(0, 4000)}`;
         }).join("\n\n");
@@ -20891,7 +21290,7 @@ ${_sharedToolRules}` : "";
           ...(systemContent ? [{ role: "system", content: systemContent }] : []),
           { role: "user", content: prompt },
           { role: "assistant", content: _strippedContent },
-          { role: "user", content: `Tool results:\n${_toolResultsText}\n\nPlease integrate these results into your final response.` },
+          { role: "user", content: `Tool results:\n${_toolResultsText}\n\nGROUNDING: Use only these tool results. For web_search you MUST cite at least one real title and https URL from the snippets when any exist; do not invent unrelated docs; do not refuse to cite when URLs are present. Integrate into your final response.` },
         ];
         const _followUpPayload = {
           model: brain.model,
@@ -22056,6 +22455,7 @@ function getBrainStatus() {
       url: brain.url,
       model: brain.model,
       role: brain.role,
+      ...(brain.provider ? { provider: brain.provider } : {}),
       stats: { ...brain.stats },
       avgResponseMs: brain.stats.requests > 0
         ? Math.round(brain.stats.totalMs / brain.stats.requests)
@@ -23350,9 +23750,21 @@ function pipeCouncil(proposal, ctx, opts={}) {
   try {
     if (proposal.action === "dtu.commit") {
       const dtu = proposal.payload.dtu;
-      const allowRewrite = !!opts.allowRewrite;
-      const gate = councilGate(dtu, { allowRewrite });
-      return { ok: gate.ok, score: gate.score, reason: gate.reason };
+      const gate = councilGate(dtu, {
+        allowRewrite: !!opts.allowRewrite,
+        userInitiated: !!opts.userInitiated,
+        promotePublic: !!opts.promotePublic || !!opts.publicPromotion,
+        contentClass: opts.contentClass || dtu?.contentClass,
+        skipCouncilGate: !!opts.skipCouncilGate,
+        minScore: opts.minScore,
+      });
+      return {
+        ok: gate.ok,
+        score: gate.score,
+        reason: gate.reason,
+        minScore: gate.minScore,
+        contentClass: gate.contentClass,
+      };
     }
   } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
   return { ok: true, score: 999, reason: "bypass" };
@@ -24489,12 +24901,49 @@ register("dtu", "create", async (ctx, input) => {
     },
     machine: { ...machineIn },
     cretiHuman: "",
-    scope: "local",  // Scope Separation: all new DTUs start in Local scope
+    scope: (input.scope === "personal" || input.scope === "local") ? input.scope : "local",  // Scope Separation: default Local; personal locker may opt in
     createdAt: nowISO(),
     updatedAt: nowISO(),
     authority: { model: "council", score: 0, votes: {} },
     domain: input.domain || input.lens || meta?.lens || null,
   };
+
+  // ── Content class + purchase-scoped license (dtu-content-classes / dtu-licenses) ──
+  // Infer industry class so council admission is class-aware (media need not
+  // carry academic core). Stamp license scopes the creator declared.
+  try {
+    if (coreIn.composition != null) dtu.core.composition = coreIn.composition;
+    else if (input.composition != null) dtu.core.composition = input.composition;
+    if (input.mimeType || input.mediaType || input.media) {
+      dtu.mimeType = input.mimeType || input.media?.mimeType || dtu.mimeType;
+      dtu.mediaType = input.mediaType || input.media?.mediaType || dtu.mediaType;
+      if (input.media && typeof input.media === "object") dtu.media = input.media;
+    }
+    if (input.artifact && typeof input.artifact === "object") dtu.artifact = input.artifact;
+    dtu.contentClass = dtuInferContentClass({
+      ...dtu,
+      contentClass: input.contentClass || input.class || meta?.contentClass,
+      mime: dtu.mimeType,
+      mediaType: dtu.mediaType,
+      type: input.type || meta?.type,
+      domain: dtu.domain,
+      tags,
+      core: dtu.core,
+      composition: dtu.core?.composition,
+      title,
+    });
+    dtu.meta = dtu.meta || {};
+    dtu.meta.contentClass = dtu.contentClass;
+    dtu.license = dtuDefaultLicense({
+      ...input,
+      license: input.license,
+      scopes: input.scopes || input.license?.scopes,
+      listingScopes: input.listingScopes || input.license?.listingScopes,
+      visibility: dtu.visibility,
+    });
+  } catch (_e) {
+    logger.debug("server", "dtu_content_license_stamp_failed", { error: _e?.message });
+  }
 
   // Capture context at creation time for citation detection
   if (Array.isArray(input.contextAtCreation)) {
@@ -24532,14 +24981,32 @@ register("dtu", "create", async (ctx, input) => {
     source === "forge" ||
     source === "lens" ||
     (actorRole && actorRole !== "system" && actorRole !== "internal");
+  const _promotePublic = (
+    input.promotePublic === true ||
+    input.visibility === "public" ||
+    input.visibility === "published" ||
+    dtu.visibility === "public" ||
+    dtu.visibility === "published" ||
+    input.scope === "global" ||
+    input.scope === "marketplace"
+  );
   const gate = councilGate(dtu, {
     allowRewrite,
     userInitiated: isUserInitiated,
+    promotePublic: _promotePublic,
+    contentClass: dtu.contentClass,
     skipCouncilGate: input.skipCouncilGate === true && (actorRole === "owner" || actorRole === "founder" || ctx?.actor?.internal),
   });
   if (!gate.ok) {
-    ctx.log("dtu.reject", `Rejected DTU: ${title}`, { reason: gate.reason, score: gate.score, source });
-    return { ok: false, error: "Council rejected DTU", reason: gate.reason, score: gate.score, minScore: gate.minScore };
+    ctx.log("dtu.reject", `Rejected DTU: ${title}`, { reason: gate.reason, score: gate.score, source, contentClass: gate.contentClass || dtu.contentClass });
+    return {
+      ok: false,
+      error: "Council rejected DTU",
+      reason: gate.reason,
+      score: gate.score,
+      minScore: gate.minScore,
+      contentClass: gate.contentClass || dtu.contentClass,
+    };
   }
 
   dtu.cretiHuman = dtu.cretiHuman || renderHumanDTU(dtu);
@@ -24552,7 +25019,7 @@ register("dtu", "create", async (ctx, input) => {
   // reported "DTU not found". The headline "create a thought" verb silently lost
   // data. Now we check the commit result and fail honestly when it didn't persist.
   _beat("persisting");
-  const _commit = await pipelineCommitDTU(ctx, dtu, { op: 'dtu.create', allowRewrite: true });
+  const _commit = await pipelineCommitDTU(ctx, dtu, { op: 'dtu.create', allowRewrite: true, userInitiated: isUserInitiated, promotePublic: typeof _promotePublic !== 'undefined' && _promotePublic, contentClass: dtu.contentClass });
   if (!_commit || _commit.ok === false) {
     ctx.log("dtu.create.reject", `DTU not committed: ${title}`, { id: dtu.id, reason: _commit?.error });
     return {
@@ -24962,10 +25429,150 @@ register("dtu", "list", (ctx, input) => {
   return { ok: true, dtus: items, limit, offset, total };
   } catch (e) { return { ok: false, error: "handler_error", message: String(e?.message || e) }; }
 });
+
+// Advertised in MACRO_ACL + publicReadDomains but were never registered
+// (ghost 404s / unknown_macro). Wire to real list/searchIndexed paths.
+register("dtu", "search", (ctx, input = {}) => {
+  try {
+    const q = String(input.q || input.query || input.text || "").trim();
+    const limit = clamp(Number(input.limit || 20), 1, 200);
+    if (!q) return { ok: false, error: "query required" };
+    // Prefer inverted index when available; fall back to dtu.list token filter.
+    let hits = [];
+    try {
+      if (typeof searchIndexed === "function") {
+        hits = searchIndexed(q, { limit, minScore: 0.01 }) || [];
+      }
+    } catch (_e) { hits = []; }
+    if (!hits.length) {
+      const listed = (typeof runMacro === "function")
+        ? null
+        : null;
+      // Inline same visibility filter as dtu.list (avoid re-entrancy).
+      const userId = ctx?.actor?.id || ctx?.actor?.userId || ctx?.actor?.odId || null;
+      const INTERNAL_KINDS = new Set(["shadow", "pattern_shadow", "repair_record", "royalty_record", "session_context", "linguistic_map", "audit_trail", "system_metric", "repair_dtu", "client_error"]);
+      const qq = tokenish(q);
+      hits = userVisibleDTUs(userId).filter(d => !isShadowDTU(d) && !INTERNAL_KINDS.has(d.machine?.kind) && d.tier !== "shadow")
+        .filter(d => tokenish(d.title).includes(qq) || tokenish((d.tags||[]).join(" ")).includes(qq) || tokenish((d.cretiHuman || d.creti || "")).includes(qq))
+        .slice(0, limit);
+    }
+    return { ok: true, query: q, dtus: hits, total: hits.length, limit };
+  } catch (e) {
+    return { ok: false, error: "handler_error", message: String(e?.message || e) };
+  }
+});
+
+register("dtu", "recent", (ctx, input = {}) => {
+  try {
+    const limit = clamp(Number(input.limit || 20), 1, 200);
+    const userId = ctx?.actor?.id || ctx?.actor?.userId || ctx?.actor?.odId || null;
+    const INTERNAL_KINDS = new Set(["shadow", "pattern_shadow", "repair_record", "royalty_record", "session_context", "linguistic_map", "audit_trail", "system_metric", "repair_dtu", "client_error"]);
+    let items = userVisibleDTUs(userId).filter(d => !isShadowDTU(d) && !INTERNAL_KINDS.has(d.machine?.kind) && d.tier !== "shadow");
+    items = items.sort((a,b)=> (b.createdAt||"").localeCompare(a.createdAt||"")).slice(0, limit);
+    return { ok: true, dtus: items, limit, total: items.length };
+  } catch (e) {
+    return { ok: false, error: "handler_error", message: String(e?.message || e) };
+  }
+});
+
+register("dtu", "count", (ctx, input = {}) => {
+  try {
+    const userId = ctx?.actor?.id || ctx?.actor?.userId || ctx?.actor?.odId || null;
+    const INTERNAL_KINDS = new Set(["shadow", "pattern_shadow", "repair_record", "royalty_record", "session_context", "linguistic_map", "audit_trail", "system_metric", "repair_dtu", "client_error"]);
+    const items = userVisibleDTUs(userId).filter(d => !isShadowDTU(d) && !INTERNAL_KINDS.has(d.machine?.kind) && d.tier !== "shadow");
+    return { ok: true, count: items.length };
+  } catch (e) {
+    return { ok: false, error: "handler_error", message: String(e?.message || e) };
+  }
+});
+
+register("dtu", "export", (ctx, input = {}) => {
+  try {
+    const id = input.id || input.dtuId;
+    if (!id) return { ok: false, error: "id required" };
+    const userId = ctx?.actor?.id || ctx?.actor?.userId || ctx?.actor?.odId || null;
+    const d = (typeof userVisibleDTUs === "function" ? userVisibleDTUs(userId) : []).find(x => x.id === id) || STATE.dtus?.get?.(id);
+    if (!d || (typeof isShadowDTU === "function" && isShadowDTU(d))) return { ok: false, error: "not_found" };
+    return { ok: true, dtu: d, format: input.format || "json" };
+  } catch (e) {
+    return { ok: false, error: "handler_error", message: String(e?.message || e) };
+  }
+});
+
+register("dtu", "paginated", (ctx, input = {}) => {
+  try {
+    const page = Math.max(1, Number(input.page || 1));
+    const pageSize = clamp(Number(input.pageSize || input.limit || 20), 1, 200);
+    const offset = (page - 1) * pageSize;
+    // Reuse list semantics
+    const out = (MACROS.get("dtu")?.get("list"))
+      ? null
+      : null;
+    // Call list handler logic via runMacro if available in this scope — register callbacks
+    // are sync here; invoke the list registration by duplicating offset/limit call path:
+    const listFn = MACROS.get("dtu") && MACROS.get("dtu").get("list");
+    // list is already registered above; but MACROS may not be populated until after all registers.
+    // Safer: compute via direct filter like list.
+    const userId = ctx?.actor?.id || ctx?.actor?.userId || ctx?.actor?.odId || null;
+    const INTERNAL_KINDS = new Set(["shadow", "pattern_shadow", "repair_record", "royalty_record", "session_context", "linguistic_map", "audit_trail", "system_metric", "repair_dtu", "client_error"]);
+    let items = userVisibleDTUs(userId).filter(d => !isShadowDTU(d) && !INTERNAL_KINDS.has(d.machine?.kind) && d.tier !== "shadow");
+    items = items.sort((a,b)=> (b.createdAt||"").localeCompare(a.createdAt||""));
+    const total = items.length;
+    items = items.slice(offset, offset + pageSize);
+    return { ok: true, dtus: items, page, pageSize, total, totalPages: Math.ceil(total / pageSize) };
+  } catch (e) {
+    return { ok: false, error: "handler_error", message: String(e?.message || e) };
+  }
+});
+
 // List a viewer's visible DTUs filtered to specific machine.kind value(s). Thin
 // filter over the same userVisibleDTUs set as dtu.list (shadow/internal excluded).
 // Surfaces the studio session browser's DTU/Forge tabs (SessionBrowserRail), which
 // called dtu.listByKind before it existed (the call .catch'd to an empty list).
+
+register("dtu", "tier_change", (ctx, input = {}) => {
+  try {
+    const role = ctx?.actor?.role;
+    if (!["admin", "owner"].includes(String(role || ""))) {
+      return { ok: false, error: "admin required", code: "PERMISSION_DENIED" };
+    }
+    const id = input.id || input.dtuId;
+    const tier = input.tier;
+    if (!id || !tier) return { ok: false, error: "id and tier required" };
+    if (!["regular", "mega", "hyper"].includes(tier)) return { ok: false, error: "invalid tier" };
+    const d = STATE.dtus.get(id);
+    if (!d) return { ok: false, error: "not_found" };
+    const prev = d.tier;
+    d.tier = tier;
+    d.updatedAt = nowISO();
+    d.meta = d.meta || {};
+    d.meta.tierHistory = d.meta.tierHistory || [];
+    d.meta.tierHistory.push({ from: prev, to: tier, at: nowISO(), by: ctx?.actor?.userId || ctx?.actor?.id || null });
+    STATE.dtus.set(id, d);
+    saveStateDebounced();
+    return { ok: true, id, tier, previous: prev };
+  } catch (e) {
+    return { ok: false, error: "handler_error", message: String(e?.message || e) };
+  }
+}, { summary: "Admin: change a DTU tier (regular|mega|hyper)." });
+
+register("dtu", "shadow_access", (ctx, input = {}) => {
+  try {
+    const role = ctx?.actor?.role;
+    if (!["admin", "owner"].includes(String(role || ""))) {
+      return { ok: false, error: "admin required", code: "PERMISSION_DENIED" };
+    }
+    const limit = clamp(Number(input.limit || 50), 1, 200);
+    const items = [...STATE.dtus.values()]
+      .filter((d) => d && (d.tier === "shadow" || (typeof isShadowDTU === "function" && isShadowDTU(d))))
+      .slice(0, limit)
+      .map((d) => ({ id: d.id, title: d.title, tier: d.tier, kind: d.machine?.kind || null, createdAt: d.createdAt }));
+    return { ok: true, shadows: items, total: items.length };
+  } catch (e) {
+    return { ok: false, error: "handler_error", message: String(e?.message || e) };
+  }
+}, { summary: "Admin: list shadow/internal DTUs (not user-visible)." });
+
 register("dtu", "listByKind", (ctx, input = {}) => {
   try {
     const kinds = Array.isArray(input.kind) ? input.kind.map(String)
@@ -25866,6 +26473,11 @@ if (_isWeatherQuery(prompt)) {
       });
 
       if (_oracleMsg?.ok) {
+        const _oracleReply = String(_oracleMsg.reply || "");
+        const _oracleBrainDown = /conscious brain unavailable/i.test(_oracleReply);
+        // Don't short-circuit on the templated oracle fallback — that path
+        // never called an organ. Fall through so v6/chat tool-loop can observe.
+        if (!_oracleBrainDown) {
         sess.messages.push({
           role: "assistant",
           content: _oracleMsg.reply,
@@ -25898,6 +26510,7 @@ if (_isWeatherQuery(prompt)) {
             connections: _oracleMsg.meta?.connections || [],
           },
         };
+        }
       }
       // If oracle solve failed, fall through to standard chat flow.
       if (_oracleMsg && _oracleMsg.meta?.oracle?.error) {
@@ -25912,7 +26525,12 @@ if (_isWeatherQuery(prompt)) {
   }
 
   // Identity answers are declarative: Concord refers to itself.
-  if (_mentionsSelf || intentInfo.intent === INTENT.IDENTITY) {
+  // ONLY explicit identity intent (who/what are you / what is Concord).
+  // Do NOT short-circuit on _mentionsSelf — tokenish() + includes() is a
+  // substring match on tokens like "global","dtu","concord","marketplace",
+  // which previously returned the encyclopedia template with llmUsed=false
+  // on ordinary factual claims. Identity still lives in composeSystemPrompt.
+  if (intentInfo.intent === INTENT.IDENTITY) {
     const base = SYSTEM_IDENTITY.short;
     const more = SYSTEM_IDENTITY.long;
     const ask = "What part do you want—DTUs, lattice retrieval, macros/wrappers, Temporal OS, or the UI/panels?";
@@ -25937,13 +26555,10 @@ lex[key].count++;
 lex[key].lastSeen = nowISO();
 if (lex[key].samples.length < 5 && prompt) lex[key].samples.push(prompt);
 
-// Hard intercepts (authoritative)
-if (intentInfo.intent === INTENT.IDENTITY) {
-  const reply = `${SYSTEM_IDENTITY.short}\n\n${SYSTEM_IDENTITY.long}\n\nInvariants:\n- ${SYSTEM_IDENTITY.invariants.join("\n- ")}`;
-  sess.messages.push({ role:"assistant", content: reply, ts: nowISO() });
-  saveStateDebounced();
-  return { ok:true, reply, mode, llmUsed:false, intent: intentInfo.intent };
-}
+// Hard IDENTITY intercept removed 2026-09-05 (honesty): duplicate of the
+// narrowed INTENT.IDENTITY handler above; second copy still forced encyclopedia
+// with llmUsed=false. Greeting shortcircuit stays disabled below.
+
 // Greeting shortcircuit disabled — let the brain handle greetings naturally
 // if (intentInfo.intent === INTENT.GREETING) {
 //   const isFirstTurn = !sess.messages || sess.messages.length <= 1;
@@ -26584,6 +27199,23 @@ let localReply = formatCrispResponse({
   const _toolFlags = _c3sessionFlags(ctx);
   // Auto-enable tools for chat sessions (no explicit opt-in needed)
   const _toolsAvailable = Boolean(STATE.__chicken3?.toolsEnabled !== false);
+  // Honesty 2026-09-05: tools.web_search still gated on session toolsOptIn.
+  // Chat auto-enables availability above, but the macro refused with
+  // "session tools opt-in required". Opt the live session in here so
+  // observe organs (web_search etc.) can actually run.
+  if (_toolsAvailable) {
+    try {
+      const _sTools = STATE.sessions.get(sessionId);
+      if (_sTools && _sTools.toolsOptIn !== true) {
+        _sTools.toolsOptIn = true;
+        STATE.sessions.set(sessionId, _sTools);
+      }
+      if (ctx && typeof ctx === "object") {
+        ctx.sessionId = sessionId;
+        ctx.reqMeta = { ...(ctx.reqMeta || {}), sessionId };
+      }
+    } catch { /* never block chat */ }
+  }
 
   // Sprint 33 Phase 5 (cc-sonnet) — CSL pre-dispatch tool gate for THIS
   // macro's own embedded tool-call loop (_executeToolCall below). One fresh
@@ -26636,7 +27268,9 @@ Rules for tool use:
 - Use browse_url when the user provides a URL or asks about a specific page.
 - Only use create_dtu when the user asks to save/remember something.
 - After the tool call marker, continue your response naturally. You will receive the tool results and can then give a final answer.
-- Do NOT fabricate tool results or calculations.` : "";
+- Do NOT fabricate tool results or calculations.
+
+V6 JSON contract (also accepted): emit one JSON object with keys intent, confidence, evidence, action, status, f0, tool, args. Observe tools: web_search, concord.verify, concord.math, brain_status, dila_status, lens_list, expert_mode.answer, dtu_search. f0=DENY for Coinbase/place_order/secrets/launchctl/second trader — the executor refuses those. If the user challenges a claim ("I don't buy that", "check it"), you MUST call an observe organ.` : "";
 
   // Context-sensitive lens action hints (appended to tool prompt at system prompt build sites)
   const _DOMAIN_KW = {
@@ -26660,8 +27294,27 @@ Rules for tool use:
     return acts.length > 0 ? `\nRelevant run_lens_action options for this query: ${acts.join(", ")}` : "";
   })() : "";
 
-  // Parse tool calls from brain response text
-  const _parseToolCalls = (text) => {
+  // Parse tool calls from brain response text ([TOOL_CALL:] + v6 JSON contract)
+  let _parseObserveCalls = null;
+  let _executeObserveOrgan = null;
+  let _isChallengePrompt = null;
+  let _challengeFallbackCall = null;
+  let _lastBrainMessage = null;
+  try {
+    const _v6 = await import("./lib/v6-observe-bridge.js");
+    _parseObserveCalls = _v6.parseObserveCalls;
+    _executeObserveOrgan = _v6.executeObserveOrgan;
+    _isChallengePrompt = _v6.isChallengePrompt;
+    _challengeFallbackCall = _v6.challengeFallbackCall;
+  } catch (_v6err) {
+    logger.debug("chat_tools", "v6-observe-bridge unavailable", { error: _v6err?.message });
+  }
+  const _parseToolCalls = (text, ollamaMessage) => {
+    if (typeof _parseObserveCalls === "function") {
+      return _parseObserveCalls(text, ollamaMessage).map((c) => ({
+        tool: c.tool, params: c.params || {}, raw: c.raw, f0: c.f0,
+      }));
+    }
     const calls = [];
     const re = /\[TOOL_CALL:\s*(\{[\s\S]*?\})\s*\]/g;
     let m;
@@ -26669,7 +27322,7 @@ Rules for tool use:
       try {
         const parsed = JSON.parse(m[1]);
         if (parsed && parsed.tool) {
-          calls.push({ tool: String(parsed.tool), params: parsed.params || {}, raw: m[0] });
+          calls.push({ tool: String(parsed.tool), params: parsed.params || parsed.args || {}, raw: m[0], f0: parsed.f0 });
         }
       } catch (_e) {
         logger.debug("chat_tools", "Failed to parse tool call JSON", { raw: m[1], error: _e?.message });
@@ -26770,8 +27423,17 @@ Rules for tool use:
           const lensResult = await handler(ctx, null, call.params.params || {});
           return { tool: call.tool, ok: true, result: lensResult };
         }
-        default:
+        default: {
+          if (typeof _executeObserveOrgan === "function") {
+            const _obs = await _executeObserveOrgan(call, {
+              runMacro, callMCPTool, runMcpTool,
+              ctx, db: ctx?.db, STATE,
+              fallbackQuery: String(prompt || "").slice(0, 500),
+            });
+            if (_obs && (_obs.ok || _obs.error !== `unmapped_observe_tool:${call.tool}`)) return _obs;
+          }
           return { tool: call.tool, ok: false, error: `Unknown tool: ${call.tool}` };
+        }
       }
     } catch (e) {
       return { tool: call.tool, ok: false, error: String(e?.message || e) };
@@ -26814,10 +27476,39 @@ Rules for tool use:
   };
 
   // Format tool results into a message for the follow-up brain call
+  const _formatWebSearchForGrounding = (raw) => {
+    const text = String(raw || "");
+    // Prefer already-structured snippet blocks
+    if (/^\s*\d+\.\s+title:/im.test(text) || /\btitle:\s*.+\n\s*url:/i.test(text)) {
+      return text.slice(0, 8000);
+    }
+    const out = [];
+    const re = /<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g;
+    let m;
+    while ((m = re.exec(text)) && out.length < 8) {
+      let href = m[1];
+      const ud = href.match(/[?&]uddg=([^&]+)/);
+      if (ud) { try { href = decodeURIComponent(ud[1]); } catch { /* keep */ } }
+      else if (href.startsWith("//")) href = "https:" + href;
+      if (!/^https?:\/\//.test(href)) continue;
+      const title = m[2].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 160);
+      // nearby snippet if present
+      const after = text.slice(m.index, m.index + 900);
+      const sn = after.match(/class="result__snippet"[^>]*>([\s\S]*?)<\/a>/i)
+        || after.match(/class="result__snippet"[^>]*>([\s\S]*?)<\//i);
+      let excerpt = sn ? sn[1].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 280) : "";
+      out.push(`${out.length + 1}. title: ${title}\n   url: ${href}\n   excerpt: ${excerpt || "(no excerpt)"}`);
+    }
+    if (out.length) return out.join("\n");
+    // last resort: strip tags, keep head
+    const plain = text.replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<style[\s\S]*?<\/style>/gi, " ")
+      .replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 2500);
+    return plain || "(empty search results)";
+  };
   const _formatToolResults = (results) => {
     return results.map(r => {
       if (!r.ok) return `[TOOL_RESULT: ${r.tool}] Error: ${r.error}`;
-      if (r.tool === "web_search") return `[TOOL_RESULT: web_search] ${r.result}`;
+      if (r.tool === "web_search") return `[TOOL_RESULT: web_search]\n${_formatWebSearchForGrounding(r.result)}`;
       if (r.tool === "run_compute") return `[TOOL_RESULT: run_compute key=${r.key}] ${JSON.stringify(r.result).slice(0, 4000)}`;
       if (r.tool === "browse_url") return `[TOOL_RESULT: browse_url url=${r.url}]\nTitle: ${r.title}\n${r.text}`;
       if (r.tool === "create_dtu") return `[TOOL_RESULT: create_dtu] Created DTU "${r.title}" (id: ${r.dtuId})`;
@@ -26825,6 +27516,28 @@ Rules for tool use:
       return `[TOOL_RESULT: ${r.tool}] ${JSON.stringify(r).slice(0, 4000)}`;
     }).join("\n\n");
   };
+
+  // Honesty 2026-09-05: if web_search returned real URLs but the 2B refused
+  // to cite ("never existed"), append a Sources block from the snippets.
+  const _enforceWebSearchCite = (reply, toolResultsText) => {
+    const text = String(reply || "");
+    const src = String(toolResultsText || "");
+    if (/https?:\/\//i.test(text)) return text; // already cited
+    const cites = [];
+    const re = /^\s*\d+\.\s+title:\s*(.+)\n\s*url:\s*(https?:\/\/\S+)/gim;
+    let m;
+    while ((m = re.exec(src)) && cites.length < 3) {
+      cites.push(`- ${m[1].trim()} — ${m[2].trim()}`);
+    }
+    if (!cites.length) return text;
+    const refused = /never existed|can'?t quote|cannot quote|without inventing/i.test(text);
+    const suffix = `\n\nSources (from web_search):\n${cites.join("\n")}`;
+    if (refused) {
+      return `From the search results:\n${cites.map(c => c.replace(/^- /, "• ")).join("\n")}${suffix}`;
+    }
+    return text + suffix;
+  };
+
   // ===== END TOOL CALLING INFRASTRUCTURE =====
 
   let messages = null;
@@ -26954,9 +27667,11 @@ Rules for tool use:
       dtuRefs: _dtuTitles,
       macroRefs: ["chat.respond"],
       grcMode: mode,
+      think: false,
     });
     if (r.ok) {
-      finalReply = r.content.trim() || localReply;
+      _lastBrainMessage = r.message || r.raw || r;
+      finalReply = String(r.content || "").trim() || localReply;
       llmUsed = true;
       _llmSpan.end("ok", { responseLength: finalReply.length });
     } else {
@@ -26975,6 +27690,7 @@ Rules for tool use:
             model: brainModel,
             messages: [{ role: "system", content: system }, ...messages],
             stream: false,
+            think: false,
             options: { temperature: _llmTemp, num_predict: _llmMaxTokens }
           }),
           signal: _fbAc.signal
@@ -26984,8 +27700,9 @@ Rules for tool use:
         BRAIN.conscious.stats.requests++;
         BRAIN.conscious.stats.totalMs += _fbElapsed;
         BRAIN.conscious.stats.lastCallAt = new Date().toISOString();
-        if (_fbRes.ok && _fbJson.message?.content) {
-          finalReply = _fbJson.message.content.trim() || localReply;
+        if (_fbRes.ok && (_fbJson.message?.content || _fbJson.message?.tool_calls)) {
+          _lastBrainMessage = _fbJson.message || null;
+          finalReply = String(_fbJson.message?.content || "").trim() || localReply;
           llmUsed = true;
           ctx.log("llm.fallback", "Conscious brain fallback succeeded.", { brainUrl, brainModel, elapsed: _fbElapsed });
         } else {
@@ -27036,6 +27753,7 @@ Rules for tool use:
           model: brainModel,
           messages: _directMessages,
           stream: false,
+          think: false,
           options: { temperature: _directParams.temperature || 0.75, num_predict: _directParams.maxTokens || 1500 }
         }),
         signal: _directAc.signal
@@ -27045,8 +27763,9 @@ Rules for tool use:
       BRAIN.conscious.stats.requests++;
       BRAIN.conscious.stats.totalMs += _directElapsed;
       BRAIN.conscious.stats.lastCallAt = new Date().toISOString();
-      if (_directRes.ok && _directJson.message?.content) {
-        finalReply = _directJson.message.content.trim() || localReply;
+      if (_directRes.ok && (_directJson.message?.content || _directJson.message?.tool_calls)) {
+        _lastBrainMessage = _directJson.message || null;
+        finalReply = String(_directJson.message?.content || "").trim() || localReply;
         llmUsed = true;
         ctx.log("llm.direct", "Direct conscious brain call succeeded (no ctx.llm).", { brainUrl, brainModel, elapsed: _directElapsed });
       } else {
@@ -27061,12 +27780,29 @@ Rules for tool use:
   }
 
   // ===== TOOL CALL EXECUTION LOOP =====
-  // After the brain responds, check for [TOOL_CALL: ...] markers.
+  // After the brain responds, check for [TOOL_CALL: ...] markers / v6 JSON / native tool_calls.
   // If found, execute the tools and make a follow-up brain call with results.
   let _toolCallsExecuted = [];
   if (_toolsAvailable && llmUsed && finalReply) {
     try {
-      const _toolCalls = _parseToolCalls(finalReply);
+      let _toolCalls = _parseToolCalls(finalReply, typeof _lastBrainMessage !== "undefined" ? _lastBrainMessage : null);
+      const _isChal = typeof _isChallengePrompt === "function" && _isChallengePrompt(prompt);
+      // Honesty 2026-09-05 second pass: on challenge, ALWAYS use observe fallback.
+      // The 2B often invents non-helpful organs (dtu_oracle / brain_status) for
+      // factual "check it" turns; fallback picks verify/web_search/math/status
+      // from the claim text with F0 still enforced in executeObserveOrgan.
+      if (_isChal && typeof _challengeFallbackCall === "function") {
+        const _prior = (sess.messages || []).filter((m) => m.role === "assistant").slice(-1)[0];
+        const _fb = _challengeFallbackCall(prompt, _prior?.content);
+        ctx.log("chat_tools", "Challenge forcing observe fallback", {
+          from: _toolCalls.map(c => c.tool), to: _fb.tool,
+        });
+        _toolCalls = [_fb];
+      } else if (_toolCalls.length === 0 && _isChal) {
+        const _prior = (sess.messages || []).filter((m) => m.role === "assistant").slice(-1)[0];
+        const _fb = { tool: "web_search", params: { query: String(prompt || "").slice(0, 400) }, f0: "ALLOW", raw: "challenge-fallback" };
+        _toolCalls.push(_fb);
+      }
       if (_toolCalls.length > 0) {
         ctx.log("chat_tools", "Tool calls detected in brain response", { count: _toolCalls.length, tools: _toolCalls.map(c => c.tool) });
 
@@ -27082,7 +27818,7 @@ Rules for tool use:
         const _followUpMessages = [
           { role: "user", content: `User prompt:\n${prompt}` },
           { role: "assistant", content: _cleanedInitialReply || "(tool calls issued)" },
-          { role: "user", content: `Tool results:\n${_toolResultsText}\n\nNow provide your final answer to the user, incorporating the tool results. Do NOT output any [TOOL_CALL:] markers. Respond naturally.` }
+          { role: "user", content: `Tool results:\n${_toolResultsText}\n\nGROUNDING RULES (mandatory):\n- If web_search results include numbered snippets with title/url/excerpt, your answer MUST cite at least one real title and full https URL from those snippets. Refusing to cite when URLs are present is wrong.\n- Quote or paraphrase only from the provided excerpts — do NOT invent Google Cloud docs, API pages, or other sources not listed.\n- Only say you cannot verify when snippets are empty or clearly irrelevant to the question.\n- Do NOT output any [TOOL_CALL:] markers. Respond naturally.` }
         ];
 
         // Make a follow-up brain call with tool results
@@ -27093,7 +27829,7 @@ Rules for tool use:
           mode,
           currentLens,
           worldId: input?.worldId || null,
-          extra: "You previously called tools and received their results. Now synthesize a final answer for the user.",
+          extra: "You previously called tools and received their results. Ground your final answer ONLY on those tool results. For web_search, cite real title/url/excerpt from the snippets — never invent unrelated documentation.",
         }).system;
         try {
           const _fuAc = new AbortController();
@@ -27106,6 +27842,7 @@ Rules for tool use:
               model: brainModel,
               messages: [{ role: "system", content: _followUpSystem }, ..._followUpMessages],
               stream: false,
+              think: false,
               options: { temperature: 0.4, num_predict: 900 }
             }),
             signal: _fuAc.signal
@@ -27116,8 +27853,8 @@ Rules for tool use:
           BRAIN.conscious.stats.totalMs += _fuElapsed;
           BRAIN.conscious.stats.lastCallAt = new Date().toISOString();
           if (_fuRes.ok && _fuJson.message?.content) {
-            finalReply = _fuJson.message.content.trim();
-            ctx.log("chat_tools", "Follow-up brain call with tool results succeeded", { elapsed: _fuElapsed, toolCount: _toolResults.length });
+            finalReply = _enforceWebSearchCite(_fuJson.message.content.trim(), _toolResultsText);
+            ctx.log("chat_tools", "Follow-up brain call with tool results succeeded", { elapsed: _fuElapsed, toolCount: _toolResults.length, citeEnforce: true });
           } else {
             // Follow-up failed — use the cleaned initial reply + inline tool results
             BRAIN.conscious.stats.errors++;
@@ -29003,6 +29740,7 @@ registerElementMacros(register);
 // The domain file was exported but never imported, so the macro bus couldn't
 // reach the real resolvers in lib/minigame-resolvers.js (playtest finding #2).
 import registerMinigameMacros from "./domains/minigames.js";
+import registerSubstrateFinishMacros from "./domains/substrate-finish.js";
 registerMinigameMacros(register);
 
 // Phase 1 (UX completeness sprint) — per-lens auto-save drafts. Four
@@ -29259,7 +29997,50 @@ registerCrossWorldEffectivenessMacros(register);
 import { recordEvent as _timelineRecordFn, listRecent as _timelineList, stats as _timelineStats, pruneOld as _timelinePrune } from "./lib/event-timeline.js";
 import registerEventTimelineMacros from "./domains/event-timeline.js";
 registerEventTimelineMacros(register, { listRecent: _timelineList, stats: _timelineStats });
-void _timelinePrune; // exposed for future heartbeat-driven TTL sweep
+// 2026-09-05: the "future heartbeat-driven TTL sweep" this comment used to
+// point at was never written. event_timeline_log grew unbounded from boot
+// (2026-08-13) with zero rows ever deleted -- measured at 2.5M rows / 1.74GB
+// (31% of the whole 5.67GB database) after 23 days, ~108k rows/day. The
+// 30-day PRUNE_OLDER_THAN_SECONDS window in lib/event-timeline.js was real
+// code that had simply never been called. This table's own index
+// (idx_timeline_actor) was one of two objects corrupted when a 2026-09-01
+// disk-full event hit mid-write -- an unbounded, never-pruned table on a
+// chronically near-full disk is exactly the mechanism that produces that.
+// frequency 240 (~1h at the 15s tick) matches player-signs-cleanup's cadence
+// for the same "periodic GC on one accumulating table" shape. pruneOld()
+// already returns {ok:false,...} rather than throwing on failure, but wrap
+// anyway per the heartbeat doctrine (a module must never throw).
+registerHeartbeat("event-timeline-prune", {
+  frequency: 240,
+  scope: "global",
+  handler: ({ db: ctxDb } = {}) => {
+    try {
+      return _timelinePrune(ctxDb || db);
+    } catch (err) {
+      structuredLog("warn", "event_timeline_prune_failed", { error: err?.message });
+      return { ok: false, reason: "exception" };
+    }
+  },
+});
+
+// Sibling to the sweep above: trace_correlation (server/lib/auth-gate/
+// dispatch.js) is a SEPARATE sqlite file (~/.local/share/concord/
+// trace-fabric.db) fed by the same organ ticks and had the identical
+// never-pruned defect. Async handler since pruneOldTraceEvents lazily opens
+// its own connection; registerHeartbeat already awaits handler results.
+registerHeartbeat("trace-fabric-prune", {
+  frequency: 240,
+  scope: "global",
+  handler: async () => {
+    try {
+      const { pruneOldTraceEvents } = await import("./lib/auth-gate/dispatch.js");
+      return await pruneOldTraceEvents();
+    } catch (err) {
+      structuredLog("warn", "trace_fabric_prune_failed", { error: err?.message });
+      return { ok: false, reason: "exception" };
+    }
+  },
+});
 
 // Sprint 9 — diegetic waypoint surface. Returns the player's active
 // objective with worldPos + hint text. Powers the 3D QuestWaypointBeacon
@@ -29273,7 +30054,11 @@ registerGuidanceWaypointMacros(register);
 import registerNewsComposeMacros from "./domains/news-compose.js";
 registerNewsComposeMacros(register);
 import registerCivicBondsMacros from "./domains/civic-bonds.js";
+import registerUsbMacros from "./domains/usb.js";
+import registerLeaseMacros from "./domains/lease.js";
 registerCivicBondsMacros(register);
+registerUsbMacros(register);
+registerLeaseMacros(register);
 import registerDailyLifeMacros from "./domains/daily-life.js";
 registerDailyLifeMacros(register);
 import registerSkillForgeMacros from "./domains/skill-forge.js";
@@ -29350,6 +30135,13 @@ registerDocumentActions(register);
 // is closed. Same tool surface as chat_agent.do.
 import registerAgentMarathonMacros from "./domains/agent-marathon.js";
 registerAgentMarathonMacros(register);
+
+// P0 — Mission Task Runtime. Durable multi-step missions orchestrating the
+// organ fleet through F0 dispatchMCP; autonomous spawn from initiative/
+// proactive/sentinel signals. See lib/mission-runtime.js + emergent/
+// mission-runtime-cycle.js.
+import registerMissionRuntimeMacros from "./domains/mission-runtime.js";
+registerMissionRuntimeMacros(register);
 
 // Sprint 14 — video generation (Sora / Veo / Runway). BYO-key first,
 // env fallback. Async pattern: start returns a jobId, poll until done.
@@ -31462,12 +32254,968 @@ register("context", "query", async (ctx, input) => {
 register("settings", "get", (ctx, _input) => {
   return { ok:true, settings: ctx.state.settings };
 });
+
+// MULTIPASS ACL: settings.status — advertised in publicReadDomains
+register("settings", "status", (ctx, _input) => {
+  try {
+    const s = (ctx?.state && ctx.state.settings) || (typeof STATE !== "undefined" ? STATE.settings : {}) || {};
+    return {
+      ok: true,
+      status: "ok",
+      settingsKeys: Object.keys(s || {}),
+      settings: s,
+    };
+  } catch (e) {
+    return { ok: false, error: "handler_error", message: String(e?.message || e) };
+  }
+}, { description: "Read-only settings status (publicRead alias companion to settings.get)." });
+
+// ============================================================================
+// MULTIPASS FOLLOWUP 2026-09-05 — publicRead ghosts with REAL near-handlers.
+// Prefer aliases / shared helpers used by existing REST routes. Do NOT invent
+// fake ok:true. Keep F0/Coinbase/trading untouched. Writes stay auth-gated.
+// ============================================================================
+(function registerPublicReadFollowupAliases() {
+  const _aliasRun = async (ctx, domain, name, input = {}) => {
+    try {
+      if (ctx?.macro?.run) return await ctx.macro.run(domain, name, input || {});
+      const entry = MACROS.get(domain)?.get(name);
+      const fn = typeof entry === "function" ? entry : (entry?.fn || entry?.handler);
+      if (typeof fn !== "function") {
+        return { ok: false, error: "alias_target_missing", reason: `${domain}.${name}` };
+      }
+      return await fn(ctx, input || {});
+    } catch (e) {
+      return { ok: false, error: "handler_error", message: String(e?.message || e) };
+    }
+  };
+
+  register("system", "health", async (ctx, input = {}) => {
+    const r = await _aliasRun(ctx, "system", "status", input);
+    if (r && typeof r === "object") return { ...r, aliasOf: "system.status" };
+    return r;
+  }, { description: "publicRead alias of system.status (member-safe runtime status)." });
+
+  register("system", "getStatus", async (ctx, input = {}) => {
+    const r = await _aliasRun(ctx, "system", "status", input);
+    if (r && typeof r === "object") return { ...r, aliasOf: "system.status" };
+    return r;
+  }, { description: "publicRead alias of system.status." });
+
+  register("graph", "visual", (ctx, input = {}) => {
+    try {
+      const entry = MACROS.get("graph")?.get("visualData");
+      const fn = typeof entry === "function" ? entry : (entry?.fn || entry?.handler);
+      if (typeof fn === "function") return fn(ctx, input || {});
+      return { ok: false, error: "alias_target_missing", reason: "graph.visualData" };
+    } catch (e) {
+      return { ok: false, error: "handler_error", message: String(e?.message || e) };
+    }
+  }, { description: "Alias of graph.visualData (same as GET /api/graph/visual)." });
+
+  register("graph", "stats", (ctx, _input = {}) => {
+    try {
+      if (typeof rebuildGraphIndex === "function" && GRAPH_INDEX?.dirty) rebuildGraphIndex();
+      return {
+        ok: true,
+        stats: {
+          totalNodes: GRAPH_INDEX?.nodes?.size || 0,
+          totalEdges: GRAPH_INDEX?.edges?.size || 0,
+          dirty: !!GRAPH_INDEX?.dirty,
+        },
+      };
+    } catch (e) {
+      return { ok: false, error: "handler_error", message: String(e?.message || e) };
+    }
+  }, { description: "Graph index stats (nodes/edges)." });
+
+  register("graph", "edges", (ctx, input = {}) => {
+    try {
+      if (typeof rebuildGraphIndex === "function" && GRAPH_INDEX?.dirty) rebuildGraphIndex();
+      const limit = Math.min(Number(input.limit || 200), 1000);
+      const edges = Array.from(GRAPH_INDEX?.edges?.values?.() || []).slice(0, limit);
+      return { ok: true, edges, count: edges.length, total: GRAPH_INDEX?.edges?.size || 0 };
+    } catch (e) {
+      return { ok: false, error: "handler_error", message: String(e?.message || e) };
+    }
+  }, { description: "List graph edges from GRAPH_INDEX." });
+
+  register("graph", "neighbors", (ctx, input = {}) => {
+    try {
+      const id = input.id || input.nodeId || input.centerNode;
+      if (!id) return { ok: false, error: "id_required", reason: "id_required" };
+      if (typeof rebuildGraphIndex === "function" && GRAPH_INDEX?.dirty) rebuildGraphIndex();
+      const neighbors = [];
+      for (const e of (GRAPH_INDEX?.edges?.values?.() || [])) {
+        if (e.source === id) neighbors.push({ id: e.target, edge: e, direction: "out" });
+        else if (e.target === id) neighbors.push({ id: e.source, edge: e, direction: "in" });
+      }
+      return { ok: true, id, neighbors, count: neighbors.length };
+    } catch (e) {
+      return { ok: false, error: "handler_error", message: String(e?.message || e) };
+    }
+  }, { description: "Neighbor nodes for a graph id." });
+})();
+
+
+(function registerPublicReadFollowupAliases2() {
+  const _aliasRun = async (ctx, domain, name, input = {}) => {
+    try {
+      if (ctx?.macro?.run) return await ctx.macro.run(domain, name, input || {});
+      const entry = MACROS.get(domain)?.get(name);
+      const fn = typeof entry === "function" ? entry : (entry?.fn || entry?.handler);
+      if (typeof fn !== "function") {
+        return { ok: false, error: "alias_target_missing", reason: `${domain}.${name}` };
+      }
+      return await fn(ctx, input || {});
+    } catch (e) {
+      return { ok: false, error: "handler_error", message: String(e?.message || e) };
+    }
+  };
+
+  register("analytics", "dashboard", (ctx, _input = {}) => {
+    try {
+      const out = getDashboardSummary(typeof STATE !== "undefined" ? STATE : ctx?.state);
+      return out && typeof out === "object" ? (out.ok !== undefined ? out : { ok: true, ...out }) : { ok: true, result: out };
+    } catch (e) {
+      return { ok: false, error: "handler_error", message: String(e?.message || e) };
+    }
+  }, { description: "Analytics dashboard summary (GET /api/analytics/dashboard)." });
+
+  register("analytics", "growth", (ctx, input = {}) => {
+    try {
+      const out = getDtuGrowthTrends(typeof STATE !== "undefined" ? STATE : ctx?.state, { period: input.period || "24h" });
+      return out && typeof out === "object" ? (out.ok !== undefined ? out : { ok: true, ...out }) : { ok: true, result: out };
+    } catch (e) {
+      return { ok: false, error: "handler_error", message: String(e?.message || e) };
+    }
+  }, { description: "DTU growth trends (GET /api/analytics/growth)." });
+
+  register("analytics", "density", (ctx, _input = {}) => {
+    try {
+      const out = getKnowledgeDensity(typeof STATE !== "undefined" ? STATE : ctx?.state);
+      return out && typeof out === "object" ? (out.ok !== undefined ? out : { ok: true, ...out }) : { ok: true, result: out };
+    } catch (e) {
+      return { ok: false, error: "handler_error", message: String(e?.message || e) };
+    }
+  }, { description: "Knowledge density (GET /api/analytics/density)." });
+
+  register("analytics", "citations", (ctx, input = {}) => {
+    try {
+      const out = getCitationAnalytics(typeof STATE !== "undefined" ? STATE : ctx?.state, { limit: Number(input.limit || 20) });
+      return out && typeof out === "object" ? (out.ok !== undefined ? out : { ok: true, ...out }) : { ok: true, result: out };
+    } catch (e) {
+      return { ok: false, error: "handler_error", message: String(e?.message || e) };
+    }
+  }, { description: "Citation analytics (GET /api/analytics/citations)." });
+
+  register("analytics", "marketplace", (ctx, _input = {}) => {
+    try {
+      const out = getMarketAnalytics(typeof STATE !== "undefined" ? STATE : ctx?.state);
+      return out && typeof out === "object" ? (out.ok !== undefined ? out : { ok: true, ...out }) : { ok: true, result: out };
+    } catch (e) {
+      return { ok: false, error: "handler_error", message: String(e?.message || e) };
+    }
+  }, { description: "Marketplace analytics (GET /api/analytics/marketplace)." });
+
+  register("analytics", "personal", (ctx, input = {}) => {
+    try {
+      const userId = input.userId || ctx?.actor?.userId || ctx?.actor?.id;
+      if (!userId) return { ok: false, error: "authentication_required", reason: "authentication_required" };
+      const out = getPersonalAnalytics(typeof STATE !== "undefined" ? STATE : ctx?.state, userId);
+      return out && typeof out === "object" ? (out.ok !== undefined ? out : { ok: true, ...out }) : { ok: true, result: out };
+    } catch (e) {
+      return { ok: false, error: "handler_error", message: String(e?.message || e) };
+    }
+  }, { description: "Personal analytics for caller (or explicit userId)." });
+
+  register("atlas", "search", (ctx, input = {}) => {
+    try {
+      const q = input.q || input.query || input.search;
+      const out = searchAtlasDtus(typeof STATE !== "undefined" ? STATE : ctx?.state, {
+        domainType: input.domainType,
+        epistemicClass: input.epistemicClass,
+        status: input.status,
+        entity: input.entity || q,
+        minConfidence: input.minConfidence != null ? Number(input.minConfidence) : undefined,
+        limit: Number(input.limit || 50),
+        offset: Number(input.offset || 0),
+      });
+      return out && typeof out === "object" ? (out.ok !== undefined ? out : { ok: true, ...out }) : { ok: true, result: out };
+    } catch (e) {
+      return { ok: false, error: "handler_error", message: String(e?.message || e) };
+    }
+  }, { description: "Atlas DTU search (GET /api/atlas/search)." });
+
+  register("atlas", "status", (ctx, _input = {}) => {
+    try {
+      const st = typeof STATE !== "undefined" ? STATE : ctx?.state;
+      const atlas = st?.atlas || st?.__atlas || null;
+      return { ok: true, status: "ok", hasAtlas: !!atlas, metricsAlias: "atlas.metrics" };
+    } catch (e) {
+      return { ok: false, error: "handler_error", message: String(e?.message || e) };
+    }
+  }, { description: "Lightweight atlas status for publicRead." });
+
+  register("atlas", "chat", (_ctx, _input = {}) => {
+    return {
+      ok: false,
+      error: "use_rest_atlas_chat",
+      reason: "use_rest_atlas_chat",
+      message: "Use /api/atlas/chat/retrieve|save|list|exchange — no single-macro chat handler.",
+    };
+  }, { description: "Honest pointer to /api/atlas/chat/* REST (not a fake ok)." });
+})();
+
+
+(function registerPublicReadFollowupAliases3() {
+  const _aliasRun = async (ctx, domain, name, input = {}) => {
+    try {
+      if (ctx?.macro?.run) return await ctx.macro.run(domain, name, input || {});
+      const entry = MACROS.get(domain)?.get(name);
+      const fn = typeof entry === "function" ? entry : (entry?.fn || entry?.handler);
+      if (typeof fn !== "function") {
+        return { ok: false, error: "alias_target_missing", reason: `${domain}.${name}` };
+      }
+      return await fn(ctx, input || {});
+    } catch (e) {
+      return { ok: false, error: "handler_error", message: String(e?.message || e) };
+    }
+  };
+
+  register("events", "list", (ctx, input = {}) => {
+    try {
+      const limit = Math.min(Number(input.limit || 100), 200);
+      const logs = (typeof STATE !== "undefined" ? STATE.logs : ctx?.state?.logs) || [];
+      const events = logs.slice(-limit).map((log) => ({
+        id: log.id || undefined,
+        type: log.domain || "system",
+        action: log.action || "event",
+        message: log.message || "",
+        timestamp: log.ts || log.timestamp || null,
+        meta: log.meta || {},
+      }));
+      return { ok: true, events, count: events.length };
+    } catch (e) {
+      return { ok: false, error: "handler_error", message: String(e?.message || e) };
+    }
+  }, { description: "Recent system events (GET /api/events)." });
+
+  register("events", "recent", async (ctx, input = {}) => {
+    return _aliasRun(ctx, "events", "list", { ...input, limit: input.limit || 50 });
+  }, { description: "Alias of events.list." });
+
+  register("events", "log", (ctx, input = {}) => {
+    try {
+      const limit = Math.min(Number(input.limit || 20), 100);
+      const logs = (typeof STATE !== "undefined" ? STATE.logs : ctx?.state?.logs) || [];
+      return { ok: true, log: logs.slice(-limit), count: Math.min(logs.length, limit) };
+    } catch (e) {
+      return { ok: false, error: "handler_error", message: String(e?.message || e) };
+    }
+  }, { description: "Tail of STATE.logs (read-only)." });
+
+  register("events", "paginated", (ctx, input = {}) => {
+    try {
+      const limit = Math.min(Number(input.limit || 50), 200);
+      const offset = Math.max(Number(input.offset || 0), 0);
+      const logs = (typeof STATE !== "undefined" ? STATE.logs : ctx?.state?.logs) || [];
+      const slice = logs.slice().reverse().slice(offset, offset + limit);
+      return { ok: true, events: slice, limit, offset, total: logs.length };
+    } catch (e) {
+      return { ok: false, error: "handler_error", message: String(e?.message || e) };
+    }
+  }, { description: "Paginated events from STATE.logs." });
+
+  register("daily", "list", async (ctx, input = {}) => {
+    const r = await _aliasRun(ctx, "daily", "list_mine", input);
+    if (r && typeof r === "object") return { ...r, aliasOf: "daily.list_mine" };
+    return r;
+  }, { description: "Alias of daily.list_mine (caller-scoped)." });
+
+  register("daily", "get", async (ctx, input = {}) => {
+    const id = input.id || input.entryId || input.dtuId;
+    if (!id) return { ok: false, error: "id_required", reason: "id_required" };
+    const r = await _aliasRun(ctx, "daily", "list_mine", { limit: 100 });
+    if (!r?.ok) return r;
+    const rows = r.rows || r.items || r.entries || r.dtus || r.results || [];
+    const hit = Array.isArray(rows) ? rows.find((x) => x?.id === id || x?.dtuId === id) : null;
+    if (!hit) return { ok: false, error: "not_found", reason: "not_found" };
+    return { ok: true, entry: hit, aliasOf: "daily.list_mine" };
+  }, { description: "Get one caller-scoped daily entry by id." });
+
+  register("reflection", "list", async (ctx, input = {}) => {
+    const r = await _aliasRun(ctx, "reflection", "list_mine", input);
+    if (r && typeof r === "object") return { ...r, aliasOf: "reflection.list_mine" };
+    return r;
+  }, { description: "Alias of reflection.list_mine." });
+
+  register("research", "list", async (ctx, input = {}) => {
+    const r = await _aliasRun(ctx, "research", "list_mine", input);
+    if (r && typeof r === "object") return { ...r, aliasOf: "research.list_mine" };
+    return r;
+  }, { description: "Alias of research.list_mine." });
+
+  register("research", "get", async (ctx, input = {}) => {
+    const id = input.id || input.dtuId || input.researchId;
+    if (!id) return { ok: false, error: "id_required", reason: "id_required" };
+    const r = await _aliasRun(ctx, "research", "list_mine", { limit: 100 });
+    if (!r?.ok) return r;
+    const rows = r.rows || r.items || r.entries || r.dtus || r.results || [];
+    const hit = Array.isArray(rows) ? rows.find((x) => x?.id === id || x?.dtuId === id) : null;
+    if (!hit) return { ok: false, error: "not_found", reason: "not_found" };
+    return { ok: true, item: hit, aliasOf: "research.list_mine" };
+  }, { description: "Get one caller-scoped research item by id." });
+
+  register("worldmodel", "entities", async (ctx, input = {}) => {
+    const r = await _aliasRun(ctx, "worldmodel", "list_entities", input);
+    if (r && typeof r === "object") return { ...r, aliasOf: "worldmodel.list_entities" };
+    return r;
+  }, { description: "Alias of worldmodel.list_entities." });
+
+  register("worldmodel", "simulations", async (ctx, input = {}) => {
+    const r = await _aliasRun(ctx, "worldmodel", "list_simulations", input);
+    if (r && typeof r === "object") return { ...r, aliasOf: "worldmodel.list_simulations" };
+    return r;
+  }, { description: "Alias of worldmodel.list_simulations." });
+
+  register("worldmodel", "get", async (ctx, input = {}) => {
+    if (input.simulationId || input.simId) {
+      return _aliasRun(ctx, "worldmodel", "get_simulation", input);
+    }
+    if (input.id || input.entityId) {
+      return _aliasRun(ctx, "worldmodel", "get_entity", { ...input, id: input.id || input.entityId });
+    }
+    return _aliasRun(ctx, "worldmodel", "status", input);
+  }, { description: "Route to get_entity / get_simulation / status by input." });
+
+  register("lattice", "status", async (ctx, input = {}) => {
+    const r = await _aliasRun(ctx, "lattice", "resonance", input);
+    if (r && typeof r === "object") return { ...r, aliasOf: "lattice.resonance", status: r.ok ? "ok" : "error" };
+    return r;
+  }, { description: "Alias of lattice.resonance for publicRead status." });
+
+  register("lattice", "stats", async (ctx, input = {}) => {
+    const r = await _aliasRun(ctx, "lattice", "resonance", input);
+    if (!r?.ok) return r;
+    return { ok: true, stats: r.resonance || r, aliasOf: "lattice.resonance" };
+  }, { description: "Stats projection of lattice.resonance." });
+
+  register("scope", "status", (ctx, _input = {}) => {
+    try {
+      const st = typeof STATE !== "undefined" ? STATE : ctx?.state;
+      const counts = { local: 0, global: 0, creative_global: 0, other: 0 };
+      for (const dtu of (st?.dtus?.values?.() || [])) {
+        const s = dtu.scope || "other";
+        if (counts[s] != null) counts[s]++; else counts.other++;
+      }
+      return { ok: true, status: "ok", scopeCounts: counts, dtuCount: st?.dtus?.size || 0 };
+    } catch (e) {
+      return { ok: false, error: "handler_error", message: String(e?.message || e) };
+    }
+  }, { description: "Aggregate DTU scope counts (read-only)." });
+
+  register("scope", "metrics", (ctx, input = {}) => {
+    try {
+      const entry = MACROS.get("scope")?.get("status");
+      const fn = typeof entry === "function" ? entry : (entry?.fn || entry?.handler);
+      const base = typeof fn === "function" ? fn(ctx, input || {}) : { ok: true };
+      return { ...base, metrics: base.scopeCounts || null };
+    } catch (e) {
+      return { ok: false, error: "handler_error", message: String(e?.message || e) };
+    }
+  }, { description: "Alias-ish metrics from scope.status." });
+
+  register("scope", "dtus", (ctx, input = {}) => {
+    try {
+      const st = typeof STATE !== "undefined" ? STATE : ctx?.state;
+      const scope = input.scope;
+      const limit = Math.min(Number(input.limit || 50), 200);
+      const userId = ctx?.actor?.userId || ctx?.actor?.id;
+      const out = [];
+      for (const dtu of (st?.dtus?.values?.() || [])) {
+        if (scope && dtu.scope !== scope) continue;
+        const vis = dtu.visibility || dtu.scope;
+        const owner = dtu.creator_id || dtu.owner_user_id || dtu.ownerId || dtu.userId;
+        if (vis === "private" && userId && owner && owner !== userId) continue;
+        out.push({ id: dtu.id, title: dtu.title, scope: dtu.scope, visibility: vis });
+        if (out.length >= limit) break;
+      }
+      return { ok: true, dtus: out, count: out.length };
+    } catch (e) {
+      return { ok: false, error: "handler_error", message: String(e?.message || e) };
+    }
+  }, { description: "Member-safe scoped DTU listing (skips others' private)." });
+
+  register("scope", "overrides", (_ctx, _input = {}) => {
+    return { ok: true, overrides: [], note: "No runtime scope overrides configured." };
+  }, { description: "Read-only scope overrides list (empty unless configured)." });
+
+  register("guidance", "status", (_ctx, _input = {}) => {
+    return { ok: true, status: "ok", layer: "guidance", note: "guidance.emitEvent substrate available server-side" };
+  }, { description: "Guidance layer status." });
+
+  register("guidance", "suggestions", (ctx, input = {}) => {
+    try {
+      const st = typeof STATE !== "undefined" ? STATE : ctx?.state;
+      const sugg = st?.guidance?.suggestions || st?.__guidance?.suggestions || [];
+      const limit = Math.min(Number(input.limit || 20), 100);
+      return { ok: true, suggestions: Array.isArray(sugg) ? sugg.slice(0, limit) : [], count: Array.isArray(sugg) ? Math.min(sugg.length, limit) : 0 };
+    } catch (e) {
+      return { ok: false, error: "handler_error", message: String(e?.message || e) };
+    }
+  }, { description: "Guidance suggestions if present in STATE." });
+})();
+
+
+
+
 register("settings", "set", (ctx, input) => {
   const s = input.settings && typeof input.settings === "object" ? input.settings : {};
   ctx.state.settings = { ...ctx.state.settings, ...s };
   ctx.log("settings.set", "Settings updated", { keys: Object.keys(s) });
   return { ok:true, settings: ctx.state.settings };
 });
+
+
+// ============================================================================
+// MULTIPASS FOLLOWUP part4 — remaining near-alias + atlas helper wires
+// ============================================================================
+(function registerPublicReadFollowupAliases4() {
+  const _aliasRun = async (ctx, domain, name, input = {}) => {
+    try {
+      if (ctx?.macro?.run) return await ctx.macro.run(domain, name, input || {});
+      const entry = MACROS.get(domain)?.get(name);
+      const fn = typeof entry === "function" ? entry : (entry?.fn || entry?.handler);
+      if (typeof fn !== "function") {
+        return { ok: false, error: "alias_target_missing", reason: `${domain}.${name}` };
+      }
+      return await fn(ctx, input || {});
+    } catch (e) {
+      return { ok: false, error: "handler_error", message: String(e?.message || e) };
+    }
+  };
+  const _wrap = (out, aliasOf) => {
+    if (out && typeof out === "object") return { ...(out.ok !== undefined ? out : { ok: true, ...out }), aliasOf };
+    return { ok: true, result: out, aliasOf };
+  };
+
+  // Remaining MACROS near-aliases
+  const near = [
+    ["agents", "list", "agents", "list_mine"],
+    ["atlas", "scope-metrics", "atlas", "metrics"],
+    ["commonsense", "assumptions", "commonsense", "get_assumptions"],
+    ["commonsense", "surface", "commonsense", "surface_assumptions"],
+    ["creative", "list", "creative", "list_mine"],
+    ["explanation", "dtu", "explanation", "explain_dtu"],
+    ["grounding", "ground", "grounding", "ground_dtu"],
+    ["messaging", "bindings", "messaging", "list_bindings"],
+    ["metacognition", "predictions", "metacognition", "predictions_list"],
+    ["metalearning", "strategies", "metalearning", "list_strategies"],
+    ["reasoning", "chains", "reasoning", "list_chains"],
+    ["transfer", "analogies", "transfer", "find_analogies"],
+    ["transfer", "apply", "transfer", "apply_pattern"],
+    ["transfer", "classify-domain", "transfer", "classify_domain"],
+    ["transfer", "extract-pattern", "transfer", "extract_pattern"],
+    ["cache", "status", "cache", "stats"],
+    ["attention", "get", "attention", "status"],
+    ["agent", "status", "agent", "list"],
+    ["culture", "status", "culture", "get"],
+    ["srs", "get", "srs", "list_mine"],
+    ["quality", "stats", "quality", "status"],
+    ["dream", "history", "dream", "list_for_player"],
+    ["schema", "get", "schema", "list"],
+    ["jobs", "status", "jobs", "list"],
+    ["collab", "workspace", "collab", "listSessions"],
+    ["temporal", "get", "temporal", "frame"],
+  ];
+  for (const [d, n, td, tn] of near) {
+    register(d, n, async (ctx, input = {}) => {
+      const r = await _aliasRun(ctx, td, tn, input);
+      return _wrap(r, `${td}.${tn}`);
+    }, { description: `publicRead alias of ${td}.${tn}` });
+  }
+
+  // Atlas helpers (same substrate as /api/atlas/*)
+  register("atlas", "get", (ctx, input = {}) => {
+    try {
+      const id = input.id || input.dtuId;
+      if (!id) return { ok: false, error: "id_required", reason: "id_required" };
+      const out = getAtlasDtu(typeof STATE !== "undefined" ? STATE : ctx?.state, id);
+      return _wrap(out, "getAtlasDtu");
+    } catch (e) {
+      return { ok: false, error: "handler_error", message: String(e?.message || e) };
+    }
+  }, { description: "Get atlas DTU by id (getAtlasDtu)." });
+
+  register("atlas", "list", (ctx, input = {}) => {
+    try {
+      const out = searchAtlasDtus(typeof STATE !== "undefined" ? STATE : ctx?.state, {
+        limit: Number(input.limit || 50),
+        offset: Number(input.offset || 0),
+        status: input.status,
+        domainType: input.domainType,
+      });
+      return _wrap(out, "searchAtlasDtus");
+    } catch (e) {
+      return { ok: false, error: "handler_error", message: String(e?.message || e) };
+    }
+  }, { description: "List/search atlas DTUs." });
+
+  register("atlas", "contradictions", (ctx, input = {}) => {
+    try {
+      const id = input.id || input.dtuId;
+      if (!id) return { ok: false, error: "id_required", reason: "id_required" };
+      const out = getContradictions(typeof STATE !== "undefined" ? STATE : ctx?.state, id);
+      return _wrap(out, "getContradictions");
+    } catch (e) {
+      return { ok: false, error: "handler_error", message: String(e?.message || e) };
+    }
+  }, { description: "Atlas contradictions for dtuId." });
+
+  register("atlas", "score-explain", (ctx, input = {}) => {
+    try {
+      const id = input.id || input.dtuId;
+      if (!id) return { ok: false, error: "id_required", reason: "id_required" };
+      const out = getScoreExplanation(typeof STATE !== "undefined" ? STATE : ctx?.state, id);
+      return _wrap(out, "getScoreExplanation");
+    } catch (e) {
+      return { ok: false, error: "handler_error", message: String(e?.message || e) };
+    }
+  }, { description: "Atlas score explanation for dtuId." });
+
+  // Honest non-fake residuals for research.* without substrate
+  for (const n of ["conduct", "report", "results", "metrics"]) {
+    register("research", n, (_ctx, _input = {}) => ({
+      ok: false,
+      error: "no_macro_substrate",
+      reason: "no_macro_substrate",
+      message: `research.${n} has no dedicated handler; use research.list_mine / lens research.* actions / live_crossref.`,
+      suggest: ["research.list", "research.list_mine", "research.live_crossref", "research.live_openalex"],
+    }), { description: `Honest absent substrate for research.${n}` });
+  }
+
+  // physics.models — no models catalog macro; constants/status live via lens
+  register("physics", "models", (_ctx, _input = {}) => ({
+    ok: false,
+    error: "no_macro_substrate",
+    reason: "no_macro_substrate",
+    message: "physics.models not implemented as macro; use physics.constants / lens physics.*",
+    suggest: ["physics.constants", "physics.status"],
+  }), { description: "Honest absent physics.models catalog." });
+
+  // agent.config — read-only list projection, not a fake config write
+  register("agent", "config", async (ctx, input = {}) => {
+    const r = await _aliasRun(ctx, "agent", "list", input);
+    if (!r?.ok && r?.ok !== undefined) return r;
+    return { ok: true, config: { agents: r?.agents || r?.items || r?.result || r }, aliasOf: "agent.list", note: "read-only projection" };
+  }, { description: "Read-only agent config projection via agent.list." });
+})();
+
+// ============================================================================
+// NO-DUTCH leftover pass 2026-09-05 — deferred_no_substrate + intentional_absent refresh
+// Ghost Fleet is disabled (CONCORD_DISABLE_GHOST_FLEET=true), so emergent/* macros
+// never register. Wire publicRead names to real substrates via lazy import or
+// near-aliases. NEVER fake ok:true.
+// ============================================================================
+(function registerDeferredNoSubstrateWires() {
+  const _aliasRun = async (ctx, domain, name, input = {}) => {
+    try {
+      if (ctx?.macro?.run) return await ctx.macro.run(domain, name, input || {});
+      const entry = MACROS.get(domain)?.get(name);
+      const fn = typeof entry === "function" ? entry : (entry?.fn || entry?.handler);
+      if (typeof fn !== "function") {
+        return { ok: false, error: "alias_target_missing", reason: `${domain}.${name}` };
+      }
+      return await fn(ctx, input || {});
+    } catch (e) {
+      return { ok: false, error: "handler_error", message: String(e?.message || e) };
+    }
+  };
+  const _wrap = (out, aliasOf) => {
+    if (out && typeof out === "object") {
+      return { ...(out.ok !== undefined ? out : { ok: true, ...out }), aliasOf };
+    }
+    return { ok: true, result: out, aliasOf };
+  };
+  const _honest = (key, reason, message, suggest = []) => ({
+    ok: false,
+    error: reason,
+    reason,
+    message,
+    suggest,
+    key,
+  });
+
+  // ── Near-aliases onto already-live MACROS (city/collab/quality/reasoning/…) ──
+  const near = [
+    ["city", "get", "city", "summary"],
+    ["city", "list", "city", "policies"],
+    ["city", "status", "city", "summary"],
+    ["collab", "revisions", "collab", "docHistory"],
+    ["creative", "run", "creative", "generate"],
+    ["explanation", "get", "explanation", "recent"],
+    ["quality", "domain", "quality", "status"],
+    ["quality", "thresholds", "quality", "status"],
+    ["reasoning", "steps", "reasoning", "list_chains"],
+    ["skill", "gaps", "skills", "atrophy_risk"],
+    ["transfer", "history", "transfer", "list_transfers"],
+  ];
+  for (const [d, n, td, tn] of near) {
+    // Skip if already registered (e.g. Ghost Fleet later enabled)
+    if (MACROS.get(d)?.has(n)) continue;
+    register(d, n, async (ctx, input = {}) => {
+      // lens-first for collab.docHistory / creative.generate etc.
+      try {
+        if (typeof LENS_ACTIONS !== "undefined" && LENS_ACTIONS?.has?.(`${td}.${tn}`)) {
+          const h = LENS_ACTIONS.get(`${td}.${tn}`);
+          const out = await h(ctx, { domain: td, data: input || {} }, input || {});
+          return _wrap(out, `lens:${td}.${tn}`);
+        }
+      } catch (e) {
+        /* fall through to MACROS */
+      }
+      const r = await _aliasRun(ctx, td, tn, input);
+      return _wrap(r, `${td}.${tn}`);
+    }, { description: `deferred publicRead alias of ${td}.${tn}` });
+  }
+
+  // ── Emergent modules (Ghost Fleet off) — lazy import real helpers ──
+  const _lazy = (modPath) => import(modPath);
+
+  if (!MACROS.get("agents")?.has("get")) {
+    register("agents", "get", async (_ctx, input = {}) => {
+      try {
+        const agents = await _lazy("./emergent/agent-system.js");
+        const id = input.agentId || input.id;
+        if (!id) return { ok: false, error: "agentId_required", reason: "agentId_required" };
+        return _wrap(agents.getAgent(id), "emergent/agent-system.getAgent");
+      } catch (e) {
+        return _honest("agents.get", "substrate_load_failed", String(e?.message || e), ["agents.list"]);
+      }
+    }, { description: "Get agent by id (emergent/agent-system; Ghost Fleet off path)." });
+  }
+
+  for (const [name, impl] of [
+    ["find_precedent", async (m, input) => m.findPrecedent(input.type || input.query, input.domain)],
+    ["get_dispute", async (m, input) => {
+      const id = input.id || input.disputeId;
+      if (!id) return { ok: false, error: "id_required" };
+      return m.getDispute(id);
+    }],
+    ["list_disputes", async (m, input) => m.listDisputes(input || {})],
+    ["metrics", async (m) => m.getDisputeMetrics()],
+  ]) {
+    if (MACROS.get("conflict")?.has(name)) continue;
+    register("conflict", name, async (_ctx, input = {}) => {
+      try {
+        const m = await _lazy("./emergent/conflict-resolution.js");
+        return _wrap(await impl(m, input), `emergent/conflict-resolution.${name}`);
+      } catch (e) {
+        return _honest(`conflict.${name}`, "substrate_load_failed", String(e?.message || e));
+      }
+    }, { description: `conflict.${name} via emergent/conflict-resolution (Ghost Fleet off).` });
+  }
+
+  for (const [name, impl] of [
+    ["masterworks", async (m) => m.getMasterworks()],
+    ["metrics", async (m) => m.getCreativeMetrics()],
+    ["profile", async (m, input) => {
+      const id = input.entityId || input.id || input.userId;
+      if (!id) return { ok: false, error: "entityId_required" };
+      return m.getCreativeProfile(id);
+    }],
+    ["get", async (m, input) => {
+      const id = input.id || input.workId;
+      if (!id) return { ok: false, error: "id_required" };
+      const w = m.getWork(id);
+      return w ? { ok: true, work: w } : { ok: false, error: "not_found" };
+    }],
+    ["exhibition", async (m) => m.getExhibition()],
+  ]) {
+    if (MACROS.get("creative")?.has(name)) continue;
+    register("creative", name, async (_ctx, input = {}) => {
+      try {
+        const m = await _lazy("./emergent/creative-generation.js");
+        return _wrap(await impl(m, input), `emergent/creative-generation.${name}`);
+      } catch (e) {
+        return _honest(`creative.${name}`, "substrate_load_failed", String(e?.message || e), ["creative.list"]);
+      }
+    }, { description: `creative.${name} via emergent/creative-generation (Ghost Fleet off).` });
+  }
+
+  for (const [name, impl] of [
+    ["identity", async (m) => m.getCulturalIdentity()],
+    ["metrics", async (m) => m.getCultureMetrics()],
+    ["stories", async (m, input) => m.listStories(input.sortBy, input.limit)],
+    ["values", async (m) => m.getCulturalValues()],
+    ["traditions", async (m, input) => m.listTraditions(input || {})],
+  ]) {
+    if (MACROS.get("culture")?.has(name)) continue;
+    register("culture", name, async (_ctx, input = {}) => {
+      try {
+        const m = await _lazy("./emergent/culture-layer.js");
+        return _wrap(await impl(m, input), `emergent/culture-layer.${name}`);
+      } catch (e) {
+        return _honest(`culture.${name}`, "substrate_load_failed", String(e?.message || e), ["culture.get", "culture.status"]);
+      }
+    }, { description: `culture.${name} via emergent/culture-layer (Ghost Fleet off).` });
+  }
+
+  // ── AI / brain — same substrate as REST /api/ai/* and /api/brain/* ──
+  if (!MACROS.get("ai")?.has("embeddings")) {
+    register("ai", "embeddings", (_ctx, _input = {}) => {
+      try {
+        const emb = (typeof EMBEDDINGS !== "undefined") ? EMBEDDINGS : null;
+        if (!emb) return _honest("ai.embeddings", "embeddings_unavailable", "EMBEDDINGS store not initialized");
+        return { ok: true, enabled: !!emb.enabled, indexed: emb.store?.size ?? 0, dim: emb.dim ?? null, aliasOf: "GET /api/ai/embeddings/status" };
+      } catch (e) {
+        return _honest("ai.embeddings", "handler_error", String(e?.message || e));
+      }
+    }, { description: "Embedding index status (mirrors GET /api/ai/embeddings/status)." });
+  }
+  if (!MACROS.get("ai")?.has("search")) {
+    register("ai", "search", async (_ctx, input = {}) => {
+      try {
+        const q = input.q || input.query || "";
+        const limit = Number(input.limit || 10);
+        if (typeof embeddingSearch === "function") {
+          const result = await embeddingSearch(q, { limit, minScore: Number(input.minScore || 0.3) });
+          return _wrap(result, "embeddingSearch");
+        }
+        return _honest("ai.search", "no_macro_substrate", "embeddingSearch unavailable; use GET /api/ai/search", ["GET /api/ai/search"]);
+      } catch (e) {
+        return _honest("ai.search", "handler_error", String(e?.message || e));
+      }
+    }, { description: "Semantic/text search (mirrors GET /api/ai/search)." });
+  }
+  // Always (re)register ai.gaps with hardened substrate — prior pass could leave handler_error
+  register("ai", "gaps", async (_ctx, input = {}) => {
+    try {
+      if (typeof analyzeKnowledgeGaps !== "function") {
+        return _honest("ai.gaps", "no_macro_substrate", "analyzeKnowledgeGaps unavailable; use GET /api/ai/gaps", ["GET /api/ai/gaps"]);
+      }
+      const domain = input.domain != null ? String(input.domain) : null;
+      const out = analyzeKnowledgeGaps(domain);
+      return _wrap(out, "analyzeKnowledgeGaps");
+    } catch (e) {
+      return _honest("ai.gaps", "substrate_error", String(e?.message || e), ["GET /api/ai/gaps"]);
+    }
+  }, { description: "Knowledge-gap analysis (mirrors GET /api/ai/gaps).", note: "intentional_shadow_ok" });
+  if (!MACROS.get("brain")?.has("status")) {
+    register("brain", "status", (_ctx, _input = {}) => {
+      try {
+        if (typeof getBrainStatus === "function") {
+          return { ok: true, ...getBrainStatus(), llmReady: (typeof LLM_READY !== "undefined") ? LLM_READY : undefined, aliasOf: "GET /api/brain/status" };
+        }
+        return _honest("brain.status", "no_macro_substrate", "getBrainStatus unavailable");
+      } catch (e) {
+        return _honest("brain.status", "handler_error", String(e?.message || e));
+      }
+    }, { description: "Per-brain health (mirrors GET /api/brain/status)." });
+  }
+  if (!MACROS.get("brain")?.has("health")) {
+    register("brain", "health", async (_ctx, _input = {}) => {
+      // Lightweight projection — full probe is GET /api/brain/health (expensive).
+      try {
+        if (typeof getBrainStatus === "function") {
+          const s = getBrainStatus();
+          return { ok: true, ...s, note: "macro projection; for live Ollama probes use GET /api/brain/health", aliasOf: "getBrainStatus" };
+        }
+        return _honest("brain.health", "no_macro_substrate", "use GET /api/brain/health");
+      } catch (e) {
+        return _honest("brain.health", "handler_error", String(e?.message || e));
+      }
+    }, { description: "Brain health projection (prefer GET /api/brain/health for live probes)." });
+  }
+
+  // ── Messaging — same helpers as /api/messaging/* ──
+  if (!MACROS.get("messaging")?.has("status")) {
+    register("messaging", "status", async (_ctx, _input = {}) => {
+      try {
+        const adapters = await Promise.all([
+          _lazy("./lib/messaging/adapters/whatsapp.js").catch(() => null),
+          _lazy("./lib/messaging/adapters/telegram.js").catch(() => null),
+          _lazy("./lib/messaging/adapters/discord.js").catch(() => null),
+          _lazy("./lib/messaging/adapters/signal.js").catch(() => null),
+          _lazy("./lib/messaging/adapters/imessage.js").catch(() => null),
+          _lazy("./lib/messaging/adapters/slack.js").catch(() => null),
+        ]);
+        const names = ["whatsapp", "telegram", "discord", "signal", "imessage", "slack"];
+        const platforms = {};
+        for (let i = 0; i < names.length; i++) {
+          const a = adapters[i];
+          platforms[names[i]] = a ? { configured: !!a.isConfigured?.(), platform: a.platform || names[i] } : { configured: false };
+        }
+        return { ok: true, platforms, aliasOf: "GET /api/messaging/status" };
+      } catch (e) {
+        return _honest("messaging.status", "handler_error", String(e?.message || e));
+      }
+    }, { description: "Messaging platform status (mirrors GET /api/messaging/status)." });
+  }
+  if (!MACROS.get("messaging")?.has("messages")) {
+    register("messaging", "messages", (ctx, input = {}) => {
+      try {
+        const db = ctx?.db || (typeof globalThis !== "undefined" ? globalThis.__concordDB : null);
+        const userId = ctx?.actor?.userId || ctx?.actor?.id || input.userId;
+        if (!userId) return { ok: false, error: "authentication_required" };
+        if (!db?.prepare) return { ok: true, messages: [], note: "db_unavailable" };
+        const platform = input.platform;
+        const limit = Math.min(100, Number(input.limit || 20));
+        const messages = platform
+          ? db.prepare(`SELECT mm.id, mm.direction, mm.content_text, mm.created_at, mb.platform, mb.display_name
+              FROM messaging_messages mm JOIN messaging_bindings mb ON mm.binding_id = mb.id
+              WHERE mb.user_id = ? AND mb.platform = ? ORDER BY mm.created_at DESC LIMIT ?`).all(userId, platform, limit)
+          : db.prepare(`SELECT mm.id, mm.direction, mm.content_text, mm.created_at, mb.platform, mb.display_name
+              FROM messaging_messages mm JOIN messaging_bindings mb ON mm.binding_id = mb.id
+              WHERE mb.user_id = ? ORDER BY mm.created_at DESC LIMIT ?`).all(userId, limit);
+        return { ok: true, messages, aliasOf: "GET /api/messaging/messages" };
+      } catch (e) {
+        return { ok: true, messages: [], note: String(e?.message || e) };
+      }
+    }, { description: "Messaging history (mirrors GET /api/messaging/messages)." });
+  }
+  if (!MACROS.get("messaging")?.has("connect")) {
+    register("messaging", "connect", (_ctx, input = {}) => _honest(
+      "messaging.connect",
+      "use_rest_messaging_connect",
+      "Use POST /api/messaging/connect/:platform with externalId (CSRF+auth). Macro path omitted to avoid duplicating binding side-effects.",
+      ["POST /api/messaging/connect/:platform", "messaging.status", "messaging.bindings"],
+    ), { description: "Honest pointer to REST messaging connect." });
+  }
+  if (!MACROS.get("messaging")?.has("verify")) {
+    register("messaging", "verify", (_ctx, input = {}) => _honest(
+      "messaging.verify",
+      "use_rest_messaging_verify",
+      "Use POST /api/messaging/verify with platform+token (CSRF+auth).",
+      ["POST /api/messaging/verify", "messaging.status"],
+    ), { description: "Honest pointer to REST messaging verify." });
+  }
+
+  // ── Heartbeat — only tick exists; expose honest status projection ──
+  if (!MACROS.get("heartbeat")?.has("status")) {
+    register("heartbeat", "status", async (ctx, input = {}) => {
+      const r = await _aliasRun(ctx, "heartbeat", "tick", { ...input, dry: true });
+      // tick may mutate — prefer registry introspection if available
+      try {
+        const reg = await _lazy("./emergent/heartbeat-registry.js").catch(() => null);
+        if (reg?.getHeartbeatStatus) return _wrap(reg.getHeartbeatStatus(), "heartbeat-registry");
+        if (reg?.listHeartbeats) return { ok: true, heartbeats: reg.listHeartbeats(), aliasOf: "listHeartbeats" };
+      } catch (_e) { /* fall through */ }
+      return {
+        ok: true,
+        alive: true,
+        note: "heartbeat.status projection; full history/metrics not stored as macros",
+        tickPresent: !!MACROS.get("heartbeat")?.has("tick"),
+        aliasOf: "heartbeat.tick_presence",
+      };
+    }, { description: "Heartbeat status projection." });
+  }
+  for (const n of ["history", "metrics"]) {
+    if (MACROS.get("heartbeat")?.has(n)) continue;
+    register("heartbeat", n, () => _honest(
+      `heartbeat.${n}`,
+      "no_macro_substrate",
+      `heartbeat.${n} has no durable store; use heartbeat.status / organ heartbeats / GET /health`,
+      ["heartbeat.status", "heartbeat.tick", "GET /health"],
+    ), { description: `Honest absent heartbeat.${n}.` });
+  }
+
+  // Refresh intentional_absent messages — real substrate shadows stubs below.
+})();
+
+// ============================================================================
+// SUBSTRATE FINISH 2026-09-05 — replace no_macro_substrate / use_rest_* with real
+// handlers (research-jobs, atlas-chat, physics catalog, heartbeat-registry,
+// messaging inbound-pipeline). Ghost Fleet may stay disabled.
+// ============================================================================
+(function registerSubstrateFinish() {
+  try {
+    const result = registerSubstrateFinishMacros(register, {
+      chatRetrieve,
+      getChatMetrics,
+      recordChatExchange,
+      saveAsDtu,
+      getChatSession,
+      STATE: typeof STATE !== "undefined" ? STATE : undefined,
+    });
+    if (typeof structuredLog === "function") {
+      structuredLog("info", "substrate_finish_registered", {
+        registered: result?.registered || [],
+      });
+    }
+  } catch (err) {
+    try {
+      structuredLog("error", "substrate_finish_boot_error", { error: String(err?.message || err) });
+    } catch (_e) { /* non-fatal */ }
+  }
+})();
+
+
+// MULTIPASS ACL: social.profile/discover/cited-by/share — advertised in publicReadDomains
+// Wired to the same social-layer helpers as /api/social/* routes.
+register("social", "profile", (ctx, input = {}) => {
+  try {
+    const userId = input.userId || input.id || ctx?.actor?.userId || ctx?.actor?.id || "anon";
+    const out = getProfile(STATE, userId);
+    return out && typeof out === "object" ? (out.ok !== undefined ? out : { ok: true, ...out }) : { ok: true, profile: out };
+  } catch (e) {
+    return { ok: false, error: "handler_error", message: String(e?.message || e) };
+  }
+}, { description: "Social profile for userId (defaults to caller)." });
+
+register("social", "discover", (ctx, input = {}) => {
+  try {
+    const userId = input.userId || input.id || ctx?.actor?.userId || ctx?.actor?.id || "anon";
+    const out = discoverUsers(STATE, userId);
+    return out && typeof out === "object" ? (out.ok !== undefined ? out : { ok: true, ...out }) : { ok: true, users: out };
+  } catch (e) {
+    return { ok: false, error: "handler_error", message: String(e?.message || e) };
+  }
+}, { description: "Discover users (same substrate as GET /api/social/discover/:userId)." });
+
+register("social", "cited-by", (ctx, input = {}) => {
+  try {
+    const dtuId = input.dtuId || input.id;
+    if (!dtuId) return { ok: false, error: "dtuId required" };
+    const out = getCitedBy(STATE, dtuId);
+    return out && typeof out === "object" ? (out.ok !== undefined ? out : { ok: true, ...out }) : { ok: true, citedBy: out };
+  } catch (e) {
+    return { ok: false, error: "handler_error", message: String(e?.message || e) };
+  }
+}, { description: "Reverse citations for a DTU (GET /api/social/cited-by/:dtuId)." });
+
+register("social", "share", (ctx, input = {}) => {
+  try {
+    const userId = ctx?.actor?.userId || ctx?.actor?.id;
+    if (!userId) return { ok: false, error: "authentication_required" };
+    // Optional DTU share: require social_post on the referenced DTU
+    const dtuId = input.dtuId || input.linkedDtuId;
+    if (dtuId) {
+      const dtu = STATE.dtus.get(dtuId);
+      if (!dtu) return { ok: false, error: "dtu_not_found" };
+      dtuEnsureLicense(dtu);
+      const gate = dtuAssertScope(dtu, "social_post", { actorId: userId });
+      if (!gate.ok) {
+        return {
+          ok: false,
+          error: "license_scope_denied",
+          reason: gate.reason,
+          scope: "social_post",
+          message: "DTU license lacks social_post scope",
+        };
+      }
+    }
+    const postId = input.postId || input.id;
+    if (!postId) return { ok: false, error: "postId required" };
+    const out = socialSharePost(STATE, { userId, postId, commentary: input.commentary });
+    return out && typeof out === "object" ? (out.ok !== undefined ? out : { ok: true, ...out }) : { ok: true, result: out };
+  } catch (e) {
+    return { ok: false, error: "handler_error", message: String(e?.message || e) };
+  }
+}, { description: "Share a social post (auth required; mirrors POST /api/social/share)." });
+
+
 
 // Interface domain
 register("interface", "tabs", (_ctx, _input) => {
@@ -32835,6 +34583,45 @@ register("global","publish", async (ctx, input) => {
   return { ok:false, error:"DTU missing after publish" };
 }, { summary:"Publish a DTU to Global (council-gated, scope-enforced). Accepts lensId for C-NET source attribution." });
 
+register("global", "queue", (ctx, input = {}) => {
+  try {
+    const limit = clamp(Number(input.limit || 50), 1, 200);
+    const items = [...STATE.dtus.values()]
+      .filter((d) => d?.meta?.globalCandidate && !d?.meta?.globalId)
+      .sort((a, b) => String(b.updatedAt || b.createdAt || "").localeCompare(String(a.updatedAt || a.createdAt || "")))
+      .slice(0, limit)
+      .map((d) => ({ id: d.id, title: d.title, updatedAt: d.updatedAt || d.createdAt, ownerId: d.ownerId || null }));
+    return { ok: true, queue: items, total: items.length };
+  } catch (e) {
+    return { ok: false, error: "handler_error", message: String(e?.message || e) };
+  }
+}, { summary: "List DTUs marked as global candidates awaiting publish." });
+
+register("global", "contributions", (ctx, input = {}) => {
+  try {
+    const userId = ctx?.actor?.userId || ctx?.actor?.id || ctx?.actor?.odId || null;
+    const limit = clamp(Number(input.limit || 50), 1, 200);
+    let items = [...STATE.dtus.values()].filter((d) => d?.meta?.globalId || d?.meta?.globalCandidate || d?.scope === "global");
+    if (userId) {
+      items = items.filter((d) => d.ownerId === userId || d.meta?.publishedBy === userId);
+    }
+    items = items
+      .sort((a, b) => String(b.meta?.globalPublishedAt || b.updatedAt || "").localeCompare(String(a.meta?.globalPublishedAt || a.updatedAt || "")))
+      .slice(0, limit)
+      .map((d) => ({
+        id: d.id,
+        title: d.title,
+        globalId: d.meta?.globalId || null,
+        candidate: !!d.meta?.globalCandidate,
+        publishedAt: d.meta?.globalPublishedAt || null,
+        scope: d.scope || null,
+      }));
+    return { ok: true, contributions: items, total: items.length, userId };
+  } catch (e) {
+    return { ok: false, error: "handler_error", message: String(e?.message || e) };
+  }
+}, { summary: "List the caller's global publish/candidate contributions." });
+
 // ---- Marketplace ----
 register("market","listingCreate", (ctx, input) => {
   const dtuId = String(input.dtuId||"");
@@ -32982,7 +34769,7 @@ register("paper","export", (ctx, input) => {
 register("observability", "log_error", (ctx, input = {}) => {
   try {
     const { lensId, message, stack, componentStack } = input || {};
-    (STATE.logs ||= []).push({
+    const entry = {
       at: Date.now(),
       kind: "client_error",
       lensId: String(lensId || "unknown"),
@@ -32990,9 +34777,10 @@ register("observability", "log_error", (ctx, input = {}) => {
       stack: String(stack || "").slice(0, 4000),
       componentStack: String(componentStack || "").slice(0, 2000),
       userId: ctx?.actor?.userId || null,
-    });
-    return { ok: true };
-  } catch { return { ok: true, reason: "log_failed" }; }
+    };
+    (STATE.logs ||= []).push(entry);
+    return { ok: true, result: { logged: true, lensId: entry.lensId } };
+  } catch { return { ok: true, result: { logged: false }, reason: "log_failed" }; }
 }, { note: "Sink for LensErrorBoundary client-side error reports." });
 
 register("audit","query", (ctx, input) => {
@@ -34375,6 +36163,7 @@ app.use("/api/auth", createAuthRouter({
   _REFRESH_FAMILIES,
   REFRESH_TOKEN_COOKIE,
   NODE_ENV,
+  resolveCookieSecure,
   validate,
   hashPassword,
   verifyPassword,
@@ -34840,6 +36629,20 @@ allowMacro("global", "propose", _ACL_MEMBER);
 allowMacro("global", "publish", _ACL_MEMBER);
 allowMacro("global", "queue", _ACL_MEMBER);
 allowMacro("global", "contributions", _ACL_MEMBER);
+// Wave multipass audit 2026-09-05: publicRead live_* wires were advertised in
+// publicReadDomains but domain-level _ACL_OWNER still 403'd every member call
+// (Permission denied: global.live_countries). Override to public-read.
+// global is in _sovereignOnlyDomains — canRunMacro always applies. _ACL_PUB
+// lacks sovereign/founder, so honesty/sovereign tokens 403'd publicRead live_*
+// wires. Extend roles; members/viewers unchanged.
+const _ACL_PUB_SOV = { roles: ["viewer","member","admin","owner","sovereign","founder"], scopes: ["read","write","admin","*"] };
+allowMacro("global", "live_countries", _ACL_PUB_SOV);
+allowMacro("global", "live_wiki_search", _ACL_PUB_SOV);
+allowMacro("global", "live_wiki_summary", _ACL_PUB_SOV);
+allowMacro("global", "live_worldbank", _ACL_PUB_SOV);
+// Bulk recent_mine/list_mine on owner-gated council also 403'd members.
+allowMacro("council", "list_mine", _ACL_MEMBER_READ);
+allowMacro("council", "recent_mine", _ACL_MEMBER_READ);
 
 // Auth: identity read and personal API-key creation are safe for any
 // authenticated member. Overrides the domain-level _ACL_OWNER so regular
@@ -36348,7 +38151,7 @@ const ALL_LENS_DOMAINS = [
   "landscaping","law","law-enforcement","legacy","legal","linguistics","lock","logistics","manufacturing","market",
   "marketing","marketplace","masonry","materials","math","mental-health","mentorship","meta","metacognition","metalearning","mining","ml",
   "music","neuro","news","nonprofit","ocean","offline","organ","paper","parenting","pets","pharmacy","philosophy","photography","physics",
-  "platform","plumbing","podcast","poetry","privacy","projects","quantum","questmarket","queue","realestate","reasoning","robotics",
+  "platform","plumbing","podcast","poetry","predict","privacy","projects","quantum","questmarket","queue","realestate","reasoning","robotics",
   "reflection","repos","research","resonance","retail","schema","science",
   "security","services","sim","space","sports","srs","studio","suffering","supplychain",
   "telecommunications","temporal","thread","tick","timeline","trades","transfer",
@@ -36604,6 +38407,13 @@ import createWagersRouter from "./routes/wagers.js";
 import createNPCShopRouter from "./routes/npc-shop.js";
 app.use("/api/tools", createToolsRouter({ requireAuth, db }));
 app.use("/api/blueprints", createBlueprintsRouter({ requireAuth, db }));
+
+// ConKay free-text NLP → design intent → FEA/partMesh mesh arrays (v1 apply_mesh path)
+import createConkayDesignRouter from "./routes/conkay-design.js";
+app.use("/api/conkay", createConkayDesignRouter({ requireAuth, db }));
+// ConKay CAD Wave 1 — multi-part assembly store + revise
+import createConkayAssemblyRouter from "./routes/conkay-assembly.js";
+app.use("/api/conkay", createConkayAssemblyRouter({ requireAuth, db }));
 app.use("/api/wagers", createWagersRouter({ requireAuth, db, realtimeEmit }));
 app.use("/api/npc-shop", createNPCShopRouter({ requireAuth, db }));
 
@@ -36722,20 +38532,30 @@ app.get("/mcp/tools", (_req, res) => {
 const MCP_TOOLS_REQUIRE_REAL_AUTH = new Set(["reflect_invoke", "reflect_rescan"]);
 
 app.post("/mcp/call", express.json({ limit: "1mb" }), asyncHandler(async (req, res) => {
-  const { tool, args } = req.body || {};
-  if (!tool || typeof tool !== "string") {
-    return res.status(400).json({ ok: false, error: "tool (string) is required" });
-  }
-  if (MCP_TOOLS_REQUIRE_REAL_AUTH.has(tool) && (!req.user || req.authMethod === "mcp-bypass")) {
-    return res.status(403).json({ ok: false, error: "forbidden", reason: "this tool requires real authentication; the CONCORD_MCP_PUBLIC/AUTH_MODE=public bypass does not cover it" });
-  }
-  try {
-    const result = await callMCPTool(db, tool, args || {}, globalThis.STATE || null);
-    res.json(result);
-  } catch (e) {
-    res.status(500).json({ ok: false, error: String(e?.message || e) });
-  }
-}));
+    const { tool, args } = req.body || {};
+    if (!tool || typeof tool !== "string") {
+      return res.status(400).json({ ok: false, error: "tool (string) is required" });
+    }
+    if (MCP_TOOLS_REQUIRE_REAL_AUTH.has(tool) && (!req.user || req.authMethod === "mcp-bypass")) {
+      return res.status(403).json({ ok: false, error: "forbidden", reason: "this tool requires real authentication; the CONCORD_MCP_PUBLIC/AUTH_MODE=public bypass does not cover it" });
+    }
+    try {
+      // F0.5: wrap callMCPTool with AuthGate composition layer (lib/auth-gate/dispatch.js).
+      // The dispatch is HTTP-agnostic; AuthGate builds the 14-field envelope and routes
+      // through the existing authority systems. observe_only is the default for safety.
+      const { dispatchMCP } = await import("./lib/auth-gate/dispatch.js");
+      const result = await dispatchMCP(tool, args || {}, {
+        actor: req.user || null,
+        req,
+        db,
+        STATE: globalThis.STATE || null,
+        trace_id: req.headers['x-trace-id'] || null,
+      });
+      res.json(result);
+    } catch (e) {
+      res.status(500).json({ ok: false, error: String(e?.message || e) });
+    }
+  }));
 // ===== END MCP ENDPOINTS =====
 
 app.get("/api/plugins/gallery", (req, res) => {
@@ -36984,6 +38804,11 @@ app.use("/api/combat", createCombatRouter({
   getNearbyUserIds: _combatGetNearbyUserIds,
   db,
 }));
+
+// Concordia FULL server-authority — quest interact returns authored branching
+// text from content store (not Unity-only offline LoreStone strings).
+import createQuestAuthorityRouter from "./routes/quest-authority.js";
+app.use("/api/quests", createQuestAuthorityRouter({ requireAuth }));
 
 // Procedural creatures + emergent skills. Creatures are physics-validated
 // procedural spawns from in-fiction descriptions (a dragon described in
@@ -38248,13 +40073,13 @@ register("city", "endStream", (ctx, input={}) => {
 register("city", "followStream", (ctx, input={}) => {
   const viewerId = ctx?.actor?.userId || "anon";
   cityStreaming.followStream(input.streamId, viewerId);
-  return { ok: true };
+  return { ok: true, result: { streamId: input.streamId, viewerId } };
 });
 
 register("city", "unfollowStream", (ctx, input={}) => {
   const viewerId = ctx?.actor?.userId || "anon";
   cityStreaming.unfollowStream(input.streamId, viewerId);
-  return { ok: true };
+  return { ok: true, result: { streamId: input.streamId, viewerId } };
 });
 
 register("city", "listStreams", (ctx, input={}) => {
@@ -38673,6 +40498,11 @@ async function governorTick(reason="heartbeat") {
     try { METRICS?.counters?.heartbeatSkipped?.inc(); } catch { /* metrics best-effort */ }
     return { ok: false, reason: "tick_already_running" };
   }
+  // Loop-liveness stamp — set on EVERY firing, including an idle-skip below,
+  // so "is the 15s interval alive" is observable separately from "did heavy
+  // maintenance run this tick". Consumed by /api/system/health's heartbeat.
+  STATE.__governorTickAt = Date.now();
+
   // Sprint 60+ — idle gate on governor heartbeat. autogen/dream/evolution/synth
   // plus jobs/queue/ingest all do real CPU work (macros, embeddings,
   // cluster detection). With no users, there's no one to notice the result.
@@ -40367,6 +42197,23 @@ register("council", "vote", (ctx, input) => {
   if (!dtuId || !vote) return { ok: false, error: "dtuId and vote required" };
   if (!["approve", "reject", "abstain"].includes(vote)) return { ok: false, error: "Invalid vote" };
 
+  // Require a real DTU (STATE / archive / SQL dtus) before recording a ballot.
+  // Previously any string (e.g. "missing") was accepted with ok:true — a
+  // residual honesty ghost from the macro-reality audit.
+  let councilDtu = (STATE.dtus && typeof STATE.dtus.get === "function") ? STATE.dtus.get(dtuId) : null;
+  if (!councilDtu && typeof rehydrateDTU === "function") {
+    try { councilDtu = rehydrateDTU(dtuId); } catch { /* miss */ }
+  }
+  if (!councilDtu && typeof db !== "undefined" && db && typeof readAndHydrateDtu === "function") {
+    try {
+      councilDtu = readAndHydrateDtu(db, dtuId);
+      if (councilDtu && STATE.dtus && typeof STATE.dtus.set === "function") {
+        STATE.dtus.set(dtuId, councilDtu);
+      }
+    } catch { /* miss */ }
+  }
+  if (!councilDtu) return { ok: false, error: "dtu_not_found" };
+
   // ---- Duplicate Vote Prevention (Category 2: Concurrency) ----
   const voterId = ctx?.actor?.id || ctx?.actor?.odId || persona || "anonymous";
   if (STATE.councilVotes.has(dtuId)) {
@@ -40434,6 +42281,63 @@ register("council", "credibility", (ctx, input) => {
 
   return { ok: true, dtuId, credibility: dtu.authority.credibility };
 });
+
+register("council", "list", (ctx, input = {}) => {
+  try {
+    const limit = clamp(Number(input.limit || 50), 1, 200);
+    const open = [];
+    for (const [dtuId, votes] of (STATE.councilVotes || new Map()).entries()) {
+      const dtu = STATE.dtus.get(dtuId);
+      open.push({
+        dtuId,
+        title: dtu?.title || null,
+        votes: Array.isArray(votes) ? votes.length : 0,
+        candidate: !!dtu?.meta?.globalCandidate,
+        updatedAt: dtu?.updatedAt || null,
+      });
+    }
+    // Also surface global candidates with zero votes yet
+    for (const d of STATE.dtus.values()) {
+      if (d?.meta?.globalCandidate && !open.find((x) => x.dtuId === d.id)) {
+        open.push({ dtuId: d.id, title: d.title || null, votes: 0, candidate: true, updatedAt: d.updatedAt || null });
+      }
+    }
+    open.sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")));
+    return { ok: true, items: open.slice(0, limit), total: open.length };
+  } catch (e) {
+    return { ok: false, error: "handler_error", message: String(e?.message || e) };
+  }
+}, { summary: "List council ballot items and global candidates." });
+
+register("council", "status", (ctx, _input = {}) => {
+  try {
+    const voteKeys = STATE.councilVotes ? STATE.councilVotes.size : 0;
+    let voteCount = 0;
+    if (STATE.councilVotes) {
+      for (const votes of STATE.councilVotes.values()) voteCount += Array.isArray(votes) ? votes.length : 0;
+    }
+    const candidates = [...STATE.dtus.values()].filter((d) => d?.meta?.globalCandidate && !d?.meta?.globalId).length;
+    const published = STATE.globalIndex?.byId ? STATE.globalIndex.byId.size : 0;
+    return { ok: true, openBallots: voteKeys, totalVotes: voteCount, globalCandidates: candidates, globalPublished: published };
+  } catch (e) {
+    return { ok: false, error: "handler_error", message: String(e?.message || e) };
+  }
+}, { summary: "Council queue health: ballots, votes, candidates, published." });
+
+register("council", "proposePromotion", (ctx, input = {}) => {
+  // Real path: mark DTU as global candidate (same substrate as global.propose).
+  const dtuId = String(input.dtuId || input.id || "");
+  if (!dtuId) return { ok: false, error: "dtuId required" };
+  const dtu = STATE.dtus.get(dtuId);
+  if (!dtu) return { ok: false, error: "DTU not found" };
+  dtu.meta = dtu.meta || {};
+  dtu.meta.globalCandidate = true;
+  dtu.meta.proposedPromotionAt = nowISO();
+  dtu.meta.proposedPromotionBy = ctx?.actor?.userId || ctx?.actor?.id || null;
+  dtu.updatedAt = nowISO();
+  saveStateDebounced();
+  return { ok: true, dtuId, status: "global_candidate", via: "council.proposePromotion" };
+}, { summary: "Propose a DTU for global promotion (marks globalCandidate)." });
 
 // ---- User-Defined Personas ----
 // NOTE: this is the CANONICAL persona.create — it shadows two earlier
@@ -41249,6 +43153,42 @@ register("marketplace", "browse", (ctx, input) => {
   return { ok: true, ...result, categories: PLUGIN_MARKETPLACE.categories };
 });
 
+// MULTIPASS ACL: marketplace.listings/get — advertised in publicReadDomains
+// but only browse/list existed (ghost 404 via lens/macros). Real handlers:
+register("marketplace", "listings", (ctx, input = {}) => {
+  try {
+    const fn = MACROS.get("marketplace")?.get("browse");
+    if (typeof fn === "function") return fn(ctx, input || {});
+    // Inline equivalent if map not ready
+    const { category, search, sort, page, pageSize } = input || {};
+    let listings = Array.from(PLUGIN_MARKETPLACE.listings.values()).filter(l => l.status === "approved" || l.status === "pending_review");
+    if (category) listings = listings.filter(l => l.category === category);
+    if (search) { const q = String(search).toLowerCase(); listings = listings.filter(l => (l.name || "").toLowerCase().includes(q) || (l.description || "").toLowerCase().includes(q)); }
+    if (sort === "rating") listings.sort((a, b) => (b.rating || 0) - (a.rating || 0));
+    else if (sort === "downloads") listings.sort((a, b) => (b.downloads || 0) - (a.downloads || 0));
+    else listings.sort((a, b) => new Date(b.submittedAt || 0) - new Date(a.submittedAt || 0));
+    const result = paginateResults(listings, { page: Number(page || 1), pageSize: clamp(Number(pageSize || 20), 1, 100) });
+    return { ok: true, ...result, categories: PLUGIN_MARKETPLACE.categories };
+  } catch (e) {
+    return { ok: false, error: "handler_error", message: String(e?.message || e) };
+  }
+}, { description: "Alias of marketplace.browse for publicRead/listings callers." });
+
+register("marketplace", "get", (ctx, input = {}) => {
+  try {
+    const pluginId = input.pluginId || input.id || input.listingId;
+    if (!pluginId) return { ok: false, error: "pluginId required" };
+    const listing = PLUGIN_MARKETPLACE.listings.get(pluginId);
+    if (!listing) return { ok: false, error: "Plugin not found" };
+    const reviews = PLUGIN_MARKETPLACE.reviews?.get?.(pluginId) || [];
+    return { ok: true, listing, reviews, reviewCount: reviews.length };
+  } catch (e) {
+    return { ok: false, error: "handler_error", message: String(e?.message || e) };
+  }
+}, { description: "Get one marketplace plugin listing by pluginId." });
+
+
+
 register("marketplace", "install", (ctx, input) => {
   const { pluginId, fromGithub, githubUrl } = input;
   if (fromGithub && githubUrl) {
@@ -41367,11 +43307,35 @@ register("marketplace", "list", async (ctx, input) => {
   if (dtu.ownerId && dtu.ownerId !== userId) {
     return { ok: false, error: "not_your_dtu" };
   }
-  if (dtu.scope && dtu.scope !== "personal") {
+  // Owner private work may be local (dtu.create default) or personal (locker).
+  // Block already-global / already-marketplace scopes from a second list path.
+  if (dtu.scope && dtu.scope !== "personal" && dtu.scope !== "local") {
     return { ok: false, error: "can_only_list_personal_dtus" };
   }
 
+  // Purchase-scoped license: listing requires marketplace_sale on the DTU.
+  dtuEnsureLicense(dtu);
+  const saleGate = dtuAssertScope(dtu, "marketplace_sale", { actorId: userId });
+  if (!saleGate.ok) {
+    return {
+      ok: false,
+      error: "license_scope_denied",
+      reason: saleGate.reason,
+      scope: "marketplace_sale",
+      message: "DTU license lacks marketplace_sale scope — add it before listing.",
+    };
+  }
+
   dtu.scope = "marketplace";
+  const listingScopes = Array.isArray(input?.listingScopes) ? input.listingScopes
+    : Array.isArray(input?.purchaseScopes) ? input.purchaseScopes
+    : (dtu.license?.listingScopes || []);
+  if (listingScopes.length) {
+    dtu.license.listingScopes = dtuNormalizeLicense({
+      ...dtu.license,
+      listingScopes,
+    }).listingScopes;
+  }
   dtu.marketplace = {
     listed: true, listedAt: new Date().toISOString(),
     price: price || 0, currency: currency || "USD",
@@ -41382,6 +43346,7 @@ register("marketplace", "list", async (ctx, input) => {
     preview: preview || null,
     seller: userId || dtu.meta?.createdBy,
     purchases: 0, rating: null, reviews: [],
+    purchaseScopes: dtu.license?.listingScopes || [],
   };
 
   return { ok: true, listing: dtu.marketplace };
@@ -41485,19 +43450,31 @@ register("marketplace", "purchase", async (ctx, input) => {
   const dtu = STATE.dtus.get(dtuId);
   if (!dtu?.marketplace?.listed) return { ok: false, error: "not_listed" };
 
+  const buyerId = ctx?.actor?.userId || ctx?.actor?.id;
+  const grant = buyerId
+    ? dtuGrantPurchaseScopes(dtu, buyerId, dtu.marketplace || {})
+    : { ok: false, scopes: [] };
+
   const clone = JSON.parse(JSON.stringify(dtu));
   clone.id = uid("dtu");
   clone.scope = "local";
   clone.meta = clone.meta || {};
   clone.meta.purchasedFrom = dtuId;
   clone.meta.purchasedAt = new Date().toISOString();
-  clone.meta.owner = ctx?.actor?.userId;
+  clone.meta.owner = buyerId;
+  clone.ownerId = buyerId || clone.ownerId;
+  // Buyer receives a private license carrying the purchased scopes
+  clone.license = dtuNormalizeLicense({
+    scopes: grant.scopes?.length ? grant.scopes : dtuScopesGrantedByPurchase(dtu.marketplace || {}),
+    holderScopes: {},
+    listingScopes: [],
+  });
   delete clone.marketplace;
 
   STATE.dtus.set(clone.id, clone);
   dtu.marketplace.purchases++;
 
-  return { ok: true, purchasedDtuId: clone.id };
+  return { ok: true, purchasedDtuId: clone.id, grantedScopes: grant.scopes || clone.license.scopes };
 }, { description: "Purchase a marketplace listing." });
 
 register("marketplace", "dtu_browse", async (ctx, input) => {
@@ -42255,16 +44232,24 @@ register("marketplace", "purchaseWithRoyalties", async (ctx, input) => {
     }
   }
   if (price === 0) {
+    const buyerId0 = ctx?.actor?.userId || ctx?.actor?.id;
+    const grant0 = buyerId0 ? dtuGrantPurchaseScopes(dtu, buyerId0, dtu.marketplace || {}) : { scopes: [] };
     const clone = JSON.parse(JSON.stringify(dtu));
     clone.id = uid("dtu");
     clone.scope = "local";
     clone.meta = clone.meta || {};
     clone.meta.purchasedFrom = dtuId;
     clone.meta.purchasedAt = new Date().toISOString();
-    clone.meta.owner = ctx?.actor?.userId;
+    clone.meta.owner = buyerId0;
+    clone.ownerId = buyerId0 || clone.ownerId;
+    clone.license = dtuNormalizeLicense({
+      scopes: grant0.scopes?.length ? grant0.scopes : dtuScopesGrantedByPurchase(dtu.marketplace || {}),
+      holderScopes: {},
+      listingScopes: [],
+    });
     delete clone.marketplace;
     STATE.dtus.set(clone.id, clone);
-    return { ok: true, purchasedDtuId: clone.id, price: 0, royalties: [] };
+    return { ok: true, purchasedDtuId: clone.id, price: 0, royalties: [], grantedScopes: clone.license.scopes };
   }
 
   const platformFee = price * 0.05;
@@ -42326,13 +44311,21 @@ register("marketplace", "purchaseWithRoyalties", async (ctx, input) => {
   // idempotency key below references clone.id. (Previously the `const clone`
   // declaration sat after this loop, so `clone.id` here hit a temporal-dead-zone
   // ReferenceError and every PAID purchase threw before any wallet was credited.)
+  const buyerIdPaid = ctx?.actor?.userId || ctx?.actor?.id;
+  const grantPaid = buyerIdPaid ? dtuGrantPurchaseScopes(dtu, buyerIdPaid, dtu.marketplace || {}) : { scopes: [] };
   const clone = JSON.parse(JSON.stringify(dtu));
   clone.id = uid("dtu");
   clone.scope = "local";
   clone.meta = clone.meta || {};
   clone.meta.purchasedFrom = dtuId;
   clone.meta.purchasedAt = new Date().toISOString();
-  clone.meta.owner = ctx?.actor?.userId;
+  clone.meta.owner = buyerIdPaid;
+  clone.ownerId = buyerIdPaid || clone.ownerId;
+  clone.license = dtuNormalizeLicense({
+    scopes: grantPaid.scopes?.length ? grantPaid.scopes : dtuScopesGrantedByPurchase(dtu.marketplace || {}),
+    holderScopes: {},
+    listingScopes: [],
+  });
   delete clone.marketplace;
   STATE.dtus.set(clone.id, clone);
 
@@ -44458,15 +46451,42 @@ try {
 // so the two dispatchers can't silently drift apart again the way they had
 // (see docs/CONKAY_TOOL_AUTHORING_SPEC.md's "Corrections to the task's
 // framing" for the gap this closed).
+//
+// LENS_ACTIONS handlers bypass runMacro, so they never hit its macro_call_log
+// hook — the 119-vs-8743 invocation gap in substrate inventory. Bill here too.
+function _billLensDispatch(domain, name, result, startedAt, ctx) {
+  const db = STATE?.db || globalThis._concordDB;
+  if (!db) return;
+  try {
+    const userId = ctx?.actor?.userId;
+    const apiKeyId = ctx?.actor?.apiKeyId || ctx?.apiKeyId || null;
+    billMacroCall(db, {
+      userId: userId && userId !== "anon" ? userId : null,
+      apiKeyId,
+      domain,
+      name,
+      durationMs: Math.max(0, Date.now() - startedAt),
+      status: result?.ok === false ? "error" : "ok",
+      refId: apiKeyId ? `${apiKeyId}:${crypto.randomUUID()}` : null,
+    });
+  } catch (e) {
+    observe(e, "lens_dispatch_billing");
+  }
+}
+
 async function runMcpTool(domain, name, input, ctx) {
+  const _t0 = Date.now();
   const resolved = _resolveDualRegistry(domain, name, { lensActions: LENS_ACTIONS, runMacro });
   if (resolved.via === "lens_action") {
     const data = _peelRedundantArtifactWrapper(input || {});
     const virtualArtifact = { id: null, domain, type: "domain_action", data, meta: {} };
-    return await resolved.handler(ctx, virtualArtifact, data);
+    const result = await resolved.handler(ctx, virtualArtifact, data);
+    _billLensDispatch(domain, name, result, _t0, ctx);
+    return result;
   }
   return await runMacro(domain, name, input || {}, ctx);
 }
+globalThis.__concordRunMcpTool = runMcpTool;
 
 // Sprint 18.5 follow-up — same TDZ story. mountMcpServer needs `app` + `STATE`
 // + a tool runner. Old position at ~line 23681 was TDZ on `app` and silently
@@ -44622,7 +46642,10 @@ app.post("/api/lens/run", async (req, res) => {
     const lensHandler = LENS_ACTIONS.get(`${domain}.${action}`);
     if (lensHandler) {
       const virtualArtifact = { id: null, domain, type: "domain_action", data: rest, meta: {} };
-      const result = _unwrapLensEnvelope(await lensHandler(ctx, virtualArtifact, rest));
+      const _lensT0 = Date.now();
+      const lensRaw = await lensHandler(ctx, virtualArtifact, rest);
+      _billLensDispatch(domain, action, lensRaw, _lensT0, ctx);
+      const result = _unwrapLensEnvelope(lensRaw);
       emitMacroLife("macro:completed", { ok: result?.ok !== false, ms: Date.now() - _lifeStartedAt });
       // R5/E22 — ConKay spatial mode (Godot Hub): a real, non-fabricated
       // capability-tier fact for the two verdict-producing macros only. See
@@ -44958,9 +46981,31 @@ registerLensAction("council", "debate", (ctx, artifact, params) => {
   saveStateDebounced();
   return { ok: true, debate: artifact.data.debate };
 });
-registerLensAction("council", "vote", (ctx, artifact, params) => {
+registerLensAction("council", "vote", async (ctx, artifact, params = {}) => {
+  // Prefer the canonical DTU council ballot (MACROS register("council","vote"))
+  // whenever dtuId + vote/choice are present. The previous lens-only handler
+  // pushed onto a virtual empty artifact and always returned ok:true — even
+  // with zero params — which made /api/lens/run look like a successful vote
+  // while never touching STATE.councilVotes.
+  const dtuId = params.dtuId || params.id || artifact?.data?.dtuId || null;
+  const vote = params.vote || params.choice || null;
+  if (dtuId && vote) {
+    return await runMacro("council", "vote", {
+      dtuId: String(dtuId),
+      vote: String(vote),
+      persona: params.persona,
+      reason: params.reason || params.rationale || "",
+    }, ctx);
+  }
+  // Artifact-scoped debate vote: require a real artifact id + explicit choice.
+  if (!artifact?.id) {
+    return { ok: false, error: "dtuId and vote required (or a persisted council artifact with choice)" };
+  }
+  if (!vote) {
+    return { ok: false, error: "choice or vote required" };
+  }
   const votes = artifact.data?.votes || [];
-  const newVote = { id: uid("vote"), voterId: ctx.actor?.userId || "anon", choice: params.choice, weight: params.weight || 1, rationale: params.rationale || "", timestamp: nowISO() };
+  const newVote = { id: uid("vote"), voterId: ctx.actor?.userId || "anon", choice: vote, weight: params.weight || 1, rationale: params.rationale || params.reason || "", timestamp: nowISO() };
   votes.push(newVote);
   artifact.data = { ...artifact.data, votes };
   artifact.updatedAt = nowISO();
@@ -45291,8 +47336,46 @@ registerLensAction("graph", "merge", (ctx, artifact, params) => {
 });
 
 // === Whiteboard (Collaboration) ===
-registerLensAction("whiteboard", "render", (ctx, artifact, params) => {
-  return { ok: true, render: { boardId: artifact.id, format: params.format || "png", renderedAt: nowISO() } };
+registerLensAction("whiteboard", "render", (ctx, artifact, params = {}) => {
+  // Honest render: previously returned ok:true metadata-only with no pixels.
+  // Cheap real path — emit an SVG of board elements/nodes when present.
+  const elements = Array.isArray(artifact?.data?.elements) ? artifact.data.elements
+    : (Array.isArray(artifact?.data?.nodes) ? artifact.data.nodes : []);
+  if (!artifact?.id && !elements.length) {
+    return { ok: false, error: "whiteboard_empty", message: "No whiteboard artifact/elements to render." };
+  }
+  if (!elements.length) {
+    return { ok: false, error: "whiteboard_empty", message: "Whiteboard has no elements to render." };
+  }
+  const width = Math.max(320, Number(params.width) || Number(artifact?.data?.width) || 1200);
+  const height = Math.max(240, Number(params.height) || Number(artifact?.data?.height) || 800);
+  const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  const colors = ["#4e79a7", "#f28e2b", "#e15759", "#76b7b2", "#59a14f", "#edc948", "#b07aa1", "#ff9da7"];
+  let body = "";
+  elements.forEach((el, i) => {
+    const x = Number(el.x != null ? el.x : (40 + (i % 8) * 140));
+    const y = Number(el.y != null ? el.y : (40 + Math.floor(i / 8) * 100));
+    const w = Math.max(40, Number(el.width || el.w || 120));
+    const h = Math.max(24, Number(el.height || el.h || 60));
+    const fill = el.color || el.fill || colors[i % colors.length];
+    const label = el.text || el.label || el.title || el.content || el.id || `item-${i + 1}`;
+    body += `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="8" fill="${esc(fill)}" opacity="0.85"/>`;
+    body += `<text x="${x + w / 2}" y="${y + h / 2 + 4}" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#111">${esc(String(label).slice(0, 48))}</text>`;
+  });
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><rect width="100%" height="100%" fill="#fafafa"/>${body}</svg>`;
+  return {
+    ok: true,
+    render: {
+      boardId: artifact?.id || null,
+      format: "svg",
+      mimeType: "image/svg+xml",
+      width,
+      height,
+      elementCount: elements.length,
+      svg,
+      renderedAt: nowISO(),
+    },
+  };
 });
 registerLensAction("whiteboard", "layout", (ctx, artifact, params) => {
   try {
@@ -47008,8 +49091,12 @@ registerUniversalLensActions();
     // Schema lens: frontend calls validate
     ["schema", "validate", "schemaValidate"],
 
-    // Entity lens: frontend calls terminal
-    ["entity", "terminal", "entityResolution"],
+    // Entity lens: DO NOT alias terminal → entityResolution.
+    // That alias shadowed chicken3's real register("entity","terminal")
+    // (governed shell exec) and made /api/lens/run {entity,terminal}
+    // return a vacuous entity-resolution "ok" with zero records — a
+    // classic fake-success ghost. Entity resolution is entityResolution;
+    // terminal is the chicken3 macro (honest disabled unless ENABLE_TERMINAL_EXEC).
 
     // Code lens: frontend calls forge-generate (app generation, map to generate universal action)
     ["code", "forge-generate", "generate"],
@@ -47478,6 +49565,12 @@ const DOMAIN_ACTION_MANIFEST = {
     { action: "design-experiment", brain: "U", desc: "Suggest experimental design: variables, controls, methodology" },
     { action: "validate-conclusions", brain: "R", desc: "Validate that conclusions match the data" },
     { action: "find-transfers", brain: "S", desc: "Find structurally similar hypotheses in other domains" },
+  ],
+  predict: [
+    { action: "explain-forecast", brain: "C", desc: "Explain a ticket's forecast distribution and what evidence would move it" },
+    { action: "suggest-regime", brain: "U", desc: "Suggest a regime label for a ticket from its feature snapshot" },
+    { action: "critique-calibration", brain: "R", desc: "Flag likely miscalibration, overfitting, or sample-size abuse in a calibration report" },
+    { action: "find-transfers", brain: "S", desc: "Find structurally similar predictions across other subjects" },
   ],
   science: [
     { action: "validate-claims", brain: "R", desc: "Validate consistency between related scientific claims" },
@@ -52001,9 +54094,9 @@ const CACHE = { hot: new Map(), queries: new Map(), ttl: 300000, maxSize: 1000 }
 register("cache", "get", (ctx, input) => {
   const { key } = input;
   const cached = CACHE.hot.get(key);
-  if (!cached) return { ok: false, miss: true };
-  if (Date.now() - cached.cachedAt > (cached.ttl || CACHE.ttl)) { CACHE.hot.delete(key); return { ok: false, miss: true, expired: true }; }
-  return { ok: true, data: cached.data, cachedAt: cached.cachedAt };
+  if (!cached) return { ok: false, error: "cache_miss", miss: true };
+  if (Date.now() - cached.cachedAt > (cached.ttl || CACHE.ttl)) { CACHE.hot.delete(key); return { ok: false, error: "cache_expired", miss: true, expired: true }; }
+  return { ok: true, result: { data: cached.data, cachedAt: cached.cachedAt } };
 });
 
 register("cache", "set", (ctx, input) => {
@@ -52871,6 +54964,27 @@ app.get("/api/system/health", (_req, res) => {
     const sessions = STATE.sessions?.size || 0;
     const brainStatus = typeof getBrainStatus === "function" ? getBrainStatus() : {};
     const uptime = process.uptime();
+
+    // Heartbeat liveness. `__governorTickAt` is stamped on EVERY governorTick
+    // firing (including idle-skips), so this reflects "is the 15s interval
+    // alive" — not "did heavy maintenance run" (which is correctly skipped
+    // when no users are active). `_tickHistory` only grows on non-idle ticks.
+    const _govAt = STATE.__governorTickAt || null;
+    const _lastTick = _tickHistory.length ? _tickHistory[_tickHistory.length - 1] : null;
+    const _agoMs = _govAt ? (Date.now() - _govAt) : null;
+    const heartbeat = {
+      tick: STATE.__bgTickCounter || 0,
+      lastTickAt: _govAt ? new Date(_govAt).toISOString() : null,
+      lastTickAgoMs: _agoMs,
+      // ≤ 3 missed 15s intervals => alive
+      alive: _agoMs != null ? _agoMs < 48000 : false,
+      lastMaintenanceAt: _lastTick?.at || null,
+    };
+
+    // Substrate tier mix — regular DTUs consolidate into MEGA then HYPER, so
+    // (mega + hyper) is the real "compacted" count.
+    const tiers = { regular: 0, mega: 0, hyper: 0, shadow: 0 };
+    for (const d of dtus) tiers[d.tier || "regular"] = (tiers[d.tier || "regular"] || 0) + 1;
     // Outbound fetch scheduler stats (entity-web-exploration + feed-manager).
     // Surfaces the concurrency cap, in-flight count, circuit-breaker openings,
     // and timeout/error tallies — logwatch can scan for "droppedByCircuit > 0"
@@ -52889,6 +55003,8 @@ app.get("/api/system/health", (_req, res) => {
         dtuCount: total,
         sessionCount: sessions,
         brains: brainStatus,
+        heartbeat,
+        substrate: { total, tiers, compacted: (tiers.mega || 0) + (tiers.hyper || 0) },
         memory: { rss: process.memoryUsage().rss, heap: process.memoryUsage().heapUsed },
         postgres: { connected: !!pgPool, status: pgPool ? 'connected' : 'in-memory-fallback' },
         redis: { connected: !!redisClient, status: redisClient ? 'connected' : 'in-memory-fallback' },
@@ -54072,6 +56188,19 @@ app.post("/api/comments/:id/react", (req, res) => {
 app.post("/api/dtus/:id/share", (req, res) => {
   try {
     const userId = req.user?.id || "anonymous";
+    const dtu = STATE.dtus.get(req.params.id);
+    if (!dtu) return res.status(404).json({ ok: false, error: "DTU not found" });
+    dtuEnsureLicense(dtu);
+    const gate = dtuAssertScope(dtu, "social_post", { actorId: userId === "anonymous" ? null : userId });
+    if (!gate.ok) {
+      return res.status(403).json({
+        ok: false,
+        error: "license_scope_denied",
+        reason: gate.reason,
+        scope: "social_post",
+        message: "DTU license lacks social_post scope",
+      });
+    }
     const result = createShareLink(req.params.id, userId, req.body);
     res.json(result);
   } catch (e) {
@@ -55054,33 +57183,20 @@ function processVoiceNote(audioBuffer, options = {}) {
 
 // ---- Image Analysis ----
 async function analyzeImage(imageBuffer, prompt = "Describe this image in detail.") {
-  // Use multimodal brain config — respects BRAIN_MULTIMODAL_URL + OLLAMA_VISION_MODEL
-  const brain = BRAIN_CONFIG.multimodal;
-  const OLLAMA_URL = brain.url || process.env.OLLAMA_HOST || "";
-  const VISION_MODEL = brain.model || "qwen2.5vl:7b";
-
+  // 4-lane: routes through vision-inference (CF Workers AI when BRAIN_VISION_PROVIDER=cloudflare)
   try {
     const base64 = imageBuffer.toString("base64");
-
-    // Use /api/chat (not deprecated /api/generate) with images array
-    const response = await fetch(`${OLLAMA_URL}/api/chat`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: VISION_MODEL,
-        messages: [{ role: "user", content: prompt, images: [base64] }],
-        stream: false,
-        options: { temperature: brain.temperature ?? 0.1 },
-      })
-    });
-
-    if (!response.ok) {
-      return { ok: false, error: `Ollama error: ${response.status}` };
+    const { callVision } = await import("./lib/vision-inference.js");
+    const visionResult = await callVision(base64, prompt);
+    if (!visionResult.ok) {
+      return { ok: false, error: visionResult.error || "vision_failed", model: visionResult.model };
     }
-
-    const data = await response.json();
-    const content = data.message?.content || data.response || "";
-    return { ok: true, description: content, model: VISION_MODEL };
+    return {
+      ok: true,
+      description: visionResult.content || "",
+      model: visionResult.model || process.env.BRAIN_VISION_MODEL,
+      source: visionResult.source,
+    };
   } catch (e) {
     return { ok: false, error: String(e.message || e) };
   }
@@ -56275,6 +58391,364 @@ app.get("/api/admin/worker-stats", requireRole("owner", "admin", "sovereign", "f
     res.status(500).json({ ok: false, error: String(e?.message || e) });
   }
 });
+
+// ── Concord Runtime observability (docs/CONCORD_RUNTIME_MASTER_SPEC.md §11) ─
+// Capability-registry + event-bus surfaces. Admin-gated like the other
+// /api/admin/* telemetry routes above — this is operational visibility,
+// not a public API. Predict is the only domain onboarded into the
+// registry so far (see domains/predict.js's CAPABILITY_DESCRIPTORS).
+app.get("/api/runtime/capabilities", requireRole("owner", "admin", "sovereign", "founder"), async (req, res) => {
+  try {
+    const { listCapabilities, checkCapabilityHealth } = await import("./lib/runtime/capability-registry.js");
+    const filters = {};
+    if (req.query.owner) filters.owner = String(req.query.owner);
+    if (req.query.risk) filters.risk = String(req.query.risk);
+    const capabilities = listCapabilities(filters).map((c) => ({ ...c, health: checkCapabilityHealth(c.capability) }));
+    res.json({ ok: true, count: capabilities.length, capabilities });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
+});
+
+app.get("/api/runtime/capabilities/:capability/health", requireRole("owner", "admin", "sovereign", "founder"), async (req, res) => {
+  try {
+    const { getCapabilityDescriptor, checkCapabilityHealth } = await import("./lib/runtime/capability-registry.js");
+    const capability = req.params.capability;
+    const descriptor = getCapabilityDescriptor(capability);
+    if (!descriptor) return res.status(404).json({ ok: false, error: "not_registered" });
+    res.json({ ok: true, descriptor, health: checkCapabilityHealth(capability) });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
+});
+
+app.get("/api/runtime/events/recent", requireRole("owner", "admin", "sovereign", "founder"), async (req, res) => {
+  try {
+    const { recentEvents } = await import("./lib/runtime/event-bus.js");
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 100, 1), 500);
+    res.json({ ok: true, events: recentEvents(limit) });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
+});
+
+// P0 — Mission control API (docs/CONCORD_RUNTIME_MASTER_SPEC.md §10/§11)
+app.get("/api/runtime/missions", requireRole("owner", "admin", "sovereign", "founder"), async (req, res) => {
+  try {
+    const { listMissions, runtimeOverview } = await import("./lib/mission-runtime.js");
+    const status = req.query.status ? String(req.query.status) : undefined;
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
+    res.json({
+      ok: true,
+      overview: runtimeOverview(db),
+      missions: listMissions(db, { status, limit }),
+    });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
+});
+
+app.get("/api/runtime/missions/:missionId", requireRole("owner", "admin", "sovereign", "founder"), async (req, res) => {
+  try {
+    const { getMission } = await import("./lib/mission-runtime.js");
+    const mission = getMission(db, req.params.missionId);
+    if (!mission) return res.status(404).json({ ok: false, reason: "not_found" });
+    res.json({ ok: true, mission });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
+});
+
+app.post("/api/runtime/missions", requireRole("owner", "admin", "sovereign", "founder"), asyncHandler(async (req, res) => {
+  const { createMission } = await import("./lib/mission-runtime.js");
+  const userId = req.user?.id || req.user?.userId || "system";
+  const r = createMission(db, {
+    template: req.body?.template,
+    title: req.body?.title,
+    goal: req.body?.goal,
+    steps: req.body?.steps,
+    source: req.body?.source || "operator",
+    sourceRef: req.body?.sourceRef,
+    spawnContext: req.body?.spawnContext,
+    userId,
+    maxSteps: req.body?.maxSteps,
+    executionMode: req.body?.executionMode,
+    decomposeParallel: req.body?.decomposeParallel,
+  });
+  if (!r.ok) return res.status(400).json(r);
+  res.json(r);
+}));
+
+app.post("/api/runtime/missions/:missionId/tick", requireRole("owner", "admin", "sovereign", "founder"), asyncHandler(async (req, res) => {
+  const { tickMission } = await import("./lib/mission-runtime.js");
+  const { dispatchMCP } = await import("./lib/auth-gate/dispatch.js");
+  const r = await tickMission({
+    db,
+    missionId: req.params.missionId,
+    dispatchMCP,
+    STATE: globalThis.STATE || null,
+  });
+  res.json(r);
+}));
+
+app.post("/api/runtime/missions/:missionId/pause", requireRole("owner", "admin", "sovereign", "founder"), asyncHandler(async (req, res) => {
+  const { pauseMission } = await import("./lib/mission-runtime.js");
+  res.json(pauseMission(db, req.params.missionId));
+}));
+
+app.post("/api/runtime/missions/:missionId/abandon", requireRole("owner", "admin", "sovereign", "founder"), asyncHandler(async (req, res) => {
+  const { abandonMission } = await import("./lib/mission-runtime.js");
+  res.json(abandonMission(db, req.params.missionId));
+}));
+
+app.post("/api/runtime/missions/plan", requireRole("owner", "admin", "sovereign", "founder"), asyncHandler(async (req, res) => {
+  const { planMissionGoal } = await import("./lib/mission-runtime.js");
+  const r = await planMissionGoal({
+    goal: req.body?.goal,
+    plannerMode: req.body?.plannerMode,
+    templateHint: req.body?.templateHint,
+    spawnContext: req.body?.spawnContext,
+    ctx: { llm: req.app.locals?.llm || globalThis.STATE?.llm },
+  });
+  res.json(r);
+}));
+
+app.get("/api/runtime/supervisor", requireRole("owner", "admin", "sovereign", "founder"), asyncHandler(async (req, res) => {
+  const { collectFullSupervisorStatus } = await import("./lib/runtime/supervisor.js");
+  const { dispatchMCP } = await import("./lib/auth-gate/dispatch.js");
+  const status = await collectFullSupervisorStatus({ db, dispatchMCP });
+  res.json({ ok: true, ...status });
+}));
+
+app.post("/api/runtime/supervisor/snapshot", requireRole("owner", "admin", "sovereign", "founder"), asyncHandler(async (req, res) => {
+  const { snapshotSupervisor } = await import("./lib/runtime/supervisor.js");
+  const { dispatchMCP } = await import("./lib/auth-gate/dispatch.js");
+  res.json(await snapshotSupervisor({ db, dispatchMCP }));
+}));
+
+app.get("/api/runtime/domain-packs", requireRole("owner", "admin", "sovereign", "founder"), async (req, res) => {
+  try {
+    const { listDomainPacks } = await import("./lib/runtime/domain-packs.js");
+    res.json({ ok: true, packs: listDomainPacks() });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
+});
+
+app.get("/api/runtime/memory-graph", requireRole("owner", "admin", "sovereign", "founder"), async (req, res) => {
+  try {
+    const { memoryGraphOverview } = await import("./lib/runtime/memory-graph.js");
+    res.json({ ok: true, ...memoryGraphOverview(db) });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
+});
+
+app.post("/api/runtime/repo-graph/index", requireRole("owner", "admin", "sovereign", "founder"), asyncHandler(async (req, res) => {
+  const { indexRepo } = await import("./lib/runtime/repo-graph.js");
+  res.json(await indexRepo(db, req.body?.repoRoot));
+}));
+
+app.get("/api/runtime/repo-graph/overview", requireRole("owner", "admin", "sovereign", "founder"), async (req, res) => {
+  try {
+    const { repoGraphOverview } = await import("./lib/runtime/repo-graph.js");
+    res.json({ ok: true, ...repoGraphOverview(db, req.query.repoRoot ? String(req.query.repoRoot) : undefined) });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
+});
+
+app.get("/api/runtime/repo-graph/search", requireRole("owner", "admin", "sovereign", "founder"), async (req, res) => {
+  try {
+    const { findSymbol } = await import("./lib/runtime/repo-graph.js");
+    const q = String(req.query.q || "").trim();
+    if (!q) return res.status(400).json({ ok: false, reason: "missing_query" });
+    res.json({ ok: true, symbols: findSymbol(db, req.query.repoRoot ? String(req.query.repoRoot) : undefined, q) });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
+});
+
+app.post("/api/runtime/benchmark/run", requireRole("owner", "admin", "sovereign", "founder"), asyncHandler(async (req, res) => {
+  const suite = req.body?.suite;
+  const mod = suite && String(suite).startsWith("dila")
+    ? await import("./lib/runtime/dila-bench.js")
+    : await import("./lib/runtime/agent-benchmark.js");
+  const { dispatchMCP } = await import("./lib/auth-gate/dispatch.js");
+  res.json(await mod.runBenchmark({
+    db,
+    dispatchMCP,
+    suite,
+    scenarioIds: req.body?.scenarioIds,
+  }));
+}));
+
+app.get("/api/runtime/benchmark/runs", requireRole("owner", "admin", "sovereign", "founder"), async (req, res) => {
+  try {
+    const { listBenchmarkRuns } = await import("./lib/runtime/agent-benchmark.js");
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 100);
+    res.json({ ok: true, runs: listBenchmarkRuns(db, limit) });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
+});
+
+app.get("/api/runtime/benchmark/:runId", requireRole("owner", "admin", "sovereign", "founder"), async (req, res) => {
+  try {
+    const { getBenchmarkRun } = await import("./lib/runtime/agent-benchmark.js");
+    const run = getBenchmarkRun(db, req.params.runId);
+    if (!run) return res.status(404).json({ ok: false, reason: "not_found" });
+    res.json({ ok: true, run });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
+});
+
+app.get("/api/runtime/tier", requireRole("owner", "admin", "sovereign", "founder"), async (req, res) => {
+  try {
+    const tier = db.prepare(`SELECT * FROM runtime_tier_state WHERE id = 1`).get() || null;
+    res.json({
+      ok: true,
+      authGateMode: process.env.CONCORD_AUTH_GATE_MODE || "observe",
+      enforceAutonomous: process.env.CONCORD_AUTH_GATE_ENFORCE_AUTONOMOUS === "true",
+      tier,
+    });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
+});
+
+app.get("/api/runtime/marathon-links", requireRole("owner", "admin", "sovereign", "founder"), async (req, res) => {
+  try {
+    const { listLinkedMarathons, bridgeOverview } = await import("./lib/mission-marathon-bridge.js");
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 100);
+    res.json({ ok: true, overview: bridgeOverview(db), links: listLinkedMarathons(db, limit) });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
+});
+
+app.post("/api/runtime/coding-loop/iterate", requireRole("owner", "admin", "sovereign", "founder"), asyncHandler(async (req, res) => {
+  const { runCodingLoopIteration } = await import("./lib/coding-loop.js");
+  const { dispatchMCP } = await import("./lib/auth-gate/dispatch.js");
+  res.json(await runCodingLoopIteration({
+    db,
+    goal: req.body?.goal,
+    dispatchMCP,
+    repoRoot: req.body?.repoRoot,
+  }));
+}));
+
+app.post("/api/runtime/dila/kickoff", requireRole("owner", "admin", "sovereign", "founder"), asyncHandler(async (req, res) => {
+  const { kickoffDilaMission } = await import("./lib/dila-mission.js");
+  const { dispatchMCP } = await import("./lib/auth-gate/dispatch.js");
+  res.json(await kickoffDilaMission({
+    db,
+    goal: req.body?.goal,
+    template: req.body?.template,
+    dispatchMCP,
+    opts: req.body || {},
+  }));
+}));
+
+app.get("/api/runtime/dila/org", requireRole("owner", "admin", "sovereign", "founder"), asyncHandler(async (req, res) => {
+  const { orgOverview } = await import("./lib/runtime/agent-org.js");
+  res.json(await orgOverview(db));
+}));
+
+app.get("/api/runtime/dila/supervisor-tree", requireRole("owner", "admin", "sovereign", "founder"), asyncHandler(async (req, res) => {
+  const { buildSupervisorTree } = await import("./lib/runtime/supervisor-tree.js");
+  res.json(buildSupervisorTree(db));
+}));
+
+app.post("/api/runtime/dila/route-model", requireRole("owner", "admin", "sovereign", "founder"), asyncHandler(async (req, res) => {
+  const { routeModel } = await import("./lib/runtime/model-router.js");
+  res.json(await routeModel({ db, ...req.body }));
+}));
+
+app.get("/api/runtime/dila/routing-stats", requireRole("owner", "admin", "sovereign", "founder"), asyncHandler(async (req, res) => {
+  const { routingStats } = await import("./lib/runtime/model-router.js");
+  res.json(routingStats(db, req.query.taskClass));
+}));
+
+app.get("/api/runtime/dila/recovery", requireRole("owner", "admin", "sovereign", "founder"), asyncHandler(async (req, res) => {
+  const { recoveryOverview } = await import("./lib/runtime/recovery.js");
+  res.json(recoveryOverview(db));
+}));
+
+app.get("/api/runtime/dila/mission-control", requireRole("owner", "admin", "sovereign", "founder"), asyncHandler(async (req, res) => {
+  const { getMissionControlPlane } = await import("./lib/runtime/mission-control.js");
+  res.json(getMissionControlPlane(db));
+}));
+
+app.get("/api/runtime/dila/missions/:missionId/detail", requireRole("owner", "admin", "sovereign", "founder"), asyncHandler(async (req, res) => {
+  const { getMissionControlDetail } = await import("./lib/runtime/mission-control.js");
+  const detail = getMissionControlDetail(db, req.params.missionId);
+  if (!detail.ok && detail.reason === "not_found") return res.status(404).json(detail);
+  res.json(detail);
+}));
+
+app.get("/api/runtime/dila/capability-index", requireRole("owner", "admin", "sovereign", "founder"), asyncHandler(async (req, res) => {
+  const { computeDilaCapabilityIndex } = await import("./lib/runtime/dila-capability-index.js");
+  res.json(computeDilaCapabilityIndex(db));
+}));
+
+app.get("/api/runtime/dila/capabilities", requireRole("owner", "admin", "sovereign", "founder"), asyncHandler(async (req, res) => {
+  const { listCapabilities } = await import("./lib/capability-forge/index.js");
+  res.json({ ok: true, capabilities: listCapabilities(db, { status: req.query.status, limit: parseInt(req.query.limit, 10) || 50 }) });
+}));
+
+app.get("/api/runtime/dila/config", requireRole("owner", "admin", "sovereign", "founder"), asyncHandler(async (req, res) => {
+  const { listConfig } = await import("./lib/runtime/runtime-config.js");
+  res.json({ ok: true, entries: listConfig(db, req.query.prefix || "") });
+}));
+
+app.get("/api/runtime/dila/improvements", requireRole("owner", "admin", "sovereign", "founder"), asyncHandler(async (req, res) => {
+  const { listImprovementProposals } = await import("./lib/runtime/self-improvement.js");
+  res.json({ ok: true, proposals: listImprovementProposals(db, parseInt(req.query.limit, 10) || 20) });
+}));
+
+app.post("/api/runtime/dila/improvements/process", requireRole("owner", "admin", "sovereign", "founder"), asyncHandler(async (req, res) => {
+  const { processPendingProposals } = await import("./lib/runtime/self-improvement.js");
+  const { dispatchMCP } = await import("./lib/auth-gate/dispatch.js");
+  res.json(await processPendingProposals(db, dispatchMCP, {
+    limit: req.body?.limit || 3,
+    suite: req.body?.suite || "dila_core",
+  }));
+}));
+
+app.post("/api/runtime/dila/soak", requireRole("owner", "admin", "sovereign", "founder"), asyncHandler(async (req, res) => {
+  const { runSoakSimulation } = await import("./lib/runtime/soak-harness.js");
+  const { dispatchMCP } = await import("./lib/auth-gate/dispatch.js");
+  res.json(await runSoakSimulation({
+    db,
+    dispatchMCP,
+    days: req.body?.days || 7,
+    ticksPerDay: req.body?.ticksPerDay || 3,
+    goal: req.body?.goal,
+  }));
+}));
+
+app.get("/api/runtime/repo-graph/full", requireRole("owner", "admin", "sovereign", "founder"), asyncHandler(async (req, res) => {
+  const { buildFullRepoGraph } = await import("./lib/runtime/repo-graph.js");
+  res.json(buildFullRepoGraph(db, req.query.repoRoot));
+}));
+
+app.post("/api/runtime/dila/workspace-audit", requireRole("owner", "admin", "sovereign", "founder"), asyncHandler(async (req, res) => {
+  const { runWorkspaceAudit } = await import("./lib/runtime/workspace-audit.js");
+  res.json(await runWorkspaceAudit({ db }));
+}));
+
+app.get("/api/runtime/dila/workspace-audits", requireRole("owner", "admin", "sovereign", "founder"), asyncHandler(async (req, res) => {
+  const { listWorkspaceAudits } = await import("./lib/runtime/workspace-audit.js");
+  res.json({ ok: true, audits: listWorkspaceAudits(db) });
+}));
+
+app.post("/api/runtime/benchmark/dila", requireRole("owner", "admin", "sovereign", "founder"), asyncHandler(async (req, res) => {
+  const { runBenchmark } = await import("./lib/runtime/dila-bench.js");
+  const { dispatchMCP } = await import("./lib/auth-gate/dispatch.js");
+  res.json(await runBenchmark({ db, dispatchMCP, suite: req.body?.suite || "dila_full" }));
+}));
 
 // ── Phase X2 — intoxication ─────────────────────────────────────────────
 
@@ -61507,7 +63981,22 @@ app.get("/api/social/discover/:userId", (req, res) => {
 // publishDtu/unpublishDtu never actually checked ownership — any
 // authenticated user could publish/unpublish any other user's DTU.
 app.post("/api/social/publish/:dtuId", requireAuth(), (req, res) => {
-  try { res.json(publishDtu(STATE, req.params.dtuId, req.user?.id)); } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+  try {
+    const dtu = STATE.dtus.get(req.params.dtuId);
+    if (!dtu) return res.status(404).json({ ok: false, error: "DTU not found" });
+    dtuEnsureLicense(dtu);
+    const gate = dtuAssertScope(dtu, "social_post", { actorId: req.user?.id });
+    if (!gate.ok) {
+      return res.status(403).json({
+        ok: false,
+        error: "license_scope_denied",
+        reason: gate.reason,
+        scope: "social_post",
+        message: "DTU license lacks social_post scope",
+      });
+    }
+    res.json(publishDtu(STATE, req.params.dtuId, req.user?.id));
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
 app.post("/api/social/unpublish/:dtuId", requireAuth(), (req, res) => {
@@ -61534,6 +64023,44 @@ app.get("/api/social/metrics", (req, res) => {
 app.post("/api/social/post", requireAuth(), (req, res) => {
   try {
     const userId = req.user?.id || req.actor?.userId || "anon";
+    const linked = Array.isArray(req.body?.linkedDTUs) ? req.body.linkedDTUs : [];
+    for (const ref of linked) {
+      const id = typeof ref === "string" ? ref : ref?.id || ref?.dtuId;
+      if (!id) continue;
+      const dtu = STATE.dtus.get(id);
+      if (!dtu) return res.status(404).json({ ok: false, error: "linked_dtu_not_found", dtuId: id });
+      dtuEnsureLicense(dtu);
+      const gate = dtuAssertScope(dtu, "social_post", { actorId: userId });
+      if (!gate.ok) {
+        return res.status(403).json({
+          ok: false,
+          error: "license_scope_denied",
+          reason: gate.reason,
+          scope: "social_post",
+          dtuId: id,
+          message: "Linked DTU license lacks social_post scope",
+        });
+      }
+    }
+    // Media/feed posts that reference a primary dtuId the same way
+    const primaryId = req.body?.dtuId;
+    if (primaryId) {
+      const dtu = STATE.dtus.get(primaryId);
+      if (dtu) {
+        dtuEnsureLicense(dtu);
+        const gate = dtuAssertScope(dtu, "social_post", { actorId: userId });
+        if (!gate.ok) {
+          return res.status(403).json({
+            ok: false,
+            error: "license_scope_denied",
+            reason: gate.reason,
+            scope: "social_post",
+            dtuId: primaryId,
+            message: "DTU license lacks social_post scope",
+          });
+        }
+      }
+    }
     const result = socialCreatePost(STATE, { userId, ...req.body });
     res.json(result);
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
@@ -63255,6 +65782,27 @@ app.get("/api/brain/health", asyncHandler(async (_req, res) => {
   const health = {};
   const probes = Object.entries(BRAIN).map(async ([name, brain]) => {
     try {
+      const _isCfVision = name === "multimodal" && (
+        String(brain.provider || process.env.BRAIN_VISION_PROVIDER || "").toLowerCase() === "cloudflare"
+        || String(brain.url || "").startsWith("cloudflare://")
+      );
+      if (_isCfVision) {
+        const online = Boolean(process.env.CLOUDFLARE_API_TOKEN && process.env.CLOUDFLARE_ACCOUNT_ID);
+        if (online) {
+          _brainHealthFailures[name] = 0;
+          brain.enabled = true;
+        }
+        health[name] = {
+          online,
+          healthy: online,
+          model: brain.model,
+          provider: "cloudflare",
+          avgResponseTime: brain.stats.requests > 0 ? Math.round(brain.stats.totalMs / brain.stats.requests) : 0,
+          totalRequests: brain.stats.requests,
+          status: online ? 200 : 0,
+        };
+        return;
+      }
       const probe = await fetch(`${brain.url}/api/tags`, { signal: AbortSignal.timeout(8000) });
       if (probe.ok) {
         _brainHealthFailures[name] = 0; // Reset failure counter on success
@@ -63438,6 +65986,25 @@ app.get("/api/hive/metrics", asyncHandler(async (_req, res) => {
 app.get("/api/hive/limits", asyncHandler(async (_req, res) => {
   res.json({ ok: true, limits: CASCADE_LIMITS });
 }));
+
+// NO_DUTCH_REST_GHOST_ALIASES 2026-09-05
+app.get("/api/hive/status", asyncHandler(async (_req, res) => {
+  res.json({ ok: true, aliasOf: "/api/hive/metrics", suggest: ["/api/hive/metrics", "/api/hive/limits"], status: "ok" });
+}));
+app.get("/api/credits/balance", requireAuth(), (req, res) => {
+  try {
+    const userId = req.user?.id || req.actor?.userId;
+    res.json({ ok: true, userId, balance: null, aliasOf: "POST /api/credits/wallet", note: "read stub — use wallet endpoint for authoritative balance" });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
+});
+app.get("/api/onboarding/progress", requireAuth(), (req, res) => {
+  res.redirect(307, "/api/onboarding/wizard-status");
+});
+app.get("/api/digest/list", (req, res) => {
+  res.redirect(307, "/api/digest");
+});
 
 // ---- Worker Pool Stats API ----
 app.get("/api/workers/stats", requireAuth(), requireRole("owner"), (_req, res) => {
@@ -68090,6 +70657,7 @@ STATE._circuitBreakers = circuitBreakers;
 // reads STATE; without this call drift-monitor can't run. Idempotent —
 // safe to call multiple times.
 try { initLatticeOrchestrator(STATE); } catch { /* non-fatal — orchestrator handles unset STATE with reason */ }
+try { initPredictResearchCycle(STATE); } catch { /* non-fatal — handler handles unset STATE with reason */ }
 
 // Phase 8 / T3 — initialise Reflex Cortex with STATE + db + root so its
 // four handlers can read live data. Idempotent.
@@ -70132,14 +72700,68 @@ async function _dispatchGodotCombatAttack(userId, data) {
 
   const { clampBaseDamage, clampAttackRange, resolvedDamageCap } = await import("./lib/combat-limits.js");
 
-  const result = cityPresence.applyAttack({
+  let limbMods = null;
+  try {
+    const { getPainBudget } = await import("./lib/embodied/pain.js");
+    const { limbContextModifiers } = await import("./lib/combat/limb-verbs.js");
+    const budget = getPainBudget(db, userId);
+    limbMods = limbContextModifiers(budget.byRegion);
+  } catch { /* pain table optional */ }
+
+  let result = cityPresence.applyAttack({
     attackerId: userId,
     targetId,
     baseDamage: clampBaseDamage(data.baseDamage, spellMaxDamage),
     range: clampAttackRange(data.range),
     armorPierce: Number(data.armorPierce) || 0,
     maxDamage: resolvedDamageCap(spellMaxDamage),
+    contextModifiers: limbMods,
   });
+  // Wave 5 — Unity TrainingDummy / Hostile names are not always in presence.
+  // Server HP authority (momentum×poise) must still own damage — never leave
+  // HitScan as sole local HP when Connected.
+  if (!result?.ok && (result?.error === "target_not_found" || result?.error === "attacker_not_found")) {
+    try {
+      const worldId = cityPresence.getUserPosition?.(userId)?.worldId
+        || cityPresence.getUserPosition?.(userId)?.cityId
+        || data.worldId
+        || "concordia-hub";
+      if (result.error === "attacker_not_found") {
+        try {
+          cityPresence.updateUserPosition?.(userId, {
+            cityId: String(worldId),
+            x: Number(data.x) || 0,
+            y: Number(data.y) || 0,
+            z: Number(data.z) || 0,
+            direction: 0,
+            action: "combat",
+          });
+        } catch { /* best-effort register */ }
+        result = cityPresence.applyAttack({
+          attackerId: userId,
+          targetId,
+          baseDamage: clampBaseDamage(data.baseDamage, spellMaxDamage),
+          range: clampAttackRange(data.range),
+          armorPierce: Number(data.armorPierce) || 0,
+          maxDamage: resolvedDamageCap(spellMaxDamage),
+          contextModifiers: limbMods,
+        });
+      }
+      if (!result?.ok && result?.error === "target_not_found") {
+        _ensureCombatActor(targetId, { worldId: String(worldId), hp: 80 });
+        result = _worldCombatHit({
+          attackerId: userId,
+          targetId,
+          weapon: data.weapon || "sword",
+          baseDamage: clampBaseDamage(data.baseDamage, spellMaxDamage),
+          worldId: String(worldId),
+        });
+      }
+    } catch (e) {
+      result = { ok: false, error: "hp_authority_failed", message: String(e?.message || e) };
+    }
+  }
+  if (limbMods?.limbVerbs) result.limbVerbs = limbMods.limbVerbs;
 
   if (!result.ok) return result;
 
@@ -70269,6 +72891,15 @@ async function _dispatchGodotCombatDodge(userId, data) {
   const direction = ["left", "right", "back"].includes(data.direction) ? data.direction : "back";
   const wasParry = !!data.wasParry;
 
+  try {
+    const { getPainBudget } = await import("./lib/embodied/pain.js");
+    const { verbsFromPain } = await import("./lib/combat/limb-verbs.js");
+    const v = verbsFromPain(getPainBudget(db, userId).byRegion);
+    if (v.dodgeDisabled && !wasParry) {
+      return { ok: false, error: "broken_leg", limbVerbs: v };
+    }
+  } catch { /* pain optional */ }
+
   let perfectDodge = false, dodgeDilation = 0;
   try {
     const incomingAt = Number(data.attackArrivesAt ?? data.incomingAt);
@@ -70339,6 +72970,8 @@ const _godotMoveRateGate = makeGodotMoveRateGate();
 
 function _onGodotClientMessage(client, evt, data) {
   const userId = client?.userId || null;
+  // Unity /unity-ws uses the same gateway; envelopes are unity:<godot-evt>.
+  if (typeof evt === "string" && evt.startsWith("unity:")) evt = evt.slice(6);
   switch (evt) {
     case "player:move": {
       // ~30Hz cap — byte-identical intent to socket.io's `_moveRateState`.
@@ -81884,7 +84517,7 @@ app.get("/api/search", (req, res) => {
 // ── Automated Backup System ──────────────────────────────────────────────────
 // BACKUP_DIR already declared at top-level (line ~4626)
 const _BACKUP_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
-const _BACKUP_RETENTION_DAYS = 7;
+const _BACKUP_RETENTION_DAYS = 1; // 2026-09-05: keep newest only (disk pressure)
 
 async function runBackup() {
   try {
@@ -81929,15 +84562,33 @@ async function runBackup() {
     // runs on the libuv threadpool, where the sync form blocked the event
     // loop for the whole gzip of a 33MB+ file), and reports a MISSING
     // database at warn level instead of vanishing.
+    //
+    // 2026-09-05: switched from buffer-then-one-shot-gzip to a real STREAM.
+    // `fs.promises.readFile` + `zlib.gzip(buffer, ...)` loaded the entire DB
+    // into one Buffer and handed it to zlib's one-shot API in a single call
+    // — which has a hard ~2^31-1 byte (2GiB) input ceiling, independent of
+    // available memory. Once event_timeline_log's unbounded growth (fixed
+    // separately, see event-timeline-prune) pushed the live DB past 2GiB,
+    // every daily backup started failing with "File size (...) is greater
+    // than 2 GiB" — correctly logged as an error (this code's own prior fix
+    // already replaced a silent no-op with a real error), but still not
+    // actually backing anything up. A streaming pipeline has no such
+    // ceiling — it processes bounded chunks — and additionally never
+    // materializes a second multi-GB copy of the DB in the Node heap the
+    // way the buffered version did, which matters more now that the DB
+    // itself is several times larger than earlier in this codebase's life.
     try {
       if (fs.existsSync(DB_PATH)) {
-        const raw = await fs.promises.readFile(DB_PATH);
-        const compressed = await new Promise((resolve, reject) => {
-          zlib.gzip(raw, { level: 6 }, (err, buf) => (err ? reject(err) : resolve(buf)));
-        });
-        await fs.promises.writeFile(`${backupDir}/concord.db.gz`, compressed);
+        const gzipPath = `${backupDir}/concord.db.gz`;
+        await pipeline(
+          fs.createReadStream(DB_PATH),
+          zlib.createGzip({ level: 6 }),
+          fs.createWriteStream(gzipPath),
+        );
+        const { size: sourceBytes } = await fs.promises.stat(DB_PATH);
+        const { size: compressedBytes } = await fs.promises.stat(gzipPath);
         structuredLog("info", "backup_db_captured", {
-          source: DB_PATH, bytes: raw.length, compressedBytes: compressed.length,
+          source: DB_PATH, bytes: sourceBytes, compressedBytes,
         });
       } else {
         structuredLog("warn", "backup_db_missing", {
@@ -84976,5 +87627,6 @@ export const __TEST__ = Object.freeze({
   enforceEthosInvariant,
   getEthosEnforcementSnapshot,
   ETHOS_ENFORCEMENT_HISTORY_CAP,
+  initGhostFleet,
 });
 // Test commit

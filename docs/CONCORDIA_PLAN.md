@@ -1226,3 +1226,5 @@ gate** that flags any exported "system" function (engine/handler/reaction) with 
 any documented constant (`CONCORD_*`) that is never read. That converts "we built a thing and forgot to plug
 it in" from the dominant failure mode into a build-time error — keeping the connection-debt at zero as new
 systems land. This is itself a Sprint-1 ticket and arguably the highest-leverage line in the whole plan.
+
+> 2026-09-07: server-authority **LIVE** for combat hit + quest interact (see `apps/concordia-living-world/bible/NETWORK.md`, proof `~/.zuko/remaining-work/concordia-server-authority-proof.json`).

@@ -144,7 +144,7 @@ const NowPlayingBar = dynamic(
 // Same fix, same reasoning as the /onboarding entry above: standalone here
 // stops that chrome (and its fetch/prefetch burst) from mounting at exactly
 // the moment the page has the least reason to show it.
-const STANDALONE_PREFIXES = ['/legal/', '/welding-portal/', '/share/animation/', '/onboarding', '/register', '/login'];
+const STANDALONE_PREFIXES = ['/legal/', '/welding-portal/', '/share/animation/', '/onboarding', '/register', '/login', '/explore'];
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -287,10 +287,11 @@ export function AppShell({ children }: AppShellProps) {
   }, [commandPaletteOpen, setCommandPaletteOpen]);
 
   if (!mounted) {
-    // Minimal shell during hydration to prevent CLS flash
+    // Keep children in the tree during hydration so first paint is the
+    // page (not an empty main). Chrome waits until mounted.
     return (
       <div className="flex h-screen overflow-hidden bg-lattice-void">
-        <main id="main-content" role="main" className="flex-1" />
+        <main id="main-content" role="main" className="flex-1">{children}</main>
       </div>
     );
   }

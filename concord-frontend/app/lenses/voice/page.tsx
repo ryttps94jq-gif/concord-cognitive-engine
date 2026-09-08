@@ -15,7 +15,6 @@ import { VoiceOtterSuite } from '@/components/voice/VoiceOtterSuite';
 import { PipingProvider } from '@/components/panel-polish';
 import { ManifestActionBar } from '@/components/lens/ManifestActionBar';
 import { useLensCommand } from '@/hooks/useLensCommand';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { api, apiHelpers } from '@/lib/api/client';
 import { useUIStore } from '@/store/ui';
@@ -35,7 +34,6 @@ import {
   Edit3,
   Check,
   X,
-  Save,
   FileText,
   Activity,
   Clock,
@@ -53,6 +51,7 @@ import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
+import { SaveAsDtuButton } from '@/components/dtu/SaveAsDtuButton';
 
 type RecordingStatus = 'ready' | 'recording' | 'processing';
 type ExportFormat = 'wav' | 'mp3' | 'flac';
@@ -165,7 +164,6 @@ const DEFAULT_INPUTS = [
 export default function VoiceLensPage() {
   useLensNav('voice');
   const { latestData: realtimeData, alerts: realtimeAlerts, insights: realtimeInsights, isLive, lastUpdated } = useRealtimeLens('voice');
-  const queryClient = useQueryClient();
 
   // Recording state
   const [status, setStatus] = useState<RecordingStatus>('ready');
@@ -538,30 +536,6 @@ export default function VoiceLensPage() {
     formData.append('audio', audioBlob, 'recording.webm');
     const res = await apiHelpers.voice.transcribe(formData);
     return res.data?.transcript || res.data?.text || '';
-  };
-
-  const saveMutation = useMutation({
-    mutationFn: async ({ transcript, audioBlob }: { transcript?: string; audioBlob?: Blob }) => {
-      const formData = new FormData();
-      // Use actual recorded audio blob if available, otherwise send transcript-only
-      if (audioBlob && audioBlob.size > 0) {
-        formData.append('audio', audioBlob, 'recording.webm');
-      }
-      if (transcript) formData.append('transcript', transcript);
-      return apiHelpers.voice.ingest(formData);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['dtus'] });
-    },
-    onError: (err) => {
-      console.error('Failed to save voice DTU:', err);
-    },
-  });
-
-  const handleSaveDTU = () => {
-    if (activeTake?.transcript) {
-      saveMutation.mutate({ transcript: activeTake.transcript });
-    }
   };
 
   // Stats
@@ -1062,19 +1036,17 @@ export default function VoiceLensPage() {
 
           {/* Export + Save */}
           <div className="flex items-center gap-3 px-4">
-            <button
-              onClick={handleSaveDTU}
-              disabled={!activeTake?.transcript || saveMutation.isPending}
-              className={cn(
-                'flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium transition-colors',
-                activeTake?.transcript
-                  ? 'bg-neon-cyan/20 text-neon-cyan hover:bg-neon-cyan/30'
-                  : 'bg-white/5 text-gray-600 cursor-not-allowed'
-              )}
-            >
-              <Save className="w-3.5 h-3.5" />
-              {saveMutation.isPending ? 'Saving...' : 'Save as DTU'}
-            </button>
+            {activeTake?.transcript ? (
+              <SaveAsDtuButton
+                apiSource="voice-lens"
+                title={`Voice take — ${activeTake.name || `Take ${activeTake.number}`}`}
+                content={activeTake.transcript}
+                extraTags={['voice', 'transcript', 'take']}
+                rawData={{ takeId: activeTake.id, name: activeTake.name, number: activeTake.number, duration: activeTake.duration, transcript: activeTake.transcript }}
+                confirm
+                className="!bg-neon-cyan/20 !text-neon-cyan hover:!bg-neon-cyan/30"
+              />
+            ) : null}
             <div className="h-8 w-px bg-white/10" />
             <div className="flex items-center gap-1.5">
               <span className="text-[10px] text-gray-400 mr-1">Export:</span>

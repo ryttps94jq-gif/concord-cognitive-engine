@@ -5,7 +5,7 @@
 //
 // Architecture (per locked F0.0 + F0.2 spec):
 //   1. routes/mcp.js authorizeToolCall() — HTTP-level coarse gate (existing)
-//   2. AuthGate.evaluate(envelope)       — composition of 8 gates (NEW)
+//   2. AuthGate.evaluate(envelope)       — composition of 10 pre-dispatch checks (gates/ has 10 modules; verification is post-tool)
 //   3. callMCPTool(db, tool, args, STATE) — tool dispatch (EXISTING)
 //   4. Verification probe                — post-condition (NEW)
 //   5. Event-bus publish                 — audit emission (EXISTING)
@@ -72,6 +72,30 @@ async function ensureTraceDb() {
     }
   })();
   return _traceDbPromise;
+}
+
+// 2026-09-05: same defect class as event_timeline_log (see server.js's
+// event-timeline-prune heartbeat) -- trace_correlation is written on every
+// organ tick (13 organs, 60s/300s/900s launchd cadences) with no retention
+// anywhere: not here, not in the standalone organ .py scripts. 78,685 rows
+// already at the time this was found, on a separate small db file that had
+// been growing since inception with nothing to stop it. 30 days matches the
+// event-timeline retention window for consistency, not a load-bearing choice.
+const TRACE_PRUNE_OLDER_THAN_SECONDS = 30 * 24 * 3600;
+
+/** Delete trace_correlation rows older than the retention window. Best-effort,
+ * mirrors writeTraceEvent's own never-throw contract -- a prune failure must
+ * never affect dispatch. */
+export async function pruneOldTraceEvents(olderThanSeconds = TRACE_PRUNE_OLDER_THAN_SECONDS) {
+  const db = await ensureTraceDb();
+  if (!db) return { ok: false, reason: "no_db" };
+  try {
+    const cutoffIso = new Date(Date.now() - olderThanSeconds * 1000).toISOString();
+    const r = db.prepare(`DELETE FROM trace_correlation WHERE created_at < ?`).run(cutoffIso);
+    return { ok: true, deleted: r.changes };
+  } catch (e) {
+    return { ok: false, reason: "prune_failed", error: e.message };
+  }
 }
 
 function writeTraceEvent(traceId, source, sourceEvent, toolName, durationMs, observedAt, payload, parentTraceId) {

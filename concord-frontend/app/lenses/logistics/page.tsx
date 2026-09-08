@@ -3,6 +3,7 @@
 import { useLensCommand } from '@/hooks/useLensCommand';
 import { LensShell } from '@/components/lens/LensShell';
 import { RecentMineCard } from '@/components/lens/RecentMineCard';
+import { DTUExportButton } from '@/components/lens/DTUExportButton';
 import { AutoActionStrip } from '@/components/lens/AutoActionStrip';
 import { CrossLensRecentsPanel } from '@/components/lens/CrossLensRecentsPanel';
 import { FirstRunTour } from '@/components/lens/FirstRunTour';
@@ -253,7 +254,18 @@ export default function LogisticsLensPage() {
       isError={isError}
       error={error as Error | null}
       onRetry={refetch}
-      actions={<LiveIndicator isLive={isLive} lastUpdated={lastUpdated} />}
+      actions={
+        <div className="flex items-center gap-2">
+          <LiveIndicator isLive={isLive} lastUpdated={lastUpdated} />
+          <DTUExportButton
+            domain="logistics"
+            data={realtimeData || {}}
+            title="Logistics snapshot"
+            tags={['logistics', 'tms', 'export']}
+            compact
+          />
+        </div>
+      }
     >
       {/* Transit Wire — BTS + DOT live press feed */}
       <LiveFeed

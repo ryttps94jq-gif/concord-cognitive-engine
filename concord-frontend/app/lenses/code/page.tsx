@@ -66,6 +66,7 @@ import { VisionAnalyzeButton } from '@/components/common/VisionAnalyzeButton';
 import { GithubTrending } from '@/components/code/GithubTrending';
 import { CodeActionPanel } from '@/components/code/CodeActionPanel';
 import { PipingProvider } from '@/components/panel-polish';
+import { SaveAsDtuButton } from '@/components/dtu/SaveAsDtuButton';
 
 interface FileNode {
   id: string;
@@ -596,7 +597,6 @@ export default function CodeLensPage() {
     },
   });
 
-  const [savingOutputDTU, setSavingOutputDTU] = useState(false);
 
   // ── Parity sprint panels: activity bar / settings / terminal / agent ──
   const [activity, setActivity] = useState<Activity>('files');
@@ -831,27 +831,6 @@ export default function CodeLensPage() {
       setOutputTab('output');
     },
   });
-
-  const handleSaveOutputAsDTU = useCallback(async () => {
-    if (!scriptOutput) return;
-    setSavingOutputDTU(true);
-    try {
-      await saveScript({
-        title: `Output: ${activeTab.name}`,
-        data: {
-          content: activeTab.content,
-          output: scriptOutput.log,
-          language: activeTab.language,
-          scriptType: activeTab.scriptType || activeScriptType,
-        },
-        meta: { tags: ['script', 'output', activeTab.scriptType || activeScriptType], status: 'active' },
-      });
-    } catch (err) {
-      console.error('[Code] Save output failed:', err);
-    } finally {
-      setSavingOutputDTU(false);
-    }
-  }, [scriptOutput, activeTab, activeScriptType, saveScript]);
 
   const updateTabContent = useCallback((content: string) => {
     setTabs((prev) =>
@@ -2116,13 +2095,15 @@ export default function CodeLensPage() {
                               </div>
                               )}
                               <div className="flex items-center gap-2 pt-2 border-t border-lattice-border">
-                                <button
-                                  onClick={handleSaveOutputAsDTU}
-                                  disabled={savingOutputDTU}
-                                  className="flex items-center gap-1.5 px-3 py-1.5 bg-neon-blue/10 text-neon-blue rounded-lg text-xs hover:bg-neon-blue/20 disabled:opacity-50"
-                                >
-                                  <Save className="w-3.5 h-3.5" /> {savingOutputDTU ? 'Saving...' : 'Save as DTU'}
-                                </button>
+                                <SaveAsDtuButton
+                                  apiSource="code-lens"
+                                  title={`Output: ${activeTab.name}`}
+                                  content={`// ${activeTab.name}\n// Language: ${activeTab.language}\n// Script type: ${activeTab.scriptType || activeScriptType}\n\n// Source:\n${activeTab.content}\n\n// Output:\n${scriptOutput.log}${scriptOutput.visualization ? `\n\n// Visualization:\n${scriptOutput.visualization}` : ''}`}
+                                  extraTags={['script', 'output', activeTab.scriptType || activeScriptType, activeTab.language].filter(Boolean) as string[]}
+                                  rawData={{ content: activeTab.content, output: scriptOutput.log, visualization: scriptOutput.visualization, language: activeTab.language, scriptType: activeTab.scriptType || activeScriptType }}
+                                  confirm
+                                  className="!bg-neon-blue/10 !text-neon-blue hover:!bg-neon-blue/20"
+                                />
                                 <button
                                   onClick={() => {
                                     const content = `// ${activeTab.name}\n// Output:\n${scriptOutput.log}\n${scriptOutput.visualization ? `\n// Visualization:\n${scriptOutput.visualization}` : ''}`;

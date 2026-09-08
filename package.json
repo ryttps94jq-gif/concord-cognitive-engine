@@ -35,7 +35,9 @@
     "lens:unloaded": "node scripts/lens-unloaded-domains.mjs",
     "export:web": "node scripts/export-godot-web.mjs",
     "export:unity-web": "node scripts/export-unity-web.mjs",
-    "sync:hub-kit": "node scripts/sync-concordia-hub-kit.mjs"
+    "sync:hub-kit": "node scripts/sync-concordia-hub-kit.mjs",
+    "bench:dhtp-rs": "node server/scripts/run-dhtp-rs.mjs",
+    "bench:dhtp-rs:resume": "node server/scripts/run-dhtp-rs.mjs resume"
   },
   "dependencies": {
     "@axe-core/playwright": "^4.11.3",

@@ -26,7 +26,7 @@ import { RuntimeConstellationPanel } from '@/components/runtime/RuntimeConstella
 import { useLensCommand } from '@/hooks/useLensCommand';
 import { useSmartPolling } from '@/hooks/useSmartPolling';
 import { lensRun } from '@/lib/api/client';
-import { Activity, Cpu, Brain, Globe, RefreshCcw, AlertTriangle, Layers, Radar, ShieldAlert, ArrowUpRight, Share2 } from 'lucide-react';
+import { Activity, Cpu, Brain, Globe, RefreshCcw, AlertTriangle, Layers, Radar, ShieldAlert, ArrowUpRight, Share2, Target } from 'lucide-react';
 
 interface HeartbeatStatRow {
   id: string;
@@ -103,6 +103,69 @@ interface WorldSummaryRow {
 // `SELECT peer_id AS peerId, url, brain_url AS brainUrl, capabilities_json,
 // revoked` with `capabilities` added as the parsed JSON array. `revoked`
 // comes back as the raw SQLite integer (0/1), not a JS boolean.
+interface MissionRow {
+  id: string;
+  title: string;
+  template: string;
+  source: string;
+  status: string;
+  current_step: number;
+  total_steps: number;
+  updated_at: number;
+}
+
+interface MissionOverview {
+  ok: boolean;
+  active?: number;
+  byStatus?: Record<string, number>;
+  killSwitch?: boolean;
+  templates?: string[];
+}
+
+interface SupervisorStatus {
+  overall: string;
+  activeMissions?: number;
+  subsystems?: Record<string, { status: string }>;
+}
+
+interface DilaSupervisorNode {
+  id: string;
+  label: string;
+  node_kind: string;
+  status: string;
+  children?: DilaSupervisorNode[];
+}
+
+interface DilaRecoveryOverview {
+  ok: boolean;
+  stats?: { total?: number; success_rate?: number; avg_detection_ms?: number };
+  recent?: Array<{ mission_id: string; failure_kind: string; recovery_action: string; recovery_success: number }>;
+}
+
+interface WorkspaceAuditSummary {
+  envKeyCount?: number;
+  envKeyNames?: string[];
+  connectors?: string[];
+  dataSources?: Array<{ id: string; kind: string; fileCount: number }>;
+  soak?: { pass?: boolean; daysSimulated?: number; coherentDays?: number };
+}
+
+interface CapabilityIndex {
+  ok?: boolean;
+  target?: number;
+  overall?: number;
+  dimensions?: Record<string, number>;
+  dimensionCount?: number;
+}
+
+interface MissionControlPlane {
+  ok?: boolean;
+  capabilityIndex?: CapabilityIndex;
+  causal?: { ok?: boolean; total?: number; withLesson?: number };
+  workers?: { active?: number; idle?: number; degraded?: number };
+  memory?: { ok?: boolean; totalNodes?: number };
+}
+
 interface FedmeshPeerRow {
   peerId: string;
   url: string | null;
@@ -145,6 +208,21 @@ export default function OpsTelemetryPage() {
   const [fedDraining, setFedDraining] = useState(false);
   const [fedDrainResult, setFedDrainResult] = useState<{ accepted: number; rejected: number; at: number } | null>(null);
   const [fedDrainError, setFedDrainError] = useState<string | null>(null);
+  const [missions, setMissions] = useState<MissionRow[]>([]);
+  const [missionOverview, setMissionOverview] = useState<MissionOverview | null>(null);
+  const [supervisor, setSupervisor] = useState<SupervisorStatus | null>(null);
+  const [missionError, setMissionError] = useState<string | null>(null);
+  const [missionBusy, setMissionBusy] = useState<string | null>(null);
+  const [authGateMode, setAuthGateMode] = useState<string>('observe');
+  const [tierState, setTierState] = useState<{ coding_loops_run?: number; marathons_spawned?: number } | null>(null);
+  const [marathonLinks, setMarathonLinks] = useState<Array<{ mission_id: string; marathon_id: string; mission_title?: string; marathon_status?: string }>>([]);
+  const [benchmarkRuns, setBenchmarkRuns] = useState<Array<{ id: string; status: string; summary_json?: string }>>([]);
+  const [dilaTree, setDilaTree] = useState<{ nodeCount?: number; roots?: DilaSupervisorNode[] } | null>(null);
+  const [dilaRecovery, setDilaRecovery] = useState<DilaRecoveryOverview | null>(null);
+  const [workspaceAudit, setWorkspaceAudit] = useState<WorkspaceAuditSummary | null>(null);
+  const [missionControl, setMissionControl] = useState<MissionControlPlane | null>(null);
+  const [selectedMissionDetail, setSelectedMissionDetail] = useState<string | null>(null);
+  const [missionDetail, setMissionDetail] = useState<Record<string, unknown> | null>(null);
   // Wave 4 gap-closure — this page's own refresh() and LivenessPanel's
   // internal refresh used to run on two independent, uncoordinated 5s
   // setIntervals (two unjittered network round-trips every 5s). This page
@@ -223,6 +301,74 @@ export default function OpsTelemetryPage() {
         setFedPeersError(e instanceof Error ? e.message : String(e));
       }
 
+      try {
+        const [missionRes, supervisorRes] = await Promise.all([
+          fetch('/api/runtime/missions?limit=12', { credentials: 'include' }),
+          fetch('/api/runtime/supervisor', { credentials: 'include' }),
+        ]);
+        if (missionRes.ok) {
+          const missionJson = await missionRes.json();
+          if (missionJson.ok) {
+            setMissions(missionJson.missions || []);
+            setMissionOverview(missionJson.overview || null);
+            setMissionError(null);
+          } else {
+            setMissions([]);
+            setMissionOverview(null);
+            setMissionError(missionJson.reason || 'Failed to load missions');
+          }
+        } else {
+          setMissions([]);
+          setMissionOverview(null);
+          setMissionError(`missions HTTP ${missionRes.status}`);
+        }
+        if (supervisorRes.ok) {
+          const supJson = await supervisorRes.json();
+          if (supJson.ok) {
+            setSupervisor({ overall: supJson.overall, activeMissions: supJson.activeMissions, subsystems: supJson.subsystems });
+          }
+        }
+        const [tierRes, linksRes, benchRes, dilaTreeRes, dilaRecoveryRes, missionControlRes] = await Promise.all([
+          fetch('/api/runtime/tier', { credentials: 'include' }),
+          fetch('/api/runtime/marathon-links?limit=8', { credentials: 'include' }),
+          fetch('/api/runtime/benchmark/runs?limit=5', { credentials: 'include' }),
+          fetch('/api/runtime/dila/supervisor-tree', { credentials: 'include' }),
+          fetch('/api/runtime/dila/recovery', { credentials: 'include' }),
+          fetch('/api/runtime/dila/mission-control', { credentials: 'include' }),
+        ]);
+        if (tierRes.ok) {
+          const tierJson = await tierRes.json();
+          if (tierJson.ok) {
+            setAuthGateMode(tierJson.enforceAutonomous ? 'enforce_autonomous' : (tierJson.authGateMode || 'observe'));
+            setTierState(tierJson.tier || null);
+          }
+        }
+        if (linksRes.ok) {
+          const linksJson = await linksRes.json();
+          if (linksJson.ok) setMarathonLinks(linksJson.links || []);
+        }
+        if (benchRes.ok) {
+          const benchJson = await benchRes.json();
+          if (benchJson.ok) setBenchmarkRuns(benchJson.runs || []);
+        }
+        if (dilaTreeRes.ok) {
+          const treeJson = await dilaTreeRes.json();
+          if (treeJson.ok) setDilaTree({ nodeCount: treeJson.nodeCount, roots: treeJson.roots });
+        }
+        if (dilaRecoveryRes.ok) {
+          const recJson = await dilaRecoveryRes.json();
+          if (recJson.ok) setDilaRecovery(recJson);
+        }
+        if (missionControlRes.ok) {
+          const mcJson = await missionControlRes.json();
+          if (mcJson.ok) setMissionControl(mcJson);
+        }
+      } catch (e) {
+        setMissions([]);
+        setMissionOverview(null);
+        setMissionError(e instanceof Error ? e.message : String(e));
+      }
+
       setLastRefresh(new Date());
       setHasLoadedOnce(true);
     } catch (e) {
@@ -233,6 +379,25 @@ export default function OpsTelemetryPage() {
   }, []);
 
   useEffect(() => { refresh(); }, [refresh]);
+
+  useEffect(() => {
+    if (!selectedMissionDetail) {
+      setMissionDetail(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/runtime/dila/missions/${encodeURIComponent(selectedMissionDetail)}/detail`, { credentials: 'include' });
+        const json = await res.json();
+        if (!cancelled && json.ok) setMissionDetail(json);
+        else if (!cancelled) setMissionDetail(null);
+      } catch {
+        if (!cancelled) setMissionDetail(null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [selectedMissionDetail]);
   // Background refresh — tab-visibility-paused + jittered (see
   // hooks/useSmartPolling.ts; it already skips the tick while the tab is
   // hidden, so the manual `document.visibilityState` check the raw interval
@@ -284,6 +449,213 @@ export default function OpsTelemetryPage() {
       setFedDraining(false);
     }
   }, []);
+
+  const spawnFleetMission = useCallback(async () => {
+    setMissionBusy('spawn');
+    try {
+      const res = await fetch('/api/runtime/missions', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ template: 'fleet_health', source: 'operator' }),
+      });
+      const json = await res.json();
+      if (!json.ok) setMissionError(json.reason || 'spawn failed');
+      else { setMissionError(null); refresh(); }
+    } catch (e) {
+      setMissionError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setMissionBusy(null);
+    }
+  }, [refresh]);
+
+  const tickMission = useCallback(async (missionId: string) => {
+    setMissionBusy(missionId);
+    try {
+      await fetch(`/api/runtime/missions/${encodeURIComponent(missionId)}/tick`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+      refresh();
+    } catch (e) {
+      setMissionError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setMissionBusy(null);
+    }
+  }, [refresh]);
+
+  const runBenchmark = useCallback(async (suite?: string) => {
+    setMissionBusy('benchmark');
+    try {
+      const res = await fetch('/api/runtime/benchmark/run', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(suite ? { suite } : {}),
+      });
+      const json = await res.json();
+      if (!json.ok) setMissionError(json.reason || 'benchmark failed');
+      else setMissionError(null);
+      refresh();
+    } catch (e) {
+      setMissionError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setMissionBusy(null);
+    }
+  }, [refresh]);
+
+  const kickoffDila = useCallback(async () => {
+    setMissionBusy('dila');
+    try {
+      const res = await fetch('/api/runtime/dila/kickoff', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          goal: 'Audit fleet health, research opportunities, and verify mission runtime integrity',
+          loopPhases: 4,
+        }),
+      });
+      const json = await res.json();
+      if (!json.ok) setMissionError(json.reason || 'Dila kickoff failed');
+      else { setMissionError(null); refresh(); }
+    } catch (e) {
+      setMissionError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setMissionBusy(null);
+    }
+  }, [refresh]);
+
+  const runWorkspaceAudit = useCallback(async () => {
+    setMissionBusy('audit');
+    try {
+      const res = await fetch('/api/runtime/dila/workspace-audit', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      const json = await res.json();
+      if (!json.ok) setMissionError(json.reason || 'workspace audit failed');
+      else {
+        setMissionError(null);
+        setWorkspaceAudit(json.summary || null);
+        refresh();
+      }
+    } catch (e) {
+      setMissionError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setMissionBusy(null);
+    }
+  }, [refresh]);
+
+  const runSoakHarness = useCallback(async () => {
+    setMissionBusy('soak');
+    try {
+      const res = await fetch('/api/runtime/dila/soak', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ days: 7, ticksPerDay: 3 }),
+      });
+      const json = await res.json();
+      if (!json.ok) setMissionError(json.reason || 'soak failed');
+      else {
+        setMissionError(null);
+        if (json.summary) {
+          setWorkspaceAudit((prev) => ({
+            ...prev,
+            soak: json.summary,
+          }));
+        }
+        refresh();
+      }
+    } catch (e) {
+      setMissionError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setMissionBusy(null);
+    }
+  }, [refresh]);
+
+  const processImprovements = useCallback(async () => {
+    setMissionBusy('improve');
+    try {
+      const res = await fetch('/api/runtime/dila/improvements/process', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ suite: 'dila_core' }),
+      });
+      const json = await res.json();
+      if (!json.ok) setMissionError(json.reason || 'improvement cycle failed');
+      else { setMissionError(null); refresh(); }
+    } catch (e) {
+      setMissionError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setMissionBusy(null);
+    }
+  }, [refresh]);
+
+  const spawnCodingLoop = useCallback(async () => {
+    setMissionBusy('coding');
+    try {
+      const res = await fetch('/api/runtime/missions', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ goal: 'implement refactor for mission runtime tests', source: 'operator' }),
+      });
+      const json = await res.json();
+      if (!json.ok) setMissionError(json.reason || 'coding loop spawn failed');
+      else { setMissionError(null); refresh(); }
+    } catch (e) {
+      setMissionError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setMissionBusy(null);
+    }
+  }, [refresh]);
+
+  const spawnParallelAudit = useCallback(async () => {
+    setMissionBusy('parallel');
+    try {
+      const res = await fetch('/api/runtime/missions', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          goal: 'Full comprehensive system fleet audit with parallel research and code checks',
+          source: 'operator',
+          decomposeParallel: true,
+        }),
+      });
+      const json = await res.json();
+      if (!json.ok) setMissionError(json.reason || 'parallel audit spawn failed');
+      else { setMissionError(null); refresh(); }
+    } catch (e) {
+      setMissionError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setMissionBusy(null);
+    }
+  }, [refresh]);
+
+  const spawnMarathonMission = useCallback(async () => {
+    setMissionBusy('marathon');
+    try {
+      const res = await fetch('/api/runtime/missions', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ template: 'marathon_delegate', source: 'operator', goal: 'Open-ended autonomous research task' }),
+      });
+      const json = await res.json();
+      if (!json.ok) setMissionError(json.reason || 'marathon spawn failed');
+      else { setMissionError(null); refresh(); }
+    } catch (e) {
+      setMissionError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setMissionBusy(null);
+    }
+  }, [refresh]);
 
   // Discoverable keyboard shortcut: "r" forces an immediate refresh instead of
   // waiting for the next 5s tick (Grafana/Datadog convention). Registers in the
@@ -419,6 +791,282 @@ export default function OpsTelemetryPage() {
             <LivenessPanel refreshToken={livenessTick} />
           </div>
 
+          {/* P4 — Mission Control: autonomous organ-fleet missions */}
+          <div data-testid="mission-control-panel" className="rounded-xl border border-violet-500/20 bg-violet-500/[0.03] p-3">
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+              <h2 className="flex items-center gap-2 text-[12px] font-semibold uppercase tracking-wider text-violet-300">
+                <Target className="h-4 w-4" /> Mission control
+                {supervisor && (
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-normal normal-case ${
+                    supervisor.overall === 'RUNNING' ? 'bg-emerald-500/20 text-emerald-200'
+                      : supervisor.overall === 'DEGRADED' ? 'bg-amber-500/20 text-amber-200'
+                        : 'bg-red-500/20 text-red-200'
+                  }`}>
+                    {supervisor.overall}
+                  </span>
+                )}
+                <span className={`rounded-full px-2 py-0.5 text-[10px] font-normal normal-case ${
+                  authGateMode === 'enforce' || authGateMode === 'enforce_autonomous'
+                    ? 'bg-orange-500/20 text-orange-200' : 'bg-slate-500/20 text-slate-300'
+                }`}>
+                  F0: {authGateMode}
+                </span>
+              </h2>
+              <div className="flex flex-wrap gap-1.5">
+                <button
+                  onClick={spawnFleetMission}
+                  disabled={!!missionBusy || missionOverview?.killSwitch}
+                  className="rounded-full border border-violet-500/30 bg-violet-500/10 px-2.5 py-1 text-[11px] font-medium text-violet-200 hover:bg-violet-500/20 disabled:opacity-50"
+                >
+                  {missionBusy === 'spawn' ? 'spawning…' : 'spawn fleet health'}
+                </button>
+                <button
+                  onClick={spawnCodingLoop}
+                  disabled={!!missionBusy}
+                  className="rounded-full border border-violet-500/30 bg-violet-500/10 px-2.5 py-1 text-[11px] font-medium text-violet-200 hover:bg-violet-500/20 disabled:opacity-50"
+                >
+                  {missionBusy === 'coding' ? 'spawning…' : 'coding loop'}
+                </button>
+                <button
+                  onClick={spawnParallelAudit}
+                  disabled={!!missionBusy}
+                  className="rounded-full border border-violet-500/30 bg-violet-500/10 px-2.5 py-1 text-[11px] font-medium text-violet-200 hover:bg-violet-500/20 disabled:opacity-50"
+                >
+                  {missionBusy === 'parallel' ? 'spawning…' : 'parallel audit'}
+                </button>
+                <button
+                  onClick={spawnMarathonMission}
+                  disabled={!!missionBusy}
+                  className="rounded-full border border-violet-500/30 bg-violet-500/10 px-2.5 py-1 text-[11px] font-medium text-violet-200 hover:bg-violet-500/20 disabled:opacity-50"
+                >
+                  {missionBusy === 'marathon' ? 'spawning…' : 'marathon delegate'}
+                </button>
+                <button
+                  onClick={() => runBenchmark()}
+                  disabled={!!missionBusy}
+                  className="rounded-full border border-violet-500/30 bg-violet-500/10 px-2.5 py-1 text-[11px] font-medium text-violet-200 hover:bg-violet-500/20 disabled:opacity-50"
+                >
+                  {missionBusy === 'benchmark' ? 'running…' : 'run benchmark'}
+                </button>
+                <button
+                  onClick={kickoffDila}
+                  disabled={!!missionBusy || missionOverview?.killSwitch}
+                  className="rounded-full border border-fuchsia-500/30 bg-fuchsia-500/10 px-2.5 py-1 text-[11px] font-medium text-fuchsia-200 hover:bg-fuchsia-500/20 disabled:opacity-50"
+                >
+                  {missionBusy === 'dila' ? 'kickoff…' : 'Dila kickoff'}
+                </button>
+                <button
+                  onClick={() => runBenchmark('dila_full')}
+                  disabled={!!missionBusy}
+                  className="rounded-full border border-fuchsia-500/30 bg-fuchsia-500/10 px-2.5 py-1 text-[11px] font-medium text-fuchsia-200 hover:bg-fuchsia-500/20 disabled:opacity-50"
+                >
+                  {missionBusy === 'benchmark' ? 'running…' : 'DilaBench full'}
+                </button>
+                <button
+                  onClick={runWorkspaceAudit}
+                  disabled={!!missionBusy}
+                  className="rounded-full border border-fuchsia-500/30 bg-fuchsia-500/10 px-2.5 py-1 text-[11px] font-medium text-fuchsia-200 hover:bg-fuchsia-500/20 disabled:opacity-50"
+                >
+                  {missionBusy === 'audit' ? 'auditing…' : 'workspace audit'}
+                </button>
+                <button
+                  onClick={runSoakHarness}
+                  disabled={!!missionBusy}
+                  className="rounded-full border border-fuchsia-500/30 bg-fuchsia-500/10 px-2.5 py-1 text-[11px] font-medium text-fuchsia-200 hover:bg-fuchsia-500/20 disabled:opacity-50"
+                >
+                  {missionBusy === 'soak' ? 'soaking…' : '7-day soak'}
+                </button>
+                <button
+                  onClick={processImprovements}
+                  disabled={!!missionBusy}
+                  className="rounded-full border border-fuchsia-500/30 bg-fuchsia-500/10 px-2.5 py-1 text-[11px] font-medium text-fuchsia-200 hover:bg-fuchsia-500/20 disabled:opacity-50"
+                >
+                  {missionBusy === 'improve' ? 'promoting…' : 'Ouroboros gate'}
+                </button>
+              </div>
+            </div>
+            {missionError && (
+              <div role="alert" className="mb-2 flex items-center gap-2 rounded-md border border-red-500/40 bg-red-500/10 px-3 py-1.5 text-[11px] text-red-200">
+                <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" /> <span className="flex-1 break-words">{missionError}</span>
+              </div>
+            )}
+            {missionOverview?.killSwitch && (
+              <p className="mb-2 text-[11px] text-amber-300">CONCORD_MISSION_RUNTIME=0 — autonomous missions disabled.</p>
+            )}
+            {missionOverview && (
+              <div className="mb-2 grid grid-cols-2 gap-2 sm:grid-cols-6">
+                <Metric label="active" value={String(missionOverview.active ?? 0)} />
+                <Metric label="completed" value={String(missionOverview.byStatus?.completed ?? 0)} />
+                <Metric label="failed" value={String(missionOverview.byStatus?.failed ?? 0)} />
+                <Metric label="templates" value={String(missionOverview.templates?.length ?? 0)} />
+                {missionControl?.capabilityIndex?.overall != null && (
+                  <Metric
+                    label={`capability /${missionControl.capabilityIndex.target ?? 11}`}
+                    value={missionControl.capabilityIndex.overall.toFixed(1)}
+                  />
+                )}
+                {missionControl?.causal?.total != null && (
+                  <Metric label="causal lessons" value={String(missionControl.causal.withLesson ?? missionControl.causal.total)} />
+                )}
+                {tierState && (
+                  <>
+                    <Metric label="coding loops" value={String(tierState.coding_loops_run ?? 0)} />
+                    <Metric label="marathons" value={String(tierState.marathons_spawned ?? 0)} />
+                  </>
+                )}
+              </div>
+            )}
+            {missionControl?.capabilityIndex?.dimensions && (
+              <div className="mb-2 flex flex-wrap gap-1">
+                {Object.entries(missionControl.capabilityIndex.dimensions)
+                  .sort(([, a], [, b]) => b - a)
+                  .slice(0, 8)
+                  .map(([dim, score]) => (
+                    <span
+                      key={dim}
+                      className="rounded-full border border-violet-500/20 bg-violet-500/5 px-2 py-0.5 text-[10px] text-violet-200/90"
+                      title={dim}
+                    >
+                      {dim.replace(/_/g, ' ')} {score.toFixed(1)}
+                    </span>
+                  ))}
+              </div>
+            )}
+            <div className="overflow-x-auto">
+              <table className="w-full text-[11px]" aria-label="Active missions">
+                <thead>
+                  <tr className="border-b border-zinc-800 text-left text-slate-400">
+                    <th scope="col" className="px-2 py-1.5">mission</th>
+                    <th className="px-2 py-1.5">template</th>
+                    <th className="px-2 py-1.5">status</th>
+                    <th className="px-2 py-1.5 text-right">progress</th>
+                    <th className="px-2 py-1.5 text-right">action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {missions.length === 0 && (
+                    <tr><td colSpan={5} className="px-2 py-4 text-center text-slate-500">no missions yet</td></tr>
+                  )}
+                  {missions.map((m) => (
+                    <tr key={m.id} className="border-b border-zinc-900">
+                      <td className="px-2 py-1 text-slate-200">{m.title}</td>
+                      <td className="px-2 py-1 font-mono text-slate-400">{m.template}</td>
+                      <td className="px-2 py-1 text-slate-300">{m.status}</td>
+                      <td className="px-2 py-1 text-right font-mono text-slate-400">{m.current_step}/{m.total_steps}</td>
+                      <td className="px-2 py-1 text-right">
+                        <div className="flex justify-end gap-1">
+                          <button
+                            onClick={() => setSelectedMissionDetail(selectedMissionDetail === m.id ? null : m.id)}
+                            className="rounded border border-zinc-700 bg-zinc-900/50 px-2 py-0.5 text-[10px] text-slate-300 hover:bg-zinc-800"
+                          >
+                            {selectedMissionDetail === m.id ? 'hide' : 'detail'}
+                          </button>
+                          {['pending', 'running'].includes(m.status) && (
+                            <button
+                              onClick={() => tickMission(m.id)}
+                              disabled={!!missionBusy}
+                              className="rounded border border-violet-500/30 bg-violet-500/10 px-2 py-0.5 text-[10px] text-violet-200 hover:bg-violet-500/20 disabled:opacity-50"
+                            >
+                              {missionBusy === m.id ? '…' : 'tick'}
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {missionDetail && selectedMissionDetail && (
+              <div className="mb-3 rounded-lg border border-violet-500/15 bg-violet-500/[0.02] p-2 text-[10px] text-slate-400">
+                <h3 className="mb-1 font-semibold uppercase tracking-wider text-violet-300/80">Mission detail</h3>
+                <p className="text-slate-300">
+                  {(missionDetail.what as { currentStep?: number; totalSteps?: number; status?: string })?.status}
+                  {' · '}
+                  step {(missionDetail.what as { currentStep?: number })?.currentStep}
+                  /{(missionDetail.what as { totalSteps?: number })?.totalSteps}
+                </p>
+                {Array.isArray(missionDetail.tools) && (missionDetail.tools as Array<{ tool?: string; status?: string }>).length > 0 && (
+                  <ul className="mt-1 space-y-0.5">
+                    {(missionDetail.tools as Array<{ tool?: string; status?: string; durationMs?: number }>).slice(-5).map((t, i) => (
+                      <li key={i}>
+                        <span className="font-mono text-violet-200/80">{t.tool}</span>
+                        <span className="text-slate-600"> · {t.status}</span>
+                        {t.durationMs != null && <span className="text-slate-600"> · {t.durationMs}ms</span>}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {Array.isArray(missionDetail.memory) && (missionDetail.memory as Array<{ lesson?: string }>).length > 0 && (
+                  <p className="mt-1 truncate text-slate-500">
+                    lesson: {(missionDetail.memory as Array<{ lesson?: string }>)[0]?.lesson}
+                  </p>
+                )}
+              </div>
+            )}
+            {marathonLinks.length > 0 && (
+              <div className="mt-3 border-t border-violet-500/10 pt-2">
+                <h3 className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-violet-300/80">Marathon links</h3>
+                <div className="space-y-1">
+                  {marathonLinks.map((l) => (
+                    <div key={l.mission_id} className="flex justify-between text-[10px] text-slate-400">
+                      <span className="truncate">{l.mission_title || l.mission_id}</span>
+                      <span className="font-mono text-violet-300/70">{l.marathon_status}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {benchmarkRuns.length > 0 && (
+              <div className="mt-2 text-[10px] text-slate-500">
+                latest benchmark: {benchmarkRuns[0]?.status} ({benchmarkRuns[0]?.id?.slice(0, 12)})
+              </div>
+            )}
+            {(dilaTree || dilaRecovery || workspaceAudit) && (
+              <div className="mt-3 grid gap-2 border-t border-fuchsia-500/10 pt-2 sm:grid-cols-3">
+                {dilaTree && (
+                  <div className="rounded-lg border border-fuchsia-500/10 bg-fuchsia-500/[0.02] p-2">
+                    <h3 className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-fuchsia-300/80">Supervisor tree</h3>
+                    <p className="text-[11px] text-slate-300">{dilaTree.nodeCount ?? 0} nodes</p>
+                    <ul className="mt-1 space-y-0.5 text-[10px] text-slate-400">
+                      {(dilaTree.roots?.[0]?.children || []).slice(0, 5).map((n) => (
+                        <li key={n.id}>{n.label} <span className="text-slate-600">({n.status})</span></li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {dilaRecovery && (
+                  <div className="rounded-lg border border-fuchsia-500/10 bg-fuchsia-500/[0.02] p-2">
+                    <h3 className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-fuchsia-300/80">Recovery</h3>
+                    <p className="text-[11px] text-slate-300">
+                      {dilaRecovery.stats?.total ?? 0} events
+                      {dilaRecovery.stats?.success_rate != null && (
+                        <> · {(dilaRecovery.stats.success_rate * 100).toFixed(0)}% success</>
+                      )}
+                    </p>
+                    {(dilaRecovery.recent || []).slice(0, 2).map((e, i) => (
+                      <p key={i} className="truncate text-[10px] text-slate-500">{e.failure_kind} → {e.recovery_action}</p>
+                    ))}
+                  </div>
+                )}
+                {workspaceAudit && (
+                  <div className="rounded-lg border border-fuchsia-500/10 bg-fuchsia-500/[0.02] p-2">
+                    <h3 className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-fuchsia-300/80">Workspace audit</h3>
+                    <p className="text-[11px] text-slate-300">{workspaceAudit.envKeyCount ?? 0} env keys · {workspaceAudit.connectors?.length ?? 0} connectors</p>
+                    <p className="truncate text-[10px] text-slate-500">
+                      sources: {(workspaceAudit.dataSources || []).filter((d) => d.fileCount > 0).map((d) => d.id).join(', ') || 'none'}
+                    </p>
+                    {workspaceAudit.soak && (
+                      <p className="text-[10px] text-fuchsia-300/80">
+                        soak: {workspaceAudit.soak.coherentDays}/{workspaceAudit.soak.daysSimulated} days coherent
+                        {workspaceAudit.soak.pass ? ' ✓' : ' ✗'}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
           <RuntimeConstellationPanel />
 
           {/* Wave E — Simulation Overview. This lens was infra-health-only

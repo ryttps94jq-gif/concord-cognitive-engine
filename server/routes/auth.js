@@ -82,6 +82,7 @@ export default function createAuthRouter({
   _REFRESH_FAMILIES,
   REFRESH_TOKEN_COOKIE,
   NODE_ENV,
+  resolveCookieSecure,
   validate,
   hashPassword,
   verifyPassword,
@@ -267,8 +268,8 @@ export default function createAuthRouter({
     const refreshToken = createRefreshToken(userId);
 
     // SECURITY: Set httpOnly cookies for browser auth
-    if (token) setAuthCookie(res, token);
-    if (refreshToken) setRefreshCookie(res, refreshToken);
+    if (token) setAuthCookie(res, token, req);
+    if (refreshToken) setRefreshCookie(res, refreshToken, req);
 
     // Track refresh token family
     try {
@@ -342,8 +343,8 @@ export default function createAuthRouter({
     const refreshToken = createRefreshToken(user.id);
 
     // SECURITY: Set httpOnly cookies for browser auth
-    if (token) setAuthCookie(res, token);
-    if (refreshToken) setRefreshCookie(res, refreshToken);
+    if (token) setAuthCookie(res, token, req);
+    if (refreshToken) setRefreshCookie(res, refreshToken, req);
 
     // Track refresh token family
     try {
@@ -640,7 +641,7 @@ export default function createAuthRouter({
     if (clearLockerKey && req.user?.id) clearLockerKey(req.user.id);
 
     // Clear auth cookies
-    clearAuthCookie(res);
+    clearAuthCookie(res, req);
 
     res.json({ ok: true, message: "Logged out successfully" });
   });
@@ -676,7 +677,7 @@ export default function createAuthRouter({
 
     const decoded = verifyToken(refreshCookie);
     if (!decoded || decoded.type !== "refresh") {
-      clearAuthCookie(res);
+      clearAuthCookie(res, req);
       return res.status(401).json({ ok: false, error: "Invalid or expired refresh token", code: "REFRESH_INVALID" });
     }
 
@@ -687,7 +688,7 @@ export default function createAuthRouter({
       // Revoke the entire family and force re-login.
       _TOKEN_BLACKLIST.revokeAllForUser(decoded.userId);
       _REFRESH_FAMILIES.delete(decoded.family);
-      clearAuthCookie(res);
+      clearAuthCookie(res, req);
       auditLog("security", "refresh_token_reuse", {
         userId: decoded.userId,
         family: decoded.family,
@@ -703,15 +704,15 @@ export default function createAuthRouter({
     // Issue new token pair (rotation)
     const user = AuthDB.getUser(decoded.userId);
     if (!user) {
-      clearAuthCookie(res);
+      clearAuthCookie(res, req);
       return res.status(401).json({ ok: false, error: "User not found" });
     }
 
     const newAccessToken = createToken(user.id);
     const newRefreshToken = createRefreshToken(user.id);
 
-    setAuthCookie(res, newAccessToken);
-    if (newRefreshToken) setRefreshCookie(res, newRefreshToken);
+    setAuthCookie(res, newAccessToken, req);
+    if (newRefreshToken) setRefreshCookie(res, newRefreshToken, req);
 
     // Update family tracking
     try {
@@ -747,7 +748,7 @@ export default function createAuthRouter({
       userAgent: req.headers["user-agent"]
     });
 
-    clearAuthCookie(res);
+    clearAuthCookie(res, req);
     res.json({ ok: true, message: "All sessions revoked. Please log in again." });
   });
 
@@ -760,9 +761,13 @@ export default function createAuthRouter({
     // present whenever auth cookies are. "lax" ensures it's sent on same-site
     // navigations + fetch requests.
     const cookieDomain = process.env.COOKIE_DOMAIN || undefined;
+    // Same Secure resolution as concord_auth / refresh — never bare NODE_ENV.
+    // Missing helper must NOT default to Secure on local HTTP prod builds.
     res.cookie("csrf_token", csrfToken, {
       httpOnly: false, // JS needs to read this
-      secure: NODE_ENV === "production",
+      secure: typeof resolveCookieSecure === "function"
+        ? resolveCookieSecure(req)
+        : false,
       sameSite: process.env.COOKIE_SAME_SITE || "lax",
       maxAge: 7 * 24 * 60 * 60 * 1000,
       path: "/",

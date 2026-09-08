@@ -64,7 +64,40 @@ export function getEmergentState(STATE) {
   if (!STATE.__emergent) {
     STATE.__emergent = createEmergentState();
   }
+  // 2026-08-31: always hydrate from DB (idempotent — only adds missing)
+  // This ensures post-restart persistence works even when in-memory state was populated elsewhere
+  try {
+    const db = STATE?.db || globalThis?._concordDB;
+    if (db) {
+      const rows = db.prepare("SELECT * FROM emergent_registry WHERE active = 1").all();
+      for (const r of rows) {
+        if (!STATE.__emergent.emergents.has(r.emergent_id)) {
+          STATE.__emergent.emergents.set(r.emergent_id, {
+            id: r.emergent_id,
+            name: r.name,
+            role: r.role,
+            instanceScope: r.instance_scope || "local",
+            capabilities: r.capabilities_json ? safeJsonParse(r.capabilities_json, []) : ["talk", "propose"],
+            memoryPolicy: r.memory_policy || "distilled",
+            origin: r.origin || null,
+            purpose: r.purpose || null,
+            district: r.district || "commons",
+            districtHistory: r.district_history_json ? safeJsonParse(r.district_history_json, []) : [],
+            districtAffinity: r.district_affinity_json ? safeJsonParse(r.district_affinity_json, {}) : {},
+            createdAt: new Date(r.created_at || Date.now()).toISOString(),
+            active: r.active === 1,
+            state: r.state || "active",
+            age: r.age || null,
+          });
+        }
+      }
+    }
+  } catch (e) { /* silent — table may not exist yet */ }
   return STATE.__emergent;
+}
+
+function safeJsonParse(str, fallback) {
+  try { return JSON.parse(str); } catch { return fallback; }
 }
 
 // ── Emergent CRUD ─────────────────────────────────────────────────────────
@@ -79,6 +112,37 @@ export function registerEmergent(state, emergent) {
     createdAt: new Date().toISOString(),
     active: true,
   });
+  // 2026-08-30: dual-write to emergent_registry table (limitation fix #1)
+  // Best-effort — silent failure if db/table unavailable
+  try {
+    const db = state?.db || globalThis?._concordDB;
+    if (db) {
+      const now = Date.now();
+      const row = {
+        emergent_id: emergent.id,
+        name: emergent.name || emergent.id,
+        role: emergent.role || null,
+        instance_scope: emergent.instanceScope || "local",
+        capabilities_json: JSON.stringify(emergent.capabilities || []),
+        memory_policy: emergent.memoryPolicy || null,
+        origin: emergent.origin || null,
+        purpose: emergent.purpose || null,
+        district: emergent.district || "commons",
+        district_history_json: JSON.stringify(emergent.districtHistory || []),
+        district_affinity_json: JSON.stringify(emergent.districtAffinity || {}),
+        active: 1,
+        state: "active",
+        age: null,
+        created_at: now,
+        updated_at: now,
+      };
+      // Upsert
+      const cols = Object.keys(row);
+      const placeholders = cols.map(() => "?").join(",");
+      const updateClause = cols.filter(c => c !== "emergent_id").map(c => `${c} = excluded.${c}`).join(", ");
+      db.prepare(`INSERT INTO emergent_registry (${cols.join(",")}) VALUES (${placeholders}) ON CONFLICT(emergent_id) DO UPDATE SET ${updateClause}`).run(cols.map(c => row[c]));
+    }
+  } catch (e) { /* silent — non-fatal */ }
   // Initialize reputation
   if (!state.reputations.has(emergent.id)) {
     state.reputations.set(emergent.id, {

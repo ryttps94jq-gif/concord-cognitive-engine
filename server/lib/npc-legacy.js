@@ -24,6 +24,8 @@ import crypto from "node:crypto";
 import logger from "../logger.js";
 import { inheritHooks } from "./hooks.js";
 import { handleNpcDeathVacancy } from "./settlements.js";
+import { recordConsequence, recordLeaderDeath } from "./world-consequence.js";
+import { inheritMemories } from "./npc-memory.js";
 import { birthTemperament } from "./ecosystem/temperament.js";
 import { DRIVE_KINDS } from "./ecosystem/drives.js";
 import { appraiseExperience } from "./felt-per.js";
@@ -362,6 +364,29 @@ export function onNpcDeath(db, npc, opts = {}) {
     _openSettlementVacancyOnDeath(db, npc, opts);
   } catch { /* settlements optional */ }
 
+  try {
+    const isLeader = !!(npc.settlement_role || npc.role === "leader" || opts.asLeader);
+    const payload = {
+      worldId: npc.world_id || "concordia-hub",
+      actorKind: opts.killerKind || (opts.killerId ? "player" : "world"),
+      actorId: String(opts.killerId || opts.killer || "unknown"),
+      targetKind: "npc",
+      targetId: npc.id,
+      factionId: npc.faction || null,
+      location: npc.world_id,
+    };
+    if (isLeader) {
+      recordLeaderDeath(db, {
+        ...payload,
+        importance: 0.95,
+        immediate: { factionId: npc.faction || null, succession: true },
+        longTerm: { factionId: npc.faction || null },
+      });
+    } else {
+      recordConsequence(db, { ...payload, action: "kill", importance: 0.7 });
+    }
+  } catch { /* consequence bus optional until mig 416 */ }
+
   const cause = opts.cause || "unknown";
   const lastWords = composeLastWords(npc, cause);
 
@@ -413,6 +438,9 @@ export function onNpcDeath(db, npc, opts = {}) {
       const hres = inheritHooks(db, npc.id, primary.id);
       inherited.hooks = (hres?.transferredOver || 0) + (hres?.transferredHeld || 0);
     } catch { inherited.hooks = 0; }
+    try {
+      inherited.memories = inheritMemories(db, npc.id, primary.id);
+    } catch { inherited.memories = 0; }
   }
 
   return { ok: true, legacyId, heirs: heirs.map(h => h.id), inherited };

@@ -103,6 +103,39 @@ function HomeClient() {
     setHasEntered(isEntered);
     setFullPageMode(!isEntered);
 
+    // Session cookies (httpOnly) can exist without concord_entered — API
+    // register/login never set that flag. Always probe /api/auth/me.
+    if (!authCheckRef.current) {
+      authCheckRef.current = true;
+      const timeout = new Promise<'timeout'>((resolve) =>
+        setTimeout(() => resolve('timeout'), 8_000)
+      );
+      const sessionProbe = api
+        .get('/api/auth/me')
+        .then(async () => {
+          await api.get('/api/auth/csrf-token').catch(() => {});
+          return 'ok' as const;
+        })
+        .catch(() => 'failed' as const);
+      Promise.race([sessionProbe, timeout]).then((result) => {
+        if (result === 'ok') {
+          try { localStorage.setItem(ENTERED_KEY, 'true'); } catch {}
+          setHasEntered(true);
+          setAuthChecked(true);
+          setFullPageMode(false);
+          if (window.location.pathname === '/') {
+            window.location.replace('/hub');
+          }
+          return;
+        }
+        setAuthChecked(true);
+      });
+      return;
+    }
+
+    setHasEntered(isEntered);
+    setFullPageMode(!isEntered);
+
     // If user has entered before, verify they're still authenticated
     if (isEntered && !authCheckRef.current) {
       authCheckRef.current = true;

@@ -31,7 +31,6 @@ import {
   X,
   AlertCircle,
   Zap,
-  Save,
   FileText,
   Microscope,
   CheckCircle,
@@ -44,7 +43,6 @@ import { ErrorState } from '@/components/common/EmptyState';
 import { useLensDTUs } from '@/hooks/useLensDTUs';
 import { LensContextPanel } from '@/components/lens/LensContextPanel';
 import { FeedbackWidget } from '@/components/feedback/FeedbackWidget';
-import { useUIStore } from '@/store/ui';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
 import { LiveIndicator } from '@/components/lens/LiveIndicator';
 import { DTUExportButton } from '@/components/lens/DTUExportButton';
@@ -55,6 +53,7 @@ import { VisionAnalyzeButton } from '@/components/common/VisionAnalyzeButton';
 import { PullToSubstrate } from '@/components/lens/PullToSubstrate';
 import { FeedBanner } from '@/components/lens/FeedBanner';
 import ResearchWorkbench from '@/components/research/ResearchWorkbench';
+import { SaveAsDtuButton } from '@/components/dtu/SaveAsDtuButton';
 
 interface DTUResult {
   id: string;
@@ -227,7 +226,6 @@ export default function ResearchLensPage() {
     null
   );
   const [generateError, setGenerateError] = useState<string | null>(null);
-  const [savingDTU, setSavingDTU] = useState(false);
   const [deepResearchLoading, setDeepResearchLoading] = useState(false);
 
   const handleDeepResearch = useCallback(async () => {
@@ -308,26 +306,6 @@ export default function ResearchLensPage() {
         .then((r) => r.data)
         .catch(() => ({ dtus: [] })),
   });
-
-  const handleSaveAsDTU = useCallback(async () => {
-    if (!generateResult) return;
-    setSavingDTU(true);
-    try {
-      await api.post('/api/dtus', {
-        title: generateResult.title,
-        content: generateResult.content,
-        domain: 'research',
-        tags: ['research', 'analysis', 'generated'],
-      });
-      setSavingDTU(false);
-      refetch();
-      refetchDTUs();
-    } catch (e) {
-      console.error('Failed to save research DTU:', e);
-      useUIStore.getState().addToast({ type: 'error', message: 'Failed to save research result' });
-      setSavingDTU(false);
-    }
-  }, [generateResult, refetch, refetchDTUs]);
 
   const dtus: DTUResult[] = useMemo(() => dtusData?.dtus || [], [dtusData]);
 
@@ -587,13 +565,16 @@ export default function ResearchLensPage() {
               >
                 <Download className="w-3.5 h-3.5" /> Download
               </button>
-              <button
-                onClick={handleSaveAsDTU}
-                disabled={savingDTU}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-neon-purple/10 text-neon-purple rounded-lg text-xs hover:bg-neon-purple/20 disabled:opacity-50"
-              >
-                <Save className="w-3.5 h-3.5" /> {savingDTU ? 'Saving...' : 'Save as DTU'}
-              </button>
+              <SaveAsDtuButton
+                apiSource="research-lens"
+                title={generateResult.title}
+                content={generateResult.content}
+                extraTags={['research', 'analysis', 'generated']}
+                rawData={generateResult}
+                confirm
+                onSaved={() => { refetch(); refetchDTUs(); }}
+                className="!bg-neon-purple/10 !text-neon-purple hover:!bg-neon-purple/20"
+              />
               <button
                 onClick={() => setGenerateResult(null)}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-gray-400 hover:text-white text-xs"

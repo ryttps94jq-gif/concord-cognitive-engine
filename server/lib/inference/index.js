@@ -141,6 +141,28 @@ export async function infer(req, db) {
       terminated: loopResult.terminated,
     });
 
+    if (db) {
+      try {
+        const { meterInferenceWithBilling } = await import("../runtime/inference-billing-bridge.js");
+        meterInferenceWithBilling(db, {
+          inferenceId,
+          spanType: "infer",
+          brainUsed: handle.name,
+          modelUsed: activeModel,
+          tokensIn: response.tokensIn,
+          tokensOut: response.tokensOut,
+          latencyMs,
+          stepCount: loopResult.steps?.length || 0,
+          callerId: req.callerId,
+          lensId: req.lensContext?.lens,
+          path: req.path || req.econPath,
+          missionId: req.missionId,
+          stepIndex: req.stepIndex,
+          usage: loopResult.usage,
+        });
+      } catch { /* metering never blocks */ }
+    }
+
     return response;
   } catch (err) {
     const latencyMs = Date.now() - startedAt;
@@ -184,6 +206,8 @@ export async function* inferStream(req, db) {
   });
 
   const slot = await acquire(handle.name);
+  let tokensIn = 0;
+  let tokensOut = 0;
   try {
     const res = await fetch(url, {
       method: "POST",
@@ -210,7 +234,29 @@ export async function* inferStream(req, db) {
           const j = JSON.parse(line);
           if (j.message?.content) yield { text: j.message.content };
           if (j.done) {
-            traceEmit("finish", inferenceId, { brainUsed: handle.name, latencyMs: Date.now() - startedAt });
+            tokensIn = j.prompt_eval_count || tokensIn;
+            tokensOut = j.eval_count || tokensOut;
+            const latencyMs = Date.now() - startedAt;
+            traceEmit("finish", inferenceId, { brainUsed: handle.name, latencyMs, tokensIn, tokensOut });
+            if (db && (tokensIn > 0 || tokensOut > 0)) {
+              try {
+                const { meterInferenceWithBilling } = await import("../runtime/inference-billing-bridge.js");
+                meterInferenceWithBilling(db, {
+                  inferenceId,
+                  spanType: "infer_stream",
+                  brainUsed: handle.name,
+                  modelUsed: handle.model,
+                  provider: "ollama",
+                  tokensIn,
+                  tokensOut,
+                  latencyMs,
+                  callerId: req.callerId,
+                  lensId: req.lensContext?.lens,
+                  path: req.path || req.econPath,
+                  billingSource: "provider",
+                });
+              } catch { /* metering never blocks */ }
+            }
             yield { done: true };
             return;
           }
