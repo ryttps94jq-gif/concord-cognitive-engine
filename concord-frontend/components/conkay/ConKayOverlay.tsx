@@ -36,7 +36,7 @@ import { runFeaBeamToWorld } from '@/lib/conkay/fea-beam-to-world';
 import { runPartMeshToWorld } from '@/lib/conkay/part-mesh-to-world';
 import { designViaApiOrClient } from '@/lib/conkay/nlp-design-to-world';
 import { runEvoGlbToWorld } from '@/lib/conkay/evo-glb-to-world';
-import { runAssemblyChatRevise, downloadStl, downloadAssemblyBom, downloadStep, downloadBrepStep, occFeatureRebuild, rebuildPartSolid, occFeatureAppend, fetchOccStatus, runAssemblyUndo, runAssemblyRedo, downloadAssemblyDrawing, downloadAssemblyDrawingPdf, explodeAssemblyApi, fetchMaterials, attachPartMaterial, listParts, mateSolveDof, sketchSolve, gdtDigital, occFeatureList } from '@/lib/conkay/assembly-to-world';
+import { runAssemblyChatRevise, downloadStl, downloadAssemblyBom, downloadErpBomJson, downloadErpBomCsv, downloadStep, downloadBrepStep, occFeatureRebuild, rebuildPartSolid, occFeatureAppend, fetchOccStatus, runAssemblyUndo, runAssemblyRedo, downloadAssemblyDrawing, downloadAssemblyDrawingPdf, explodeAssemblyApi, fetchMaterials, attachPartMaterial, listParts, mateSolveDof, sketchSolve, gdtDigital, occFeatureList } from '@/lib/conkay/assembly-to-world';
 import { ConKayActionConfirm } from './ConKayActionConfirm';
 import { ConKayVerticalsBar } from './ConKayVerticalsBar';
 import { mintConkayArtifactDtu } from '@/lib/conkay/mint-artifact-dtu';
@@ -300,6 +300,17 @@ export function ConKayOverlay() {
   const [nlpBuilding, setNlpBuilding] = useState(false);
   const [evoGlbBusy, setEvoGlbBusy] = useState(false);
   const [assemblyId, setAssemblyId] = useState<string | null>(null);
+
+  // Share current assembly with cockpit CAD panels (feature-tree / ERP BOM) — minimal bridge.
+  useEffect(() => {
+    if (!assemblyId) return;
+    try {
+      sessionStorage.setItem('conkay.assemblyId', assemblyId);
+      window.dispatchEvent(new CustomEvent('conkay:assembly', { detail: { assemblyId } }));
+    } catch {
+      /* ignore */
+    }
+  }, [assemblyId]);
   const [assemblyBusy, setAssemblyBusy] = useState(false);
   const [materialPicker, setMaterialPicker] = useState('steel');
   const [materialsList, setMaterialsList] = useState<Array<{ id: string; name: string; color?: string }>>([]);
@@ -845,6 +856,34 @@ export function ConKayOverlay() {
       setWorkStatus(`BOM download failed — ${e instanceof Error ? e.message : String(e)}`);
     }
   }, [assemblyId]);
+
+  const exportErpBom = useCallback(async () => {
+    if (!assemblyId) {
+      setWorkStatus('ERP BOM: no assembly yet — build/revise an assembly first');
+      return;
+    }
+    try {
+      const r = await downloadErpBomJson(assemblyId);
+      if (!r.ok) {
+        setWorkStatus(`ERP BOM failed — ${r.error || 'unknown'}`);
+        return;
+      }
+      const csv = await downloadErpBomCsv(assemblyId);
+      reportCadAction(
+        `ERP BOM LIVE: ${r.filename}${csv.ok ? ` + ${csv.filename}` : ''} parts=${r.bom?.totalParts ?? '?'} rollup=$${Number(r.bom?.rollup?.rollupCostUsd ?? 0).toFixed(2)} — not SAP/Oracle`,
+        {
+          action: 'export_erp_bom',
+          filename: r.filename,
+          csv: csv.ok ? csv.filename : null,
+          totalParts: r.bom?.totalParts ?? null,
+          rollupCostUsd: r.bom?.rollup?.rollupCostUsd ?? null,
+        },
+      );
+    } catch (e) {
+      setWorkStatus(`ERP BOM failed — ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }, [assemblyId]);
+
 
   const downloadAssemblyDrawingSvg = useCallback(async () => {
     if (!assemblyId) {
@@ -1715,6 +1754,16 @@ export function ConKayOverlay() {
                   data-testid="ck-assembly-bom"
                   className="rounded-lg px-2 py-1 text-[10px] text-lime-100 hover:bg-lime-400/15 border border-lime-400/30 disabled:opacity-40">
                   BOM
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { void exportErpBom(); }}
+                  className="rounded border border-emerald-400/25 bg-emerald-400/10 px-2 py-1 text-[10px] text-emerald-100/90 hover:bg-emerald-400/20"
+                  title="ERP-shaped BOM JSON+CSV — part numbers, mass/volume, vendor stubs, rollup (not SAP/Oracle)"
+                  aria-label="Export ERP BOM"
+                  data-testid="ck-assembly-erp-bom"
+                >
+                  ERP BOM
                 </button>
                 <button type="button" onClick={() => { void downloadAssemblyStep(); }}
                   disabled={!assemblyId}

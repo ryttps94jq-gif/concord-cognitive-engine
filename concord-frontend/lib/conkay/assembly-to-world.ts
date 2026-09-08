@@ -463,3 +463,59 @@ export async function occFeatureList(partId: string) {
   const res = await api.get(`/api/conkay/occ/feature-list/${encodeURIComponent(partId)}`);
   return res?.data;
 }
+
+/** ERP-shaped BOM JSON (part numbers, mass/volume, vendor stubs, rollup). NOT SAP/Oracle. */
+export async function fetchErpBom(assemblyId: string, opts?: { overheadPct?: number }) {
+  const q =
+    opts?.overheadPct != null && Number.isFinite(opts.overheadPct)
+      ? `?overheadPct=${encodeURIComponent(String(opts.overheadPct))}`
+      : '';
+  const res = await api.get(`/api/conkay/assemblies/${assemblyId}/bom/erp${q}`);
+  return res?.data;
+}
+
+/** Browser download of ERP BOM as JSON. */
+export async function downloadErpBomJson(assemblyId: string) {
+  const bom = await fetchErpBom(assemblyId);
+  if (!bom?.ok) return { ok: false, error: bom?.reason || bom?.error || 'erp_bom_failed' };
+  const blob = new Blob([JSON.stringify(bom, null, 2)], { type: 'application/json' });
+  const filename = `conkay-erp-bom-${assemblyId.slice(0, 8)}.json`;
+  if (typeof window !== 'undefined') {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+  return { ok: true, filename, bom };
+}
+
+/** Browser download of ERP BOM as CSV. */
+export async function downloadErpBomCsv(assemblyId: string) {
+  const res = await api.get(`/api/conkay/assemblies/${assemblyId}/bom/erp.csv`, { responseType: 'blob' });
+  const blob = res?.data instanceof Blob ? res.data : new Blob([res?.data], { type: 'text/csv' });
+  const filename = `conkay-erp-bom-${assemblyId.slice(0, 8)}.csv`;
+  if (typeof window !== 'undefined') {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+  return { ok: true, filename, size: blob.size };
+}
+
+/** Create OCC feature tree for a partId. */
+export async function occFeatureCreate(body: Record<string, unknown>) {
+  const res = await api.post('/api/conkay/occ/feature-create', body);
+  return res?.data;
+}
+
+/** Undo last OCC feature on a part. */
+export async function occFeatureUndo(body: Record<string, unknown>) {
+  const res = await api.post('/api/conkay/occ/feature-undo', body);
+  return res?.data;
+}
+

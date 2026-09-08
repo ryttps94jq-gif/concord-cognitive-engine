@@ -36,6 +36,10 @@ import {
   buildBom,
 } from '../lib/conkay/assembly-export.js';
 import {
+  buildErpBom,
+  erpBomToCsv,
+} from '../lib/conkay/erp-bom.js';
+import {
   probeOcc,
   exportAssemblyBrepStep,
   exportPartBrepStep,
@@ -394,6 +398,31 @@ export default function createConkayAssemblyRouter({ requireAuth, db }) {
     if (!bom.ok) return res.status(404).json(bom);
     return res.json(bom);
   });
+
+  /** GET /api/conkay/assemblies/:id/bom/erp — ERP-shaped BOM JSON (not SAP/Oracle) */
+  router.get('/assemblies/:id/bom/erp', auth, (req, res) => {
+    if (!needDb(res)) return;
+    const overheadPct = req.query?.overheadPct != null ? Number(req.query.overheadPct) : undefined;
+    const bom = buildErpBom(db, req.params.id, { overheadPct });
+    if (!bom.ok) return res.status(404).json(bom);
+    return res.json(bom);
+  });
+
+  /** GET /api/conkay/assemblies/:id/bom/erp.csv — ERP-shaped BOM CSV download */
+  router.get('/assemblies/:id/bom/erp.csv', auth, (req, res) => {
+    if (!needDb(res)) return;
+    const overheadPct = req.query?.overheadPct != null ? Number(req.query.overheadPct) : undefined;
+    const bom = buildErpBom(db, req.params.id, { overheadPct });
+    if (!bom.ok) return res.status(404).json(bom);
+    const csv = erpBomToCsv(bom);
+    if (!csv.ok) return res.status(422).json(csv);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${csv.filename}"`);
+    res.setHeader('X-ConKay-Bom-Schema', 'conkay.erp-bom.v1');
+    res.setHeader('X-ConKay-Bom-Lines', String(bom.lines?.length || 0));
+    return res.send(csv.csv);
+  });
+
 
   /** GET /api/conkay/assemblies/:id/parts/:partId/stl — binary STL download */
   router.get('/assemblies/:id/parts/:partId/stl', auth, (req, res) => {
