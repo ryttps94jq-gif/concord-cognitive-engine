@@ -237,7 +237,7 @@ export async function exportAssemblyBrepStep(db, assemblyId, opts = {}) {
       kernel: 'OpenCascade/OCP',
       format: 'AP214 advanced B-rep STEP',
       note: 'LIVE OCC B-rep when advanced_brep=true. Mesh parts approximated as AABB boxes / cylinders from kind.',
-      not: 'Full feature-tree CAD / industrial mates solver',
+      not: 'SolidWorks UI parity / physical ISO 17025 CMM',
     },
   };
 }
@@ -461,6 +461,28 @@ export async function rebuildPartFromFeatures(db, assemblyId, partId, opts = {})
 }
 
 
+
+/** INDUSTRIAL_CLASS — multi-DOF mate solver (not AABB snap) */
+export async function mateSolveDof(payload = {}) {
+  return runOccCli('mate-solve-dof', {
+    include_mesh: payload.include_mesh !== false && !payload.omit_mesh,
+    ...payload,
+  });
+}
+
+/** INDUSTRIAL_CLASS — 2D sketch constraint solve + optional extrude */
+export async function sketchSolve(payload = {}) {
+  return runOccCli('sketch-solve', {
+    include_mesh: payload.include_mesh !== false && !payload.omit_mesh,
+    ...payload,
+  });
+}
+
+/** INDUSTRIAL_CLASS — digital ASME Y14.5-style software metrology (NOT ISO CMM) */
+export async function gdtDigital(payload = {}) {
+  return runOccCli('gdt-digital', payload);
+}
+
 export { resolvePython, resolveCli, brepDataDir };
 export default {
   runOccCli,
@@ -476,5 +498,8 @@ export default {
   sketchExtrude,
   measureGeometry,
   mateSolids,
+  mateSolveDof,
+  sketchSolve,
+  gdtDigital,
   rebuildPartFromFeatures,
 };

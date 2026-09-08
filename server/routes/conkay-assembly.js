@@ -48,6 +48,9 @@ import {
   sketchExtrude,
   measureGeometry,
   mateSolids,
+  mateSolveDof,
+  sketchSolve,
+  gdtDigital,
   rebuildPartFromFeatures,
 } from '../lib/conkay/occ-bridge.js';
 import {
@@ -924,6 +927,30 @@ export default function createConkayAssemblyRouter({ requireAuth, db }) {
 
   router.post('/occ/mate-solids', auth, async (req, res) => {
     const out = await mateSolids(req.body || {});
+    return res.status(out.ok ? 200 : 422).json(out);
+  });
+
+  /** POST /api/conkay/occ/mate-solve-dof — INDUSTRIAL_CLASS multi-DOF solver */
+  router.post('/occ/mate-solve-dof', auth, async (req, res) => {
+    const out = await mateSolveDof(req.body || {});
+    return res.status(out.ok ? 200 : 422).json(out);
+  });
+
+  /** POST /api/conkay/occ/sketch-solve — INDUSTRIAL_CLASS 2D constraints */
+  router.post('/occ/sketch-solve', auth, async (req, res) => {
+    const out = await sketchSolve(req.body || {});
+    return res.status(out.ok ? 200 : 422).json(out);
+  });
+
+  /** POST /api/conkay/occ/gdt-digital — digital ASME Y14.5 harness (NOT ISO CMM) */
+  router.post('/occ/gdt-digital', auth, async (req, res) => {
+    const out = await gdtDigital(req.body || {});
+    return res.status(out.ok ? 200 : 422).json(out);
+  });
+
+  /** POST /api/conkay/occ/feature-list — alias body form */
+  router.post('/occ/feature-list', auth, async (req, res) => {
+    const out = await featureList(req.body || {});
     return res.status(out.ok ? 200 : 422).json(out);
   });
 

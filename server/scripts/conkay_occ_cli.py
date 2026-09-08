@@ -78,7 +78,8 @@ def probe() -> dict:
             "commands": sorted(COMMANDS.keys()),
             "honesty": {
                 "note": "OpenCascade via cadquery-ocp (OCP). Real B-rep STEP — not faceted POLY_LOOP.",
-                "not": "SolidWorks feature-parity / ISO CMM lab certification",
+                "not": "SolidWorks UI parity / physical ISO 17025 CMM lab",
+                "industrial": "multi-DOF mates + advanced features + digital ASME Y14.5 harness when companion loaded",
             },
         }
     except Exception as e:
@@ -90,7 +91,7 @@ def _make_shape(kind: str, params: dict):
     from OCP.gp import gp_Ax2, gp_Pnt, gp_Dir
 
     kind = (kind or "box").lower()
-    if kind in ("box", "cube", "rect", "beam"):
+    if kind in ("box", "cube", "rect", "beam", "plate", "block", "slab"):
         dx = float(params.get("dx") or params.get("x") or params.get("width") or 10.0)
         dy = float(params.get("dy") or params.get("y") or params.get("depth") or 10.0)
         dz = float(params.get("dz") or params.get("z") or params.get("height") or 10.0)
@@ -277,7 +278,7 @@ def _shape_from_feature_params(feat: dict):
     """Build a primitive solid from a feature dict (box/cylinder or nested tool)."""
     ftype = (feat.get("type") or feat.get("op") or feat.get("kind") or "box").lower()
     params = feat.get("params") or feat
-    if ftype in ("box", "cube", "rect", "beam"):
+    if ftype in ("box", "cube", "rect", "beam", "plate", "block", "slab"):
         shape, used = _make_shape("box", params)
     elif ftype in ("cylinder", "cyl", "pipe", "rod"):
         shape, used = _make_shape("cylinder", params)
@@ -314,20 +315,32 @@ def _chamfer_all_edges(shape, dist: float):
     from OCP.TopAbs import TopAbs_EDGE
     from OCP.TopoDS import TopoDS
 
-    mk = BRepFilletAPI_MakeChamfer(shape)
+    edges = []
     exp = TopExp_Explorer(shape, TopAbs_EDGE)
-    n = 0
     while exp.More():
-        edge = TopoDS.Edge_s(exp.Current())
-        mk.Add(float(dist), edge)
-        n += 1
+        edges.append(TopoDS.Edge_s(exp.Current()))
         exp.Next()
-    if n == 0:
+    if not edges:
         return shape, 0
-    mk.Build()
-    if not mk.IsDone():
-        raise RuntimeError("chamfer_failed")
-    return mk.Shape(), n
+    # Try all edges; on failure, try progressively fewer (industrial best-effort)
+    for take in (len(edges), max(1, len(edges)//2), max(1, len(edges)//4), min(4, len(edges)), 1):
+        mk = BRepFilletAPI_MakeChamfer(shape)
+        n = 0
+        for edge in edges[:take]:
+            try:
+                mk.Add(float(dist), edge)
+                n += 1
+            except Exception:
+                continue
+        if n == 0:
+            continue
+        try:
+            mk.Build()
+            if mk.IsDone():
+                return mk.Shape(), n
+        except Exception:
+            continue
+    raise RuntimeError("chamfer_failed")
 
 
 def _boolean(op: str, a, b):
@@ -451,7 +464,7 @@ def rebuild_from_features(features: list) -> tuple:
         if "id" not in feat:
             feat["id"] = _new_id()
         ftype = (feat.get("type") or feat.get("op") or feat.get("kind") or "").lower()
-        if ftype in ("box", "cube", "cylinder", "cyl", "pipe", "rod", "beam", "rect"):
+        if ftype in ("box", "cube", "cylinder", "cyl", "pipe", "rod", "beam", "rect", "plate", "block", "slab"):
             prim, used = _shape_from_feature_params(feat)
             if shape is None:
                 shape = prim
@@ -534,7 +547,17 @@ def rebuild_from_features(features: list) -> tuple:
             shape = _apply_pos_rot(shape, feat)
             notes.append("transform")
         else:
-            raise ValueError(f"unsupported_feature:{ftype}")
+            # INDUSTRIAL_CLASS advanced ops (shell/draft/pattern) via companion module
+            adv = None
+            try:
+                from conkay_occ_industrial import apply_advanced_feature
+                adv = apply_advanced_feature(ftype, feat, shape)
+            except ImportError:
+                adv = None
+            if adv is None:
+                raise ValueError(f"unsupported_feature:{ftype}")
+            shape, note = adv
+            notes.append(note)
         normalized.append(feat)
     if shape is None:
         raise ValueError("rebuild_produced_no_shape")
@@ -1148,6 +1171,42 @@ COMMANDS = {
     "mate_solids": cmd_mate_solids,
     "mate-solids": cmd_mate_solids,
 }
+
+
+# ── INDUSTRIAL_CLASS extensions (multi-DOF mates / sketch solve / digital GD&T / advanced features)
+try:
+    import sys as _sys
+    from pathlib import Path as _Path
+    _scripts_dir = str(_Path(__file__).resolve().parent)
+    if _scripts_dir not in _sys.path:
+        _sys.path.insert(0, _scripts_dir)
+    import conkay_occ_industrial as _ind
+
+    _ind.bind_helpers(
+        rebuild_from_features=rebuild_from_features,
+        _make_shape=_make_shape,
+        _apply_pos_rot=_apply_pos_rot,
+        _translate=_translate,
+        _write_step=_write_step,
+        _maybe_mesh=_maybe_mesh,
+        _bbox=_bbox,
+        _count_solids=_count_solids,
+        _boolean=_boolean,
+        _wire_from_sketch=_wire_from_sketch,
+        _face_from_wire=_face_from_wire,
+        _extrude_face=_extrude_face,
+        _revolve_face=_revolve_face,
+        _fail=_fail,
+        _new_id=_new_id,
+    )
+    _ind.register(COMMANDS)
+except Exception as _ind_err:  # keep base CLI alive if industrial companion missing
+    COMMANDS["_industrial_load_error"] = lambda p, e=_ind_err: {
+        "ok": False,
+        "reason": "industrial_module_load_failed",
+        "error": str(e),
+    }
+
 
 
 def main(argv: list[str]) -> int:

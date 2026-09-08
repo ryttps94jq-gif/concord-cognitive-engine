@@ -36,7 +36,7 @@ import { runFeaBeamToWorld } from '@/lib/conkay/fea-beam-to-world';
 import { runPartMeshToWorld } from '@/lib/conkay/part-mesh-to-world';
 import { designViaApiOrClient } from '@/lib/conkay/nlp-design-to-world';
 import { runEvoGlbToWorld } from '@/lib/conkay/evo-glb-to-world';
-import { runAssemblyChatRevise, downloadStl, downloadAssemblyBom, downloadStep, downloadBrepStep, occFeatureRebuild, rebuildPartSolid, occFeatureAppend, fetchOccStatus, runAssemblyUndo, runAssemblyRedo, downloadAssemblyDrawing, downloadAssemblyDrawingPdf, explodeAssemblyApi, fetchMaterials, attachPartMaterial, listParts } from '@/lib/conkay/assembly-to-world';
+import { runAssemblyChatRevise, downloadStl, downloadAssemblyBom, downloadStep, downloadBrepStep, occFeatureRebuild, rebuildPartSolid, occFeatureAppend, fetchOccStatus, runAssemblyUndo, runAssemblyRedo, downloadAssemblyDrawing, downloadAssemblyDrawingPdf, explodeAssemblyApi, fetchMaterials, attachPartMaterial, listParts, mateSolveDof, sketchSolve, gdtDigital, occFeatureList } from '@/lib/conkay/assembly-to-world';
 import { ConKayActionConfirm } from './ConKayActionConfirm';
 import { ConKayCockpit } from './ConKayCockpit';
 import { CONKAY_SIGNATURE_GREETING, CONKAY_PERSONA_PROMPT, type ConKayState } from './conkay-persona';
@@ -612,23 +612,129 @@ export function ConKayOverlay() {
       const created = await occFeatureRebuild({
         partId,
         features: [
-          { type: 'box', dx: 40, dy: 30, dz: 20 },
-          { type: 'cut', tool: { type: 'cylinder', r: 5, h: 30, position: { x: 20, y: 15, z: -5 } } },
+          { type: 'box', dx: 40, dy: 24, dz: 16 },
+          { type: 'shell', thickness: 1.5 },
+          { type: 'chamfer', distance: 0.4 },
+          { type: 'union', tool: { type: 'cylinder', r: 4, h: 18, position: { x: 20, y: 12, z: -1 } } },
+          { type: 'circular_pattern', count: 3, angle: 360, axis: 'z' },
+          { type: 'revolve', angle: 360, sketch: { type: 'rect', x: 2, y: 0, w: 2, h: 4 }, position: { x: 0, y: -40, z: 0 } },
         ],
-        include_mesh: false,
+        mesh_summary_only: true,
       });
       if (!created?.ok) {
         setWorkStatus(`Add feature failed — ${created?.reason || created?.error || 'unknown'}`);
         return;
       }
-      const appended = await occFeatureAppend({ partId, feature: { type: 'fillet', radius: 1 } });
+      const listed = await occFeatureList(partId);
       setWorkStatus(
-        `Add feature LIVE: part=${partId} features=${appended?.count ?? created.featureCount} (box+cut+fillet tree) — Rebuild to tessellate`,
+        `Add feature LIVE (industrial): part=${partId} ops=${(created.notes || []).join(',')} features=${listed?.count ?? created.featureCount} advanced=${!!created.export?.advanced_brep} — not SolidWorks UI parity`,
       );
     } catch (e) {
       setWorkStatus(`Add feature failed — ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setAssemblyBusy(false);
+    }
+  }, []);
+
+  const industrialMateSolveDemo = useCallback(async () => {
+    setAssemblyBusy(true);
+    try {
+      const out = await mateSolveDof({
+        bodies: [
+          { id: 'cylA', kind: 'cylinder', params: { r: 5, h: 30 }, position: { x: 0, y: 0, z: 0 }, fixed: true },
+          { id: 'cylB', kind: 'cylinder', params: { r: 5, h: 30 }, position: { x: 12, y: 8, z: 2 }, rotation: { rz_deg: 8 }, lock: ['rx', 'ry'] },
+          { id: 'plate', kind: 'plate', params: { dx: 40, dy: 40, dz: 4 }, position: { x: -10, y: -10, z: 45 }, lock: ['rx', 'ry', 'rz'] },
+        ],
+        mates: [
+          { type: 'concentric', a: 0, b: 1 },
+          { type: 'distance', a: 0, b: 2, axis: 'z', distance: 22, centered: true },
+          { type: 'parallel', a: 0, b: 1, on: 'axis' },
+        ],
+        tol_mm: 0.001,
+        tol_rad: 0.001,
+        include_mesh: false,
+      });
+      setWorkStatus(
+        out?.pass
+          ? `Industrial mate-solve-dof LIVE: bodies=${out.bodyCount} residual_max=${out?.remeasure_after_trsf?.max_abs ?? out?.residual?.max_abs} (gp_Trsf; not AABB snap)`
+          : `Industrial mate-solve-dof FAIL — ${out?.reason || out?.error || 'residual above tol'}`,
+      );
+    } catch (e) {
+      setWorkStatus(`Mate-solve-dof failed — ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setAssemblyBusy(false);
+    }
+  }, []);
+
+  const digitalGdtDemo = useCallback(async () => {
+    setAssemblyBusy(true);
+    try {
+      const out = await gdtDigital({
+        features: [
+          { type: 'box', dx: 40, dy: 30, dz: 20 },
+          { type: 'cut', tool: { type: 'cylinder', r: 5, h: 30, position: { x: 20, y: 15, z: -5 } } },
+        ],
+        checks: [
+          { type: 'flatness', tol: 0.05 },
+          { type: 'perpendicularity', tol: 0.5 },
+          { type: 'position', tol: 0.1, mode: 'cylinder_axis', axes: 'xy', nominal: { x: 20, y: 15, z: -5 } },
+          { type: 'cylindricity', tol: 0.05 },
+        ],
+      });
+      setWorkStatus(
+        out?.pass
+          ? `Digital GD&T LIVE: harness=${out.harness} checks=${(out.checks || []).map((c: any) => c.type + ':' + (c.pass ? 'PASS' : 'FAIL')).join(',')} — NOT ISO CMM / ISO 17025`
+          : `Digital GD&T FAIL — ${out?.reason || 'check failed'} (still not physical CMM)`,
+      );
+    } catch (e) {
+      setWorkStatus(`Digital GD&T failed — ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setAssemblyBusy(false);
+    }
+  }, []);
+
+  const industrialCertDemo = useCallback(async () => {
+    try {
+      const st = await fetchOccStatus();
+      const cmds = Array.isArray(st?.commands) ? st.commands : [];
+      const has = ['mate-solve-dof', 'gdt-digital', 'sketch-solve'].every((c) => cmds.includes(c) || cmds.includes(c.replace(/-/g, '_')));
+      let sketchNote = '';
+      try {
+        const sk = await sketchSolve({
+          sketch: {
+            points: [
+              { id: 'p0', x: 0, y: 0 },
+              { id: 'p1', x: 12, y: 0.5 },
+              { id: 'p2', x: 11, y: 8 },
+              { id: 'p3', x: 0.2, y: 7.5 },
+            ],
+            locked: ['p0.x', 'p0.y'],
+            segments: [
+              { type: 'line', a: 'p0', b: 'p1' },
+              { type: 'line', a: 'p1', b: 'p2' },
+              { type: 'line', a: 'p2', b: 'p3' },
+              { type: 'line', a: 'p3', b: 'p0' },
+            ],
+            constraints: [
+              { type: 'horizontal', a: 'p0', b: 'p1' },
+              { type: 'vertical', a: 'p0', b: 'p3' },
+            ],
+            dimensions: [{ a: 'p0', b: 'p1', value: 16, axis: 'x' }],
+          },
+          distance: 8,
+          mesh_summary_only: true,
+        });
+        sketchNote = sk?.pass ? ` sketch-solve=PASS` : ` sketch-solve=FAIL`;
+      } catch {
+        sketchNote = ' sketch-solve=ERR';
+      }
+      setWorkStatus(
+        has
+          ? `INDUSTRIAL_CLASS probe LIVE: OCC ok=${!!st?.ok} cmds=mate-solve-dof|gdt-digital|sketch-solve${sketchNote} — run scripts/conkay-industrial-class-cert.mjs for CERTIFIED (NOT SolidWorks UI / NOT ISO 17025 CMM)`
+          : `INDUSTRIAL_CLASS probe incomplete — OCC ok=${!!st?.ok}; missing industrial cmds${sketchNote}`,
+      );
+    } catch (e) {
+      setWorkStatus(`Industrial cert probe failed — ${e instanceof Error ? e.message : String(e)}`);
     }
   }, []);
 
@@ -680,7 +786,7 @@ export function ConKayOverlay() {
     try {
       const st = await fetchOccStatus();
       setWorkStatus(
-        `OCC cert probe: ok=${!!st?.ok} kernel=${st?.kernel || '?'} — full CERTIFIED via scripts/conkay-solid-world-cert.mjs (geometry verification harness; not ISO CMM)`,
+        `OCC cert probe: ok=${!!st?.ok} kernel=${st?.kernel || '?'} — SOLID WORLD + INDUSTRIAL_CLASS via scripts/conkay-industrial-class-cert.mjs (digital ASME harness; NOT ISO 17025 CMM; NOT SolidWorks UI parity)`,
       );
     } catch (e) {
       setWorkStatus(`OCC status failed — ${e instanceof Error ? e.message : String(e)}`);
@@ -1599,7 +1705,7 @@ export function ConKayOverlay() {
                 </button>
                 <button type="button" onClick={() => { void addFeatureDemo(); }}
                   disabled={assemblyBusy}
-                  title="Add feature to OCC parametric tree (box/cut/fillet demo)"
+                  title="Add industrial OCC features (shell/chamfer/union/pattern/revolve) — not SolidWorks UI parity"
                   aria-label="Add solid feature"
                   data-testid="ck-add-feature"
                   className="rounded-lg px-2 py-1 text-[10px] text-fuchsia-100 hover:bg-fuchsia-400/15 border border-fuchsia-400/30 disabled:opacity-40">
@@ -1619,6 +1725,29 @@ export function ConKayOverlay() {
                   data-testid="ck-solid-cert"
                   className="rounded-lg px-2 py-1 text-[10px] text-emerald-100 hover:bg-emerald-400/15 border border-emerald-400/30">
                   Cert
+                </button>
+                <button type="button" onClick={() => { void industrialMateSolveDemo(); }}
+                  disabled={assemblyBusy}
+                  title="Industrial multi-DOF mate solve (concentric+distance on OCC gp_Trsf — not AABB snap)"
+                  aria-label="Industrial mate solve"
+                  data-testid="ck-mate-solve-dof"
+                  className="rounded-lg px-2 py-1 text-[10px] text-amber-100 hover:bg-amber-400/15 border border-amber-400/30 disabled:opacity-40">
+                  DOF
+                </button>
+                <button type="button" onClick={() => { void digitalGdtDemo(); }}
+                  disabled={assemblyBusy}
+                  title="Digital ASME Y14.5-style GD&T from B-rep/tessellation — NOT physical ISO 17025 CMM"
+                  aria-label="Digital GD&T"
+                  data-testid="ck-gdt-digital"
+                  className="rounded-lg px-2 py-1 text-[10px] text-amber-100 hover:bg-amber-400/15 border border-amber-400/30 disabled:opacity-40">
+                  GD&T
+                </button>
+                <button type="button" onClick={() => { void industrialCertDemo(); }}
+                  title="INDUSTRIAL_CLASS cert probe (kernel capabilities — not SolidWorks UI parity / not ISO CMM lab)"
+                  aria-label="Industrial class cert"
+                  data-testid="ck-industrial-cert"
+                  className="rounded-lg px-2 py-1 text-[10px] text-amber-100 hover:bg-amber-400/15 border border-amber-400/30">
+                  IND
                 </button>
                 <button type="button" onClick={() => { void downloadAssemblyDrawingSvg(); }}
                   disabled={!assemblyId}

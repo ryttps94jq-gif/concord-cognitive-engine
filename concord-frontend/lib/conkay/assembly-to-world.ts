@@ -439,3 +439,27 @@ export async function fetchOccStatus() {
   const res = await api.get('/api/conkay/occ/status');
   return res?.data;
 }
+
+/** INDUSTRIAL_CLASS — multi-DOF mate solve (OCC gp_Trsf; not AABB snap). */
+export async function mateSolveDof(body: Record<string, unknown>) {
+  const res = await api.post('/api/conkay/occ/mate-solve-dof', body);
+  return res?.data;
+}
+
+/** INDUSTRIAL_CLASS — sketch constraints + extrude. */
+export async function sketchSolve(body: Record<string, unknown>) {
+  const res = await api.post('/api/conkay/occ/sketch-solve', body);
+  return res?.data;
+}
+
+/** INDUSTRIAL_CLASS — digital ASME Y14.5 software metrology (NOT ISO CMM). */
+export async function gdtDigital(body: Record<string, unknown>) {
+  const res = await api.post('/api/conkay/occ/gdt-digital', body);
+  return res?.data;
+}
+
+/** List OCC feature tree for a partId. */
+export async function occFeatureList(partId: string) {
+  const res = await api.get(`/api/conkay/occ/feature-list/${encodeURIComponent(partId)}`);
+  return res?.data;
+}
