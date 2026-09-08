@@ -69,6 +69,15 @@ Claude ships will break those lenses.
 - [ ] Frontend: `npm run type-check && npm run lint` + the lens's behavior test + `node scripts/detect-lens-stacking.mjs` (score must drop) before commit
 - [ ] Doc edits: your section only
 
+## Known drift during Grok's pass (Grok refreshes on commit)
+
+- `docs/PREMIUM_UI_AUDIT.md:178` — "arbitrary `text-[Npx]` occurrences: 1802" is
+  a `grep ... concord-frontend/app/lenses/*/page.tsx` count. As of 2026-09-08 a
+  live re-run returns 1715 and falling — Grok's lens edits are changing those
+  files. `check-doc-claims-all.mjs --ci` will flag this until Grok's pass
+  settles and Grok updates the number (it's a frontend-file metric, Grok owns
+  it). Claude does NOT touch this line.
+
 ## Escalate to the owner if
 
 - A backend change genuinely needs a frontend contract change (shouldn't happen
