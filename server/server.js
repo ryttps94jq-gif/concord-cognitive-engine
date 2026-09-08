@@ -6311,6 +6311,25 @@ const AUTH = {
   apiKeys: new Map(),
 };
 
+// Per-request user-record cache. `authMiddleware` calls `AuthDB.getUser()` on
+// EVERY authenticated request — a synchronous `db.prepare(...).get()` + a
+// `JSON.parse(scopes)` on the one event loop. Under a concurrent burst (measured
+// 2026-09-08: 250 parallel macro calls) those point-lookups serialise on the
+// loop and became the dominant per-request cost (~740ms p50 for the whole burst,
+// identical across macro types incl. the off-thread Rust ones — proof the tax is
+// in the pipeline, not the handler). This cache turns the repeat lookups within
+// a burst into Map reads. TTL is deliberately SHORT (5s) so a role/scope/ban
+// change takes effect fast without chasing every `UPDATE users` call site;
+// security-critical mutations (is_active=0, password change) call
+// `bustUserCache()` explicitly for immediate effect.
+const _userCache = new LruMap(50_000);
+const _USER_CACHE_TTL_MS = Number(process.env.CONCORD_USER_CACHE_TTL_MS) || 5_000;
+function bustUserCache(userId) {
+  if (userId) _userCache.delete(String(userId));
+  else _userCache.clear();
+}
+globalThis.__concordBustUserCache = bustUserCache; // reachable from routes/lib without an import cycle
+
 // Database-backed auth functions
 const AuthDB = {
   // Users
@@ -6333,11 +6352,23 @@ const AuthDB = {
         stmt.run(user.id, user.username, user.email, user.passwordHash, user.role, JSON.stringify(user.scopes), user.createdAt, user.lastLoginAt);
       }
     }
+    bustUserCache(user.id);
     AUTH.users.set(user.id, user);
     saveAuthData();
   },
 
   getUser(userId) {
+    if (userId != null) {
+      const key = String(userId);
+      const hit = _userCache.get(key);
+      if (hit && (Date.now() - hit.at) < _USER_CACHE_TTL_MS) return hit.user;
+    }
+    const user = this._getUserUncached(userId);
+    if (userId != null) _userCache.set(String(userId), { user, at: Date.now() });
+    return user;
+  },
+
+  _getUserUncached(userId) {
     if (db) {
       // brain_mode: Private/High Power Mode per-account routing preference
       // (migration 397). Read here — not via a separate targeted query —
@@ -6430,6 +6461,7 @@ const AuthDB = {
       const stmt = db.prepare("UPDATE users SET last_login_at = ? WHERE id = ?");
       stmt.run(now, userId);
     }
+    bustUserCache(userId);
     const user = AUTH.users.get(userId);
     if (user) {
       user.lastLoginAt = now;
@@ -6478,6 +6510,7 @@ const AuthDB = {
         db.prepare("UPDATE users SET date_of_birth = ? WHERE id = ?").run(dob || null, userId);
       }
     }
+    bustUserCache(userId);
     const user = AUTH.users.get(userId);
     if (user) { user.dateOfBirth = dob || null; }
     saveAuthData();
@@ -6490,6 +6523,7 @@ const AuthDB = {
     if (db) {
       try { db.prepare("UPDATE users SET is_active = 0 WHERE id = ?").run(userId); } catch { /* schema-tolerant */ }
     }
+    bustUserCache(userId);
     AUTH.users.delete(userId);
     saveAuthData();
     return true;
