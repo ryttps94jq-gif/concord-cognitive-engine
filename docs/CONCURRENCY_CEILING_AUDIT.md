@@ -105,15 +105,33 @@ pressure into `SQLITE_BUSY` retries rather than throughput.
 
 ## 4. Ranked plan
 
-### Tier 0 — hours, no architecture change, best ratio by far
-| # | Fix | Effort | Expected |
-|---|---|---|---|
-| **A** | **Cache/index `userVisibleDTUs`.** Memoize per `(viewerId, scope, tier)` against a `STATE.dtus` version counter bumped on every DTU write (copy the `_cognitiveDtuEntriesCache` idiom). Better still: maintain a pre-filtered public/regional index so the common anon case is O(page), not O(corpus). | ~4-6 h | `dtu.list` 655 ms → target <20 ms at the same concurrency. Removes the dominant parker. |
-| **B** | Re-evaluate the DTU-sidecar lag-bypass (`cde86295b`). It currently sends `dtu.list` **inline** when loop lag > 250 ms — correct while (A) is unfixed (inline beat a UDS hop on a starved loop), likely wrong after (A) lands. Re-measure and flip if so. | ~1 h | avoids a self-inflicted slow path |
-| **C** | Audit the other 14 `userVisibleDTUs()` call sites for the same O(corpus) pattern. | ~2 h | removes secondary parkers |
+### Tier 0 — **DONE 2026-09-08.** Measured, not projected.
+| # | Fix | Status |
+|---|---|---|
+| **A** | Version-keyed cache on `userVisibleDTUs()` — keyed by `(viewerId)` against `STATE.dtus.getVersion()` (bumps on every write-through set/delete). | **shipped** — commit `9dd560cd4`, pinned by `tests/depth/dtu-visibility-cache-behavior.test.js` |
+| **A2** | Same treatment for the bare `dtusArray()` (~40 other call sites — search/RAG/trending/stale-sweep each did their own `Array.from`). | **shipped** — commit `f7609cf4f` |
+| **B** | DTU-sidecar lag-bypass (`cde86295b`): the inline path now hits the cache (~1 ms) so it's genuinely fast under lag — the bypass is *more* correct now, no change. | reviewed, no change |
+| **C** | All `userVisibleDTUs()` / `dtusArray()` consumers audited for in-place array mutation — one `dtusArray().sort()` site copied; rest read-only. | done |
 
-**Do Tier 0 before anything else.** Spending multi-day cluster work to divide a
-problem that a few hours of caching largely removes is the wrong order.
+**Measured, live self-host, `chaos-storm.mjs @ 200 concurrent` (the level that
+showed the 130× degradation):**
+
+| macro | before Tier 0 (session storms) | **after Tier 0** |
+|---|--:|--:|
+| `dtu.list` | avg **655 ms**, max **11,729 ms** | **p50 28 ms · p95 55 ms · p99 396 ms** |
+| `dtu.stats` | avg 3 ms, max **6,122 ms** | p50 28 ms · p99 547 ms |
+| `goals.list` | avg 3 ms, max **5,618 ms** | p50 28 ms · p99 901 ms |
+| `accounting.trialBalance` (pure-compute control) | avg 0 ms | p50 28 ms · p99 549 ms |
+
+`dtu.list` no longer stands out — it degrades in lockstep with the pure-compute
+control, i.e. it's just sharing the loop's general contention now, not *being*
+the bottleneck. The bimodal 5-6-second p99 tails on `dtu.stats` / `goals.list`
+(both call `userVisibleDTUs`) are gone.
+
+**What's left at 200 concurrent:** uniform ~28 ms p50 / ~55 ms p95 with
+occasional 400-900 ms p99 and one 10 s health spike (1×503). That residual is
+general single-loop contention + the heartbeat still on the same loop — exactly
+what Tier 1 D and Tier 2 address. Those are A40 deploy steps (§7, §8).
 
 ### Tier 1 — process separation, no STATE-coordination needed
 | # | Fix | Status | Expected |
@@ -121,14 +139,22 @@ problem that a few hours of caching largely removes is the wrong order.
 | **D** | **Run the heartbeat in its own process.** | **CODE DONE** (2026-09-08) — see §7 below | 143 modules of bulk work + the cognitive worker leave the HTTP loop entirely. Structurally the biggest win that is **not** clustering. |
 | **E** | **Activate the read-replica + read-router** (already built, commit `56c6e4ec7`, `engines/concord-read-router/RUNBOOK.md`). Takes the allowlisted GET catalog off the writer. | built, not activated | free read parallelism; gated on RAM headroom → needs the A40, not the 16 GB Mac |
 
-### Tier 2 — multi-day, the actual cluster
-Execute `docs/CONCURRENCY_STATE_AUDIT.md`'s 7 steps in order: resolve
-`/api/credits/*` (a live in-memory free-mint wallet — correctness fix, do it
-regardless), `IS_HEARTBEAT_NODE` singleton guard (largely subsumed by D), nginx
-routing tiers, Redis for `_macroRateLimits`/`_apiRateWindows`/user-cache bust,
-Tier-U write-through (`game_profiles`, `xpStore`, `mentorships`), then
-`instances: 2` and watch for a week.
+### Tier 2 — multi-day, the actual cluster (A40 deploy work)
+`docs/CONCURRENCY_STATE_AUDIT.md`'s 7 steps:
+1. **✅ `/api/credits/*`** — resolved 2026-09-08 (commit `12dc168b0`): `STATE.wallets`
+   deleted, wallet/balance read the real ledger, earn/spend are honest no-ops.
+2. **✅ `IS_HEARTBEAT_NODE` singleton guard** — subsumed by Tier 1 D: the sim runs
+   on exactly one `CONCORD_HEARTBEAT_ONLY=1` process by construction.
+3. nginx routing tiers (node-0-pin the ~8 queue-enqueue endpoints + admin/emergent;
+   sticky by session for `/api/chat` + `/socket.io` + `/godot-ws`; round-robin
+   the rest).
+4. Redis for `_macroRateLimits` / `_apiRateWindows` / cross-node `_userCache` bust.
+5. Tier-U write-through (`game_profiles`, `xpStore`, `mentorships`).
+6. `instances: 2`, watch a week.
+7. scale to 3-4 once stable.
 
+Steps 3-7 can't be built-and-verified without nginx + Redis + multiple Node +
+the sim + Ollama running together — not viable on the 16 GB Mac. **A40 work.**
 Expected: reads scale ~N. Writes do not (§3).
 
 ### Tier 3 — only if measurement says writes are the ceiling
