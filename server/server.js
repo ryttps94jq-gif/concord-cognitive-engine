@@ -15140,7 +15140,9 @@ register("multimodal","vision_analyze", (ctx, input={}) => {
 
   // Local-first: use multimodal brain config (respects BRAIN_MULTIMODAL_URL + OLLAMA_VISION_MODEL)
   const _mmBrain = BRAIN_CONFIG.multimodal;
-  const OLLAMA_URL = _mmBrain.url || process.env.OLLAMA_URL || process.env.OLLAMA_HOST || "";
+  // Phase 4: _mmBrain.url wins (cloudflare:// vision stays on CF); OLLAMA_PROXY_URL
+  // only backstops the bare local-Ollama fallback chain.
+  const OLLAMA_URL = _mmBrain.url || process.env.OLLAMA_PROXY_URL || process.env.OLLAMA_URL || process.env.OLLAMA_HOST || "";
   if (OLLAMA_URL) {
     const model = String(_mmBrain.model || process.env.OLLAMA_VISION_MODEL || "qwen2.5vl:7b");
     const payload = {

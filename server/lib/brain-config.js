@@ -18,6 +18,24 @@ import { platformProviderIdForSlot } from "./platform-providers.js";
 // Environment-based toggle for adaptive brain scaling
 const ADAPTIVE_BRAIN_SCALING = process.env.CONCORD_ADAPTIVE_BRAIN_SCALING !== 'false';
 
+// Concurrency Refactor Phase 4 — fail-fast ollama-proxy cutover.
+// When OLLAMA_PROXY_URL is set, every local Ollama endpoint (http/https scheme)
+// is rewritten to the proxy address. The proxy reads `model` from each request
+// body, so one URL serves all brains. Non-http endpoints (cloudflare://, cloud
+// sentinels) pass through untouched. Applied inside _parseEndpoints so it covers
+// BOTH the static BRAIN_CONFIG.<brain>.url/.urls reads (chat-parallel-brains,
+// conversation-memory/summarizer, oracle-brain, repair-brain, brain-router, and
+// the ~4 direct server.js fetch sites) AND pickBrainEndpoint's candidate list.
+// Default unset → behaviour unchanged.
+const _OLLAMA_PROXY_URL = process.env.OLLAMA_PROXY_URL || "";
+function _applyProxy(list) {
+  if (!_OLLAMA_PROXY_URL) return list;
+  const mapped = list.map((u) =>
+    typeof u === "string" && /^https?:\/\//i.test(u) ? _OLLAMA_PROXY_URL : u,
+  );
+  return [...new Set(mapped)];
+}
+
 // Phase D — multi-endpoint scale-out.
 // If BRAIN_<NAME>_URLS is set (comma-separated), it overrides the singular
 // BRAIN_<NAME>_URL and a round-robin picker spreads requests across the
@@ -25,9 +43,9 @@ const ADAPTIVE_BRAIN_SCALING = process.env.CONCORD_ADAPTIVE_BRAIN_SCALING !== 'f
 function _parseEndpoints(plural, singular, fallback) {
   if (plural) {
     const list = String(plural).split(",").map(s => s.trim()).filter(Boolean);
-    if (list.length) return list;
+    if (list.length) return _applyProxy(list);
   }
-  return [singular || fallback];
+  return _applyProxy([singular || fallback]);
 }
 
 // Single-instance fallback: someone who just ran `ollama serve` (or set
@@ -381,20 +399,12 @@ const _rrCursor = new Map();
 
 function _candidatesForBrain(brainName, { includeCloud = false } = {}) {
   const cfg = getActiveBrainConfig()[brainName];
-  let local = cfg
+  // Phase 4 proxy substitution already happened in _parseEndpoints when
+  // BRAIN_CONFIG was built, so cfg.url/.urls are the proxy already if
+  // OLLAMA_PROXY_URL is set — nothing to do here.
+  const local = cfg
     ? (Array.isArray(cfg.urls) && cfg.urls.length ? cfg.urls : (cfg.url ? [cfg.url] : []))
     : [];
-  // Concurrency Refactor Phase 4 — opt-in: route every local Ollama brain through
-  // concord-ollama-proxy (fail-fast connect timeout + shared circuit breaker +
-  // per-model admission). Default unset → unchanged. Cloudflare/cloud brain URLs
-  // (non-http scheme, e.g. `cloudflare://`) are left alone. The proxy reads
-  // `model` from each request body, so one URL serves all brains.
-  const proxyUrl = process.env.OLLAMA_PROXY_URL;
-  if (proxyUrl && local.length) {
-    local = local.map((u) => (typeof u === 'string' && u.startsWith('http') ? proxyUrl : u));
-    // de-dup once every http endpoint collapses to the same proxy
-    local = [...new Set(local)];
-  }
   if (!includeCloud) return local;
   // Concurrency item (b) (Private/High Power Mode plan) — opt-in cloud
   // pool candidate. Only ever appended when a caller explicitly passes

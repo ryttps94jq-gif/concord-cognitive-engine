@@ -108,7 +108,10 @@ function deterministicReply({ npcId, npcName, playerText }) {
 }
 
 function twoBEndpoint() {
-  const raw = process.env.CONCORD_2B_URL || "http://127.0.0.1:11434";
+  // Concurrency Refactor Phase 4 — route through concord-ollama-proxy when set
+  // (fail-fast connect + shared circuit breaker). This path deliberately avoids
+  // BRAIN_CONFIG, so it needs its own OLLAMA_PROXY_URL check.
+  const raw = process.env.OLLAMA_PROXY_URL || process.env.CONCORD_2B_URL || "http://127.0.0.1:11434";
   return String(raw).replace(/\/$/, "");
 }
 
