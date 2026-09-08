@@ -826,13 +826,6 @@ namespace Concordia
                 File.WriteAllText(path, JsonUtility.ToJson(rec, true));
             }
             catch { }
-            try
-            {
-                var client = ConcordClient.Live;
-                if (client && client.Connected)
-                    _ = client.SyncKingdom(id, rec, slice);
-            }
-            catch { }
         }
 
         public static LivingSaveRec All()
@@ -1072,20 +1065,10 @@ namespace Concordia
             if (!string.IsNullOrEmpty(carried))
             {
                 toSlice.factionHeat = Mathf.Clamp(toSlice.factionHeat + 0.08f, 0f, 1f);
-                var origin = KitBag.OriginOf(carried);
                 toSlice.imports = (string.IsNullOrEmpty(toSlice.imports) ? "" : toSlice.imports + " · ")
-                    + carried + " from " + Canon.Get(from).title
-                    + (string.IsNullOrEmpty(origin) ? "" : " · origin " + origin);
+                    + carried + " from " + Canon.Get(from).title;
                 toSlice.lastEvent = Canon.Get(to).title + " noticed " + carried + " walked in from "
                     + Canon.Get(from).title + ".";
-                float tariff = (from == WorldId.Sere || to == WorldId.Sere) ? 0f : RingTariff;
-                if (tariff > 0f)
-                {
-                    float kitValue = 100f;
-                    float paid = kitValue * tariff;
-                    RecordTariff("kit-" + from + "-" + to, from, to, kitValue, tariff, paid);
-                    toSlice.lastEvent += " Ring tariff " + paid.ToString("0.0") + " on kit.";
-                }
             }
 
             AdvancePlot(from, to);
@@ -1380,14 +1363,9 @@ namespace Concordia
             if (c.to == WorldClock.World) WorldClock.LastEvent = dest.lastEvent;
             c.status = "arrived";
             c.hoursLeft = 0f;
-            RecordTariff(c.id, c.from, c.to, c.value, RingTariff, paid);
-        }
-
-        static void RecordTariff(string id, WorldId from, WorldId to, float value, float rate, float paid)
-        {
             var all = WorldMemory.All();
-            var row = id + "|" + from + "|" + to + "|" + value.ToString("0.00")
-                + "|" + rate.ToString("0.00") + "|" + paid.ToString("0.00")
+            var row = c.id + "|" + c.from + "|" + c.to + "|" + c.value.ToString("0.00")
+                + "|" + RingTariff.ToString("0.00") + "|" + paid.ToString("0.00")
                 + "|" + WorldClock.Day + ":" + Mathf.FloorToInt(WorldClock.Hour);
             all.tariffsCsv = string.IsNullOrEmpty(all.tariffsCsv) ? row : all.tariffsCsv + ";" + row;
         }

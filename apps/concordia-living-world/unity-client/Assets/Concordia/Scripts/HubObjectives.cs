@@ -380,7 +380,7 @@ namespace Concordia
     {
         public class Item
         {
-            public string id, name, kind, stem, originWorld;
+            public string id, name, kind, stem;
         }
 
         public static readonly List<Item> Items = new List<Item>();
@@ -398,21 +398,14 @@ namespace Concordia
         {
             if (string.IsNullOrEmpty(stem)) return;
             if (!Has(stem))
-                Items.Add(new Item { id = stem, name = name ?? Pretty(stem), kind = "weapon", stem = stem, originWorld = WorldClock.World.ToString() });
+                Items.Add(new Item { id = stem, name = name ?? Pretty(stem), kind = "weapon", stem = stem });
             Equipped = stem;
         }
 
-        public static void AddLoot(string id, string name = null, WorldId origin = WorldId.Hub)
+        public static void AddLoot(string id, string name = null)
         {
             if (string.IsNullOrEmpty(id) || Has(id)) return;
-            Items.Add(new Item { id = id, name = name ?? Pretty(id), kind = "loot", stem = id, originWorld = origin.ToString() });
-        }
-
-        public static string OriginOf(string id)
-        {
-            foreach (var it in Items)
-                if (it.id == id && !string.IsNullOrEmpty(it.originWorld)) return it.originWorld;
-            return null;
+            Items.Add(new Item { id = id, name = name ?? Pretty(id), kind = "loot", stem = id });
         }
 
         public static bool Has(string id)

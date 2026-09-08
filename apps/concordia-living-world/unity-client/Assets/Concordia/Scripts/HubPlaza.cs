@@ -41,11 +41,6 @@ namespace Concordia
 
         static void Floor(Transform root, Material earth, Material dark, Material stone, Material moss)
         {
-            // Packed-earth bed under the unpaved court. Covers the Frontier road
-            // past the battlefield disc. Not a paved CityRing.
-            var worldBed = HubLook.Prim(root, PrimitiveType.Cylinder, new Vector3(0f, -0.04f, 0f),
-                new Vector3(Canon.BedRadius * 2f, 0.08f, Canon.BedRadius * 2f), dark, "WorldBed");
-            FreePacks.FlattenDisc(worldBed);
             var bed = HubLook.Prim(root, PrimitiveType.Cylinder, new Vector3(0f, 0.01f, 0f), new Vector3(DomeR * 2.05f, 0.04f, DomeR * 2.05f), dark, "Battlefield");
             FreePacks.FlattenDisc(bed);
             var disc = HubLook.Prim(root, PrimitiveType.Cylinder, new Vector3(0f, 0.03f, 0f), new Vector3(Canon.CourtRadius * 2.15f, 0.04f, Canon.CourtRadius * 2.15f), earth, "UnpavedCourt");

@@ -27,8 +27,3 @@ Stateful consequence graphs. Generate situations from world state (merchant gone
 ## Gap
 
 No kernel provenance. Blocked objective types still need their surfaces. No reward mint.
-
-## Server-authority LIVE (2026-09-07)
-
-`POST /api/quests/interact` returns authored branching text from `content/quests` (e.g. Sealed Record — Three Paths / Iyatte / Asbir / Vessine).
-Unity `ConcordiaGame` prefers server text when Connected or `HttpAuthorityOk`; offline LoreStone remains local authored plaque.

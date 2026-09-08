@@ -197,6 +197,7 @@ import githubConnector from './github.js';
 import notion from './notion.js';
 import importdomain from './importdomain.js';
 import ingest from './ingest.js';
+import latticeSeed from './lattice-seed.js';
 import law from './law.js';
 import marketplace from './marketplace.js';
 import ml from './ml.js';
@@ -273,6 +274,12 @@ import registerDistrictActions from './district.js';
 import registerCobuildActions from './cobuild.js';
 import registerCompanionActions from './companion.js';
 import hub from './hub.js';
+// `dila` already imported above (line ~218 — HEAD's block). Merge dedup.
+import zuko from './zuko.js';
+import trading from './trading.js';
+import pentester from './pentester.js';
+import concordia from './concordia.js';
+import constellation from './constellation.js';
 
 // ── TheVault ⇄ DTU-permanence handshake ───────────────────────────────────
 //
@@ -505,6 +512,7 @@ export default [
   notion,
   importdomain,
   ingest,
+  latticeSeed,
   law,
   marketplace,
   ml,
@@ -581,4 +589,9 @@ export default [
   incidentEngine,
   researchFrontier,
   opportunityEngine,
+  zuko,
+  trading,
+  pentester,
+  concordia,
+  constellation,
 ];

@@ -75,7 +75,7 @@ namespace Concordia
             var g = GameObject.CreatePrimitive(PrimitiveType.Plane);
             g.name = "Ground";
             g.transform.SetParent(root, false);
-            g.transform.localScale = Vector3.one * 40;
+            g.transform.localScale = Vector3.one * 22;
             var pbrStem = w.id switch
             {
                 WorldId.Ruins => "ash_soil",

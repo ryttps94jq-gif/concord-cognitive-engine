@@ -83,6 +83,7 @@ describe("Concordia world-life — source contracts", () => {
     assert.match(life, /act = "deliver"/);
     assert.match(life, /TrySocial/);
     assert.match(life, /TryEnter/);
+    assert.match(life, /WanderRing/);
     assert.match(life, /CharacterGear\.Attach\(gameObject, "crate"/);
     assert.match(life, /opens a shop/);
     assert.match(life, /changes post/);
@@ -206,6 +207,9 @@ describe("Concordia world-life — source contracts", () => {
     assert.match(src("ConcordClient.cs"), /dialogue:request/);
     assert.match(src("ConcordClient.cs"), /AskTwoB/);
     assert.match(src("ConcordClient.cs"), /kitchenUrl, gatewayUrl/);
+    assert.match(src("ConcordClient.cs"), /EnsureConnected/);
+    assert.match(game, /EnsureConnected/);
+    assert.match(src("WorldBuilder.cs"), /TagCrowd\(/);
     assert.match(fill, /Sidewalks/);
     assert.match(fill, /a guard/);
     assert.match(fill, /WorldClock\.Ecology < 0\.28f/);

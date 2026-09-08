@@ -1,6 +1,6 @@
 # COMBAT
 
-**Status:** Browser LIVE · Unity PARTIAL→server-authority LIVE (WS/HTTP when Connected) · Offline hitscan honest  
+**Status:** Browser LIVE · Unity MISSING (hitscan) · Server unused from this client  
 **Authority:** Concord  
 **Source:** `src/game/combat.ts`; Unity `ConcordiaPlayer.cs`; `server/routes/combat.js`
 
@@ -19,9 +19,3 @@ LMB light, F heavy, G special, X dodge (shove), Space jump. Flower-law in Court.
 ## Gap
 
 Port `combat.ts` onto server `applyAttack`. Unity plays ack. Do not grow Move Forge until a dummy HP drop is authoritative.
-
-## Server-authority LIVE (2026-09-07)
-
-`POST /api/combat/hit` returns `{ok, hpBefore, hpAfter, damage}` from `combat-hp-authority`.
-Unity `ConcordiaPlayer.HitScan` prefers WS `combat:attack` when Connected; HTTP hit when probe OK; else local + `no_gateway`.
-Hub Great Refusal still refuses world-level `concordia-hub` hostility.

@@ -717,6 +717,14 @@ registerHeartbeat("lattice-federation-poll", {
   handler: runFederationPoll,
   scope: "global",
 });
+registerHeartbeat("constellation-observe-cycle", {
+  frequency: 20,
+  handler: async () => {
+    const { runConstellationObserveCycle } = await import("./lib/runtime/constellation.js");
+    return runConstellationObserveCycle({ probeLab: false });
+  },
+  scope: "global",
+});
 // Phase 3 wire-the-Lost: culture-layer drift pass (frequency 120, ~30 min).
 // 16 macros were registered via Ghost Fleet but never tick-scheduled.
 registerHeartbeat("culture-drift-pass", {
@@ -9284,7 +9292,7 @@ function _rateLimitKey(req) {
       if (decoded?.userId) return `u:${decoded.userId}`;
     }
   } catch { /* best-effort — never let key derivation break rate limiting */ }
-  return _ipKeyGenerator(req.ip);
+  return globalThis._ipKeyGenerator?.(req.ip) || req.ip;
 }
 
 let rateLimiter = null;
@@ -58271,6 +58279,53 @@ app.get("/api/admin/heartbeat-stats", requireRole("owner", "admin", "sovereign",
   }
 });
 
+// Concord Runtime observability — capability registry + sister constellation.
+app.get("/api/runtime/capabilities", requireRole("owner", "admin", "sovereign", "founder"), async (req, res) => {
+  try {
+    const { listCapabilities, checkCapabilityHealth } = await import("./lib/runtime/capability-registry.js");
+    const filters = {};
+    if (req.query.owner) filters.owner = String(req.query.owner);
+    if (req.query.risk) filters.risk = String(req.query.risk);
+    const capabilities = listCapabilities(filters).map((c) => ({ ...c, health: checkCapabilityHealth(c.capability) }));
+    res.json({ ok: true, count: capabilities.length, capabilities });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
+});
+
+app.get("/api/runtime/capabilities/:capability/health", requireRole("owner", "admin", "sovereign", "founder"), async (req, res) => {
+  try {
+    const { getCapabilityDescriptor, checkCapabilityHealth } = await import("./lib/runtime/capability-registry.js");
+    const capability = req.params.capability;
+    const descriptor = getCapabilityDescriptor(capability);
+    if (!descriptor) return res.status(404).json({ ok: false, error: "not_registered" });
+    res.json({ ok: true, descriptor, health: checkCapabilityHealth(capability) });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
+});
+
+app.get("/api/runtime/events/recent", requireRole("owner", "admin", "sovereign", "founder"), async (req, res) => {
+  try {
+    const { recentEvents } = await import("./lib/runtime/event-bus.js");
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 100, 1), 500);
+    res.json({ ok: true, events: recentEvents(limit) });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
+});
+
+app.get("/api/runtime/constellation", requireRole("owner", "admin", "sovereign", "founder"), async (req, res) => {
+  try {
+    const { collectConstellationHealth } = await import("./lib/runtime/constellation.js");
+    const { recentEvents } = await import("./lib/runtime/event-bus.js");
+    const health = await collectConstellationHealth({ probeLab: req.query.probe === "1" });
+    res.json({ ok: true, ...health, recent: recentEvents(20) });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
+  }
+});
+
 // Wave 7 / Track D3 — the SDK-facing agent + affect read surface (the licensable
 // middleware: "deploy a living being / read its felt state"). Deploy is privileged +
 // respects the C3 kill-switch; reads are auth-gated.
@@ -73108,6 +73163,11 @@ if (server) {
   } catch (e) {
     structuredLog("warn", "godot_gateway_mount_failed", { error: String(e?.message || e), stack: String(e?.stack || "").slice(0, 500) });
   }
+  // Unity Editor client — same {evt,data} envelope and the SAME
+  // `_onGodotClientMessage` → applyAttack / combat-limits path as Godot.
+  // Presentation only. Do not invent a second combat resolver here.
+  // Gated on `server` like Godot: CONCORD_NO_LISTEN=true never fabricates a
+  // listener. Path filter is `/unity-ws` so this coexists with `/godot-ws`.
   try {
     const unityGatewayHandle = mountUnityGateway(server, {
       verifyToken,

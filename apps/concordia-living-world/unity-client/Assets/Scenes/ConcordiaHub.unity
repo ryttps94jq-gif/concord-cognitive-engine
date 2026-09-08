@@ -119,7 +119,7 @@ NavMeshSettings:
     debug:
       m_Flags: 0
   m_NavMeshData: {fileID: 0}
---- !u!1 &307630262
+--- !u!1 &1197783507
 GameObject:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -127,8 +127,8 @@ GameObject:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 6
   m_Component:
-  - component: {fileID: 307630264}
-  - component: {fileID: 307630263}
+  - component: {fileID: 1197783509}
+  - component: {fileID: 1197783508}
   m_Layer: 0
   m_Name: ConcordiaGame
   m_TagString: Untagged
@@ -136,13 +136,13 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &307630263
+--- !u!114 &1197783508
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 307630262}
+  m_GameObject: {fileID: 1197783507}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 7e0bcb676e9dc428b8d6283d6a8566d8, type: 3}
@@ -150,13 +150,13 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::Concordia.ConcordiaGame
   soldierPrefab: {fileID: 0}
   world: 0
---- !u!4 &307630264
+--- !u!4 &1197783509
 Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 307630262}
+  m_GameObject: {fileID: 1197783507}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
@@ -165,7 +165,7 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!1 &1053104619
+--- !u!1 &2050690301
 GameObject:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -173,8 +173,8 @@ GameObject:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 6
   m_Component:
-  - component: {fileID: 1053104621}
-  - component: {fileID: 1053104620}
+  - component: {fileID: 2050690303}
+  - component: {fileID: 2050690302}
   m_Layer: 0
   m_Name: Directional Light
   m_TagString: Untagged
@@ -182,13 +182,13 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!108 &1053104620
+--- !u!108 &2050690302
 Light:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1053104619}
+  m_GameObject: {fileID: 2050690301}
   m_Enabled: 1
   serializedVersion: 13
   m_Type: 1
@@ -247,13 +247,13 @@ Light:
   m_LightUnit: 1
   m_LuxAtDistance: 1
   m_EnableSpotReflector: 1
---- !u!4 &1053104621
+--- !u!4 &2050690303
 Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1053104619}
+  m_GameObject: {fileID: 2050690301}
   serializedVersion: 2
   m_LocalRotation: {x: 0.33675572, y: 0.31930327, z: -0.122569054, w: 0.8772786}
   m_LocalPosition: {x: 0, y: 0, z: 0}
@@ -266,5 +266,5 @@ Transform:
 SceneRoots:
   m_ObjectHideFlags: 0
   m_Roots:
-  - {fileID: 1053104621}
-  - {fileID: 307630264}
+  - {fileID: 2050690303}
+  - {fileID: 1197783509}

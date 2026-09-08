@@ -532,6 +532,8 @@ const PowerClusterLayer = dynamic(() => import('@/components/world/PowerClusterL
 const LinkScanOverlay = dynamic(() => import('@/components/world/LinkScanOverlay'), { ssr: false });
 const WorldTintOverlay = dynamic(() => import('@/components/world/WorldTintOverlay'), { ssr: false });
 const SereFrameBanner = dynamic(() => import('@/components/world/SereFrameBanner'), { ssr: false });
+const ConcordiaPlayDoor = dynamic(() => import('@/components/world/ConcordiaPlayDoor'), { ssr: false });
+const NativeWorldPlayer = dynamic(() => import('@/components/world/NativeWorldPlayer'), { ssr: false });
 const CurtainDossier = dynamic(() => import('@/components/world/CurtainDossier'), { ssr: false });
 const QuestGuidanceHUD = dynamic(() => import('@/components/world/QuestGuidanceHUD'), { ssr: false });
 const EavesdropBubble = dynamic(() => import('@/components/world/EavesdropBubble'), { ssr: false });
@@ -5022,7 +5024,7 @@ export default function WorldLensPage() {
               <LiveIndicator isLive={isLive} lastUpdated={lastUpdated} />
             </div>
             <p className="text-[10px] text-gray-400">
-              Design, validate, and publish DTU-based creations in shared districts
+              OS world surface — DTUs, presence, stations. AAA play is the in-repo Unity client.
             </p>
           </div>
         </div>
@@ -5195,18 +5197,10 @@ export default function WorldLensPage() {
               reportFrontendError (RepairBoundary never sees these) and flip
               sceneCrashed so the Hub view can say what happened instead of
               silently looking like "the world lens is just panels." */}
-                    {CONCORDIA_RENDERER === 'unity-webgl' && UNITY_WEBGL_URL ? (
-            <div className="absolute inset-0 z-10 bg-black">
-              <iframe
-                id="concordia-unity-webgl"
-                title="Concordia Unity WebGL"
-                src={UNITY_WEBGL_URL}
-                className="w-full h-full border-0"
-                allow="fullscreen; gamepad; autoplay"
-                referrerPolicy="no-referrer"
-              />
-            </div>
-          ) : CONCORDIA_RENDERER === 'three' ? (
+          <NativeWorldPlayer
+            worldId={currentWorldId}
+            onReady={() => setSceneReady(true)}
+          >
           <ErrorBoundary
             fallback={null}
             onError={(error, errorInfo) => {
@@ -5251,27 +5245,7 @@ export default function WorldLensPage() {
             height="100%"
           />
           </ErrorBoundary>
-          ) : (
-            <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/90 text-center p-8">
-              <div className="max-w-md space-y-3">
-                <p className="text-sm text-amber-200">
-                  Legacy browser 3D (Three.js) is off so it cannot crash the site.
-                </p>
-                <p className="text-xs text-white/60">
-                  Unity WebGL is the target player. Set NEXT_PUBLIC_CONCORDIA_RENDERER=unity-webgl
-                  and NEXT_PUBLIC_UNITY_WEBGL_URL when the build is hosted — or use the 2D Hub tab.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => setViewMode('concordia')}
-                  className="px-3 py-1.5 rounded-lg bg-emerald-500/20 border border-emerald-500/40 text-emerald-200 text-xs"
-                >
-                  Open 2D Hub
-                </button>
-              </div>
-            </div>
-          )}
-
+          </NativeWorldPlayer>
           {/* Theme picker — 3 swatches + PBR/Toon toggle top-right */}
           <div style={hudCornerStyle('theme-picker')} className={`absolute right-4 z-20 flex items-center gap-1.5 bg-black/50 border border-white/10 rounded-xl px-2 py-1.5 pointer-events-auto ${hudHidden ? 'hidden' : ''}`}>
             {[
@@ -5928,6 +5902,8 @@ export default function WorldLensPage() {
           <WorldTintOverlay />
           {/* One-time satire/fiction framing for fiction worlds (Sere). */}
           <SereFrameBanner worldId={currentWorldId} />
+          {/* Honest play door: this lens is not the AAA combat client. */}
+          <ConcordiaPlayDoor />
           {/* The Curtain dossier — secrets redacted until the player declassifies them (K). */}
           <CurtainDossier worldId={currentWorldId} />
           <QuestGuidanceHUD />

@@ -402,7 +402,7 @@ namespace Concordia
             loot.gameObject.SetActive(false);
             QuestLog.NoteGather(loot.itemId);
             QuestLog.NoteGather(loot.label);
-            KitBag.AddLoot(loot.itemId, loot.label, WorldClock.World);
+            KitBag.AddLoot(loot.itemId, loot.label);
             return "Took " + loot.label + ".";
         }
 

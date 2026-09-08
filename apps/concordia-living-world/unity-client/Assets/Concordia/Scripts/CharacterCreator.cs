@@ -166,7 +166,7 @@ namespace Concordia
 
         public static void SkipNow()
         {
-            var all = FindObjectsByType<CharacterCreator>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            var all = FindObjectsByType<CharacterCreator>(FindObjectsInactive.Include);
             foreach (var c in all)
                 if (c) c.Confirm();
         }

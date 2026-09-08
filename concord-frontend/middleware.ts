@@ -38,7 +38,10 @@ import type { NextRequest } from 'next/server';
  * report-only rollout history this flip closes out.
  */
 
-function buildCsp(nonce: string): string {
+function buildCsp(nonce: string, opts?: { frameAncestors?: "'none'" | "'self'" }): string {
+  // Default document policy is frame-ancestors 'none'. /unity-client/ is the
+  // one same-origin iframe exception (world lens → Unity WebGL).
+  const frameAncestors = opts?.frameAncestors ?? "'none'";
   const directives = [
     `default-src 'self'`,
     // 'strict-dynamic' lets Next's own nonce'd bootstrap script load its
@@ -110,7 +113,7 @@ function buildCsp(nonce: string): string {
     `object-src 'none'`,
     `base-uri 'self'`,
     `form-action 'self'`,
-    `frame-ancestors 'none'`,
+    `frame-ancestors ${frameAncestors}`,
   ];
   return directives.join('; ');
 }
@@ -169,11 +172,15 @@ const PUBLIC_PREFIXES = [
   // /meshes/ above: these are asset bytes, not a page route, and the real
   // auth happens inside the client via the gateway token it's given at boot.
   '/godot-client/',
-  // Unity WebGL build (public/concordia-webgl/) — same carve-out as
-  // /godot-client/: index.html + Build/*.gz must load inside the world-lens
-  // iframe without a 307→/login (loader fetches are unauthenticated asset
-  // bytes; real auth is the parent /lenses/world session).
+  // Unity WebGL — two export paths coexist: the deployed frontend serves the
+  // gzip build from public/concordia-webgl/ (NEXT_PUBLIC_UNITY_WEBGL_URL), and
+  // scripts/export-unity-web.mjs writes the canonical export to
+  // public/unity-client/ (index.html nonce-injected by
+  // app/unity-client/index.html/route.ts). Both are static render-pipeline
+  // asset bytes that must load inside the world-lens iframe without a
+  // 307→/login; real auth is the parent /lenses/world session + /unity-ws.
   '/concordia-webgl/',
+  '/unity-client/',
   '/manifest.json',
   '/manifest.webmanifest',
   '/robots.txt',
@@ -256,7 +263,12 @@ export function middleware(request: NextRequest) {
   // of a random UUID, the standard pattern (128 bits of entropy, never
   // reused across requests).
   const nonce = btoa(crypto.randomUUID());
-  const csp = buildCsp(nonce);
+  // /unity-client/ is the world-lens iframe document. frame-ancestors 'none'
+  // (and X-Frame-Options DENY) would refuse even a same-origin embed.
+  const csp = buildCsp(
+    nonce,
+    pathname.startsWith('/unity-client/') ? { frameAncestors: "'self'" } : undefined,
+  );
 
   // Propagate the nonce to Server Components via a request header (read
   // with `(await headers()).get('x-nonce')`), and set the CSP itself as a

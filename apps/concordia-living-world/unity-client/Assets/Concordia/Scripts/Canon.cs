@@ -55,9 +55,6 @@ namespace Concordia
         public const float RingRadius = 34f;
         public const float CourtRadius = 16f;
         public const float WallRadius = 56f;
-        /// <summary>Walkable packed-earth bed under the Court. Covers embassy shells and the Frontier road past the 43m battlefield disc. Not a paved ring.</summary>
-        public const float BedRadius = 96f;
-        public const float RealmBed = 180f;
         public static readonly Vector3 Arena = new Vector3(0, 0, 18);
         public static readonly Vector3 Spawn = new Vector3(0, 0, -11);
 

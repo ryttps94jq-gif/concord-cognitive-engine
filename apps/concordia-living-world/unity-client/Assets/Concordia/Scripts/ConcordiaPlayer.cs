@@ -55,7 +55,6 @@ namespace Concordia
                     _vel.x = 0f;
                     _vel.z = 0f;
                     cc.Move(_vel * Time.deltaTime);
-                    Grounding.Recover(cc, world);
                 }
                 return;
             }
@@ -103,7 +102,6 @@ namespace Concordia
             _vel.x = Mathf.Lerp(_vel.x, move.x, 1f - Mathf.Exp(-(grounded ? 14f : 4.2f) * dt));
             _vel.z = Mathf.Lerp(_vel.z, move.z, 1f - Mathf.Exp(-(grounded ? 14f : 4.2f) * dt));
             cc.Move(_vel * dt);
-            Grounding.Recover(cc, world);
 
             var planar = new Vector3(_vel.x, 0, _vel.z);
             if (planar.sqrMagnitude > 0.2f)

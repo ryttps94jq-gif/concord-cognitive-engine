@@ -24,6 +24,12 @@ namespace Concordia.Editor
             if (Directory.Exists(staging)) Directory.Delete(staging, true);
             Directory.CreateDirectory(staging);
 
+            // Last path component becomes the wasm/loader stem. Do not use a
+            // dotfile folder name — Next/nginx hide those and the page 404s.
+            var buildFolder = Path.Combine(staging, "concordia");
+            if (Directory.Exists(staging)) Directory.Delete(staging, true);
+            Directory.CreateDirectory(staging);
+
             // WebGL BuildPlayer writes a FOLDER (index.html + Build/ + TemplateData/).
             var opts = new BuildPlayerOptions
             {
