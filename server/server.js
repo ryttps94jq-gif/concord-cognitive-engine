@@ -9235,6 +9235,8 @@ let _lastPeriodicSaveHash = "";
 let _lastPeriodicSaveSeq = -1;
 trackedSetInterval(() => {
   try {
+    // Read-only replica never persists state — the writer owns it.
+    if (READ_REPLICA) return;
     // Skip entirely when nothing has requested a save since last time.
     //
     // This check used to sit AFTER `JSON.stringify(_serializeState())`, using
@@ -12418,6 +12420,10 @@ let _chunkedSaveTears = 0;
 const _stringifyStateChunked = (snapshot) => stringifyChunked(snapshot);
 
 function saveStateDebounced() {
+  // Read-only replica: the writer owns state persistence. A replica that gets
+  // here (e.g. via a stray in-memory mutation during a read) must not schedule
+  // a save — the readonly DB rejects it and the JSON path can't write either.
+  if (READ_REPLICA) return;
   // Monotonic mutation counter. Every mutation path in the server funnels
   // through here, so this is the cheapest honest "has anything changed?"
   // signal available — the 5-min periodic safety-net reads it to skip a full
@@ -37371,6 +37377,15 @@ async function terminateCognitiveWorkerForTest() {
 }
 
 function startHeartbeat() {
+  // Read-only replicas never simulate — the writer owns all emergent state +
+  // every DB write. Without this guard a replica ran the full tick and spammed
+  // `state_save_failed` / `[feed] DB write failed` / `persistEmergentName failed`
+  // on every cycle (harmless — the readonly handle rejects the write — but noisy
+  // and a waste of the replica's loop, which exists to serve reads fast).
+  if (READ_REPLICA) {
+    structuredLog("info", "heartbeat_skipped_read_replica", {});
+    return;
+  }
   if (heartbeatTimer) clearInterval(heartbeatTimer);
   if (weeklyTimer) clearInterval(weeklyTimer);
   if (globalTickTimer) clearInterval(globalTickTimer);
