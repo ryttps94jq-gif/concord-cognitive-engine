@@ -171,9 +171,9 @@ async function checkLogging(opts, durationMs) {
   }
   try {
     const row = opts.db.prepare(
-      `SELECT domain, macro_name, status, duration_ms, created_at
+      `SELECT domain, macro_name, status, duration_ms, ts
        FROM macro_call_log WHERE domain = ? AND macro_name = ?
-       ORDER BY created_at DESC LIMIT 1`,
+       ORDER BY ts DESC LIMIT 1`,
     ).get(opts.domain, opts.action);
     if (!row) {
       return { pass: false, failureType: "LOGGING_FAILURE", note: "no macro_call_log row after dispatch" };
