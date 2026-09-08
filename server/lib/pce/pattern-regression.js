@@ -27,21 +27,24 @@ export function updateRegressionBaselines(db, { suite, results } = {}) {
   }
   let added = 0;
   let updated = 0;
+  // Prepared statements hoisted out of the loop (was re-preparing each iter).
+  const selStmt = db.prepare(`SELECT case_id FROM pce_regression_baselines WHERE case_id = ?`);
+  const updStmt = db.prepare(`
+    UPDATE pce_regression_baselines
+    SET last_passed_at = ?, pass_count = pass_count + 1, suite = ?
+    WHERE case_id = ?
+  `);
+  const insStmt = db.prepare(`
+    INSERT INTO pce_regression_baselines (case_id, suite, status, last_passed_at, pass_count)
+    VALUES (?, ?, 'baseline', ?, 1)
+  `);
   for (const r of results || []) {
     if (!r.ok || !r.caseId) continue;
-    const existing = db.prepare(`SELECT case_id FROM pce_regression_baselines WHERE case_id = ?`).get(r.caseId);
-    if (existing) {
-      db.prepare(`
-        UPDATE pce_regression_baselines
-        SET last_passed_at = ?, pass_count = pass_count + 1, suite = ?
-        WHERE case_id = ?
-      `).run(nowSec(), suite || r.suite || "concord_core", r.caseId);
+    if (selStmt.get(r.caseId)) {
+      updStmt.run(nowSec(), suite || r.suite || "concord_core", r.caseId);
       updated += 1;
     } else {
-      db.prepare(`
-        INSERT INTO pce_regression_baselines (case_id, suite, status, last_passed_at, pass_count)
-        VALUES (?, ?, 'baseline', ?, 1)
-      `).run(r.caseId, suite || r.suite || "concord_core", nowSec());
+      insStmt.run(r.caseId, suite || r.suite || "concord_core", nowSec());
       added += 1;
     }
   }
