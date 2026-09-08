@@ -35,6 +35,10 @@ import {
   importStepMesh,
   buildBom,
 } from '../lib/conkay/assembly-export.js';
+import {
+  exportAssemblyDrawing,
+  exportPartDrawing,
+} from '../lib/conkay/assembly-drawing.js';
 import { applyMate, MATE_TYPES } from '../lib/conkay/assembly-mates.js';
 import {
   listMaterials,
@@ -581,6 +585,50 @@ export default function createConkayAssemblyRouter({ requireAuth, db }) {
       ...out,
       honesty: { note: 'Redo restored forward parts+transforms snapshot — not parametric CAD history' },
     });
+  });
+
+
+  /** GET /api/conkay/assemblies/:id/drawing.json — orthographic views + segments + svg */
+  router.get('/assemblies/:id/drawing.json', auth, (req, res) => {
+    if (!needDb(res)) return;
+    const drawing = exportAssemblyDrawing(db, req.params.id);
+    if (!drawing.ok) return res.status(422).json(drawing);
+    return res.json(drawing);
+  });
+
+  /** GET /api/conkay/assemblies/:id/drawing.svg — SVG download */
+  router.get('/assemblies/:id/drawing.svg', auth, (req, res) => {
+    if (!needDb(res)) return;
+    const drawing = exportAssemblyDrawing(db, req.params.id);
+    if (!drawing.ok) return res.status(422).json(drawing);
+    const filename = `conkay-assembly-${req.params.id.slice(0, 8)}-drawing.svg`;
+    res.setHeader('Content-Type', 'image/svg+xml; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('X-ConKay-Drawing-Views', String(drawing.views?.length || 0));
+    return res.send(drawing.svg);
+  });
+
+  /** GET /api/conkay/assemblies/:id/parts/:partId/drawing.json */
+  router.get('/assemblies/:id/parts/:partId/drawing.json', auth, (req, res) => {
+    if (!needDb(res)) return;
+    const part = getPart(db, req.params.id, req.params.partId);
+    if (!part) return res.status(404).json({ ok: false, reason: 'part_not_found' });
+    const drawing = exportPartDrawing(part);
+    if (!drawing.ok) return res.status(422).json(drawing);
+    return res.json(drawing);
+  });
+
+  /** GET /api/conkay/assemblies/:id/parts/:partId/drawing.svg */
+  router.get('/assemblies/:id/parts/:partId/drawing.svg', auth, (req, res) => {
+    if (!needDb(res)) return;
+    const part = getPart(db, req.params.id, req.params.partId);
+    if (!part) return res.status(404).json({ ok: false, reason: 'part_not_found' });
+    const drawing = exportPartDrawing(part);
+    if (!drawing.ok) return res.status(422).json(drawing);
+    const filename = `conkay-part-${(part.name || part.id).slice(0, 24)}-drawing.svg`.replace(/[^\w.\-]+/g, '_');
+    res.setHeader('Content-Type', 'image/svg+xml; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    return res.send(drawing.svg);
   });
 
   /** GET /api/conkay/assemblies/:id/history */

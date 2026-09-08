@@ -36,7 +36,7 @@ import { runFeaBeamToWorld } from '@/lib/conkay/fea-beam-to-world';
 import { runPartMeshToWorld } from '@/lib/conkay/part-mesh-to-world';
 import { designViaApiOrClient } from '@/lib/conkay/nlp-design-to-world';
 import { runEvoGlbToWorld } from '@/lib/conkay/evo-glb-to-world';
-import { runAssemblyChatRevise, downloadStl, downloadAssemblyBom, downloadStep, runAssemblyUndo, runAssemblyRedo } from '@/lib/conkay/assembly-to-world';
+import { runAssemblyChatRevise, downloadStl, downloadAssemblyBom, downloadStep, runAssemblyUndo, runAssemblyRedo, downloadAssemblyDrawing, fetchMaterials, attachPartMaterial, listParts } from '@/lib/conkay/assembly-to-world';
 import { ConKayActionConfirm } from './ConKayActionConfirm';
 import { ConKayCockpit } from './ConKayCockpit';
 import { CONKAY_SIGNATURE_GREETING, CONKAY_PERSONA_PROMPT, type ConKayState } from './conkay-persona';
@@ -282,6 +282,8 @@ export function ConKayOverlay() {
   const [evoGlbBusy, setEvoGlbBusy] = useState(false);
   const [assemblyId, setAssemblyId] = useState<string | null>(null);
   const [assemblyBusy, setAssemblyBusy] = useState(false);
+  const [materialPicker, setMaterialPicker] = useState('steel');
+  const [materialsList, setMaterialsList] = useState<Array<{ id: string; name: string; color?: string }>>([]);
   useEffect(() => {
     if (!open) {
       setUnityPresent(false);
@@ -606,6 +608,59 @@ export function ConKayOverlay() {
       setWorkStatus(`BOM download failed — ${e instanceof Error ? e.message : String(e)}`);
     }
   }, [assemblyId]);
+
+  const downloadAssemblyDrawingSvg = useCallback(async () => {
+    if (!assemblyId) {
+      setWorkStatus('Drawing: no assembly yet — Asm revise first');
+      return;
+    }
+    try {
+      const r = await downloadAssemblyDrawing(assemblyId);
+      setWorkStatus(`DRAWING LIVE: ${r.filename} (${r.size} bytes) — orthographic SVG (not drafting CAD)`);
+    } catch (e) {
+      setWorkStatus(`Drawing download failed — ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }, [assemblyId]);
+
+  useEffect(() => {
+    if (!assemblyId) return;
+    void (async () => {
+      try {
+        const m = await fetchMaterials();
+        if (m?.ok && Array.isArray(m.materials)) setMaterialsList(m.materials);
+      } catch {
+        /* catalog optional */
+      }
+    })();
+  }, [assemblyId]);
+
+  const attachMaterialClick = useCallback(async () => {
+    if (!assemblyId) {
+      setWorkStatus('Material: no assembly yet — Asm revise first');
+      return;
+    }
+    setAssemblyBusy(true);
+    try {
+      const partsRes = await listParts(assemblyId);
+      const parts = partsRes?.parts || [];
+      if (!parts.length) {
+        setWorkStatus('Material: assembly has no parts');
+        return;
+      }
+      const part = parts[parts.length - 1];
+      const out = await attachPartMaterial(assemblyId, part.id, materialPicker);
+      if (!out?.ok) {
+        setWorkStatus(`Material attach failed — ${out?.error || 'unknown'}`);
+        return;
+      }
+      setWorkStatus(`MATERIAL LIVE: ${out.material?.id || materialPicker} → part ${part.name || part.id.slice(0, 8)} (library attach — not FEM model)`);
+    } catch (e) {
+      setWorkStatus(`Material error — ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setAssemblyBusy(false);
+    }
+  }, [assemblyId, materialPicker]);
+
 
 
 
@@ -966,21 +1021,14 @@ export function ConKayOverlay() {
       }
       if (ok) {
         // LIVE stub: tell Unity iframe something happened (no-op if iframe absent).
-        // Not a CAD/mesh push — thin notify + optional F0 marker when WebGL present.
+        // No automatic spawn_primitive — mesh happy-paths use apply_mesh/load_glb/set_transform.
+        // F0 cube markers only via explicit Drop-marker / FEA-proxy buttons.
         postUnityCmd('notify', {
           source: 'conkay',
           domain,
           macro,
           ok: true,
         });
-        if (unityIframePresent()) {
-          spawnPrimitive({
-            kind: 'cube',
-            position: { x: 0, y: 1.1, z: 0 },
-            scale: 0.35,
-            color: '#5eead4',
-          }, `macro-${domain}-${macro}-${Date.now()}`);
-        }
       }
       const resultStr = data?.result != null ? JSON.stringify(data.result, null, 2) : (ok ? '(done)' : (data?.error || 'no result'));
       const spoken = ok ? `Done — ran ${macro} on the ${domain} lens.` : `${macro} on ${domain} returned: ${data?.error || 'an error'}.`;
@@ -1409,6 +1457,41 @@ export function ConKayOverlay() {
                   data-testid="ck-export-step"
                   className="rounded-lg px-2 py-1 text-[10px] text-orange-100 hover:bg-orange-400/15 border border-orange-400/30 disabled:opacity-40">
                   STEP
+                </button>
+                <button type="button" onClick={() => { void downloadAssemblyDrawingSvg(); }}
+                  disabled={!assemblyId}
+                  title="Download orthographic drawing SVG (front/top/side projected mesh lines — not drafting CAD)"
+                  aria-label="Download assembly drawing SVG"
+                  data-testid="ck-export-drawing"
+                  className="rounded-lg px-2 py-1 text-[10px] text-sky-100 hover:bg-sky-400/15 border border-sky-400/30 disabled:opacity-40">
+                  DWG
+                </button>
+                <select
+                  value={materialPicker}
+                  onChange={(e) => setMaterialPicker(e.target.value)}
+                  disabled={!assemblyId}
+                  title="Material library picker"
+                  aria-label="Material picker"
+                  data-testid="ck-material-picker"
+                  className="rounded-lg px-1 py-1 text-[10px] text-slate-100 bg-black/40 border border-slate-400/30 disabled:opacity-40 max-w-[5.5rem]"
+                >
+                  {(materialsList.length ? materialsList : [
+                    { id: 'steel', name: 'steel' },
+                    { id: 'aluminum', name: 'aluminum' },
+                    { id: 'concrete', name: 'concrete' },
+                    { id: 'timber', name: 'timber' },
+                    { id: 'plastic', name: 'plastic' },
+                  ]).map((m) => (
+                    <option key={m.id} value={m.id}>{m.id}</option>
+                  ))}
+                </select>
+                <button type="button" onClick={() => { void attachMaterialClick(); }}
+                  disabled={!assemblyId || assemblyBusy}
+                  title="Attach selected material to latest assembly part (GET /api/conkay/materials + POST …/material)"
+                  aria-label="Attach material to part"
+                  data-testid="ck-material-attach"
+                  className="rounded-lg px-2 py-1 text-[10px] text-slate-100 hover:bg-slate-400/15 border border-slate-400/30 disabled:opacity-40">
+                  Mat
                 </button>
 
               </div>

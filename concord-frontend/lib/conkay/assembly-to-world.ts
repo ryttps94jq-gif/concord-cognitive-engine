@@ -315,3 +315,38 @@ export async function downloadStep(opts: { assemblyId: string; partId?: string; 
   }
   return { ok: true, filename, size: blob.size };
 }
+
+/** Fetch orthographic drawing JSON (front/top/side + svg). */
+export async function fetchAssemblyDrawing(assemblyId: string) {
+  const res = await api.get(`/api/conkay/assemblies/${assemblyId}/drawing.json`);
+  return res?.data;
+}
+
+/** Download assembly drawing SVG. */
+export async function downloadAssemblyDrawing(assemblyId: string) {
+  const res = await api.get(`/api/conkay/assemblies/${assemblyId}/drawing.svg`, { responseType: 'blob' });
+  const blob = res?.data instanceof Blob ? res.data : new Blob([res?.data], { type: 'image/svg+xml' });
+  const filename = `conkay-assembly-${assemblyId.slice(0, 8)}-drawing.svg`;
+  if (typeof window !== 'undefined') {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+  return { ok: true, filename, size: blob.size };
+}
+
+/** List material library. */
+export async function fetchMaterials() {
+  const res = await api.get('/api/conkay/materials');
+  return res?.data;
+}
+
+/** Attach material to a part. */
+export async function attachPartMaterial(assemblyId: string, partId: string, material: string) {
+  const res = await api.post(`/api/conkay/assemblies/${assemblyId}/parts/${partId}/material`, { material });
+  return res?.data;
+}
+
