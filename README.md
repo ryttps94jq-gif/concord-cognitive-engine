@@ -16,6 +16,10 @@
 
 <br/>
 
+[![Concord — the public entry point](docs/images/hero-explore.png)](https://concord-os.org/explore)
+
+<br/>
+
 ![lenses](https://img.shields.io/badge/lenses-267-22d3ee)
 ![macros](https://img.shields.io/badge/macros-~10.6k-22c55e)
 ![brains](https://img.shields.io/badge/AI_brains-5-f59e0b)
@@ -83,6 +87,14 @@ docker-compose up
 ```
 
 Production needs `JWT_SECRET`. Running the frontend standalone? Copy `concord-frontend/.env.example` → `.env.local` first. Realtime needs a WebSocket-aware proxy in front (nginx config included) — Next's standalone server does not forward WS upgrades. Full setup: [`DEPLOYMENT.md`](DEPLOYMENT.md).
+
+Each lens reads as the app it replaces — a Bloomberg-style terminal, a VS Code shell — while sharing one substrate, one macro spine, one economy:
+
+| Finance lens | Code lens |
+|---|---|
+| [![Finance lens](docs/images/lens-finance.png)](https://concord-os.org/lenses/finance) | [![Code lens](docs/images/lens-code.png)](https://concord-os.org/lenses/code) |
+
+<sub>Captured live from concord-os.org on a brand-new account (hence the empty ledgers / "connecting" feeds — nothing seeded, nothing faked). Regenerate against any instance with `node scripts/capture-screenshots.mjs`.</sub>
 
 ---
 
