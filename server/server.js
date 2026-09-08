@@ -37087,6 +37087,7 @@ function buildCognitiveSnapshot() {
 
 // ── Cognitive Worker: result merger ──────────────────────────────────────────
 // Applies worker pipeline results on the main thread via the macro system.
+let _cogTickSkips = 0; // benign "tick skipped, still running" counter (log-rate-limited below)
 async function mergeCognitiveResults(results) {
   if (!results) return;
 
@@ -37096,7 +37097,21 @@ async function mergeCognitiveResults(results) {
   }
 
   if (results.errors?.length) {
-    console.warn("[cognitive-worker] Tick errors:", results.errors);
+    // `tick_skipped_already_running` is benign backpressure — the worker
+    // correctly skips a tick when the previous one (LLM-bound) is still going.
+    // It was ~13% of stderr on the degraded-brains box. Count it, don't spam it:
+    // surface only every 50th occurrence so a genuine sustained stall is still
+    // visible. Any OTHER error still logs immediately.
+    const realErrors = results.errors.filter((e) => e !== "tick_skipped_already_running");
+    if (results.errors.includes("tick_skipped_already_running")) {
+      _cogTickSkips = (_cogTickSkips || 0) + 1;
+      if (_cogTickSkips % 50 === 0) {
+        console.warn(`[cognitive-worker] tick skipped (still running) ×${_cogTickSkips} — cognitive ticks are LLM-bound and not keeping up`);
+      }
+    }
+    if (realErrors.length) {
+      console.warn("[cognitive-worker] Tick errors:", realErrors);
+    }
   }
 
   if (results.timings) {
