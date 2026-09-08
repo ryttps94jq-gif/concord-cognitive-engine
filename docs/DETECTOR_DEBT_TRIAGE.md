@@ -507,6 +507,55 @@ historical statement about the state at PR #808, not a current count, and
 does not need changing.)
 
 ---
+
+## 2026-09-08 — `concurrency-refactor` branch review (defects fixed; baseline refresh still owner-gated)
+
+Live `node scripts/run-detectors.js --diff --ci` on branch `concurrency-refactor`
+vs `BASELINE.json` (2026-09-01): `added 456 (critical=0, high=19, medium=29,
+low=8, info=400)`, `removed 183`. The ratchet was **already red before this
+session** — CLAUDE.md's 2026-09-07 note records `added: 419 (critical=1, ...)`.
+
+**Fixed this session (real defects, committed):**
+- `critical` **1 → 0** — `maintenance-gates` / schema-drift gate: `evo_assets.asset_id`
+  → `id` (`world-asset-composition.js:85`), `macro_call_log.created_at` → `ts`
+  (`lens-behavioral-contract.js:173`). `node scripts/verify-schema-drift.mjs --ci`
+  now passes DRIFT 0.
+- `invariant-guardian` + `observability-gap` on `usb-lease-cycle.js` — wrapped the
+  heartbeat handler in try/catch. invariant-guardian now 0 findings.
+- `command-injection` on `.claude/worktrees/w1/.../cpu-self-pin.js` — detector
+  `_framework.js` walk now skips `.claude/` (git worktrees on other branches were
+  double-counted). Contributed most of the `removed 183`.
+- `perf_empty_catch` on `mcp.js:483` — dead no-op try-block removed.
+- `perf_sync_fs_in_handler` on `occ-bridge.js:237,291` — the two STEP-file
+  `readFileSync`s (real event-loop blocks proportional to geometry size) → `await
+  readFile`.
+
+**Remaining `high=19`, all `perf_sync_fs_in_handler`, all new-on-branch feature
+code — reviewed, needs a baseline refresh (owner-authorized, NOT a code change):**
+- `occ-bridge.js` 25/28/29/65/73/316 — one-time `existsSync` Python-CLI/binary
+  path resolution. Microseconds. False positive.
+- `conkay/verticals/prosthetics.js` 199/217/227/228 — a deliberately-synchronous
+  CAD g-code + telemetry generator writing small text/JSON artifacts once per
+  run. Converting the module to async ripples to every caller for no measurable
+  gain. False positive.
+- `lease-system.js` 31/32 — sub-KB JSON lock-file read at 60s heartbeat cadence.
+  Documented already in CLAUDE.md as noise-class. False positive.
+- `capability-registry.js:190` — single health-check `existsSync`. False positive.
+
+**Remaining `low` stale-code (5, new):** `dhtp-rs-freeze.js`,
+`dhtp-rs-human-export.js`, `dhtp-rs-ollama-provider.js`,
+`adaptive-field-compression.js`, `world-asset-composition.js` — the exact orphan
+set CLAUDE.md's 2026-09-07 note already lists. Pre-existing; DHTP-RS cluster is
+paused work, not dead.
+
+**Disposition:** the actionable defects are closed. The `high=19` are new feature
+code that is either genuine false-positive (`existsSync` path checks, tiny files)
+or a deliberate design choice (sync CAD generator). A `BASELINE.json` refresh is
+the sanctioned way to absorb them — an explicit human-authorized step, per the
+"Hard rule" at the top of this doc and CLAUDE.md's detector-baseline note. Not
+done here.
+
+---
 ---
 
 # Historical record — prior passes (append-only)
