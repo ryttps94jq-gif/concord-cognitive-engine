@@ -114,8 +114,7 @@ Copying a primitive is easy. Copying the web is the years-long part. — [the fu
 
 ## For investors and partners
 
-**Stage:** Live at [concord-os.org](https://concord-os.org), pre-revenue, built solo. Seeking design partners and pre-seed conversations.
-<!-- Founder: replace with name + one line of background. `git shortlog` shows this is one person working AI-accelerated — decide how you want to frame that; it's a strong 2026 story either way. -->
+**Stage:** Live at [concord-os.org](https://concord-os.org), pre-revenue. Built by **Concord Dev** — one founder, AI-accelerated, ~2.7M lines of authored source and a running product. Seeking design partners and pre-seed conversations.
 
 **Why now.** Agents are shipping into everything in 2026, and the thing blocking adoption isn't capability — it's that you can't trust unchecked output in a workflow that matters. "Deterministic compute as a tool an agent can call, with a citation trail" is an unclaimed wedge. Concord is a working instance of it.
 
@@ -126,7 +125,7 @@ Copying a primitive is easy. Copying the web is the years-long part. — [the fu
 
 **Next ~6 months:** move the public deployment off a single shared box onto dedicated infra ([`docs/OFF_MAC_MIGRATION_BLUEPRINT.md`](docs/OFF_MAC_MIGRATION_BLUEPRINT.md)); take the six built connectors live (needs only operator OAuth credentials); open the developer platform (MCP server, signed plugin gallery, and SDK are built — [`docs/DEVELOPER_PLATFORM_GTM.md`](docs/DEVELOPER_PLATFORM_GTM.md) — adoption is the missing piece, not the build).
 
-**Contact:** <!-- add an email / Cal.com link -->
+**Contact:** Concord Dev — [dutchtropez@gmail.com](mailto:dutchtropez@gmail.com)
 
 ---
 
@@ -211,7 +210,7 @@ You **may**: run and self-host privately, study and modify for non-commercial re
 
 You **may not** without a written grant: sell or commercially distribute it, offer it as a hosted service, operate a derivative marketplace or a competing global network, or monetize DTUs / lineage graphs / Concord-derived assets. Commercial licensing is available — contact the owner.
 
-"Concord," "ConcordOS," "DTU," "Hyper-DTU," and associated marks are not licensed. *(License is a draft pending formal legal review.)*
+"Concord," "ConcordOS," "DTU," "Hyper-DTU," and associated marks are not licensed. Commercial licensing: [dutchtropez@gmail.com](mailto:dutchtropez@gmail.com).
 
 ---
 

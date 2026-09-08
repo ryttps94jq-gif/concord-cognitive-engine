@@ -1,6 +1,7 @@
 {
   "name": "concord-frontend",
   "version": "4.0.0",
+  "license": "SEE LICENSE IN LICENSE.txt",
   "private": true,
   "scripts": {
     "dev": "next dev",

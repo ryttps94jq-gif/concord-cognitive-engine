@@ -2,6 +2,7 @@
   "name": "concord-server",
   "private": true,
   "version": "5.0.0",
+  "license": "SEE LICENSE IN LICENSE.txt",
   "type": "module",
   "scripts": {
     "start": "MAX_OLD_SPACE_SIZE=32768 node --max-old-space-size=32768 --expose-gc server.js",
