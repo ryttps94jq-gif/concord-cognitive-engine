@@ -39,7 +39,7 @@ Still reclassifies 10 data-modules (172k lines, e.g. the deprecated 145k-line
 | Numbered migrations | **444 files** (highest `445`) | `ls server/migrations/[0-9]*.js \| wc -l` |
 | Route files | **136** | `ls server/routes/*.js \| wc -l` |
 | Lib modules | **783** top (`ls server/lib/*.js \| wc -l`) · **1,312** recursive (`find server/lib -name '*.js' \| wc -l`) | see cell |
-| `server/server.js` | **87,817 lines** | `wc -l server/server.js` |
+| `server/server.js` | **87,854 lines** | `wc -l server/server.js` |
 | DB tables (cartographer) | **765** | `cd server && npm run cartograph:static` |
 | Socket events (cartographer) | **337** | cartographer |
 | Heartbeats (registered) | **140** | `grep -rohE "registerHeartbeat\(['\"][a-z0-9-]+['\"]" server/ \| sort -u \| wc -l` |
