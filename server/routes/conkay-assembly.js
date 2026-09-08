@@ -15,6 +15,10 @@ import {
   removePart,
   deleteAssembly,
   defaultTransform,
+  pushAssemblyRevision,
+  undoAssembly,
+  redoAssembly,
+  getAssemblyHistory,
 } from '../lib/conkay/assembly-store.js';
 import {
   parseDesignIntent,
@@ -324,6 +328,24 @@ export default function createConkayAssemblyRouter({ requireAuth, db }) {
         });
       }
 
+      if (parsed.action === 'undo') {
+        const out = undoAssembly(db, assemblyId);
+        if (!out.ok) {
+          const code = out.code === 'EMPTY_UNDO' ? 409 : 400;
+          return res.status(code).json({ ...out, utterance: parsed });
+        }
+        return res.json({ ...out, utterance: parsed });
+      }
+
+      if (parsed.action === 'redo') {
+        const out = redoAssembly(db, assemblyId);
+        if (!out.ok) {
+          const code = out.code === 'EMPTY_REDO' ? 409 : 400;
+          return res.status(code).json({ ...out, utterance: parsed });
+        }
+        return res.json({ ...out, utterance: parsed });
+      }
+
       return res.status(400).json({ ok: false, error: 'unsupported_action', action: parsed.action });
     } catch (e) {
       return res.status(500).json({ ok: false, error: e instanceof Error ? e.message : String(e) });
@@ -503,7 +525,7 @@ export default function createConkayAssemblyRouter({ requireAuth, db }) {
     return res.json(out);
   });
 
-  /** POST /api/conkay/assemblies/:id/mates  { type, aPartId, bPartId?, axis?, offset? } */
+  /** POST /api/conkay/assemblies/:id/mates  { type, aPartId, bPartId?, axis?, offset?, drive? } */
   router.post('/assemblies/:id/mates', auth, (req, res) => {
     if (!needDb(res)) return;
     const out = applyMate(db, req.params.id, {
@@ -512,6 +534,7 @@ export default function createConkayAssemblyRouter({ requireAuth, db }) {
       bPartId: req.body?.bPartId || req.body?.b || null,
       axis: req.body?.axis,
       offset: req.body?.offset,
+      drive: req.body?.drive,
     });
     if (!out.ok) {
       const code = out.code === 'NOT_FOUND' ? 404 : 400;
@@ -522,7 +545,53 @@ export default function createConkayAssemblyRouter({ requireAuth, db }) {
 
   /** GET /api/conkay/mate-types */
   router.get('/mate-types', auth, (_req, res) => {
-    return res.json({ ok: true, types: MATE_TYPES, honesty: { wave: 3, note: 'Kinematic stubs only' } });
+    return res.json({
+      ok: true,
+      types: MATE_TYPES,
+      honesty: {
+        wave: '3-v2',
+        note: 'Kinematic solve for B given A (distance/offset/align_axis) — NOT industrial solver / OCC',
+      },
+    });
+  });
+
+  /** POST /api/conkay/assemblies/:id/undo */
+  router.post('/assemblies/:id/undo', auth, (req, res) => {
+    if (!needDb(res)) return;
+    const out = undoAssembly(db, req.params.id);
+    if (!out.ok) {
+      const code = out.code === 'NOT_FOUND' ? 404 : out.code === 'EMPTY_UNDO' ? 409 : 400;
+      return res.status(code).json(out);
+    }
+    return res.json({
+      ...out,
+      honesty: { note: 'Undo restored prior parts+transforms snapshot — not parametric CAD history' },
+    });
+  });
+
+  /** POST /api/conkay/assemblies/:id/redo */
+  router.post('/assemblies/:id/redo', auth, (req, res) => {
+    if (!needDb(res)) return;
+    const out = redoAssembly(db, req.params.id);
+    if (!out.ok) {
+      const code = out.code === 'NOT_FOUND' ? 404 : out.code === 'EMPTY_REDO' ? 409 : 400;
+      return res.status(code).json(out);
+    }
+    return res.json({
+      ...out,
+      honesty: { note: 'Redo restored forward parts+transforms snapshot — not parametric CAD history' },
+    });
+  });
+
+  /** GET /api/conkay/assemblies/:id/history */
+  router.get('/assemblies/:id/history', auth, (req, res) => {
+    if (!needDb(res)) return;
+    const out = getAssemblyHistory(db, req.params.id);
+    if (!out.ok) {
+      const code = out.code === 'NOT_FOUND' ? 404 : 400;
+      return res.status(code).json(out);
+    }
+    return res.json(out);
   });
 
   return router;
