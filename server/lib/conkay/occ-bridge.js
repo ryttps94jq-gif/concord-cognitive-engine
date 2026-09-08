@@ -5,6 +5,7 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import fs from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -234,7 +235,7 @@ export async function exportAssemblyBrepStep(db, assemblyId, opts = {}) {
   if (!result.ok) return { ...result, skipped, assemblyId };
   let buffer = null;
   try {
-    buffer = fs.readFileSync(outPath);
+    buffer = await readFile(outPath);
   } catch (e) {
     return { ok: false, reason: 'step_file_unreadable', error: String(e), path: outPath };
   }
@@ -288,7 +289,7 @@ export async function exportPartBrepStep(part, opts = {}) {
   }
   const result = await runOccCli('make_archetype', payload);
   if (!result.ok) return result;
-  const buffer = fs.readFileSync(outPath);
+  const buffer = await readFile(outPath);
   return {
     ok: true,
     partId: part.id,
