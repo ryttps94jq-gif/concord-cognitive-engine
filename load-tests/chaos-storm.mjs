@@ -143,12 +143,16 @@ async function main() {
   console.log(`  throughput: ${(totalReq / Number(wall)).toFixed(0)} req/s over ${totalReq} requests`);
   console.log(`  recovery: health p95 ${pct(after, 0.95)}ms\n`);
 
+  // Absolute thresholds — idle p95 is too noisy on a shared box for a ratio.
   const b = pct(base, 0.95) || 1;
-  const factor = hp95 / b;
-  const verdict = factor > 25 ? "EVENT LOOP STARVED" : factor > 6 ? "degraded but survived" : "stayed responsive";
-  console.log(`VERDICT: health p95  ${b}ms idle → ${hp95}ms under load  (${factor.toFixed(0)}×)  →  ${verdict}`);
+  const verdict =
+    hp95 == null ? "health unreachable under load"
+    : hp95 > 1500 ? "EVENT LOOP STARVED (health p95 >1.5s under load)"
+    : hp95 > 400 ? "degraded (health p95 400ms–1.5s under load)"
+    : "stayed responsive (health p95 <400ms under load)";
+  console.log(`VERDICT: health p95  ${b}ms idle → ${hp95}ms under load  →  ${verdict}`);
 
-  const out = { base: pct(base, 0.95), healthP95UnderLoad: hp95, factor: +factor.toFixed(1), verdict, concurrency: CONC, throughputRps: +(totalReq / Number(wall)).toFixed(0), recoveredP95: pct(after, 0.95) };
+  const out = { base: pct(base, 0.95), healthP95UnderLoad: hp95, verdict, concurrency: CONC, throughputRps: +(totalReq / Number(wall)).toFixed(0), recoveredP95: pct(after, 0.95) };
   const dir = path.join(os.homedir(), ".zuko/remaining-work");
   try { fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(path.join(dir, "concord-chaos-storm.json"), JSON.stringify(out, null, 2) + "\n"); } catch {}
 
