@@ -72596,6 +72596,40 @@ try {
       histogram.reset();
     } catch { /* perf_hooks unhappy — swallow, monitor is informational */ }
   }, 30_000).unref();
+
+  // Concurrency Refactor (2026-09-08): the 3s/30s monitor above only catches
+  // full FREEZES. A concurrent-request burst starves the loop at 300-800ms —
+  // real user-facing pain, invisible to that threshold. This second pass is
+  // faster (5s window) and lower (250ms default) so a load spike shows up in
+  // the log with a timestamp to cross-reference. Same ~50ns/sample histogram.
+  const BURST_THRESHOLD_NS = (Number(process.env.CONCORD_LAG_BURST_THRESHOLD_MS) || 250) * 1e6;
+  let _burstSpikeStreak = 0;
+  const _burstHist = monitorEventLoopDelay({ resolution: 20 });
+  _burstHist.enable();
+  setInterval(() => {
+    try {
+      const maxNs = _burstHist.max;
+      if (Number.isFinite(maxNs) && maxNs > BURST_THRESHOLD_NS) {
+        _burstSpikeStreak++;
+        // log the first spike, then every 6th (~30s) while it persists, so a
+        // sustained overload is one line/30s not a flood.
+        if (_burstSpikeStreak === 1 || _burstSpikeStreak % 6 === 0) {
+          const culprit = (globalThis.__lastLagProbeName && (Date.now() - (globalThis.__lastLagProbeTs || 0) < 10_000))
+            ? globalThis.__lastLagProbeName : "concurrent_request_load?";
+          structuredLog("warn", "event_loop_burst_lag", {
+            maxMs: Math.round(maxNs / 1e6),
+            p99Ms: Math.round(_burstHist.percentile(99) / 1e6),
+            windowSeconds: 5,
+            consecutiveWindows: _burstSpikeStreak,
+            culprit,
+          });
+        }
+      } else {
+        _burstSpikeStreak = 0;
+      }
+      _burstHist.reset();
+    } catch { /* informational */ }
+  }, 5_000).unref();
 } catch (e) {
   structuredLog("info", "event_loop_monitor_unavailable", { error: String(e?.message || e) });
 }
