@@ -1,4 +1,19 @@
-# ConKay ↔ Unity (browser) — 2026-09-08 (build-intents LIVE · industrial mesh apply LIVE · free-text NLP CAD LIVE · load_glb LIVE · evo-asset→load_glb LIVE · ASSEMBLY LIVE · STL+BOM LIVE · Wave3 mates/materials LIVE · mates v2 LIVE · assembly undo/redo LIVE · set_transform player-LIVE · Wave4 suite LIVE · faceted STEP import/export LIVE · orthographic drawing+dims+PDF LIVE · explode LIVE · GD&T drafting LIVE)
+# ConKay ↔ Unity (browser) — 2026-09-08 (build-intents LIVE · industrial mesh apply LIVE · free-text NLP CAD LIVE · load_glb LIVE · evo-asset→load_glb LIVE · ASSEMBLY LIVE · STL+BOM LIVE · Wave3 mates/materials LIVE · mates v2 LIVE · assembly undo/redo LIVE · set_transform player-LIVE · Wave4 suite LIVE · faceted STEP import/export LIVE · OCC advanced B-rep STEP LIVE · orthographic drawing SVG LIVE · no-marker happy-path LIVE · Overlay material picker LIVE · FULL SOLID WORLD CERTIFIED · INDUSTRIAL_CLASS CERTIFIED · industry verticals CERTIFIED · toolbar DTU mint LIVE)
+
+## CURRENT STATUS (2026-09-08 ~09:30 ET) — read this first
+
+**Supersedes historical honesty lines below that still say “faceted only / kinematic stubs only / NOT OCC”.** Those lines are kept as wave history; they describe what was true *at that wave*, not the tip.
+
+| Tier | Status | Proof |
+|------|--------|-------|
+| SOLID WORLD (OCC feature tree / sketch / solid mates / geom verify) | **CERTIFIED** | `~/.zuko/remaining-work/conkay-solid-world-cert.json` |
+| INDUSTRIAL_CLASS (multi-DOF mates / feature breadth / digital ASME Y14.5) | **CERTIFIED** | `~/.zuko/remaining-work/conkay-industrial-class-cert.json` |
+| Industry verticals (molecular / hospital / prosthetics / studio / aero) | **CERTIFIED** (proxy/synthetic) | `~/.zuko/remaining-work/conkay-industry-verticals-cert.json` |
+| Toolbar → mint locker DTUs | **LIVE** (API+mint; not browser click e2e) | `~/.zuko/remaining-work/conkay-toolbar-dtu-wire-proof.json` · tip `74dda10c3` |
+
+**Still NOT claimed:** physical ISO CMM / FDA / 1:1 SolidWorks UI parity / ERP BOM / always-on A40 27B (Mac-copy failover LIVE — see `BRAIN_4LANE.md`).
+
+Historical sections below remain for timeline; when they conflict with this block, **this block wins**.
 
 ## Vision (design target — not LIVE)
 User: ConKay in browser drives Unity (WebGL / editor bridge) for blueprint→physics→mesh→live 3D.
@@ -117,19 +132,22 @@ Sequence sketched: ConKay intent → subconscious gate → deterministic physics
 
 ## Mates v2 kinematic solve (2026-09-08)
 - **Status: LIVE** — `distance` / `offset` / `align_axis` (+ legacy types) solve for **B given A** (`drive:'b'` default; `drive:'a'` legacy).
-- Honesty: kinematic stubs — **NOT industrial solver / OCC**.
+- Honesty (wave-at-time): kinematic stubs — **NOT industrial solver / OCC**.
+  - **CURRENT (2026-09-08):** superseded for OCC path by **INDUSTRIAL_CLASS** (`mate-solve-dof` / `gp_Trsf` multi-DOF) + SOLID WORLD Gate C; mesh mates-v2 path remains kinematic. See CURRENT STATUS.
 - Unit tests: `server/tests/conkay-assembly-mates-v2.test.js`
 - Proof: `~/.zuko/remaining-work/conkay-cad-mates-v2-proof.json`
 
 
 ## STL export + BOM (2026-09-07)
 - **Status: LIVE (Wave 2)** — binary STL part+assembly; BOM JSON; Overlay STL/BOM. Proof: `conkay-cad-export-bom-proof.json`.
-- Honesty: STL+BOM LIVE for triangle meshes. Faceted STEP also LIVE. NOT full B-rep suite.
+- Honesty (wave-at-time): STL+BOM LIVE for triangle meshes. Faceted STEP also LIVE. NOT full B-rep suite.
+  - **CURRENT (2026-09-08):** **OCC advanced B-rep STEP LIVE** + SOLID WORLD CERTIFIED — faceted STEP remains available; B-rep is no longer “faceted only”.
 
 
 ## Wave 3 mates + materials (2026-09-07 ~15:21 ET)
 - **Status: LIVE (Wave 3)** — kinematic mate stubs (`fixed` / `coincident` / `offset`) write transforms; material library attach (steel/aluminum/concrete/timber/plastic).
-- Honesty: **mates stubs + material library LIVE**. NOT a full industrial constraint solver / CAD kernel.
+- Honesty (wave-at-time): **mates stubs + material library LIVE**. NOT a full industrial constraint solver / CAD kernel.
+  - **CURRENT (2026-09-08):** INDUSTRIAL_CLASS CERTIFIED supersedes “stubs only” for OCC multi-DOF mates; Wave-3 mesh stubs still exist for Unity apply path.
 - Server: `server/lib/conkay/assembly-mates.js`, `material-library.js`; routes on `conkay-assembly.js` — `GET /api/conkay/materials`, `POST …/parts/:id/material`, `POST …/mates`, `GET /api/conkay/mate-types`.
 - Proof: `concord-frontend/scripts/conkay-constraints-proof.mjs` → `~/.zuko/remaining-work/conkay-cad-constraints-proof.json` (`ok:true`, `status:LIVE`).
 
