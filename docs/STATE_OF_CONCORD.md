@@ -39,7 +39,7 @@ Still reclassifies 10 data-modules (172k lines, e.g. the deprecated 145k-line
 | Numbered migrations | **444 files** (highest `445`) | `ls server/migrations/[0-9]*.js \| wc -l` |
 | Route files | **136** | `ls server/routes/*.js \| wc -l` |
 | Lib modules | **783** top (`ls server/lib/*.js \| wc -l`) · **1,312** recursive (`find server/lib -name '*.js' \| wc -l`) | see cell |
-| `server/server.js` | **87,751 lines** | `wc -l server/server.js` |
+| `server/server.js` | **87,817 lines** | `wc -l server/server.js` |
 | DB tables (cartographer) | **765** | `cd server && npm run cartograph:static` |
 | Socket events (cartographer) | **337** | cartographer |
 | Heartbeats (registered) | **140** | `grep -rohE "registerHeartbeat\(['\"][a-z0-9-]+['\"]" server/ \| sort -u \| wc -l` |
@@ -76,21 +76,22 @@ measure via different methodologies, not disagreement about the codebase.
 > this exact class of drift happening repeatedly. Don't cite the old
 > per-finding breakdown below; it's preserved in git history only.
 
-- **`audit/detectors/BASELINE.json` is v1, generated 2026-08-01T15:56:15Z —
-  70 fingerprints, `detectorCount` 51, totals `{critical:0, high:7, medium:17,
-  low:2, info:45, total:71}`.** This is an owner-authorized refresh
-  (`15ec8fd4`) of the prior 2026-07-25 snapshot (44 fingerprints / 46
-  detectors). `BUDGET.json` is v13 (`maxTotal` 460, generated 2026-07-19),
-  unchanged by the baseline refresh.
-- **The ratchet is green.** A fresh `cd server && node scripts/run-detectors.js
-  --diff --ci` run against this baseline reports **CI check PASSED** — 0 new
-  high/critical.
-- **The 7 highs are a known, documented false-positive class**, not live
-  defects: `money-txn-hygiene-detector.js`'s own header names
-  `server.js#creditWallet`/`debitWallet` verbatim as control-flow-blind noise
-  — each wallet function's two `economy_ledger` writes are a primary insert
-  and a mutually-exclusive catch-branch fallback, never sequential in the
-  same call. Full accounting in `docs/DETECTOR_DEBT_TRIAGE.md` rows H5/H6.
+- **`audit/detectors/BASELINE.json` — owner-authorized refresh 2026-09-08T21:35Z,
+  565 fingerprints, totals `{critical:0, high:24, medium:71, low:29, info:448,
+  total:572}`.** `BUDGET.json` bumped to **v14 `maxTotal` 620**. Supersedes the
+  2026-08-01 v1 (70 fingerprints) and the unreviewed 2026-09-01 sync-commit
+  baseline. Full review: `docs/DETECTOR_DEBT_TRIAGE.md` 2026-09-08 entry.
+- **The ratchet is green.** `cd server && node scripts/run-detectors.js
+  --diff --ci` against this baseline reports **CI check PASSED** — added 0 /
+  removed 0 / unchanged 565.
+- **The 24 highs are all reviewed false-positive / by-design**: 15×
+  `perf_sync_fs_in_handler` (one-time `existsSync` path resolution, a
+  synchronous-by-design CAD g-code generator, sub-KB lock files); 7×
+  `money_txn_untransacted_writes` (`creditWallet`/`debitWallet` control-flow-blind
+  class named in the detector's own header + an audit table + a router-factory
+  aggregation artifact where the real handlers ARE transactional); ~2-4×
+  `authz_write_auth_bypass` (intentional public-write paths). Full accounting in
+  `docs/DETECTOR_DEBT_TRIAGE.md`.
 - **0 critical**, holding since the 2026-06-09 `cmd_injection` fix
   (`workers/cognitive-worker.js` `execSync`→`execFileSync` + format-validated).
 - **Clean on the historically-tracked classes:** 0 secret leaks (see the
