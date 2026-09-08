@@ -167,6 +167,14 @@ export async function runAssemblyChatRevise(opts: {
     }
   }
 
+  // chat shortcuts
+  if (/^undo\b/i.test(text) || text.toLowerCase() === 'u') {
+    return runAssemblyUndo({ assemblyId: assemblyId!, syncUnity: opts.syncUnity });
+  }
+  if (/^redo\b/i.test(text)) {
+    return runAssemblyRedo({ assemblyId: assemblyId!, syncUnity: opts.syncUnity });
+  }
+
   const revised = await reviseAssembly(assemblyId!, text);
   if (!revised?.ok) {
     // If revise failed because utterance was "build assembly" already handled
@@ -187,6 +195,8 @@ export async function runAssemblyChatRevise(opts: {
       unity = redrawAssemblyInUnity(parts);
     } else if (revised.action === 'list') {
       unity = { ok: true, mode: 'noop' };
+    } else if (revised.action === 'undo' || revised.action === 'redo') {
+      unity = redrawAssemblyInUnity(parts);
     }
   }
 
@@ -200,6 +210,44 @@ export async function runAssemblyChatRevise(opts: {
   };
 }
 
+
+
+export async function undoAssemblyApi(assemblyId: string) {
+  const res = await api.post(`/api/conkay/assemblies/${assemblyId}/undo`);
+  return res?.data;
+}
+
+export async function redoAssemblyApi(assemblyId: string) {
+  const res = await api.post(`/api/conkay/assemblies/${assemblyId}/redo`);
+  return res?.data;
+}
+
+export async function fetchAssemblyHistory(assemblyId: string) {
+  const res = await api.get(`/api/conkay/assemblies/${assemblyId}/history`);
+  return res?.data;
+}
+
+/** Undo then redraw Unity from restored parts. */
+export async function runAssemblyUndo(opts: { assemblyId: string; syncUnity?: boolean }) {
+  const out = await undoAssemblyApi(opts.assemblyId);
+  if (!out?.ok) return { ok: false, error: out?.error || 'undo_failed', ...out };
+  let unity = null;
+  if (opts.syncUnity !== false && unityIframePresent()) {
+    unity = redrawAssemblyInUnity(out.parts || []);
+  }
+  return { ok: true, action: 'undo', assemblyId: opts.assemblyId, parts: out.parts, unity, canUndo: out.canUndo, canRedo: out.canRedo };
+}
+
+/** Redo then redraw Unity from restored parts. */
+export async function runAssemblyRedo(opts: { assemblyId: string; syncUnity?: boolean }) {
+  const out = await redoAssemblyApi(opts.assemblyId);
+  if (!out?.ok) return { ok: false, error: out?.error || 'redo_failed', ...out };
+  let unity = null;
+  if (opts.syncUnity !== false && unityIframePresent()) {
+    unity = redrawAssemblyInUnity(out.parts || []);
+  }
+  return { ok: true, action: 'redo', assemblyId: opts.assemblyId, parts: out.parts, unity, canUndo: out.canUndo, canRedo: out.canRedo };
+}
 
 /** Fetch BOM JSON for an assembly. */
 export async function fetchAssemblyBom(assemblyId: string) {

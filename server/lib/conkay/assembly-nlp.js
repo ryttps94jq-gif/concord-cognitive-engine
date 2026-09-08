@@ -11,6 +11,13 @@ export function parseAssemblyUtterance(text, { parts = [] } = {}) {
     return { ok: true, action: 'list', text: raw };
   }
 
+  if (/^undo\b/.test(lower) || lower === 'u') {
+    return { ok: true, action: 'undo', text: raw };
+  }
+  if (/^redo\b/.test(lower)) {
+    return { ok: true, action: 'redo', text: raw };
+  }
+
   // build assembly [name]
   let m = lower.match(/^build\s+assembly(?:\s+(?:named\s+|called\s+)?(.+))?$/i);
   if (m || /^create\s+assembly\b/.test(lower)) {

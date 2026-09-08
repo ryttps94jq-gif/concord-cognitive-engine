@@ -36,7 +36,7 @@ import { runFeaBeamToWorld } from '@/lib/conkay/fea-beam-to-world';
 import { runPartMeshToWorld } from '@/lib/conkay/part-mesh-to-world';
 import { designViaApiOrClient } from '@/lib/conkay/nlp-design-to-world';
 import { runEvoGlbToWorld } from '@/lib/conkay/evo-glb-to-world';
-import { runAssemblyChatRevise, downloadStl, downloadAssemblyBom, downloadStep } from '@/lib/conkay/assembly-to-world';
+import { runAssemblyChatRevise, downloadStl, downloadAssemblyBom, downloadStep, runAssemblyUndo, runAssemblyRedo } from '@/lib/conkay/assembly-to-world';
 import { ConKayActionConfirm } from './ConKayActionConfirm';
 import { ConKayCockpit } from './ConKayCockpit';
 import { CONKAY_SIGNATURE_GREETING, CONKAY_PERSONA_PROMPT, type ConKayState } from './conkay-persona';
@@ -518,6 +518,50 @@ export function ConKayOverlay() {
       setAssemblyBusy(false);
     }
   }, [nlpDesignText, assemblyId]);
+
+  const runAssemblyUndoClick = useCallback(async () => {
+    if (!assemblyId) {
+      setWorkStatus('Undo: no assembly yet — Asm revise first');
+      return;
+    }
+    setAssemblyBusy(true);
+    setWorkStatus('Assembly undo…');
+    try {
+      const res = await runAssemblyUndo({ assemblyId, syncUnity: true });
+      if (!res.ok) {
+        setWorkStatus(`Undo failed: ${res.error || 'error'}`);
+        return;
+      }
+      const n = res.parts?.length ?? 0;
+      setWorkStatus(`UNDO LIVE: parts=${n} canRedo=${res.canRedo ? 'yes' : 'no'} · not parametric CAD history`);
+    } catch (e) {
+      setWorkStatus(`Undo error: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setAssemblyBusy(false);
+    }
+  }, [assemblyId]);
+
+  const runAssemblyRedoClick = useCallback(async () => {
+    if (!assemblyId) {
+      setWorkStatus('Redo: no assembly yet — Asm revise first');
+      return;
+    }
+    setAssemblyBusy(true);
+    setWorkStatus('Assembly redo…');
+    try {
+      const res = await runAssemblyRedo({ assemblyId, syncUnity: true });
+      if (!res.ok) {
+        setWorkStatus(`Redo failed: ${res.error || 'error'}`);
+        return;
+      }
+      const n = res.parts?.length ?? 0;
+      setWorkStatus(`REDO LIVE: parts=${n} canUndo=${res.canUndo ? 'yes' : 'no'} · not parametric CAD history`);
+    } catch (e) {
+      setWorkStatus(`Redo error: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setAssemblyBusy(false);
+    }
+  }, [assemblyId]);
 
   const downloadAssemblyStl = useCallback(async () => {
     if (!assemblyId) {
@@ -1319,12 +1363,28 @@ export function ConKayOverlay() {
                 </button>
                 <button type="button" onClick={() => { void runAssemblyRevise(); }}
                   disabled={assemblyBusy}
-                  title="Assembly revise: build assembly | add beam… | move part X to x,y,z → APIs + Unity (ASSEMBLY LIVE — not full suite)"
+                  title="Assembly revise: build assembly | add beam… | move part X to x,y,z | undo | redo → APIs + Unity (ASSEMBLY LIVE — not full suite)"
                   aria-label="Assembly chat revise"
                   data-testid="ck-assembly-revise"
                   className="rounded-lg px-2 py-1 text-[10px] text-fuchsia-100 hover:bg-fuchsia-400/15 border border-fuchsia-400/30 disabled:opacity-50 flex items-center gap-1">
                   <Layers className="h-3 w-3" />
                   {assemblyBusy ? '…' : 'Asm'}
+                </button>
+                <button type="button" onClick={() => { void runAssemblyUndoClick(); }}
+                  disabled={!assemblyId || assemblyBusy}
+                  title="Assembly undo — restore prior parts+transforms snapshot (not parametric CAD history)"
+                  aria-label="Assembly undo"
+                  data-testid="ck-assembly-undo"
+                  className="rounded-lg px-2 py-1 text-[10px] text-fuchsia-100/90 hover:bg-fuchsia-400/15 border border-fuchsia-400/20 disabled:opacity-40">
+                  Undo
+                </button>
+                <button type="button" onClick={() => { void runAssemblyRedoClick(); }}
+                  disabled={!assemblyId || assemblyBusy}
+                  title="Assembly redo — restore forward parts+transforms snapshot"
+                  aria-label="Assembly redo"
+                  data-testid="ck-assembly-redo"
+                  className="rounded-lg px-2 py-1 text-[10px] text-fuchsia-100/90 hover:bg-fuchsia-400/15 border border-fuchsia-400/20 disabled:opacity-40">
+                  Redo
                 </button>
                 <button type="button" onClick={() => { void downloadAssemblyStl(); }}
                   disabled={!assemblyId}
