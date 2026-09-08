@@ -381,9 +381,20 @@ const _rrCursor = new Map();
 
 function _candidatesForBrain(brainName, { includeCloud = false } = {}) {
   const cfg = getActiveBrainConfig()[brainName];
-  const local = cfg
+  let local = cfg
     ? (Array.isArray(cfg.urls) && cfg.urls.length ? cfg.urls : (cfg.url ? [cfg.url] : []))
     : [];
+  // Concurrency Refactor Phase 4 — opt-in: route every local Ollama brain through
+  // concord-ollama-proxy (fail-fast connect timeout + shared circuit breaker +
+  // per-model admission). Default unset → unchanged. Cloudflare/cloud brain URLs
+  // (non-http scheme, e.g. `cloudflare://`) are left alone. The proxy reads
+  // `model` from each request body, so one URL serves all brains.
+  const proxyUrl = process.env.OLLAMA_PROXY_URL;
+  if (proxyUrl && local.length) {
+    local = local.map((u) => (typeof u === 'string' && u.startsWith('http') ? proxyUrl : u));
+    // de-dup once every http endpoint collapses to the same proxy
+    local = [...new Set(local)];
+  }
   if (!includeCloud) return local;
   // Concurrency item (b) (Private/High Power Mode plan) — opt-in cloud
   // pool candidate. Only ever appended when a caller explicitly passes
