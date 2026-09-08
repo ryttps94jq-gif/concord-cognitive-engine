@@ -3470,6 +3470,18 @@ const NODE_ENV = process.env.NODE_ENV || "development";
 // schema; replicas share the same DB file via WAL (unlimited concurrent readers).
 // Default OFF → an ordinary writer process is byte-identical to before.
 const READ_REPLICA = process.env.CONCORD_READ_REPLICA === "1" || process.env.CONCORD_READ_REPLICA === "true";
+
+// Concurrency Refactor Tier 1 (docs/CONCURRENCY_CEILING_AUDIT.md): split the
+// emergent simulation off the HTTP event loop into its own process.
+//   HTTP process:  CONCORD_DISABLE_HEARTBEAT=true  — serves requests, runs NO
+//                  governorTick / startHeartbeat / cognitive worker. Reads DTUs
+//                  through CONCORD_DTU_SIDECAR=1 so it still sees sim writes.
+//   Sim process:   CONCORD_HEARTBEAT_ONLY=1        — runs the full heartbeat +
+//                  emergent sim, binds NO HTTP port.
+// Both share the WAL DB. Default (neither set) → one process does both, exactly
+// as before. See engines/concord-read-router/RUNBOOK.md-style deploy notes in
+// docs/CONCURRENCY_CEILING_AUDIT.md §4 Tier 1.
+const HEARTBEAT_ONLY = process.env.CONCORD_HEARTBEAT_ONLY === "1" || process.env.CONCORD_HEARTBEAT_ONLY === "true";
 const AUTH_MODE_VALUES = new Set(["public", "apikey", "jwt", "hybrid"]);
 const LEGACY_AUTH_ENABLED = String(process.env.AUTH_ENABLED || "true").toLowerCase() === "true";
 const AUTH_MODE_RAW = String(process.env.AUTH_MODE || "").toLowerCase().trim();
@@ -37446,6 +37458,17 @@ async function terminateCognitiveWorkerForTest() {
 }
 
 function startHeartbeat() {
+  // Concurrency Refactor Tier 1: CONCORD_DISABLE_HEARTBEAT=true now COMPLETELY
+  // disables the emergent tick on this process — the local-scope/global/weekly
+  // timers, the cognitive worker spawn, AND buildCognitiveSnapshot (all of
+  // which live in or below this function). Previously it only short-circuited
+  // _startGovernorHeartbeat's registry dispatch (see its own env check) —
+  // this function ran regardless, which is the gap the audit named. The sim
+  // work moves to a sibling CONCORD_HEARTBEAT_ONLY=1 process.
+  if (String(process.env.CONCORD_DISABLE_HEARTBEAT).toLowerCase() === "true") {
+    structuredLog("info", "heartbeat_skipped_disabled_env", { mode: "http-only" });
+    return;
+  }
   // Read-only replicas never simulate — the writer owns all emergent state +
   // every DB write. Without this guard a replica ran the full tick and spammed
   // `state_save_failed` / `[feed] DB write failed` / `persistEmergentName failed`
@@ -72538,9 +72561,13 @@ if (globalThis.__sentry) {
 // on /health.
 const _FORCE_LISTEN = String(process.env.CONCORD_FORCE_LISTEN || "").toLowerCase() === "true";
 const SHOULD_LISTEN = _FORCE_LISTEN || (
+  !HEARTBEAT_ONLY &&   // the sim-only process runs the tick, binds no port
   (String(process.env.CONCORD_NO_LISTEN || "").toLowerCase() !== "true") &&
   (String(process.env.NODE_ENV || "").toLowerCase() !== "test")
 );
+if (HEARTBEAT_ONLY) {
+  structuredLog("info", "server_heartbeat_only_mode", { detail: "emergent sim + governor tick; no HTTP listener" });
+}
 
 // Read replica: lock the connection read-only for the serving phase. All the
 // boot-time no-op schema inits have run by now; from here the replica must only

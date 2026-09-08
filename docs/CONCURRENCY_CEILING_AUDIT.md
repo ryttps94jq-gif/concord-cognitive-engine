@@ -115,11 +115,11 @@ pressure into `SQLITE_BUSY` retries rather than throughput.
 **Do Tier 0 before anything else.** Spending multi-day cluster work to divide a
 problem that a few hours of caching largely removes is the wrong order.
 
-### Tier 1 — 1-2 days, process separation, no STATE-coordination needed
-| # | Fix | Effort | Expected |
+### Tier 1 — process separation, no STATE-coordination needed
+| # | Fix | Status | Expected |
 |---|---|---|---|
-| **D** | **Run the heartbeat in its own process.** `CONCORD_HEARTBEAT_ONLY=1` (governorTick + emergent, binds no HTTP port) alongside the HTTP process with a *complete* `CONCORD_DISABLE_HEARTBEAT=1`. The `CONCORD_READ_REPLICA` work already proves the "boot server.js in a role" pattern, and `world-shard-protocol.js` already documents the per-world vs user-global write split this needs. Fix the partial gating noted in 2c. | 1-2 d | 143 modules of bulk work leave the request loop entirely. Structurally the biggest win that is **not** clustering. |
-| **E** | **Activate the read-replica + read-router** (already built, commit `56c6e4ec7`, `engines/concord-read-router/RUNBOOK.md`). Takes the allowlisted GET catalog off the writer. | ~1 h + monitoring | free read parallelism; gated on RAM headroom → needs the A40, not the 16 GB Mac |
+| **D** | **Run the heartbeat in its own process.** | **CODE DONE** (2026-09-08) — see §7 below | 143 modules of bulk work + the cognitive worker leave the HTTP loop entirely. Structurally the biggest win that is **not** clustering. |
+| **E** | **Activate the read-replica + read-router** (already built, commit `56c6e4ec7`, `engines/concord-read-router/RUNBOOK.md`). Takes the allowlisted GET catalog off the writer. | built, not activated | free read parallelism; gated on RAM headroom → needs the A40, not the 16 GB Mac |
 
 ### Tier 2 — multi-day, the actual cluster
 Execute `docs/CONCURRENCY_STATE_AUDIT.md`'s 7 steps in order: resolve
@@ -164,6 +164,67 @@ sqlite3 server/data/concord.db "SELECT domain||'.'||macro_name, count(*), ROUND(
 AUTH=1 node load-tests/chaos-storm.mjs          # regenerate load
 node scripts/detect-lens-stacking.mjs           # unrelated, frontend
 ```
+
+---
+
+## 7. Tier 1 D — heartbeat-in-its-own-process (code done, deploy is opt-in)
+
+### What shipped (commit on `concurrency-refactor`, inert by default)
+Two `server.js` modes, both no-ops unless their env var is set:
+- **`CONCORD_HEARTBEAT_ONLY=1`** — runs `startHeartbeat()` + `_startGovernorHeartbeat()`
+  + the emergent sim + the cognitive worker; `SHOULD_LISTEN` is false so it
+  **binds no HTTP port**. Verified: `server_heartbeat_only_mode` logged, port
+  refused, `governor_heartbeat_boot {ok:true}`.
+- **`CONCORD_DISABLE_HEARTBEAT=true`** — now **completely** disables the tick on
+  that process. It previously only short-circuited `_startGovernorHeartbeat`'s
+  registry dispatch; `startHeartbeat()` (the T+45s local/global/weekly timers +
+  the cognitive-worker spawn + `buildCognitiveSnapshot`) ran regardless — the
+  gap §2c named. Now `startHeartbeat()` early-returns before any of that.
+  Verified: `heartbeat_skipped_disabled_env {mode:"http-only"}`, `/health` 200
+  in 3-12ms, `governor_heartbeat_boot {ok:false, reason:"heartbeat_disabled_env"}`.
+
+Default (neither var) → one process does both, byte-identical to before. Pinned
+by `server/tests/concurrency-process-modes.test.js`.
+
+### Activating the split (deliberate deploy step — NOT done)
+
+**Prereq:** the HTTP process must read DTUs from the shared store, not its own
+now-frozen in-memory `STATE.dtus` (the sim process's DTU writes — consolidation,
+autogen — won't reach the HTTP process's Map). Set `CONCORD_DTU_SIDECAR=1` on the
+HTTP process and run the Rust `dtu-sidecar` (Phase 3, already built) — it reads
+`dtu_store` directly and refreshes incrementally, so it sees every writer.
+*Without this, feeds on the HTTP process go stale until it restarts.*
+
+**pm2 (`ecosystem.config.cjs`) — apply this diff, then `pm2 reload`:**
+```
+  concord-backend env_runpod:
++   CONCORD_DISABLE_HEARTBEAT: 'true'
++   CONCORD_DTU_SIDECAR: '1'
++ concord-heartbeat  (new app):
++   script: 'server/server.js', instances: 1, exec_mode: 'fork'
++   node_args: '--max-old-space-size=4096 --expose-gc'
++   max_memory_restart: '5G'
++   env_runpod: { CONCORD_HEARTBEAT_ONLY: '1', DB_PATH: <same>, NODE_ENV: 'production', … }
+```
+The two entries are coupled — adding the `concord-heartbeat` app WITHOUT the
+`CONCORD_DISABLE_HEARTBEAT` flag on `concord-backend` runs the sim twice (2× work
++ races). Never one without the other.
+
+**launchd (the current 16 GB Mac) — not viable there.** Two full Node processes
++ the sidecar + Ollama on a swap-maxed 16 GB box will thrash. This is an A40-box
+step. On the A40: `cp` a `com.concord.heartbeat.plist` (mirror
+`com.concord.backend.plist` with `CONCORD_HEARTBEAT_ONLY=1`, no port), add
+`CONCORD_DISABLE_HEARTBEAT=true` + `CONCORD_DTU_SIDECAR=1` to the backend plist,
+`launchctl kickstart -k` both.
+
+**Rollback:** unset both env vars, restart the one process. Instant.
+
+**Watch after activating:** the sim process's own event-loop lag (it's now the
+only thing on that loop — should be fine); the HTTP process's `dtu.list` p95
+(should stay flat — sidecar-backed); `concord_heartbeat_ticks_total` rate on the
+sim process (must be non-zero); no `heartbeat` logs on the HTTP process.
+
+---
 
 **Sources:** [SkyPilot — Abusing SQLite to Handle Concurrency](https://blog.skypilot.co/abusing-sqlite-to-handle-concurrency/) ·
 [OneUptime — Fix SQLite "Database Is Locked" Under Concurrent Writes](https://oneuptime.com/blog/post/2026-09-08-fix-sqlite-database-is-locked-concurrent-writes/view) ·
