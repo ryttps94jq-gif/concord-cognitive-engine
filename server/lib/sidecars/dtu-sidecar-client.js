@@ -1,15 +1,15 @@
-// dtu-sidecar-client — thin Node client for engines/concord-dtu-sidecar.
+// dtu-sidecar-client — thin Node client for engines/concord-dtu-sidecar (Rust).
 //
-// Concurrency Refactor Phase 3. READ-ONLY DTU reads over a Unix socket so they
-// stop blocking the Node event loop.
+// Concurrency Refactor Phase 3. READ-ONLY DTU reads over a Unix socket so the
+// `dtu.list` visibility filter (which iterates the whole in-memory DTU set on
+// every locker page load) runs off the Node event loop.
 //
-// STATUS: CARVED, NOT LIVE. This client + the sidecar are built and correct, but
-// nothing routes through them yet — on this deploy DTUs live in the in-memory
-// STATE.dtus Map and concord.db.dtus is empty, and a synthetic benchmark showed
-// inline better-sqlite3 is fine for fast indexed reads. See
-// engines/concord-dtu-sidecar/README.md + ~/.zuko/remaining-work/concord-dtu-sidecar-proof.json.
+// Enabled by CONCORD_DTU_SIDECAR=1 (default off). FAIL SOFT: every call rejects
+// on transport failure and the macros fall back to the in-memory path.
 //
-// Guarded by CONCORD_DTU_SIDECAR=1 (default off). FAIL SOFT like the others.
+// Correctness is gated by engines/concord-dtu-sidecar/proof/run-proof.mjs — a
+// differential test that diffs this against the live macro across a
+// privacy-filter scenario matrix. Keep it green.
 
 import http from "node:http";
 import os from "node:os";
@@ -64,22 +64,40 @@ export async function health() {
   return (await get("/v1/health", { timeoutMs: 1_500 })).body;
 }
 
+/**
+ * Get one DTU by id. Returns { ok, dtu } | { ok:false, error }.
+ */
 export async function getDTU(id) {
   const r = await get(`/v1/dtu?id=${encodeURIComponent(id)}`);
-  return r.body;
+  return r.body || { ok: false, error: "empty_response" };
 }
 
-export async function recent({ limit = 50, owner, visibility, tier } = {}) {
+/**
+ * Visibility-filtered list — mirrors the dtu.list macro.
+ * @param {{ viewer?, scope?, tier?, q?, mine?, limit?, offset?, viewerRegional?, viewerNational? }} o
+ * @returns {Promise<{ ok, dtus, total, limit, offset }>}
+ */
+export async function list(o = {}) {
+  const q = new URLSearchParams();
+  if (o.viewer) q.set("viewer", o.viewer);
+  if (o.scope) q.set("scope", o.scope);
+  if (o.tier) q.set("tier", o.tier);
+  if (o.q) q.set("q", o.q);
+  if (o.mine) q.set("mine", "true");
+  if (o.limit != null) q.set("limit", String(o.limit));
+  if (o.offset != null) q.set("offset", String(o.offset));
+  if (o.viewerRegional) q.set("viewerRegional", o.viewerRegional);
+  if (o.viewerNational) q.set("viewerNational", o.viewerNational);
+  const r = await get(`/v1/dtus/list?${q}`, { timeoutMs: 10_000 });
+  return r.body || { ok: false, error: "empty_response" };
+}
+
+export async function recent({ limit = 50, scope, tier, source } = {}) {
   const q = new URLSearchParams({ limit: String(limit) });
-  if (owner) q.set("owner", owner);
-  if (visibility) q.set("visibility", visibility);
+  if (scope) q.set("scope", scope);
   if (tier) q.set("tier", tier);
+  if (source) q.set("source", source);
   return (await get(`/v1/dtus/recent?${q}`)).body;
-}
-
-export async function search(term, { limit = 50 } = {}) {
-  const q = new URLSearchParams({ q: term, limit: String(limit) });
-  return (await get(`/v1/dtus/search?${q}`)).body;
 }
 
 export const socketPath = SOCK;

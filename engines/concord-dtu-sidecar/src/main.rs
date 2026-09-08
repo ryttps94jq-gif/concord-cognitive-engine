@@ -15,11 +15,14 @@
 //!   GET /v1/dtus/recent?limit=&scope=&tier=&source=
 //!
 //! The `list` filter is a faithful port of server.js `userVisibleDTUs` +
-//! `dtu.list`. It is guarded by a differential test (engines/.../proof) that
-//! compares its output ID set to the live JS macro's before it is trusted live.
+//! `dtu.list`, filtering an in-memory parsed cache (refreshed every ~2.5s) by
+//! reference. It is pinned by a differential test
+//! (engines/concord-dtu-sidecar/proof/run-proof.mjs) that diffs its output
+//! ID-set + order against the live JS macro across a privacy-filter scenario
+//! matrix — keep it green on any filter or DTU-schema change.
 //!
 //! Socket: $CONCORD_DTU_SIDECAR_SOCK  (default ~/concord/run/concord-dtu-sidecar.sock)
-//! DB:     $CONCORD_DB_PATH || $DB_PATH || ~/concord/concord.db
+//! DB:     $CONCORD_DB_PATH || $DB_PATH || ~/concord/concord.db  (READ-ONLY)
 
 use rusqlite::{Connection, OpenFlags};
 use serde_json::{json, Value};
@@ -28,9 +31,9 @@ use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::PathBuf;
 use std::sync::{
     atomic::{AtomicU64, Ordering},
-    Arc,
+    Arc, RwLock,
 };
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 const SYSTEM_DTU_SOURCES: &[&str] = &[
     "repair_cortex", "concord_brain_index", "system_guardian", "guardian_monitor",
@@ -190,71 +193,90 @@ fn scope_level(sc: &str) -> i32 {
     }
 }
 
-/// Reconstruct a DTU Value from a dtu_store row. The `data` blob is UNRELIABLE
-/// for anything but the body — sniffPayload() in dtu-store.js frequently stores
-/// only `JSON.stringify(dtu.body)`, losing id/owner/visibility. So the reliable
-/// top-level columns are merged OVER whatever `data` yields.
+const ROW_COLS: &str = "id, title, tier, scope, tags, source, created_at, updated_at, data, \
+    owner_user_id, visibility, privacy, federation_tier, location_regional, location_national, kind";
+
+/// Reconstruct a DTU Value from a dtu_store row.
 ///
-/// KNOWN GAP: owner_user_id / visibility / privacy / federation_tier / kind are
-/// NOT columns and NOT reliably in `data`, so the visibility filter below can
-/// only see them for DTUs whose `data` happens to be the full object. This is
-/// why the differential proof fails and this sidecar is NOT wired live — see
-/// engines/concord-dtu-sidecar/README.md for the schema migration that fixes it.
-fn row_to_dtu(id: &str, title: &str, tier: &str, scope: &str, tags: &str, source: &str, created: &str, updated: &str, data: &str) -> Value {
-    let mut d: Value = serde_json::from_str(data).unwrap_or_else(|_| json!({}));
-    if !d.is_object() {
-        d = json!({ "body": d });
+/// Since migration 442, `data` is ALWAYS the full DTU object — so it is the
+/// source of truth and the filter reads it exactly as server.js reads the
+/// in-memory object (JS parity). The `scope`/`tier`/`source`/`title` columns are
+/// NOT merged: `scope` in particular is persist-defaulted to 'global', which
+/// would diverge from `d.scope === undefined` in the JS filter.
+///
+/// Returns `Ok(None)` for a row whose `data` is not a full DTU object with an
+/// `id` — mirrors `rehydrateFromSQLite`'s `if (dtu && dtu.id)` check, so the
+/// sidecar's corpus is exactly the one the Node process holds in memory (old
+/// body-only rows are dead weight for both).
+///
+/// The 6 visibility columns are merged ONLY when `data` lacks the key (a bridge
+/// for pre-442 rows the migration backfilled from a full `data` blob).
+fn row_to_dtu(row: &rusqlite::Row) -> rusqlite::Result<Option<Value>> {
+    let gs = |i: usize| row.get::<_, Option<String>>(i).unwrap_or(None).unwrap_or_default();
+    let go = |i: usize| row.get::<_, Option<String>>(i).unwrap_or(None).filter(|s| !s.is_empty());
+
+    let data = gs(8);
+    let mut d: Value = match serde_json::from_str(&data) {
+        Ok(v) => v,
+        Err(_) => return Ok(None),
+    };
+    // rehydrateFromSQLite parity: only rows whose data IS a DTU object with an id.
+    let has_id = d.get("id").and_then(|v| v.as_str()).map(|s| !s.is_empty()).unwrap_or(false);
+    if !d.is_object() || !has_id {
+        return Ok(None);
     }
     let o = d.as_object_mut().unwrap();
-    o.insert("id".into(), json!(id));
-    if o.get("title").and_then(|v| v.as_str()).unwrap_or("").is_empty() { o.insert("title".into(), json!(title)); }
-    o.insert("tier".into(), json!(tier));
-    if !scope.is_empty() && o.get("scope").is_none() { o.insert("scope".into(), json!(scope)); }
-    if o.get("tags").and_then(|v| v.as_array()).map(|a| a.is_empty()).unwrap_or(true) {
-        if let Ok(t) = serde_json::from_str::<Value>(tags) { o.insert("tags".into(), t); }
+    // keep the column id authoritative in case data.id drifted
+    o.insert("id".into(), json!(gs(0)));
+
+    let fill = |o: &mut serde_json::Map<String, Value>, key: &str, v: Option<String>| {
+        if let Some(v) = v {
+            if !o.contains_key(key) {
+                o.insert(key.into(), json!(v));
+            }
+        }
+    };
+    fill(o, "ownerId", go(9));
+    fill(o, "visibility", go(10));
+    fill(o, "privacy", go(11));
+    fill(o, "federation_tier", go(12));
+    fill(o, "location_regional", go(13));
+    fill(o, "location_national", go(14));
+    // JS dtu.list only ever checks d.machine?.kind, so merge there (not top-level).
+    if let Some(v) = go(15) {
+        if o.get("machine").and_then(|m| m.get("kind")).is_none() {
+            let m = o.entry("machine").or_insert_with(|| json!({}));
+            if let Some(mo) = m.as_object_mut() {
+                mo.insert("kind".into(), json!(v));
+            }
+        }
     }
-    if !source.is_empty() && o.get("source").is_none() { o.insert("source".into(), json!(source)); }
-    if o.get("createdAt").is_none() { o.insert("createdAt".into(), json!(created)); }
-    if o.get("updatedAt").is_none() { o.insert("updatedAt".into(), json!(updated)); }
-    d
+    Ok(Some(d))
 }
 
-const ROW_COLS: &str = "id, title, tier, scope, tags, source, created_at, updated_at, data";
+fn vis_published_or_public(d: &Value) -> bool {
+    let vis = d
+        .get("meta")
+        .and_then(|m| m.get("visibility"))
+        .and_then(|x| x.as_str())
+        .unwrap_or_else(|| s(d, &["visibility"]));
+    vis == "published" || vis == "public"
+}
 
-/// Port of the dtu.list body (after userVisibleDTUs).
-fn list_dtus(conn: &Connection, r: &ListReq) -> rusqlite::Result<(Vec<Value>, usize)> {
-    let mut stmt = conn.prepare(&format!("SELECT {ROW_COLS} FROM dtu_store"))?;
-    let rows = stmt.query_map([], |row| {
-        Ok(row_to_dtu(
-            &row.get::<_, String>(0)?, &row.get::<_, String>(1).unwrap_or_default(),
-            &row.get::<_, String>(2).unwrap_or_default(), &row.get::<_, String>(3).unwrap_or_default(),
-            &row.get::<_, String>(4).unwrap_or_else(|_| "[]".into()), &row.get::<_, String>(5).unwrap_or_default(),
-            &row.get::<_, String>(6).unwrap_or_default(), &row.get::<_, String>(7).unwrap_or_default(),
-            &row.get::<_, String>(8).unwrap_or_else(|_| "{}".into()),
-        ))
-    })?;
-
-    let mut items: Vec<Value> = Vec::new();
-    for d in rows {
-        let d = match d { Ok(v) => v, Err(_) => continue };
-        if !user_visible(&d, r) {
-            continue;
-        }
-        // dtu.list extra filters
-        if is_shadow(&d) {
-            continue;
-        }
-        if INTERNAL_KINDS.contains(&machine_kind(&d)) {
-            continue;
-        }
-        if s(&d, &["tier"]) == "shadow" {
-            continue;
-        }
-        items.push(d);
-    }
-
-    // scope / mine / default-view
+/// Port of the dtu.list body. Filters the pre-parsed in-memory cache by
+/// reference (the whole point — the JS macro filters `STATE.dtus.values()`;
+/// this does the equivalent work off the Node event loop, over a snapshot
+/// refreshed every few seconds). Only the final page is cloned.
+fn list_dtus(cache: &[Value], r: &ListReq) -> (Vec<Value>, usize) {
     let uid = &r.viewer;
+    let mut items: Vec<&Value> = cache
+        .iter()
+        .filter(|d| user_visible(d, r))
+        .filter(|d| !is_shadow(d))
+        .filter(|d| !INTERNAL_KINDS.contains(&machine_kind(d)))
+        .filter(|d| s(d, &["tier"]) != "shadow")
+        .collect();
+
     if r.mine {
         items = if uid.is_empty() {
             vec![]
@@ -282,21 +304,20 @@ fn list_dtus(conn: &Connection, r: &ListReq) -> rusqlite::Result<(Vec<Value>, us
             if sf != "local" {
                 items.retain(|d| {
                     let o = s(d, &["ownerId"]);
-                    if o.is_empty() || o == *uid {
-                        return true;
-                    }
-                    let vis = {
-                        let mv = d.get("meta").and_then(|m| m.get("visibility")).and_then(|x| x.as_str());
-                        mv.unwrap_or_else(|| s(d, &["visibility"]))
-                    };
-                    vis == "published" || vis == "public"
+                    o.is_empty() || o == *uid || vis_published_or_public(d)
                 });
             }
         } else if !uid.is_empty() {
-            default_view(&mut items, uid);
+            items.retain(|d| {
+                let o = s(d, &["ownerId"]);
+                o.is_empty() || o == *uid || s(d, &["scope"]) == "global" || vis_published_or_public(d)
+            });
         }
     } else if !uid.is_empty() {
-        default_view(&mut items, uid);
+        items.retain(|d| {
+            let o = s(d, &["ownerId"]);
+            o.is_empty() || o == *uid || s(d, &["scope"]) == "global" || vis_published_or_public(d)
+        });
     }
 
     // sort by createdAt desc
@@ -316,40 +337,140 @@ fn list_dtus(conn: &Connection, r: &ListReq) -> rusqlite::Result<(Vec<Value>, us
 
     let total = items.len();
     let end = (r.offset + r.limit).min(total);
-    let page = if r.offset < total { items[r.offset..end].to_vec() } else { vec![] };
-    Ok((page, total))
-}
-
-fn default_view(items: &mut Vec<Value>, uid: &str) {
-    items.retain(|d| {
-        let o = s(d, &["ownerId"]);
-        if o.is_empty() || o == uid {
-            return true;
-        }
-        if s(d, &["scope"]) == "global" {
-            return true;
-        }
-        let vis = {
-            let mv = d.get("meta").and_then(|m| m.get("visibility")).and_then(|x| x.as_str());
-            mv.unwrap_or_else(|| s(d, &["visibility"]))
-        };
-        vis == "published" || vis == "public"
-    });
+    let page = if r.offset < total {
+        items[r.offset..end].iter().map(|d| (*d).clone()).collect()
+    } else {
+        vec![]
+    };
+    (page, total)
 }
 
 fn get_dtu(conn: &Connection, id: &str) -> rusqlite::Result<Option<Value>> {
     let mut stmt = conn.prepare(&format!("SELECT {ROW_COLS} FROM dtu_store WHERE id = ? LIMIT 1"))?;
     let mut rows = stmt.query([id])?;
     match rows.next()? {
-        Some(row) => Ok(Some(row_to_dtu(
-            &row.get::<_, String>(0)?, &row.get::<_, String>(1).unwrap_or_default(),
-            &row.get::<_, String>(2).unwrap_or_default(), &row.get::<_, String>(3).unwrap_or_default(),
-            &row.get::<_, String>(4).unwrap_or_else(|_| "[]".into()), &row.get::<_, String>(5).unwrap_or_default(),
-            &row.get::<_, String>(6).unwrap_or_default(), &row.get::<_, String>(7).unwrap_or_default(),
-            &row.get::<_, String>(8).unwrap_or_else(|_| "{}".into()),
-        ))),
+        Some(row) => Ok(row_to_dtu(row)?),
         None => Ok(None),
     }
+}
+
+// ── in-memory parsed cache ─────────────────────────────────────────────────
+// The list filter runs against this snapshot by reference — that's the
+// event-loop win (parity with the JS macro filtering STATE.dtus.values(),
+// off-thread).
+//
+// Snapshot pointer swap: readers lock only to clone the Arc (a pointer copy,
+// sub-microsecond), then filter the immutable Vec with no lock held. The
+// refresher builds the next Vec entirely off-lock and swaps the pointer under
+// the same brief lock. So a slow refresh NEVER stalls a reader.
+//
+// The refresher is INCREMENTAL: it re-reads only rows whose updated_at advanced
+// since the last pass and upserts them by id (in place, so an edited DTU keeps
+// its slot — matching JS `STATE.dtus.set(existingId, …)`), so steady-state
+// refresh is a tiny indexed query even with a large corpus. A drop in row count
+// triggers one full reload. A few seconds of staleness on the locker list is fine.
+type Cache = Arc<RwLock<Arc<Vec<Value>>>>;
+
+fn snapshot(cache: &Cache) -> Arc<Vec<Value>> {
+    cache.read().map(|g| Arc::clone(&g)).unwrap_or_else(|_| Arc::new(Vec::new()))
+}
+
+fn dtu_id(v: &Value) -> &str {
+    v.get("id").and_then(|x| x.as_str()).unwrap_or("")
+}
+
+fn row_count(conn: &Connection) -> i64 {
+    conn.query_row("SELECT count(*) FROM dtu_store", [], |r| r.get(0)).unwrap_or(-1)
+}
+
+fn load_all(conn: &Connection) -> Vec<Value> {
+    load_where(conn, None)
+}
+
+/// Load rows, optionally only those with `updated_at > since` (strictly newer).
+fn load_where(conn: &Connection, since: Option<&str>) -> Vec<Value> {
+    let mut out = Vec::new();
+    let sql = match since {
+        Some(_) => format!("SELECT {ROW_COLS} FROM dtu_store WHERE updated_at > ?"),
+        None => format!("SELECT {ROW_COLS} FROM dtu_store"),
+    };
+    let Ok(mut stmt) = conn.prepare(&sql) else { return out };
+    let rows = match since {
+        Some(s) => stmt.query_map([s], row_to_dtu),
+        None => stmt.query_map([], row_to_dtu),
+    };
+    if let Ok(rows) = rows {
+        for r in rows.flatten().flatten() {
+            out.push(r);
+        }
+    }
+    out
+}
+
+fn max_updated(cache: &[Value]) -> String {
+    cache
+        .iter()
+        .filter_map(|d| d.get("updatedAt").and_then(|x| x.as_str()))
+        .max()
+        .unwrap_or("")
+        .to_string()
+}
+
+fn spawn_cache_refresher(path: String, cache: Cache) {
+    std::thread::spawn(move || {
+        let conn = match open_ro(&path) {
+            Ok(c) => c,
+            Err(e) => {
+                eprintln!("cache refresher open db: {e}");
+                return;
+            }
+        };
+        let mut last_count: i64 = snapshot(&cache).len() as i64;
+        let mut ticks: u64 = 0;
+        loop {
+            ticks += 1;
+            let count = row_count(&conn);
+            let cur = snapshot(&cache);
+            let since = max_updated(&cur);
+            // safety net: a full reconcile every ~60 refreshes catches same-ms
+            // updated_at collisions the `>` incremental query could skip.
+            let force_full = ticks % 24 == 0;
+
+            let next: Option<Vec<Value>> = if count < last_count || force_full {
+                Some(load_all(&conn))
+            } else {
+                // incremental: pull only rows strictly newer than our newest.
+                let changed = load_where(&conn, if since.is_empty() { None } else { Some(&since) });
+                if changed.is_empty() {
+                    None
+                } else {
+                    // build the next Vec off-lock: clone current, update in place
+                    // (edited DTU keeps its slot ~ JS Map.set), append new ones.
+                    let mut v: Vec<Value> = (*cur).clone();
+                    for d in changed {
+                        let id = dtu_id(&d).to_string();
+                        if let Some(slot) = v.iter_mut().find(|x| dtu_id(x) == id) {
+                            *slot = d;
+                        } else {
+                            v.push(d);
+                        }
+                    }
+                    Some(v)
+                }
+            };
+            if let Some(v) = next {
+                if let Ok(mut w) = cache.write() {
+                    *w = Arc::new(v);
+                }
+            }
+            last_count = count;
+
+            std::thread::sleep(Duration::from_millis(
+                std::env::var("CONCORD_DTU_SIDECAR_REFRESH_MS")
+                    .ok().and_then(|s| s.parse().ok()).unwrap_or(2500),
+            ));
+        }
+    });
 }
 
 fn recent(conn: &Connection, limit: usize, scope: Option<&str>, tier: Option<&str>, source: Option<&str>) -> rusqlite::Result<Vec<Value>> {
@@ -362,16 +483,8 @@ fn recent(conn: &Connection, limit: usize, scope: Option<&str>, tier: Option<&st
     params.push(limit.to_string());
     let mut stmt = conn.prepare(&sql)?;
     let pr: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| p as &dyn rusqlite::ToSql).collect();
-    let rows = stmt.query_map(pr.as_slice(), |row| {
-        Ok(row_to_dtu(
-            &row.get::<_, String>(0)?, &row.get::<_, String>(1).unwrap_or_default(),
-            &row.get::<_, String>(2).unwrap_or_default(), &row.get::<_, String>(3).unwrap_or_default(),
-            &row.get::<_, String>(4).unwrap_or_else(|_| "[]".into()), &row.get::<_, String>(5).unwrap_or_default(),
-            &row.get::<_, String>(6).unwrap_or_default(), &row.get::<_, String>(7).unwrap_or_default(),
-            &row.get::<_, String>(8).unwrap_or_else(|_| "{}".into()),
-        ))
-    })?;
-    Ok(rows.filter_map(|r| r.ok()).collect())
+    let rows = stmt.query_map(pr.as_slice(), row_to_dtu)?;
+    Ok(rows.filter_map(|r| r.ok().flatten()).collect())
 }
 
 // ── minimal HTTP over UnixListener ──────────────────────────────────────────
@@ -421,7 +534,7 @@ fn respond(stream: &mut UnixStream, status: u16, body: &[u8]) {
     let _ = stream.flush();
 }
 
-fn handle(stream: &mut UnixStream, conn: &Connection, served: &AtomicU64) {
+fn handle(stream: &mut UnixStream, conn: &Connection, cache: &Cache, served: &AtomicU64) {
     let mut reader = BufReader::new(match stream.try_clone() {
         Ok(s) => s,
         Err(_) => return,
@@ -449,10 +562,11 @@ fn handle(stream: &mut UnixStream, conn: &Connection, served: &AtomicU64) {
         "/v1/health" => {
             let n: i64 = conn.query_row("SELECT count(*) FROM dtu_store", [], |r| r.get(0)).unwrap_or(-1);
             let qo: i64 = conn.query_row("PRAGMA query_only", [], |r| r.get(0)).unwrap_or(-1);
+            let cached = snapshot(cache).len();
             (200, json!({
                 "ok": true, "service": "concord-dtu-sidecar", "impl": "rust",
-                "dtuStoreRows": n, "queryOnly": qo, "served": served.load(Ordering::Relaxed),
-                "db": db_path(),
+                "dtuStoreRows": n, "cachedDtus": cached, "queryOnly": qo,
+                "served": served.load(Ordering::Relaxed), "db": db_path(),
             }))
         }
         "/v1/dtu" => match qp.get("id") {
@@ -482,13 +596,12 @@ fn handle(stream: &mut UnixStream, conn: &Connection, served: &AtomicU64) {
                 viewer_regional: qp.get("viewerRegional").cloned().unwrap_or_default(),
                 viewer_national: qp.get("viewerNational").cloned().unwrap_or_default(),
             };
-            match list_dtus(conn, &req) {
-                Ok((page, total)) => (200, json!({
-                    "ok": true, "dtus": page, "total": total,
-                    "limit": req.limit, "offset": req.offset,
-                })),
-                Err(e) => (500, json!({"ok": false, "error": e.to_string()})),
-            }
+            let snap = snapshot(cache); // pointer clone; lock released immediately
+            let (page, total) = list_dtus(&snap, &req);
+            (200, json!({
+                "ok": true, "dtus": page, "total": total,
+                "limit": req.limit, "offset": req.offset, "cachedDtus": snap.len(),
+            }))
         }
         "/v1/dtus/recent" => {
             let limit = qp.get("limit").and_then(|s| s.parse().ok()).unwrap_or(50usize).clamp(1, 500);
@@ -526,12 +639,23 @@ fn main() {
     });
     let _ = std::fs::set_permissions(&sock, std::os::unix::fs::PermissionsExt::from_mode(0o600));
 
-    // sanity-open once up front so a bad DB path fails fast + loud
-    if let Err(e) = open_ro(&path) {
-        eprintln!("open db {path}: {e}");
-        std::process::exit(1);
-    }
-    eprintln!("concord-dtu-sidecar (rust) listening on unix:{} (db={path}, {n_workers} workers, read-only)", sock.display());
+    // build the parsed cache up front so the first request is served from it
+    let boot_conn = match open_ro(&path) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("open db {path}: {e}");
+            std::process::exit(1);
+        }
+    };
+    let cache: Cache = Arc::new(RwLock::new(Arc::new(load_all(&boot_conn))));
+    let boot_n = snapshot(&cache).len();
+    drop(boot_conn);
+    spawn_cache_refresher(path.clone(), Arc::clone(&cache));
+
+    eprintln!(
+        "concord-dtu-sidecar (rust) listening on unix:{} (db={path}, {n_workers} workers, {boot_n} dtus cached, read-only)",
+        sock.display()
+    );
 
     let served = Arc::new(AtomicU64::new(0));
     let listener = Arc::new(listener);
@@ -540,6 +664,7 @@ fn main() {
     for _ in 0..n_workers {
         let listener = Arc::clone(&listener);
         let served = Arc::clone(&served);
+        let cache = Arc::clone(&cache);
         let path = path.clone();
         handles.push(std::thread::spawn(move || {
             let conn = match open_ro(&path) {
@@ -553,7 +678,7 @@ fn main() {
                 // UnixListener::accept takes &self and is safe to call from
                 // multiple threads — the kernel serialises accept() on the fd.
                 match listener.accept() {
-                    Ok((mut s, _)) => handle(&mut s, &conn, &served),
+                    Ok((mut s, _)) => handle(&mut s, &conn, &cache, &served),
                     Err(_) => continue,
                 }
             }

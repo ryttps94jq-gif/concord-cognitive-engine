@@ -15,6 +15,10 @@ serde_json = "1"
 [profile.release]
 opt-level = 3
 lto = true
-strip = true
 codegen-units = 1
 panic = "abort"
+# NOTE: do not set `strip = true` — on macOS arm64 it removes the ad-hoc code
+# signature cargo adds, and a stripped unsigned binary hangs in dyld under
+# Gatekeeper/amfid (process state UE, socket never created). `cargo build`'s
+# output is already signed; keep it that way. If you strip manually, re-sign:
+#   codesign -s - --force bin/concord-dtu-sidecar

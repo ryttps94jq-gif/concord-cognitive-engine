@@ -1863,6 +1863,7 @@ import { createLLMQueue } from "./lib/llm-queue.js";
 import { getCurrentLagMs as getEventLoopLagMs } from "./lib/event-loop-pressure.js";
 import { createLoadSheddingMiddleware } from "./lib/request-admission.js";
 import * as goSidecar from "./lib/sidecars/go-sidecar-client.js"; // Concurrency Refactor Phase 1 — Whisper/Piper/sandbox off the event loop
+import * as dtuSidecar from "./lib/sidecars/dtu-sidecar-client.js"; // Concurrency Refactor Phase 3 — DTU get/list off the event loop (CONCORD_DTU_SIDECAR=1)
 import { BRAIN_CONFIG, SYSTEM_TO_BRAIN, BRAIN_PRIORITY, getBrainForSystem, getActiveBrainConfig, getSystemStatus, pickBrainEndpoint, noteEndpointStart, noteEndpointFinish } from "./lib/brain-config.js";
 import { preloadBrains, getBrainPriority, resolveBrain } from "./lib/brain-router.js";
 // BYO key router — when a user has plugged their own provider key into a
@@ -25191,8 +25192,21 @@ register("dtu", "create", async (ctx, input) => {
   } finally { releaseMutex(); }
 }, { description: "Create a DTU (regular/mega/hyper) with structured core; UI receives human projection." });
 
-register("dtu", "get", (ctx, input) => {
+register("dtu", "get", async (ctx, input) => {
   const id = String(input.id || "");
+  // Concurrency Refactor Phase 3: read via the Rust sidecar (off the event
+  // loop) when CONCORD_DTU_SIDECAR=1 and it's up. Fail soft to the in-memory
+  // store. Correctness pinned by engines/concord-dtu-sidecar/proof/run-proof.mjs.
+  if (dtuSidecar.ENABLED) {
+    try {
+      if (await dtuSidecar.isAvailable()) {
+        const r = await dtuSidecar.getDTU(id);
+        if (r && (r.ok === true || r.error === "DTU not found")) {
+          return r.ok ? { ok: true, dtu: r.dtu } : { ok: false, error: "DTU not found" };
+        }
+      }
+    } catch (_e) { logger.debug("server", "dtu-sidecar get unavailable — inline fallback", { error: _e?.message }); }
+  }
   // Only return from main DTU store - shadow DTUs are internal
   const dtu = STATE.dtus.get(id);
   if (!dtu) return { ok: false, error: "DTU not found" };
@@ -25387,7 +25401,7 @@ register("dtu", "stats", (ctx, _input = {}) => {
   } catch (e) { return { ok: false, error: "handler_error", message: String(e?.message || e) }; }
 }, { public: true });
 
-register("dtu", "list", (ctx, input) => {
+register("dtu", "list", async (ctx, input) => {
   try {
   const limit = clamp(Number(input.limit || 5000), 1, 5000);
   const offset = clamp(Number(input.offset || 0), 0, 1e9);
@@ -25399,6 +25413,39 @@ register("dtu", "list", (ctx, input) => {
   // never other users' published DTUs. Used by the dashboard "My Activity"
   // chart so the creation rhythm is the signed-in user's, not the global feed.
   const mineOnly = input.mine === true || input.mine === "true" || input.owner === "me";
+
+  // Concurrency Refactor Phase 3: run the visibility filter in the Rust sidecar
+  // (off the event loop) when CONCORD_DTU_SIDECAR=1 and it's up. Fail soft to
+  // the in-memory filter below. Behaviour pinned by the differential proof at
+  // engines/concord-dtu-sidecar/proof/run-proof.mjs.
+  if (dtuSidecar.ENABLED) {
+    try {
+      if (await dtuSidecar.isAvailable()) {
+        const loc = _resolveViewerLocation(userId);
+        const r = await dtuSidecar.list({
+          viewer: userId || "",
+          scope: scopeFilter,
+          tier,
+          q: input.q || "",
+          mine: mineOnly,
+          limit,
+          offset,
+          viewerRegional: loc.declaredRegional || "",
+          viewerNational: loc.declaredNational || "",
+        });
+        if (r && r.ok && Array.isArray(r.dtus)) {
+          const items = r.dtus;
+          if (typeof calculateFreshness === "function") {
+            for (const d of items) {
+              d._freshness = calculateFreshness(d);
+              d._freshnessLabel = freshnessLabel(d._freshness);
+            }
+          }
+          return { ok: true, dtus: items, limit, offset, total: r.total ?? items.length, _source: "dtu-sidecar" };
+        }
+      }
+    } catch (_e) { logger.debug("server", "dtu-sidecar list unavailable — inline fallback", { error: _e?.message }); }
+  }
 
   // Filter out shadow/repair/system DTUs - internal, not real user content.
   // Pass viewer ID so private/user-scoped uploads by other users are hidden.
