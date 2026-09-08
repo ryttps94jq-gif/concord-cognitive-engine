@@ -1,253 +1,217 @@
-> See [`docs/STACK_REALITY.md`](docs/STACK_REALITY.md) for measured LIVE vs OVERCLAIM (2026-09-05).
-
 <div align="center">
 
 # 🜂 Concord Cognitive Engine
 
 ### AI that shows its receipts.
 
-**Proves what it claims. Refuses what it can't. Remembers everything — and pays you when your work gets built on.**
+**A verified-compute knowledge engine fused with a creator-economy world platform — and a layer that audits and repairs itself.** Most AI tools generate. Concord generates *and verifies, attributes, and remembers.*
+
+**Wolfram × Roblox, built by one person.**
+
+<br/>
+
+### [→ Walk in the door: concord-os.org/explore](https://concord-os.org/explore)
+
+*Live. No signup. Nothing staged for a demo — it's the same substrate real users are on.*
+
+<br/>
+
+![lenses](https://img.shields.io/badge/lenses-267-22d3ee)
+![macros](https://img.shields.io/badge/macros-~10.6k-22c55e)
+![brains](https://img.shields.io/badge/AI_brains-5-f59e0b)
+![status](https://img.shields.io/badge/status-live-16a34a)
+![license](https://img.shields.io/badge/license-CSL--CE_1.0-6366f1)
 
 </div>
 
 ---
 
-## See it running — no signup, no waiting
+<details>
+<summary><b>Contents</b></summary>
 
-![Concord landing](docs/images/01-landing.png)
+- [What it is](#what-it-is)
+- [Try it in 5 minutes](#try-it-in-5-minutes)
+- [Why it's different](#why-its-different)
+- [For investors and partners](#for-investors-and-partners)
+- [The receipts](#the-receipts)
+- [Architecture](#architecture-from-altitude)
+- [Maturity](#maturity-honest)
+- [License](#license)
+- [Repo map](#repo-map)
 
-Most platforms ask you to trust the pitch first and see the product later. Don't. Walk in yourself, right now, with no account:
-
-**[→ concord-os.org/explore](https://concord-os.org/explore)** — a live public entry point, forked into whichever half you're actually here for:
-
-- **[The knowledge engine](https://concord-os.org/explore/engine)** — DTUs, a citation economy that pays you, real deterministic compute (a symbolic CAS, structural FEA, orbital mechanics) instead of an LLM guessing the answer.
-- **[The living world](https://concord-os.org/explore/world)** — Concordia, hundreds of NPCs running their own factions, schemes, and wars, with real Skyrim-style combat. Mature content, 18+.
-
-Or skip the tour and just [**watch the world live**](https://concord-os.org/spectate/concordia-hub) — a read-only feed of what's happening right now, updating in real time, no account, no download. Nothing here is staged for a demo. It's the same substrate real users are on.
-
----
-
-Most AI tools **generate**. Concord generates **and verifies, attributes, and remembers** — then audits and repairs *itself*. One knowledge substrate (the **DTU**), expressed through 266 domain "lenses," welded to a creator economy, a 3D civilization simulator, and a mesh network that works without the internet.
-
-| | |
-|---|---|
-| 🧠 **A second brain that compounds** | Knowledge you own, cited, and growing into a living substrate — get paid when someone else builds on it. |
-| 🌍 **A world that runs without you** | Hundreds of NPCs living their own lives, forming factions, waging wars, whether you're watching or not. |
-| 🔬 **Real math, not a guess** | A symbolic CAS, direct-stiffness FEA, orbital mechanics, double-entry accounting — it computes the answer instead of hallucinating it. |
-| 🔍 **It audits itself** | 51 detectors, a drift monitor, and a repair cortex that proposes its own fixes but can't apply them unsupervised. |
-
-In a market where the bottleneck has shifted from *generating* to *trusting*, **verification is the product.**
-
-[**Why it's different →**](docs/WHY_CONCORD_IS_DIFFERENT.md) &nbsp;·&nbsp; [**The 326 novelties →**](docs/NOVELTY_INVENTORY.md) &nbsp;·&nbsp; [**Verified snapshot →**](docs/STATE_OF_CONCORD.md)
-
-![lenses](https://img.shields.io/badge/lenses-266-22d3ee)
-![macros](https://img.shields.io/badge/macros-~10,399-22c55e)
-![brains](https://img.shields.io/badge/AI_brains-5-f59e0b)
-![tests](https://img.shields.io/badge/tests-38,371_passing-16a34a)
-![board](https://img.shields.io/badge/detector_board-0_critical-16a34a)
+</details>
 
 ---
 
-## Why it's different — the white space
+## What it is
 
-Every incumbent owns exactly **one** vector. None ship the intersection. *(full argument: [`docs/WHY_CONCORD_IS_DIFFERENT.md`](docs/WHY_CONCORD_IS_DIFFERENT.md))*
+One knowledge substrate — the **DTU** (a 4-layer, self-compressing knowledge unit) — expressed through **267 domain "lenses,"** each of which reads as the app it replaces (a Bloomberg terminal, a VS Code shell, an Ableton timeline) while sharing one macro spine and one economy.
+
+Welded to that:
+
+- **A citation economy that pays you.** Cite a DTU and its whole ancestry earns a perpetual, depth-halving royalty. 95% goes to creators.
+- **Real deterministic compute.** A symbolic CAS, direct-stiffness FEA, a gate-based quantum statevector simulator, orbital mechanics, double-entry accounting, an epidemiology sim — it *computes* the answer instead of hallucinating it.
+- **A world that runs without you.** Concordia: hundreds of NPCs living their own lives, forming factions, running schemes, waging wars, with real Skyrim-style combat. 18+.
+- **A layer that distrusts itself.** A cartographer that maps its own anatomy every pass, ~50 detectors on a CI baseline-ratchet, a drift monitor watching for six ways the corpus can lie to itself, and a repair cortex that proposes its own fixes but **cannot apply them unsupervised** — every code change routes through a governance gate.
+- **Reach without the internet.** A 7-transport mesh + federation layer.
+
+In a market where the bottleneck shifted from *generating* to *trusting*, **verification is the product.**
+
+Fuller argument: [`docs/WHY_CONCORD_IS_DIFFERENT.md`](docs/WHY_CONCORD_IS_DIFFERENT.md)
+
+---
+
+## Try it in 5 minutes
+
+**Fastest — no install:** open **[concord-os.org/explore](https://concord-os.org/explore)**, then:
+
+1. Open the **Finance** lens — it's a real tabbed terminal, not a chat box.
+2. Go to **Forge**, create a DTU (any note).
+3. Cite it from a second DTU. Watch the royalty cascade fire in the **Ledger**.
+4. Or skip the tour and [**watch the world live**](https://concord-os.org/spectate/concordia-hub) — a read-only real-time feed, no account.
+
+**Run it yourself:**
+
+```bash
+git clone https://github.com/ConcordDev/concord-cognitive-engine
+cd concord-cognitive-engine
+
+cd server && npm install && npm run migrate && npm start      # :5050
+cd ../concord-frontend && npm install && npm run dev          # :3000
+# or the full stack (backend + frontend + 5 Ollama brains + nginx/redis/qdrant/prometheus):
+docker-compose up
+```
+
+Production needs `JWT_SECRET`. Running the frontend standalone? Copy `concord-frontend/.env.example` → `.env.local` first. Realtime needs a WebSocket-aware proxy in front (nginx config included) — Next's standalone server does not forward WS upgrades. Full setup: [`DEPLOYMENT.md`](DEPLOYMENT.md).
+
+---
+
+## Why it's different
+
+Every incumbent owns exactly **one** vector. None ship the intersection.
 
 | Vector | Who owns it | Concord |
 |---|---|---|
-| Grounded / verified | Perplexity, Wolfram | ✅ `reason.verify` + citation floors + drift monitor |
-| General capability | ChatGPT | ✅ 5-brain router + ~10,399 macros |
-| Private / local | Ollama | ✅ local brains + consent gates + no-leak invariant |
-| Controllable memory | Notion | ✅ DTU substrate + scope/consent gates |
-| Owned / no-subscription | *(unowned)* | ✅ free + local + 95%-to-creator economy |
+| Grounded / verified | Perplexity, Wolfram | `reason.verify` + citation floors + a drift monitor |
+| General capability | ChatGPT | 5-brain router + ~10.6k macros |
+| Private / local | Ollama | local brains + consent gates + a no-leak invariant |
+| Controllable memory | Notion | DTU substrate + scope/consent gates |
+| Owned economy | *(unclaimed)* | 95%-to-creator citation royalties |
 
-The closest one-liner: **Wolfram × Roblox, built by one person** — a verified-compute knowledge engine fused with a creator-economy world platform, plus a self-auditing layer neither has.
+The moat isn't any one novelty — it's that they're **the same fabric**. The knowledge graph, the economy, the game, and the codebase's own self-repair are one system:
+
+```mermaid
+flowchart LR
+    DRIFT["corpus contradiction"] -->|spawns| QUEST["playable quest"]
+    PAIN["combat damage"] -->|somatic ledger| XP["skill XP"] -->|grants| BUFF["resist buff"]
+    CITE["cite a DTU"] -->|pays ancestry forever| ROYALTY["depth-halving royalty"]
+    BUG["a bug"] -->|AI-generated VERIFIED fix| GATE["governance proposal — never auto-applied"]
+```
+
+Copying a primitive is easy. Copying the web is the years-long part. — [the full thesis](docs/WHY_CONCORD_IS_DIFFERENT.md) · [the ~326 catalogued novelties](docs/NOVELTY_INVENTORY.md)
+
+---
+
+## For investors and partners
+
+**Stage:** Live at [concord-os.org](https://concord-os.org), pre-revenue, built solo. Seeking design partners and pre-seed conversations.
+<!-- Founder: replace with name + one line of background. `git shortlog` shows this is one person working AI-accelerated — decide how you want to frame that; it's a strong 2026 story either way. -->
+
+**Why now.** Agents are shipping into everything in 2026, and the thing blocking adoption isn't capability — it's that you can't trust unchecked output in a workflow that matters. "Deterministic compute as a tool an agent can call, with a citation trail" is an unclaimed wedge. Concord is a working instance of it.
+
+**The moat, in one place:**
+- **Coupled fabric** (above) — the integration is the hard part, not the parts.
+- **Self-auditing by construction** — the repo's own tooling polices its honesty; that's why every number below reproduces from a command.
+- **License** — source-available under CSL-CE 1.0: the community can run and learn from it; hosting, the marketplace, and the global network are commercially reserved. A commercial licensing path exists. ([`LICENSE.txt`](LICENSE.txt) · dependency/model license posture: [`docs/LICENSING.md`](docs/LICENSING.md))
+
+**Next ~6 months:** move the public deployment off a single shared box onto dedicated infra ([`docs/OFF_MAC_MIGRATION_BLUEPRINT.md`](docs/OFF_MAC_MIGRATION_BLUEPRINT.md)); take the six built connectors live (needs only operator OAuth credentials); open the developer platform (MCP server, signed plugin gallery, and SDK are built — [`docs/DEVELOPER_PLATFORM_GTM.md`](docs/DEVELOPER_PLATFORM_GTM.md) — adoption is the missing piece, not the build).
+
+**Contact:** <!-- add an email / Cal.com link -->
 
 ---
 
 <div align="center">
 
-## ↓ Everything below this line is the receipts ↓
+## The receipts
 
-*Numbers, architecture, and internals — for the people who want to check, not just read.*
+*Everything below reproduces from a command. That's the point.*
 
 </div>
 
 ---
 
-## By the numbers (reproduce every one)
+### By the numbers
 
-| Metric | Value | Reproduce |
-|---|---|---|
-| Authored source | **~2.62M LOC** (4.37M incl. content) | `npm run count-loc` |
-| Frontend lenses | **266** | `ls -d concord-frontend/app/lenses/*/` |
-| Backend domains | **420** | `ls server/domains/*.js` |
-| Macro domains · pairs | **547 · ~10,399** | `node scripts/verify-lens-backends.mjs` |
-| DB tables · migrations | **765 · 398** | `cd server && npm run cartograph:static` |
-| Heartbeats (live sim) | **140** | cartographer / `registerHeartbeat` grep |
-| AI brains | **5** (4 cognitive + vision) | `server/lib/brain-config.js` |
-| Catalogued novelties | **326 / 34 groups** | [`docs/NOVELTY_INVENTORY.md`](docs/NOVELTY_INVENTORY.md) |
-| Tests passing | **38,371** | `cd server && npm test` |
-| Code-health board | **71 findings · 0 critical** | `cd server && node scripts/run-detectors.js` |
+| Metric | Reproduce |
+|---|---|
+| Authored source (~2.7M LOC, excl. content) | `npm run count-loc` |
+| Frontend lenses · backend domains | `ls -d concord-frontend/app/lenses/*/` · `ls server/domains/*.js` |
+| Macro domains · `(domain, macro)` pairs (~558 · ~10.6k) | `node scripts/verify-lens-backends.mjs` |
+| DB tables · numbered migrations | `cd server && npm run cartograph:static` · `ls server/migrations/[0-9]*.js` |
+| Heartbeats driving the live sim (~143) | `grep -roh "registerHeartbeat(..." server/ --exclude-dir=tests \| sort -u \| wc -l` |
+| AI brains | 5 (4 cognitive + vision) — `server/lib/brain-config.js` |
+| Tests passing | `cd server && npm test` |
+| Detector board | 0 critical; a working backlog of high/medium the CI ratchet blocks *new* regressions against — `cd server && node scripts/run-detectors.js` |
 
-> **Everything here is falsifiable by design.** `npm run check-doc-claims` re-runs the reproduction command behind every numeric claim in the docs and fails on drift.
+> `npm run check-doc-claims` re-runs the reproduction command behind every numeric claim in `docs/` and fails the build on drift. Exact current values: [`docs/STATE_OF_CONCORD.md`](docs/STATE_OF_CONCORD.md).
 
 ---
 
-## The architecture, from altitude
+## Architecture, from altitude
 
-Concord is best read as **concentric rings** — inner rings are the substrate, outer rings are Concord acting on itself and the world.
+Concentric rings — inner is the substrate, outer is Concord acting on itself and the world.
 
 ```mermaid
 flowchart TD
     subgraph R1["🧬 Substrate"]
-        DTU["DTU — 4-layer knowledge unit<br/>measured DHTP ~1.2× (33:1 was target; densification not proven dense LIVE)"]
+        DTU["DTU — 4-layer, self-compressing knowledge unit"]
     end
     subgraph R2["🧠 Cognition"]
-        BRAINS["5-brain router + custom model<br/>HLR 7-mode reasoning · 5-voice council"]
+        BRAINS["5-brain router + custom model<br/>7-mode reasoning · 5-voice council"]
     end
     subgraph R3["💰 Economy"]
-        ECON["Citation→royalty cascade<br/>perpetual, depth-halving"]
+        ECON["citation → royalty cascade<br/>perpetual, depth-halving, 95% to creator"]
     end
     subgraph R4["🌍 World"]
         WORLD["Concordia sim · embodied layers 7–13<br/>NPC schemes · real-physics combat"]
     end
     subgraph R5["🛰️ Reach"]
-        MESH["7-transport mesh · cnet federation<br/>works without the internet"]
+        MESH["7-transport mesh · federation<br/>works without the internet"]
     end
     subgraph R6["🔍 Self-aware meta-layer"]
-        META["Cartographer · 51 detectors · drift monitor<br/>repair cortex → governance-gated self-surgery"]
-    end
-    subgraph R7["🚀 Outer layer"]
-        OUTER["ConKay builder · CaMeL safety<br/>6 real connectors · MCP verified-compute wedge"]
+        META["cartographer · ~50 detectors · drift monitor<br/>repair cortex → governance-gated self-surgery"]
     end
     DTU --> BRAINS --> ECON --> WORLD --> MESH
     META -.audits + repairs.-> DTU & BRAINS & ECON & WORLD & MESH
-    OUTER --> DTU
 ```
 
----
+**How a request flows:** `POST /api/lens/run` → 3-gate permission → `runMacro` (routes to a brain *or* deterministic compute) → read/mint DTUs → a citation fires the royalty cascade → `{ ok, result }` — verified, attributed, remembered.
 
-## The moat is the *couplings*
-
-The 326 novelties matter less than how they're wired to each other. Anyone can copy a primitive; copying the web is the years-long part.
-
-```mermaid
-flowchart LR
-    DRIFT["corpus contradiction<br/>(drift monitor)"] -->|spawns| QUEST["playable quest /<br/>haunted game-zone"]
-    PAIN["combat damage"] -->|somatic ledger| XP["skill XP"] -->|grants| BUFF["resist buff"]
-    CITE["cite a DTU"] -->|pays ancestry forever| ROYALTY["depth-halving royalty"]
-    ACT["what you actually did"] -->|stitched, never invented| DREAM["offline dream"]
-    BUG["a bug"] -->|AI-generated VERIFIED fix| GATE["governance proposal<br/>(never auto-applied)"]
-```
-
-The knowledge graph, the economy, the game, and the codebase's own self-repair are **the same fabric.** No incumbent has that.
+Deeper: [`ARCHITECTURE.md`](ARCHITECTURE.md) · [`API.md`](API.md)
 
 ---
 
-## The rarest property: self-aware by construction
+## Maturity, honest
 
-Concord carries a **running model of itself** and acts on it — the part that's genuinely hard to find anywhere:
+| Proven | In progress | Research-grade |
+|---|---|---|
+| Deployed and live; deploy path repeatable and driven by real user requests. | No literal heavy-load run against production yet — "proven under real traffic" is future work. Load *shedding* (admission control under measured event-loop lag) is built. | The Foundation signal-layer (signal tomography, EM-fingerprint identity) and some emergent-civilization systems: built, wired, running — not yet validated against real physical conditions. |
+| A dedicated audit pass hunted concurrent-load, high-volume, and money-at-volume failure modes and **fixed real instances of each** — a connection-dropping root cause, LLM-pipeline truncation, a wallet-drain IDOR, an authenticated RCE — rather than leaving them theoretical. That audit process *is* the self-auditing thesis in practice. | Public deployment currently shares one box with a dev environment — being moved to dedicated infra ([blueprint](docs/OFF_MAC_MIGRATION_BLUEPRINT.md)). | The six marquee connectors are code-complete and contract-tested; going live needs operator OAuth credentials, not code. |
+| Every lens is judged as a standalone product against its category leader; a detector mechanically checks all 267 for auto-generated-scaffold patterns (current: 0). | Some `docs/` numbers drift between refreshes — `check-doc-claims` catches it in CI; trust the command over any prose, including this file. | The developer ecosystem: infrastructure built (MCP server, signed plugin gallery, SDK), external adoption not yet started. |
 
-- **Cartographer** auto-maps its own anatomy (765 tables, 140 heartbeats, ~10,399 macros) every pass.
-- **51 detectors + a baseline-ratchet** audit its own honesty — CI fails on any new high/critical. *(It's why this repo's docs are falsifiable.)*
-- **Drift monitor** watches the corpus for 6 ways the system can lie to itself.
-- **Repair cortex** proposes its own surgery but **can't perform it unsupervised** — every code fix routes through a governance gate.
-
-A system engineered to **distrust itself** is the right architecture for the one thing the AI market actually lacks.
-
----
-
-## Under-appreciated strengths
-
-**Real deterministic compute — not LLM-guessed.** A symbolic CAS, direct-stiffness **FEA**, a gate-based **quantum statevector simulator**, stoichiometry, orbital mechanics, **causal-closure analysis**, NEC electrical code, aircraft weight & balance, k-anonymity, double-entry accounting, an epidemiology sim. *(Inventory groups O · U · AH.)* This is the R&D wedge: an agent that **computes the answer instead of hallucinating it.**
-
-**Real connectors.** All six marquee connectors are code-complete: Gmail + Google Calendar are real two-way (send/push + read/inbox/pull); Slack, Sheets, GitHub, and Notion are built and contract-tested on the same SSRF-guarded chokepoint with encrypted per-user tokens. Going live on any of them needs only operator-supplied OAuth client credentials.
+Full caveats, with commit-level evidence: [`docs/WHY_CONCORD_IS_DIFFERENT.md`](docs/WHY_CONCORD_IS_DIFFERENT.md#honest-caveats-what-it-is-not) · measured LIVE-vs-overclaim: [`docs/STACK_REALITY.md`](docs/STACK_REALITY.md).
 
 ---
 
-## How a request flows
+## License
 
-```mermaid
-sequenceDiagram
-    participant U as User / Agent / MCP client
-    participant G as 3-gate permission
-    participant M as runMacro (~10,399)
-    participant B as 5-brain router
-    participant D as DTU substrate
-    participant E as Citation→royalty economy
-    U->>G: POST /api/lens/run {domain, name, input}
-    G->>M: authMW · publicReadDomains · Chicken2
-    M->>B: route by reasoning class (or deterministic compute)
-    B->>D: read / mint DTUs (4-layer, self-compressing)
-    D->>E: citation fires the royalty cascade
-    E-->>U: { ok, result } — verified, attributed, remembered
-```
+**Concord Source License – Community Edition (CSL-CE 1.0)** — source-available, **not** OSI open-source. See [`LICENSE.txt`](LICENSE.txt).
 
----
+You **may**: run and self-host privately, study and modify for non-commercial research/education, create DTUs for private use, contribute back via PR, fork for personal/research use.
 
-## More screenshots
+You **may not** without a written grant: sell or commercially distribute it, offer it as a hosted service, operate a derivative marketplace or a competing global network, or monetize DTUs / lineage graphs / Concord-derived assets. Commercial licensing is available — contact the owner.
 
-A lens — Finance (left), Code (right). Each lens reads as the app it replaces (a
-trading dashboard, a VS Code shell) while sharing one substrate, one macro spine,
-one economy:
-
-| Finance | Code |
-|---|---|
-| ![Finance lens](docs/images/05-finance.png) | ![Code lens](docs/images/04-code.png) |
-
-> Captured from a live local instance via [`scripts/capture-screenshots.mjs`](scripts/capture-screenshots.mjs)
-> (Playwright, against the cached chromium). **Stale as of this note** — both images
-> predate a since-landed declutter pass: Finance shipped a full flagship rebuild
-> (real Bloomberg-terminal-style tabbed UI, zero raw capability-list scaffold) and
-> Chat/every other lens had the dead `UniversalActions`/`LensFeaturePanel`
-> button-wall scaffold removed repo-wide. The screenshots above show an older,
-> busier UI than what ships today. Regenerating them needs a real running,
-> authenticated instance with seeded data — out of reach for an unattended sandbox
-> session — so they're flagged here rather than left to silently misrepresent the
-> current UI. Point the script at any running instance to regenerate
-> `docs/images/*.png`:
->
-> ```bash
-> CONCORD_URL=https://your-instance CONCORD_USER=you@example.com CONCORD_PASS=… \
->   node scripts/capture-screenshots.mjs
-> ```
-
----
-
-## Maturity — honest
-
-**Deployed and live at [concord-os.org](https://concord-os.org) — deployment is proven and repeatable.** This backlog is built and shipped through that deploy path, and real users' requests drive the work. A dedicated audit pass went looking specifically for concurrent-load, high-volume-traffic, and money-at-volume failure modes and fixed real instances of each (a connection-dropping root cause, LLM-pipeline truncation, a critical wallet-drain IDOR, an authenticated RCE, and more) rather than leaving them theoretical, and a real admission-control layer sheds excess load under measured event-loop lag instead of degrading uncontrolled — but no literal heavy-load run has been executed against the live deployment, so "proven under real traffic" remains future work, not a claim made here. A handful of systems (the Foundation signal-layer, some emergent-civilization systems) are research-grade — built, wired, and running today, just not yet validated against real-world physical conditions specifically. Depth isn't papered over with generic scaffolding either: a dedicated detector mechanically checks every lens for auto-generated-template patterns, and the current count is 0/265. *(Full caveats: [`docs/WHY_CONCORD_IS_DIFFERENT.md`](docs/WHY_CONCORD_IS_DIFFERENT.md) · [`docs/STATE_OF_CONCORD.md`](docs/STATE_OF_CONCORD.md).)*
-
----
-
-## Quickstart
-
-```bash
-# Backend
-cd server && npm install && npm run migrate && npm start      # :5050
-# Frontend
-cd concord-frontend && npm install && npm run dev             # :3000
-# Full stack (backend + frontend + 5 Ollama brains + nginx/redis/qdrant/prometheus)
-docker-compose up
-```
-Requires `JWT_SECRET` in production. Five Ollama instances default to models originally sized for an RTX PRO 4500 Blackwell; the real deployed target is a single NVIDIA A40 (48GB), with per-deployment overrides tuned for that box (override any model via env). See [`docs/CONNECTORS_GO_LIVE.md`](docs/CONNECTORS_GO_LIVE.md) for connector setup.
-
-Running the frontend standalone (`npm run dev`, not `docker-compose up`)? Copy
-`concord-frontend/.env.example` to `concord-frontend/.env.local` first — an
-unconfigured `NEXT_PUBLIC_API_URL`/`NEXT_PUBLIC_SOCKET_URL` is the #1 cause of
-a persistent "Connection lost" banner in dev (the frontend defaults to the
-backend's `:5050` dev port automatically now if you skip this, but a real
-`.env.local` pointed at your actual backend host is still the correct setup
-for anything other than same-box localhost).
-
-**Realtime requires the nginx layer in front of the frontend container.**
-`docker-compose up`'s `nginx` service proxies `/socket.io/` directly to the
-backend with correct WebSocket `Upgrade` headers (`nginx/conf.d/
-default.conf`); Next.js's own `output: 'standalone'` server does not forward
-WS upgrade headers through its `rewrites()`, so any deploy path that hits the
-frontend container directly — bypassing nginx — will silently break socket
-reconnection. Always route through nginx (or an equivalent WS-aware proxy) in
-production.
+"Concord," "ConcordOS," "DTU," "Hyper-DTU," and associated marks are not licensed. *(License is a draft pending formal legal review.)*
 
 ---
 
@@ -255,31 +219,24 @@ production.
 
 | Path | What's there |
 |---|---|
-| `server/server.js` | One file by deliberate choice (IP protection), not organic sprawl — every route is independently dispatched (no single blocking call path), background simulation runs on a strictly-sequential, per-module-isolated tick (one handler at a time, a crash or timeout in one never stops the next), and a real front-door admission-control layer (`lib/request-admission.js`) sheds load under measured event-loop lag rather than degrading uncontrolled |
-| `server/domains/` | 420 domain engines (the lens backends) |
-| `server/emergent/` | 231 simulation modules (the living layer) |
-| `server/lib/` | 690+ subsystem libs (brains, DTUs, embodied, repair cortex, detectors) |
-| `server/migrations/` | 398 numbered migrations (765 tables) |
-| `concord-frontend/` | Next.js 16 — 266 lenses, the lens-runtime framework, Concordia 3D + a real Godot client |
-| `concord-mobile/` | React Native — real BLE/WiFi-P2P/NFC, mesh-aware, offline-first |
-| `docs/` | The strategic + verified docs (below) |
+| `server/server.js` | The monolith by deliberate choice (IP protection) — every route independently dispatched, background sim on a strictly-sequential per-module-isolated tick, front-door admission control under event-loop lag |
+| `server/domains/` | 434 domain engines (the lens backends) |
+| `server/emergent/` | 237 simulation modules (the living layer) |
+| `server/lib/` | ~1,280 subsystem libs (brains, DTUs, embodied layers, repair cortex, detectors) |
+| `server/migrations/` | 440 numbered migrations |
+| `concord-frontend/` | Next.js 16 — 267 lenses, the lens-runtime framework, Concordia 3D + a real Godot client |
+| `concord-mobile/` | React Native — real BLE / WiFi-P2P / NFC, mesh-aware, offline-first |
+| `sdk/` | Publishable developer SDK + examples |
+| `docs/` | Strategic + verified docs |
 
-## Docs worth reading
-
-| Doc | Purpose |
-|---|---|
-| [`WHY_CONCORD_IS_DIFFERENT.md`](docs/WHY_CONCORD_IS_DIFFERENT.md) | The strategic thesis — why the combination is defensible |
-| [`NOVELTY_INVENTORY.md`](docs/NOVELTY_INVENTORY.md) | All 326 novelties / 34 groups, each → a source file (the build-reference map) |
-| [`STATE_OF_CONCORD.md`](docs/STATE_OF_CONCORD.md) | Verified snapshot — every number reproduced from a command |
-| [`SCIFI_FEASIBILITY_MAP.md`](docs/SCIFI_FEASIBILITY_MAP.md) | Code-grounded audit — what's real vs aspirational |
-| [`CONNECTORS_GO_LIVE.md`](docs/CONNECTORS_GO_LIVE.md) | Operator runbook for the Gmail/Calendar connectors |
+**Docs worth reading:** [`WHY_CONCORD_IS_DIFFERENT.md`](docs/WHY_CONCORD_IS_DIFFERENT.md) (the thesis) · [`NOVELTY_INVENTORY.md`](docs/NOVELTY_INVENTORY.md) (every novelty → a source file) · [`STATE_OF_CONCORD.md`](docs/STATE_OF_CONCORD.md) (verified snapshot) · [`SCIFI_FEASIBILITY_MAP.md`](docs/SCIFI_FEASIBILITY_MAP.md) (real vs aspirational) · [`SECURITY.md`](SECURITY.md)
 
 ---
 
 <div align="center">
 
-**The artifact is the pitch.** Clone it, run the commands, read the receipts — or just [walk in the door](https://concord-os.org/explore) and see for yourself.
+**The artifact is the pitch.** Clone it, run the commands, read the receipts — or just [walk in the door](https://concord-os.org/explore).
 
-*In an AI market where the bottleneck shifted from generating to trusting — that's the bet, and it's already built.*
+*The bottleneck in AI shifted from generating to trusting. That's the bet — and it's already built.*
 
 </div>

@@ -50,6 +50,7 @@ const SKIP = new Set([
 
 const targets = [
   "CLAUDE.md",
+  "README.md",
   ...fs.readdirSync(path.join(ROOT, "docs"))
     .filter((f) => f.endsWith(".md"))
     .map((f) => `docs/${f}`)
