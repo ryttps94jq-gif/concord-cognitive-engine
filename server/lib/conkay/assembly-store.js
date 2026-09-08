@@ -239,6 +239,35 @@ export function removePart(db, assemblyId, partId, opts = {}) {
   return { ok: true, removed: existing };
 }
 
+
+/** Merge patch into assembly meta_json. */
+export function updateAssemblyMeta(db, assemblyId, patch) {
+  ensureAssemblyTables(db);
+  const asm = getAssembly(db, assemblyId);
+  if (!asm) return { ok: false, error: 'assembly_not_found', code: 'NOT_FOUND' };
+  const meta = { ...(asm.meta || {}), ...(patch || {}) };
+  const ts = nowIso();
+  db.prepare(`UPDATE conkay_assemblies SET meta_json = ?, updated_at = ? WHERE id = ?`).run(
+    JSON.stringify(meta),
+    ts,
+    assemblyId,
+  );
+  return { ok: true, assembly: getAssembly(db, assemblyId) };
+}
+
+/** Merge patch into part meta_json. */
+export function updatePartMeta(db, assemblyId, partId, patch) {
+  ensureAssemblyTables(db);
+  const part = getPart(db, assemblyId, partId);
+  if (!part) return { ok: false, error: 'part_not_found', code: 'NOT_FOUND' };
+  const meta = { ...(part.meta || {}), ...(patch || {}) };
+  const ts = nowIso();
+  db.prepare(
+    `UPDATE conkay_assembly_parts SET meta_json = ?, updated_at = ? WHERE assembly_id = ? AND id = ?`,
+  ).run(JSON.stringify(meta), ts, assemblyId, partId);
+  return { ok: true, part: getPart(db, assemblyId, partId) };
+}
+
 export function deleteAssembly(db, assemblyId) {
   ensureAssemblyTables(db);
   const asm = getAssembly(db, assemblyId);

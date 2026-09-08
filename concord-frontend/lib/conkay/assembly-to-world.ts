@@ -350,3 +350,52 @@ export async function attachPartMaterial(assemblyId: string, partId: string, mat
   return res?.data;
 }
 
+/** Download multi-page drawing PDF pack. */
+export async function downloadAssemblyDrawingPdf(assemblyId: string) {
+  const res = await api.get(`/api/conkay/assemblies/${assemblyId}/drawing.pdf`, { responseType: 'blob' });
+  const blob = res?.data instanceof Blob ? res.data : new Blob([res?.data], { type: 'application/pdf' });
+  const filename = `conkay-assembly-${assemblyId.slice(0, 8)}-drawing.pdf`;
+  if (typeof window !== 'undefined') {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+  return { ok: true, filename, size: blob.size };
+}
+
+/** Explode assembly transforms from COM; then set_transform / redraw in Unity. */
+export async function explodeAssemblyApi(assemblyId: string, factor = 1) {
+  const res = await api.post(`/api/conkay/assemblies/${assemblyId}/explode`, { factor });
+  const out = res?.data;
+  let unity: unknown = null;
+  if (out?.ok && Array.isArray(out.parts)) {
+    const parts = out.parts as AssemblyPartView[];
+    const xfResults = parts.map((part) => revisePartTransformInUnity(part));
+    const anyXf = xfResults.some((r) => r.ok && r.mode === 'set_transform');
+    if (!anyXf) {
+      unity = redrawAssemblyInUnity(parts);
+    } else {
+      unity = { setTransform: xfResults, ok: true };
+    }
+  }
+  return { ...out, unity };
+}
+
+export async function addAssemblyGdt(assemblyId: string, body: Record<string, unknown>) {
+  const res = await api.post(`/api/conkay/assemblies/${assemblyId}/gdt`, body);
+  return res?.data;
+}
+
+export async function listAssemblyGdt(assemblyId: string) {
+  const res = await api.get(`/api/conkay/assemblies/${assemblyId}/gdt`);
+  return res?.data;
+}
+
+export async function addAssemblyDimension(assemblyId: string, body: Record<string, unknown>) {
+  const res = await api.post(`/api/conkay/assemblies/${assemblyId}/dimensions`, body);
+  return res?.data;
+}
+

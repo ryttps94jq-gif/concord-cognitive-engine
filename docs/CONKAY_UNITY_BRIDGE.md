@@ -1,4 +1,4 @@
-# ConKay ↔ Unity (browser) — 2026-09-08 (build-intents LIVE · industrial mesh apply LIVE · free-text NLP CAD LIVE · load_glb LIVE · evo-asset→load_glb LIVE · ASSEMBLY LIVE · STL+BOM LIVE · Wave3 mates/materials LIVE · mates v2 LIVE · assembly undo/redo LIVE · set_transform player-LIVE · Wave4 suite LIVE · faceted STEP import/export LIVE)
+# ConKay ↔ Unity (browser) — 2026-09-08 (build-intents LIVE · industrial mesh apply LIVE · free-text NLP CAD LIVE · load_glb LIVE · evo-asset→load_glb LIVE · ASSEMBLY LIVE · STL+BOM LIVE · Wave3 mates/materials LIVE · mates v2 LIVE · assembly undo/redo LIVE · set_transform player-LIVE · Wave4 suite LIVE · faceted STEP import/export LIVE · orthographic drawing+dims+PDF LIVE · explode LIVE · GD&T drafting LIVE)
 
 ## Vision (design target — not LIVE)
 User: ConKay in browser drives Unity (WebGL / editor bridge) for blueprint→physics→mesh→live 3D.
@@ -147,11 +147,31 @@ Sequence sketched: ConKay intent → subconscious gate → deterministic physics
 - Commit landed in tree as `63cc66516` (deploy land of CAD wave + STEP).
 - Honesty: **faceted STEP from meshes**. NOT OpenCascade/cadquery B-rep / SolidWorks kernel / industrial mates solver.
 
+
+
+## Orthographic drawing + dimensions + PDF pack (2026-09-08)
+- **Status: LIVE** — SVG front/top/side with auto overall X/Y dims (extension lines/arrows) + optional user dims API; multi-page PDF pack (title block + BOM + 3 views).
+- APIs: `GET …/drawing.json`, `GET …/drawing.svg`, `GET …/drawing.pdf`, `POST/GET/DELETE …/dimensions`.
+- Overlay: **DWG** (`ck-export-drawing`), **PDF** (`ck-export-drawing-pdf`).
+- Honesty: projected mesh lines + drafting-style dims — **NOT** industrial drafting CAD / CMM sheets.
+- Proof: `~/.zuko/remaining-work/conkay-cad-drawing-dims-pdf-proof.json`
+
+## Assembly explode view (2026-09-08)
+- **Status: LIVE** — server computes deltas along part centroids from assembly COM; `POST …/explode { factor }` updates transforms (undoable via history); Overlay **Explode**; Unity via `set_transform` / clear+redraw.
+- Honesty: geometric centroid explode — **NOT** physics / SolidWorks explode-table animation.
+- Proof: `~/.zuko/remaining-work/conkay-cad-explode-proof.json`
+
+## GD&T drafting annotations (2026-09-08)
+- **Status: LIVE** — feature control frames (⊥ ∥ ⌖ ◎ etc + tolerance + datum refs) stored on assembly meta; rendered as SVG overlays on drawing; CRUD `…/gdt` (also embedded in `drawing.json`).
+- Honesty: **drafting annotations on projected views — NOT CMM-certified GD&T solver**.
+- Proof: `~/.zuko/remaining-work/conkay-cad-gdt-proof.json`
+
 ## NOT LIVE (do not claim)
 - Full industrial / SolidWorks-class CAD suite (FEA→cube proxy LIVE; partMesh→apply_mesh LIVE; free-text NLP→apply_mesh LIVE; load_glb LIVE; evo-asset→load_glb archetypes LIVE; ASSEMBLY LIVE; STL+BOM LIVE; **Wave 3 mates/materials LIVE**; **Wave 4 suite chain LIVE**) — still **NOT**: industrial constraint solver / full B-rep kernel (faceted STEP import/export is LIVE), ERP BOM, full SolidWorks-class suite.
 - substrate-finish.js "10 physics models" as ConKay industrial pipeline.
 - MCP compiling CAD into Unity Editor from browser without WebGL/editor bridge.
 - Linux standalone player module.
+- CMM-certified GD&T solver / industrial drafting sheets (drafting overlays LIVE).
 - Crowd/marble structural CAD from chat.
 
 ## Paths

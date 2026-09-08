@@ -1,8 +1,12 @@
 // server/lib/conkay/assembly-drawing.js
 // Orthographic 2D drawing views from triangle meshes (front/top/side).
-// Honesty: projected line segments / silhouette SVG — NOT drafting CAD / GD&T / sheets.
+// Dimensions + GD&T annotation overlays + multi-page PDF pack.
+// Honesty: projected line segments / drafting-style annotations on views —
+// NOT industrial drafting CAD / CMM-certified GD&T solver / OCC sheets.
 
 import { listParts, getAssembly } from './assembly-store.js';
+import { buildBom } from './assembly-export.js';
+import PDFDocument from 'pdfkit';
 
 function applyTransformToPositions(positions, transform) {
   const pos = transform?.position || { x: 0, y: 0, z: 0 };
@@ -17,13 +21,13 @@ function applyTransformToPositions(positions, transform) {
 }
 
 /** Project 3D → 2D for orthographic views. */
-function projectPoint(x, y, z, view) {
+export function projectPoint(x, y, z, view) {
   switch (view) {
-    case 'front': // looking −Z: X right, Y up
+    case 'front':
       return { u: x, v: y };
-    case 'top': // looking −Y: X right, Z up (or −Z depending convention; use −Z so +Z toward viewer bottom? keep Z up on paper)
+    case 'top':
       return { u: x, v: -z };
-    case 'side': // looking +X: Z right, Y up (right side)
+    case 'side':
       return { u: z, v: y };
     default:
       return { u: x, v: y };
@@ -36,7 +40,6 @@ function edgeKey(a, b) {
 
 /**
  * Extract unique triangle edges (wireframe). Optional silhouette: edges with face count === 1.
- * @returns {{ segments: Array<{x1,y1,x2,y2}>, bounds: {minU,minV,maxU,maxV}, edgeCount: number }}
  */
 export function projectMeshView(positions, indices, view = 'front', { silhouette = true } = {}) {
   const pos = positions instanceof Float32Array ? positions : new Float32Array(positions);
@@ -63,12 +66,7 @@ export function projectMeshView(positions, indices, view = 'front', { silhouette
   let maxV = -Infinity;
 
   for (const [k, count] of faceCount) {
-    if (silhouette && count !== 1 && count !== 2) {
-      // keep all for wireframe when not silhouette-only; silhouette prefers boundary (1) but
-      // closed manifold meshes have all interior edges count=2 — use projected silhouette heuristic:
-      // include all edges when silhouette=false; when true include boundary OR all (fallback wire)
-    }
-    if (silhouette && count > 1) continue; // true boundary only
+    if (silhouette && count > 1) continue;
     const [ia, ib] = k.split('|').map(Number);
     const ax = pos[ia * 3];
     const ay = pos[ia * 3 + 1];
@@ -85,7 +83,6 @@ export function projectMeshView(positions, indices, view = 'front', { silhouette
     maxV = Math.max(maxV, p1.v, p2.v);
   }
 
-  // Closed solids have no boundary edges (all count=2). Fall back to wireframe.
   if (!segments.length) {
     for (const [k] of faceCount) {
       const [ia, ib] = k.split('|').map(Number);
@@ -121,43 +118,217 @@ export function projectMeshView(positions, indices, view = 'front', { silhouette
   };
 }
 
-/** Build SVG string for one or more views. */
-export function viewsToSvg(views, { width = 900, height = 320, padding = 24 } = {}) {
+/** Auto overall X (horizontal) + Y (vertical) dimensions from view bounds. */
+export function buildOverallDimensions(bounds, view) {
+  const { minU, minV, maxU, maxV } = bounds;
+  const spanU = Math.max(0, maxU - minU);
+  const spanV = Math.max(0, maxV - minV);
+  const fmt = (n) => (Math.abs(n) >= 100 ? n.toFixed(1) : n.toFixed(3)).replace(/\.?0+$/, '') || '0';
+  return [
+    {
+      id: `auto-${view}-x`,
+      kind: 'overall',
+      axis: 'x',
+      view,
+      x1: minU,
+      y1: minV,
+      x2: maxU,
+      y2: minV,
+      value: spanU,
+      label: fmt(spanU),
+      auto: true,
+    },
+    {
+      id: `auto-${view}-y`,
+      kind: 'overall',
+      axis: 'y',
+      view,
+      x1: minU,
+      y1: minV,
+      x2: minU,
+      y2: maxV,
+      value: spanV,
+      label: fmt(spanV),
+      auto: true,
+    },
+  ];
+}
+
+function panelTransform(view, panel) {
+  const { minU, minV, maxU, maxV } = view.bounds;
+  const spanU = Math.max(1e-9, maxU - minU);
+  const spanV = Math.max(1e-9, maxV - minV);
+  const scale = Math.min(panel.w / spanU, panel.h / spanV) * 0.82;
+  const cx = panel.ox + panel.w / 2;
+  const cy = panel.oy + panel.h / 2;
+  const midU = (minU + maxU) / 2;
+  const midV = (minV + maxV) / 2;
+  return {
+    toScreen(u, v) {
+      return { x: cx + (u - midU) * scale, y: cy - (v - midV) * scale };
+    },
+    scale,
+    cx,
+    cy,
+  };
+}
+
+function arrowHead(x1, y1, x2, y2, size = 6) {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const len = Math.hypot(dx, dy) || 1;
+  const ux = dx / len;
+  const uy = dy / len;
+  const px = -uy;
+  const py = ux;
+  const bx = x2 - ux * size;
+  const by = y2 - uy * size;
+  return `${x2.toFixed(2)},${y2.toFixed(2)} ${(bx + px * size * 0.45).toFixed(2)},${(by + py * size * 0.45).toFixed(2)} ${(bx - px * size * 0.45).toFixed(2)},${(by - py * size * 0.45).toFixed(2)}`;
+}
+
+/** SVG markup for one dimension (model-space endpoints → screen via xf). */
+export function dimensionToSvg(dim, xf, { offset = 18 } = {}) {
+  const a = xf.toScreen(dim.x1, dim.y1);
+  const b = xf.toScreen(dim.x2, dim.y2);
+  const horizontal = Math.abs(dim.x2 - dim.x1) >= Math.abs(dim.y2 - dim.y1);
+  let ax = a.x;
+  let ay = a.y;
+  let bx = b.x;
+  let by = b.y;
+  if (horizontal) {
+    ay += offset;
+    by += offset;
+  } else {
+    ax -= offset;
+    bx -= offset;
+  }
+  const mx = (ax + bx) / 2;
+  const my = (ay + by) / 2;
+  const label = dim.label != null ? String(dim.label) : '';
+  const ext1 = horizontal
+    ? `<line x1="${a.x.toFixed(2)}" y1="${a.y.toFixed(2)}" x2="${ax.toFixed(2)}" y2="${ay.toFixed(2)}" />`
+    : `<line x1="${a.x.toFixed(2)}" y1="${a.y.toFixed(2)}" x2="${ax.toFixed(2)}" y2="${ay.toFixed(2)}" />`;
+  const ext2 = horizontal
+    ? `<line x1="${b.x.toFixed(2)}" y1="${b.y.toFixed(2)}" x2="${bx.toFixed(2)}" y2="${by.toFixed(2)}" />`
+    : `<line x1="${b.x.toFixed(2)}" y1="${b.y.toFixed(2)}" x2="${bx.toFixed(2)}" y2="${by.toFixed(2)}" />`;
+  return `<g class="dim" data-id="${escapeXml(dim.id || '')}">
+    <g stroke="#fbbf24" stroke-width="0.8" fill="none">${ext1}${ext2}</g>
+    <line x1="${ax.toFixed(2)}" y1="${ay.toFixed(2)}" x2="${bx.toFixed(2)}" y2="${by.toFixed(2)}" stroke="#fbbf24" stroke-width="1.1"/>
+    <polygon points="${arrowHead(bx, by, ax, ay)}" fill="#fbbf24" stroke="none"/>
+    <polygon points="${arrowHead(ax, ay, bx, by)}" fill="#fbbf24" stroke="none"/>
+    <text x="${mx.toFixed(2)}" y="${(my - 3).toFixed(2)}" fill="#fde68a" font-size="10" font-family="monospace" text-anchor="middle">${escapeXml(label)}</text>
+  </g>`;
+}
+
+const GDT_SYMBOLS = Object.freeze({
+  perpendicular: '⊥',
+  parallel: '∥',
+  position: '⌖',
+  concentricity: '◎',
+  flatness: '▱',
+  circularity: '○',
+  cylindricity: '⌭',
+  angularity: '∠',
+  symmetry: '⌯',
+  runout: '↗',
+  total_runout: '⇉',
+  straightness: '⏤',
+  profile_line: '⌒',
+  profile_surface: '⌓',
+});
+
+export function resolveGdtSymbol(symbolOrKey) {
+  const s = String(symbolOrKey || '').trim();
+  if (!s) return '⌖';
+  if (Object.values(GDT_SYMBOLS).includes(s)) return s;
+  const key = s.toLowerCase().replace(/[\s-]+/g, '_');
+  return GDT_SYMBOLS[key] || s;
+}
+
+export { GDT_SYMBOLS };
+
+function escapeXml(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+/** Feature control frame SVG at view-space anchor (u,v). */
+export function gdtAnnotationToSvg(ann, xf) {
+  const u = ann.anchor?.u ?? ann.u ?? 0;
+  const v = ann.anchor?.v ?? ann.v ?? 0;
+  const p = xf.toScreen(u, v);
+  const sym = resolveGdtSymbol(ann.symbol);
+  const tol = ann.tolerance != null ? String(ann.tolerance) : '';
+  const datums = Array.isArray(ann.datums) ? ann.datums.filter(Boolean) : [];
+  const cells = [sym, tol, ...datums.map((d) => String(d).toUpperCase())];
+  const cellW = 22;
+  const cellH = 18;
+  const w = cells.length * cellW;
+  let x = p.x;
+  let boxes = '';
+  let texts = '';
+  cells.forEach((c, i) => {
+    boxes += `<rect x="${x.toFixed(2)}" y="${p.y.toFixed(2)}" width="${cellW}" height="${cellH}" fill="#0f172a" stroke="#a5f3fc" stroke-width="1"/>`;
+    texts += `<text x="${(x + cellW / 2).toFixed(2)}" y="${(p.y + 13).toFixed(2)}" fill="#ecfeff" font-size="11" font-family="monospace" text-anchor="middle">${escapeXml(c)}</text>`;
+    x += cellW;
+  });
+  const leader = `<line x1="${p.x.toFixed(2)}" y1="${(p.y + cellH).toFixed(2)}" x2="${p.x.toFixed(2)}" y2="${(p.y + cellH + 10).toFixed(2)}" stroke="#a5f3fc" stroke-width="1"/>`;
+  return `<g class="gdt" data-id="${escapeXml(ann.id || '')}">${leader}${boxes}${texts}</g>`;
+}
+
+/** Build SVG string for one or more views (with dims + GD&T overlays). */
+export function viewsToSvg(
+  views,
+  {
+    width = 960,
+    height = 360,
+    padding = 24,
+    dimensionsByView = {},
+    gdtByView = {},
+    autoOverall = true,
+    footerNote = 'ConKay orthographic drawing — projected mesh lines + drafting annotations (not CMM GD&T / industrial CAD)',
+  } = {},
+) {
   const panelW = (width - padding * (views.length + 1)) / views.length;
-  const panelH = height - padding * 2 - 20;
+  const panelH = height - padding * 2 - 28;
   const labels = { front: 'FRONT', top: 'TOP', side: 'SIDE' };
   let bodies = '';
   views.forEach((view, i) => {
     const ox = padding + i * (panelW + padding);
     const oy = padding + 16;
-    const { minU, minV, maxU, maxV } = view.bounds;
-    const spanU = Math.max(1e-9, maxU - minU);
-    const spanV = Math.max(1e-9, maxV - minV);
-    const scale = Math.min(panelW / spanU, panelH / spanV) * 0.9;
-    const cx = ox + panelW / 2;
-    const cy = oy + panelH / 2;
-    const midU = (minU + maxU) / 2;
-    const midV = (minV + maxV) / 2;
+    const panel = { ox, oy, w: panelW, h: panelH };
+    const xf = panelTransform(view, panel);
     const lines = view.segments
       .map((s) => {
-        const x1 = cx + (s.x1 - midU) * scale;
-        const y1 = cy - (s.y1 - midV) * scale;
-        const x2 = cx + (s.x2 - midU) * scale;
-        const y2 = cy - (s.y2 - midV) * scale;
-        return `<line x1="${x1.toFixed(2)}" y1="${y1.toFixed(2)}" x2="${x2.toFixed(2)}" y2="${y2.toFixed(2)}" />`;
+        const p1 = xf.toScreen(s.x1, s.y1);
+        const p2 = xf.toScreen(s.x2, s.y2);
+        return `<line x1="${p1.x.toFixed(2)}" y1="${p1.y.toFixed(2)}" x2="${p2.x.toFixed(2)}" y2="${p2.y.toFixed(2)}" />`;
       })
       .join('\n');
+
+    const autoDims = autoOverall ? buildOverallDimensions(view.bounds, view.view) : [];
+    const userDims = dimensionsByView[view.view] || [];
+    const dims = [...autoDims, ...userDims];
+    const dimSvg = dims.map((d) => dimensionToSvg(d, xf, { offset: d.axis === 'y' ? 22 : 16 })).join('\n');
+    const gdtList = gdtByView[view.view] || [];
+    const gdtSvg = gdtList.map((a) => gdtAnnotationToSvg(a, xf)).join('\n');
+
     bodies += `
   <g class="view-${view.view}">
     <text x="${ox + 4}" y="${oy - 4}" fill="#67e8f9" font-size="12" font-family="monospace">${labels[view.view] || view.view.toUpperCase()} (${view.mode})</text>
     <rect x="${ox}" y="${oy}" width="${panelW}" height="${panelH}" fill="none" stroke="#164e63" stroke-width="1"/>
     <g stroke="#e2e8f0" stroke-width="1.2" fill="none">${lines}</g>
+    <g class="dimensions">${dimSvg}</g>
+    <g class="gdt-annotations">${gdtSvg}</g>
   </g>`;
   });
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
   <rect width="100%" height="100%" fill="#0f172a"/>
-  <text x="${padding}" y="${height - 8}" fill="#64748b" font-size="10" font-family="monospace">ConKay orthographic drawing — projected mesh lines (not drafting CAD)</text>
+  <text x="${padding}" y="${height - 8}" fill="#64748b" font-size="10" font-family="monospace">${escapeXml(footerNote)}</text>
   ${bodies}
 </svg>
 `;
@@ -183,6 +354,57 @@ function meshFromParts(parts) {
   return { allPos, allIdx, included, skipped };
 }
 
+function collectAnnotationOpts(asm, opts = {}) {
+  const meta = asm?.meta || {};
+  const userDims = Array.isArray(opts.dimensions)
+    ? opts.dimensions
+    : Array.isArray(meta.dimensions)
+      ? meta.dimensions
+      : [];
+  const gdt = Array.isArray(opts.gdt)
+    ? opts.gdt
+    : Array.isArray(meta.gdt)
+      ? meta.gdt
+      : Array.isArray(meta.gdtAnnotations)
+        ? meta.gdtAnnotations
+        : [];
+  const dimensionsByView = { front: [], top: [], side: [] };
+  for (const d of userDims) {
+    const v = d.view || 'front';
+    if (!dimensionsByView[v]) dimensionsByView[v] = [];
+    dimensionsByView[v].push(d);
+  }
+  const gdtByView = { front: [], top: [], side: [] };
+  for (const a of gdt) {
+    const v = a.view || 'front';
+    if (!gdtByView[v]) gdtByView[v] = [];
+    gdtByView[v].push(a);
+  }
+  return {
+    dimensionsByView,
+    gdtByView,
+    userDims,
+    gdt,
+    autoOverall: opts.autoOverall !== false,
+  };
+}
+
+function enrichViewsWithDims(views, ann) {
+  return views.map((v) => {
+    const auto = ann.autoOverall ? buildOverallDimensions(v.bounds, v.view) : [];
+    const user = ann.dimensionsByView[v.view] || [];
+    return {
+      name: v.view,
+      mode: v.mode,
+      edgeCount: v.edgeCount,
+      bounds: v.bounds,
+      segments: v.segments,
+      dimensions: [...auto, ...user],
+      gdt: ann.gdtByView[v.view] || [],
+    };
+  });
+}
+
 /** Build drawing JSON + SVG for a single part. */
 export function exportPartDrawing(part, opts = {}) {
   if (!part) return { ok: false, reason: 'part_not_found' };
@@ -197,21 +419,24 @@ export function exportPartDrawing(part, opts = {}) {
   const views = ['front', 'top', 'side'].map((v) =>
     projectMeshView(positions, part.mesh.indices, v, { silhouette: opts.silhouette !== false }),
   );
-  const svg = viewsToSvg(views, opts);
+  const fakeAsm = { meta: part.meta || {} };
+  const ann = collectAnnotationOpts(fakeAsm, opts);
+  const svg = viewsToSvg(views, {
+    ...opts,
+    dimensionsByView: ann.dimensionsByView,
+    gdtByView: ann.gdtByView,
+    autoOverall: ann.autoOverall,
+  });
   return {
     ok: true,
     format: 'conkay-drawing/v1',
     partId: part.id,
-    views: views.map((v) => ({
-      name: v.view,
-      mode: v.mode,
-      edgeCount: v.edgeCount,
-      bounds: v.bounds,
-      segments: v.segments,
-    })),
+    views: enrichViewsWithDims(views, ann),
+    dimensions: ann.userDims,
+    gdt: ann.gdt,
     svg,
     honesty: {
-      note: 'Orthographic projected line segments from triangle mesh — not drafting CAD / GD&T sheets',
+      note: 'Orthographic projected lines + drafting dims/GD&T overlays — NOT CMM-certified GD&T solver / industrial sheets',
     },
   };
 }
@@ -228,7 +453,13 @@ export function exportAssemblyDrawing(db, assemblyId, opts = {}) {
   const views = ['front', 'top', 'side'].map((v) =>
     projectMeshView(allPos, allIdx, v, { silhouette: opts.silhouette !== false }),
   );
-  const svg = viewsToSvg(views, opts);
+  const ann = collectAnnotationOpts(asm, opts);
+  const svg = viewsToSvg(views, {
+    ...opts,
+    dimensionsByView: ann.dimensionsByView,
+    gdtByView: ann.gdtByView,
+    autoOverall: ann.autoOverall,
+  });
   return {
     ok: true,
     format: 'conkay-drawing/v1',
@@ -236,16 +467,156 @@ export function exportAssemblyDrawing(db, assemblyId, opts = {}) {
     assemblyName: asm.name,
     included,
     skipped,
-    views: views.map((v) => ({
-      name: v.view,
-      mode: v.mode,
-      edgeCount: v.edgeCount,
-      bounds: v.bounds,
-      segments: v.segments,
-    })),
+    views: enrichViewsWithDims(views, ann),
+    dimensions: ann.userDims,
+    gdt: ann.gdt,
     svg,
     honesty: {
-      note: 'Orthographic projected line segments from triangle meshes — not drafting CAD / GD&T sheets',
+      note: 'Orthographic projected lines + drafting dims/GD&T overlays — NOT CMM-certified GD&T solver / industrial sheets',
+    },
+  };
+}
+
+function drawViewOnPdf(doc, view, box, dims, gdtList) {
+  const { x, y, w, h } = box;
+  doc.save();
+  doc.rect(x, y, w, h).stroke('#334155');
+  const xf = panelTransform(view, { ox: x, oy: y, w, h });
+  doc.strokeColor('#1e293b').lineWidth(0.6);
+  for (const s of view.segments) {
+    const p1 = xf.toScreen(s.x1, s.y1);
+    const p2 = xf.toScreen(s.x2, s.y2);
+    doc.moveTo(p1.x, p1.y).lineTo(p2.x, p2.y).stroke();
+  }
+  doc.strokeColor('#b45309').fillColor('#b45309').lineWidth(0.8);
+  const allDims = [...(dims || [])];
+  for (const dim of allDims) {
+    const a = xf.toScreen(dim.x1, dim.y1);
+    const b = xf.toScreen(dim.x2, dim.y2);
+    const horizontal = Math.abs(dim.x2 - dim.x1) >= Math.abs(dim.y2 - dim.y1);
+    const off = 14;
+    let ax = a.x;
+    let ay = a.y;
+    let bx = b.x;
+    let by = b.y;
+    if (horizontal) {
+      ay += off;
+      by += off;
+    } else {
+      ax -= off;
+      bx -= off;
+    }
+    doc.moveTo(a.x, a.y).lineTo(ax, ay).stroke();
+    doc.moveTo(b.x, b.y).lineTo(bx, by).stroke();
+    doc.moveTo(ax, ay).lineTo(bx, by).stroke();
+    doc.fontSize(8).fillColor('#92400e').text(String(dim.label || ''), (ax + bx) / 2 - 12, (ay + by) / 2 - 10, {
+      width: 40,
+      align: 'center',
+    });
+  }
+  doc.fillColor('#0e7490').strokeColor('#0e7490');
+  for (const ann of gdtList || []) {
+    const u = ann.anchor?.u ?? 0;
+    const v = ann.anchor?.v ?? 0;
+    const p = xf.toScreen(u, v);
+    const sym = resolveGdtSymbol(ann.symbol);
+    const label = [sym, ann.tolerance || '', ...(ann.datums || [])].filter(Boolean).join(' | ');
+    doc.fontSize(8).text(label, p.x, p.y, { width: 80 });
+  }
+  doc.restore();
+}
+
+/**
+ * Multi-page PDF: title+BOM page, then one page per orthographic view.
+ * Returns { ok, buffer, pages, filename }.
+ */
+export async function exportAssemblyDrawingPdf(db, assemblyId, opts = {}) {
+  const drawing = exportAssemblyDrawing(db, assemblyId, opts);
+  if (!drawing.ok) return drawing;
+  const bom = buildBom(db, assemblyId);
+  const asm = getAssembly(db, assemblyId);
+
+  const buffer = await new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ size: 'LETTER', margin: 36, autoFirstPage: false });
+    const chunks = [];
+    doc.on('data', (c) => chunks.push(c));
+    doc.on('end', () => resolve(Buffer.concat(chunks)));
+    doc.on('error', reject);
+
+    // Page 1 — title block + BOM
+    doc.addPage();
+    doc.fontSize(16).fillColor('#0f172a').text('ConKay Assembly Drawing Pack', { align: 'left' });
+    doc.moveDown(0.4);
+    doc.fontSize(10).fillColor('#334155');
+    doc.text(`Assembly: ${asm?.name || assemblyId}`);
+    doc.text(`ID: ${assemblyId}`);
+    doc.text(`Generated: ${new Date().toISOString()}`);
+    doc.text('Honesty: projected mesh views + drafting annotations — NOT CMM GD&T / OCC sheets');
+    doc.moveDown(0.8);
+    // Title block box
+    const tbY = doc.y;
+    doc.rect(36, tbY, 540, 56).stroke('#64748b');
+    doc.fontSize(9).text(`Title: ${asm?.name || 'Untitled'}`, 44, tbY + 8);
+    doc.text('Scale: orthographic fit', 44, tbY + 22);
+    doc.text('Sheet: 1 / 4 (title+BOM)', 44, tbY + 36);
+    doc.text('Rev: A', 320, tbY + 8);
+    doc.text('Units: model units', 320, tbY + 22);
+    doc.y = tbY + 70;
+    doc.fontSize(12).fillColor('#0f172a').text('Bill of Materials');
+    doc.moveDown(0.3);
+    doc.fontSize(9).fillColor('#334155');
+    const lines = bom.ok ? bom.lines : [];
+    doc.text('Kind'.padEnd(16) + 'Material'.padEnd(16) + 'Qty'.padEnd(6) + 'Names');
+    doc.moveTo(36, doc.y).lineTo(576, doc.y).stroke('#94a3b8');
+    doc.moveDown(0.2);
+    for (const line of lines) {
+      const names = (line.names || []).join(', ').slice(0, 48);
+      doc.text(
+        `${String(line.kind || '').slice(0, 14).padEnd(16)}${String(line.material || '').slice(0, 14).padEnd(16)}${String(line.qty).padEnd(6)}${names}`,
+      );
+    }
+    if (!lines.length) doc.text('(no parts)');
+    doc.moveDown(0.6);
+    doc.fontSize(8).fillColor('#64748b').text(`Total parts: ${bom.totalParts ?? 0}`);
+
+    // Pages 2–4 — views
+    const viewObjs = ['front', 'top', 'side'].map((name) => {
+      const v = drawing.views.find((x) => x.name === name);
+      return {
+        view: name,
+        segments: v.segments,
+        bounds: v.bounds,
+        mode: v.mode,
+        dimensions: v.dimensions,
+        gdt: v.gdt,
+      };
+    });
+
+    for (const v of viewObjs) {
+      doc.addPage();
+      doc.fontSize(14).fillColor('#0f172a').text(`${v.view.toUpperCase()} VIEW (${v.mode})`);
+      doc.fontSize(8).fillColor('#64748b').text('Projected mesh edges + overall dims / user dims / GD&T frames');
+      drawViewOnPdf(
+        doc,
+        v,
+        { x: 36, y: 72, w: 540, h: 620 },
+        v.dimensions,
+        v.gdt,
+      );
+    }
+
+    doc.end();
+  });
+
+  return {
+    ok: true,
+    buffer,
+    pages: 4,
+    filename: `conkay-assembly-${assemblyId.slice(0, 8)}-drawing.pdf`,
+    assemblyId,
+    assemblyName: asm?.name,
+    honesty: {
+      note: 'Multi-page PDF pack (title+BOM + 3 orthographic views). Drafting annotations — NOT CMM-certified GD&T.',
     },
   };
 }

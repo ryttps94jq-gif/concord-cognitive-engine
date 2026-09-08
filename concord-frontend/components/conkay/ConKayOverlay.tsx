@@ -36,7 +36,7 @@ import { runFeaBeamToWorld } from '@/lib/conkay/fea-beam-to-world';
 import { runPartMeshToWorld } from '@/lib/conkay/part-mesh-to-world';
 import { designViaApiOrClient } from '@/lib/conkay/nlp-design-to-world';
 import { runEvoGlbToWorld } from '@/lib/conkay/evo-glb-to-world';
-import { runAssemblyChatRevise, downloadStl, downloadAssemblyBom, downloadStep, runAssemblyUndo, runAssemblyRedo, downloadAssemblyDrawing, fetchMaterials, attachPartMaterial, listParts } from '@/lib/conkay/assembly-to-world';
+import { runAssemblyChatRevise, downloadStl, downloadAssemblyBom, downloadStep, runAssemblyUndo, runAssemblyRedo, downloadAssemblyDrawing, downloadAssemblyDrawingPdf, explodeAssemblyApi, fetchMaterials, attachPartMaterial, listParts } from '@/lib/conkay/assembly-to-world';
 import { ConKayActionConfirm } from './ConKayActionConfirm';
 import { ConKayCockpit } from './ConKayCockpit';
 import { CONKAY_SIGNATURE_GREETING, CONKAY_PERSONA_PROMPT, type ConKayState } from './conkay-persona';
@@ -621,6 +621,42 @@ export function ConKayOverlay() {
       setWorkStatus(`Drawing download failed — ${e instanceof Error ? e.message : String(e)}`);
     }
   }, [assemblyId]);
+
+  const downloadAssemblyDrawingPdfClick = useCallback(async () => {
+    if (!assemblyId) {
+      setWorkStatus('PDF: no assembly yet — Asm revise first');
+      return;
+    }
+    try {
+      const r = await downloadAssemblyDrawingPdf(assemblyId);
+      setWorkStatus(`PDF PACK LIVE: ${r.filename} (${r.size} bytes) — 3 views + title/BOM (not CMM GD&T)`);
+    } catch (e) {
+      setWorkStatus(`PDF download failed — ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }, [assemblyId]);
+
+  const explodeAssemblyClick = useCallback(async () => {
+    if (!assemblyId) {
+      setWorkStatus('Explode: no assembly yet — Asm revise first');
+      return;
+    }
+    setAssemblyBusy(true);
+    try {
+      const out = await explodeAssemblyApi(assemblyId, 1);
+      if (!out?.ok) {
+        setWorkStatus(`Explode failed — ${out?.error || 'unknown'}`);
+        return;
+      }
+      const n = out.updates?.length ?? out.parts?.length ?? 0;
+      setWorkStatus(`EXPLODE LIVE: factor=1 parts=${n} COM-centroid deltas — undoable · Unity set_transform/redraw`);
+    } catch (e) {
+      setWorkStatus(`Explode error — ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setAssemblyBusy(false);
+    }
+  }, [assemblyId]);
+
+
 
   useEffect(() => {
     if (!assemblyId) return;
@@ -1466,6 +1502,24 @@ export function ConKayOverlay() {
                   className="rounded-lg px-2 py-1 text-[10px] text-sky-100 hover:bg-sky-400/15 border border-sky-400/30 disabled:opacity-40">
                   DWG
                 </button>
+
+                <button type="button" onClick={() => { void downloadAssemblyDrawingPdfClick(); }}
+                  disabled={!assemblyId}
+                  title="Download multi-page drawing PDF (3 orthographic views + title block + BOM — drafting pack, not CMM GD&T)"
+                  aria-label="Download assembly drawing PDF"
+                  data-testid="ck-export-drawing-pdf"
+                  className="rounded-lg px-2 py-1 text-[10px] text-sky-100 hover:bg-sky-400/15 border border-sky-400/30 disabled:opacity-40">
+                  PDF
+                </button>
+                <button type="button" onClick={() => { void explodeAssemblyClick(); }}
+                  disabled={!assemblyId || assemblyBusy}
+                  title="Explode assembly along part centroids from COM (factor=1) — undoable; Unity set_transform/redraw"
+                  aria-label="Explode assembly"
+                  data-testid="ck-assembly-explode"
+                  className="rounded-lg px-2 py-1 text-[10px] text-amber-100 hover:bg-amber-400/15 border border-amber-400/30 disabled:opacity-40">
+                  Explode
+                </button>
+
                 <select
                   value={materialPicker}
                   onChange={(e) => setMaterialPicker(e.target.value)}

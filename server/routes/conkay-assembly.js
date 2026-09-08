@@ -38,7 +38,18 @@ import {
 import {
   exportAssemblyDrawing,
   exportPartDrawing,
+  exportAssemblyDrawingPdf,
 } from '../lib/conkay/assembly-drawing.js';
+import { explodeAssembly } from '../lib/conkay/assembly-explode.js';
+import {
+  listGdt,
+  addGdt,
+  updateGdt,
+  removeGdt,
+  listDimensions,
+  addDimension,
+  removeDimension,
+} from '../lib/conkay/assembly-gdt.js';
 import { applyMate, MATE_TYPES } from '../lib/conkay/assembly-mates.js';
 import {
   listMaterials,
@@ -629,6 +640,96 @@ export default function createConkayAssemblyRouter({ requireAuth, db }) {
     res.setHeader('Content-Type', 'image/svg+xml; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     return res.send(drawing.svg);
+  });
+
+
+  /** GET /api/conkay/assemblies/:id/drawing.pdf — multi-page PDF pack */
+  router.get('/assemblies/:id/drawing.pdf', auth, async (req, res) => {
+    if (!needDb(res)) return;
+    try {
+      const pdf = await exportAssemblyDrawingPdf(db, req.params.id);
+      if (!pdf.ok) return res.status(422).json(pdf);
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${pdf.filename}"`);
+      res.setHeader('X-ConKay-Drawing-Pages', String(pdf.pages || 4));
+      return res.send(pdf.buffer);
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: e instanceof Error ? e.message : String(e) });
+    }
+  });
+
+  /** POST /api/conkay/assemblies/:id/dimensions — optional user dim */
+  router.post('/assemblies/:id/dimensions', auth, (req, res) => {
+    if (!needDb(res)) return;
+    const out = addDimension(db, req.params.id, req.body || {});
+    if (!out.ok) {
+      const code = out.code === 'NOT_FOUND' ? 404 : 400;
+      return res.status(code).json(out);
+    }
+    return res.json(out);
+  });
+
+  /** GET /api/conkay/assemblies/:id/dimensions */
+  router.get('/assemblies/:id/dimensions', auth, (req, res) => {
+    if (!needDb(res)) return;
+    const out = listDimensions(db, req.params.id);
+    if (!out.ok) return res.status(404).json(out);
+    return res.json(out);
+  });
+
+  /** DELETE /api/conkay/assemblies/:id/dimensions/:dimId */
+  router.delete('/assemblies/:id/dimensions/:dimId', auth, (req, res) => {
+    if (!needDb(res)) return;
+    const out = removeDimension(db, req.params.id, req.params.dimId);
+    if (!out.ok) return res.status(404).json(out);
+    return res.json(out);
+  });
+
+  /** POST /api/conkay/assemblies/:id/explode { factor } */
+  router.post('/assemblies/:id/explode', auth, (req, res) => {
+    if (!needDb(res)) return;
+    const factor = req.body?.factor ?? 1;
+    const out = explodeAssembly(db, req.params.id, factor);
+    if (!out.ok) {
+      const code = out.code === 'NOT_FOUND' ? 404 : out.code === 'EMPTY' ? 409 : 400;
+      return res.status(code).json(out);
+    }
+    return res.json(out);
+  });
+
+  /** GET /api/conkay/assemblies/:id/gdt */
+  router.get('/assemblies/:id/gdt', auth, (req, res) => {
+    if (!needDb(res)) return;
+    const out = listGdt(db, req.params.id);
+    if (!out.ok) return res.status(404).json(out);
+    return res.json(out);
+  });
+
+  /** POST /api/conkay/assemblies/:id/gdt */
+  router.post('/assemblies/:id/gdt', auth, (req, res) => {
+    if (!needDb(res)) return;
+    const out = addGdt(db, req.params.id, req.body || {});
+    if (!out.ok) {
+      const code = out.code === 'NOT_FOUND' ? 404 : 400;
+      return res.status(code).json(out);
+    }
+    return res.json(out);
+  });
+
+  /** PATCH /api/conkay/assemblies/:id/gdt/:annId */
+  router.patch('/assemblies/:id/gdt/:annId', auth, (req, res) => {
+    if (!needDb(res)) return;
+    const out = updateGdt(db, req.params.id, req.params.annId, req.body || {});
+    if (!out.ok) return res.status(404).json(out);
+    return res.json(out);
+  });
+
+  /** DELETE /api/conkay/assemblies/:id/gdt/:annId */
+  router.delete('/assemblies/:id/gdt/:annId', auth, (req, res) => {
+    if (!needDb(res)) return;
+    const out = removeGdt(db, req.params.id, req.params.annId);
+    if (!out.ok) return res.status(404).json(out);
+    return res.json(out);
   });
 
   /** GET /api/conkay/assemblies/:id/history */
