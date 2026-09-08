@@ -1862,6 +1862,7 @@ import { readReplicaGate } from "./lib/read-replica-allowlist.js";
 import { createLLMQueue } from "./lib/llm-queue.js";
 import { getCurrentLagMs as getEventLoopLagMs } from "./lib/event-loop-pressure.js";
 import { createLoadSheddingMiddleware } from "./lib/request-admission.js";
+import * as goSidecar from "./lib/sidecars/go-sidecar-client.js"; // Concurrency Refactor Phase 1 — Whisper/Piper/sandbox off the event loop
 import { BRAIN_CONFIG, SYSTEM_TO_BRAIN, BRAIN_PRIORITY, getBrainForSystem, getActiveBrainConfig, getSystemStatus, pickBrainEndpoint, noteEndpointStart, noteEndpointFinish } from "./lib/brain-config.js";
 import { preloadBrains, getBrainPriority, resolveBrain } from "./lib/brain-router.js";
 // BYO key router — when a user has plugged their own provider key into a
@@ -14877,7 +14878,24 @@ function executeInSandbox({ entityId, command, workDir, timeoutMs, maxOutputByte
     return Promise.resolve({ exitCode: 1, stdout: "", stderr: `Sandbox: command "${executable}" not in allowlist.`, timedOut: false });
   }
 
-  return new Promise((resolve) => {
+  return (async () => {
+    // Concurrency Refactor Phase 1 (audit C03): the spawnSync below blocks the
+    // event loop for up to timeoutMs even though it's wrapped in a Promise.
+    // Prefer the Go sidecar (owns the child process); fail soft to inline.
+    try {
+      if (await goSidecar.isAvailable()) {
+        return await goSidecar.sandbox({
+          command,
+          workDir,
+          timeoutMs,
+          maxOutputBytes,
+          env: { ENTITY_ID: String(entityId || "") },
+        });
+      }
+    } catch (_e) {
+      logger.debug("server", "go-sidecar sandbox unavailable — inline fallback", { error: _e?.message });
+    }
+
     const proc = spawnSync(executable, args, {
       cwd: workDir,
       timeout: timeoutMs,
@@ -14892,13 +14910,13 @@ function executeInSandbox({ entityId, command, workDir, timeoutMs, maxOutputByte
       encoding: "utf-8"
     });
 
-    resolve({
+    return {
       exitCode: proc.status || 0,
       stdout: String(proc.stdout || ""),
       stderr: String(proc.stderr || ""),
       timedOut: proc.error?.code === "ETIMEDOUT"
-    });
-  });
+    };
+  })();
 }
 
 // ============================================================================
@@ -15186,6 +15204,13 @@ register("voice","transcribe", async (ctx, input={}) => {
   if (bin) {
     const audioPath = String(input.audioPath || "");
     if (!audioPath) return { ok:false, error:"audioPath required (server-side file path)" };
+    // Concurrency Refactor Phase 1 (audit C03): Go sidecar first, fail soft.
+    try {
+      if (await goSidecar.isAvailable()) {
+        const r = await goSidecar.whisper({ audioPath, timeoutMs: 60000 });
+        if (r.ok) return { ok:true, transcript: (r.transcript || "").trim(), source: "whisper_cpp" };
+      }
+    } catch (_e) { logger.debug("server", "go-sidecar transcribe unavailable — inline fallback", { error: _e?.message }); }
     const args = [ "-f", audioPath, "--output-txt" ];
     const p = spawnSync(bin, args, { encoding:"utf-8" });
     if (p.error) return { ok:false, error:String(p.error) };
@@ -15221,8 +15246,20 @@ register("voice","tts", async (ctx, input={}) => {
       existsSync: fs.existsSync,
     });
     const args = modelArg ? ["--model", modelArg] : [];
-    const p = spawnSync(bin, args, { input: text, encoding:"utf-8" });
-    if (p.error) return { ok:false, error:String(p.error) };
+    // Concurrency Refactor Phase 1 (audit C03): Go sidecar first, fail soft.
+    let wavBuffer = null;
+    try {
+      if (await goSidecar.isAvailable()) {
+        const r = await goSidecar.piper({ text, modelArg: modelArg || "", timeoutMs: 30000 });
+        if (r.ok && r.wav) wavBuffer = r.wav;
+      }
+    } catch (_e) { logger.debug("server", "go-sidecar tts unavailable — inline fallback", { error: _e?.message }); }
+    if (!wavBuffer) {
+      const p = spawnSync(bin, args, { input: text }); // no encoding → stdout stays a Buffer (binary wav)
+      if (p.error) return { ok:false, error:String(p.error) };
+      wavBuffer = p.stdout;
+    }
+    const p = { stdout: wavBuffer };
     const outPath = String(input.outPath || "");
     if (outPath) {
       // Path traversal protection - only allow writes to entity workspace or tmp
@@ -57132,7 +57169,7 @@ function generateEmbedHtml(embed) {
 // ============================================================================
 
 // ---- Voice Notes ----
-function processVoiceNote(audioBuffer, options = {}) {
+async function processVoiceNote(audioBuffer, options = {}) {
   // Use local Whisper if available
   const WHISPER_BIN = process.env.WHISPER_CPP_BIN || process.env.WHISPER_BIN;
 
@@ -57141,21 +57178,36 @@ function processVoiceNote(audioBuffer, options = {}) {
   }
 
   try {
-    // Save audio to temp file
-    const tempPath = path.join(DATA_DIR, `temp_audio_${Date.now()}.wav`);
-    fs.writeFileSync(tempPath, audioBuffer);
+    let transcript = "";
 
-    // Run Whisper
-    const result = spawnSync(WHISPER_BIN, ["-f", tempPath, "-otxt"], {
-      timeout: 60000,
-      maxBuffer: 10 * 1024 * 1024
-    });
+    // Concurrency Refactor Phase 1 (audit C03): prefer the Go sidecar so a ~60s
+    // whisper.cpp run never blocks the Node event loop. Fail soft to inline.
+    try {
+      if (await goSidecar.isAvailable()) {
+        const r = await goSidecar.whisper({
+          audioBase64: Buffer.from(audioBuffer).toString("base64"),
+          timeoutMs: 60000,
+        });
+        if (r.ok) transcript = r.transcript || "";
+        else if (r.error === "no_speech_detected") return { ok: false, error: "No speech detected" };
+        // any other sidecar error → fall through to the inline path
+      }
+    } catch (_e) {
+      logger.debug("server", "go-sidecar whisper unavailable — inline fallback", { error: _e?.message });
+    }
 
-    // Clean up
-    try { fs.unlinkSync(tempPath); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
-    try { fs.unlinkSync(tempPath + ".txt"); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
-
-    const transcript = result.stdout?.toString() || "";
+    if (!transcript) {
+      // Inline fallback — spawnSync blocks the loop, but only when the sidecar is down.
+      const tempPath = path.join(DATA_DIR, `temp_audio_${Date.now()}.wav`);
+      fs.writeFileSync(tempPath, audioBuffer);
+      const result = spawnSync(WHISPER_BIN, ["-f", tempPath, "-otxt"], {
+        timeout: 60000,
+        maxBuffer: 10 * 1024 * 1024,
+      });
+      try { fs.unlinkSync(tempPath); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
+      try { fs.unlinkSync(tempPath + ".txt"); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
+      transcript = result.stdout?.toString() || "";
+    }
 
     if (!transcript.trim()) {
       return { ok: false, error: "No speech detected" };
