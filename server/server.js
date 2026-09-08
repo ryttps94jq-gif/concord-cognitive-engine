@@ -63553,79 +63553,35 @@ app.get("/api/papers/tags", (req, res) => {
   res.json({ ok: true, tags: Array.from(tagSet).sort() });
 });
 
-// Credits/wallet system - requires authentication
-app.post("/api/credits/wallet", requireAuth(), (req, res) => {
-  const { walletId } = req.body || {};
-  if (!walletId) return res.status(400).json({ ok: false, error: "walletId required" });
-
-  // Initialize wallets store if needed
-  if (!STATE.wallets) STATE.wallets = new Map();
-
-  // Get or create wallet
-  let wallet = STATE.wallets.get(walletId);
-  if (!wallet) {
-    wallet = {
-      id: walletId,
-      balance: 100, // Starting balance
-      transactions: [],
-      createdAt: new Date().toISOString()
-    };
-    STATE.wallets.set(walletId, wallet);
-  }
-
-  res.json({ ok: true, wallet });
+// ── /api/credits/* — DEPRECATED (Concurrency Refactor Tier 2, 2026-09-08) ──
+// This was a SEPARATE in-memory wallet (STATE.wallets, per-process, `balance:
+// 100` starting grant) with a client-supplied `amount` on /earn — a free-mint
+// surface AND per-process-incoherent under a cluster (docs/CONCURRENCY_STATE_AUDIT.md
+// Tier M). It is NOT the real economy (user_wallets + economy_ledger, mutated
+// only via mintCoins/walletDebit/walletCredit). Its only caller was a fake
+// "Manual earn/spend" demo button in the crypto lens.
+//
+// wallet/balance now READ the real ledger-summed CC balance (read-only, no
+// per-process state). earn/spend are honest no-ops — credits are not a
+// mintable currency. The crypto-lens buttons should be removed in the
+// frontend consolidation pass (they violate honest-by-construction).
+async function _realCcBalance(userId) {
+  if (!userId || !db) return 0;
+  try {
+    const { getBalance } = await import("./economy/balances.js");
+    return getBalance(db, userId)?.balance ?? 0;
+  } catch { return 0; }
+}
+app.post("/api/credits/wallet", requireAuth(), async (req, res) => {
+  const userId = req.user?.id || req.actor?.userId || null;
+  const balance = await _realCcBalance(userId);
+  res.json({ ok: true, wallet: { id: String(req.body?.walletId || userId || "wallet"), balance, transactions: [], readOnly: true } });
 });
-
 app.post("/api/credits/earn", requireAuth(), (req, res) => {
-  const { walletId, amount, reason = "quest" } = req.body || {};
-  if (!walletId) return res.status(400).json({ ok: false, error: "walletId required" });
-  if (!amount || amount <= 0) return res.status(400).json({ ok: false, error: "positive amount required" });
-
-  if (!STATE.wallets) STATE.wallets = new Map();
-
-  let wallet = STATE.wallets.get(walletId);
-  if (!wallet) {
-    wallet = { id: walletId, balance: 0, transactions: [], createdAt: new Date().toISOString() };
-  }
-
-  wallet.balance += amount;
-  wallet.transactions.push({
-    type: "earn",
-    amount,
-    reason,
-    timestamp: new Date().toISOString()
-  });
-
-  STATE.wallets.set(walletId, wallet);
-  res.json({ ok: true, wallet, earned: amount });
+  res.status(200).json({ ok: false, error: "credits_not_mintable", detail: "CC is earned only through real economy events (marketplace sales, royalties). /api/credits/earn is deprecated." });
 });
-
 app.post("/api/credits/spend", requireAuth(), (req, res) => {
-  const { walletId, amount, reason = "spend" } = req.body || {};
-  if (!walletId) return res.status(400).json({ ok: false, error: "walletId required" });
-  if (!amount || amount <= 0) return res.status(400).json({ ok: false, error: "positive amount required" });
-
-  if (!STATE.wallets) STATE.wallets = new Map();
-
-  const wallet = STATE.wallets.get(walletId);
-  if (!wallet) {
-    return res.status(404).json({ ok: false, error: "wallet not found" });
-  }
-
-  if (wallet.balance < amount) {
-    return res.status(400).json({ ok: false, error: "insufficient balance", balance: wallet.balance });
-  }
-
-  wallet.balance -= amount;
-  wallet.transactions.push({
-    type: "spend",
-    amount,
-    reason,
-    timestamp: new Date().toISOString()
-  });
-
-  STATE.wallets.set(walletId, wallet);
-  res.json({ ok: true, wallet, spent: amount });
+  res.status(200).json({ ok: false, error: "credits_not_spendable_here", detail: "Spend CC through the real economy paths (/api/economic/marketplace/buy, etc.). /api/credits/spend is deprecated." });
 });
 
 // Global feed - public DTUs feed
@@ -66219,10 +66175,10 @@ app.get("/api/hive/limits", asyncHandler(async (_req, res) => {
 app.get("/api/hive/status", asyncHandler(async (_req, res) => {
   res.json({ ok: true, aliasOf: "/api/hive/metrics", suggest: ["/api/hive/metrics", "/api/hive/limits"], status: "ok" });
 }));
-app.get("/api/credits/balance", requireAuth(), (req, res) => {
+app.get("/api/credits/balance", requireAuth(), async (req, res) => {
   try {
     const userId = req.user?.id || req.actor?.userId;
-    res.json({ ok: true, userId, balance: null, aliasOf: "POST /api/credits/wallet", note: "read stub — use wallet endpoint for authoritative balance" });
+    res.json({ ok: true, userId, balance: await _realCcBalance(userId), source: "economy_ledger", note: "real ledger-summed CC balance; /api/credits mutation endpoints are deprecated" });
   } catch (e) {
     res.status(500).json({ ok: false, error: String(e?.message || e) });
   }
