@@ -17689,14 +17689,40 @@ function _resolveViewerLocation(viewerId) {
   return entry;
 }
 
+// ── userVisibleDTUs cache (Concurrency Refactor Tier 0, 2026-09-08) ──────────
+// Measured (docs/CONCURRENCY_CEILING_AUDIT.md): this filter was the dominant
+// event-loop parker — `dtu.list` went 5ms → 655ms (130×) under ~200 concurrent
+// while pure-compute macros stayed flat. It is an O(corpus) scan with a fresh
+// Array.from() copy, called from 15 sites, uncached. ~12k DTUs × 18k calls/day.
+//
+// Invalidation is exact, not TTL: STATE.dtus is the write-through DTU store
+// (server.js:12677) whose getVersion() monotonic counter bumps on EVERY
+// set()/delete() (dtu-store.js — every commit path funnels through it, no
+// scattered-call-site trust). Cache entry is valid iff its stored version ===
+// the current store version. A viewer changing region busts their own entry
+// via invalidateViewerLocation() below. If STATE.dtus is a plain Map (pre-boot,
+// or backup-restore path) getVersion is absent → we skip the cache entirely.
+const _uvCache = new Map(); // viewerKey → { ver, result }
+const _UV_CACHE_MAX = 4000;
+function _dtuStoreVersion() {
+  try { return typeof STATE.dtus?.getVersion === "function" ? STATE.dtus.getVersion() : -1; }
+  catch { return -1; }
+}
+
 function userVisibleDTUs(viewerId = null) {
+  const cacheKey = viewerId || " anon";
+  const ver = _dtuStoreVersion();
+  if (ver >= 0) {
+    const hit = _uvCache.get(cacheKey);
+    if (hit && hit.ver === ver) return hit.result;
+  }
   // Resolve once per call so per-DTU filtering doesn't thrash the
   // DB cache lookup. Anon viewers get no regional/national view
   // which means any regional/national-tier DTU is hidden from them
   // (correct — they haven't declared a location).
   const viewerLoc = _resolveViewerLocation(viewerId);
 
-  return dtusArray().filter(d => {
+  const result = dtusArray().filter(d => {
     // System internal filters (always applied)
     if (_SYSTEM_DTU_SOURCES.has(d.source)) return false;
     if (_SYSTEM_DTU_SOURCES.has(d.creatorType)) return false;
@@ -17750,6 +17776,15 @@ function userVisibleDTUs(viewerId = null) {
 
     return true;
   });
+
+  if (ver >= 0) {
+    // Bound the cache: one entry per active viewer + anon. A hard clear on
+    // overflow is fine — it just forces a rebuild, and 4k concurrent distinct
+    // viewers on one node is already well past this box's real ceiling.
+    if (_uvCache.size >= _UV_CACHE_MAX) _uvCache.clear();
+    _uvCache.set(cacheKey, { ver, result });
+  }
+  return result;
 }
 
 /**
@@ -17760,6 +17795,9 @@ function userVisibleDTUs(viewerId = null) {
 function invalidateViewerLocation(userId) {
   if (!userId) return;
   _VIEWER_LOC_CACHE.delete(userId);
+  // A region/nation change alters this viewer's federation-tier visibility;
+  // the version-keyed _uvCache can't see that, so bust their entry directly.
+  _uvCache.delete(userId);
 }
 function dtusByIds(ids=[]) {
   const out = [];
