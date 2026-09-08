@@ -38414,6 +38414,9 @@ app.use("/api/conkay", createConkayDesignRouter({ requireAuth, db }));
 // ConKay CAD Wave 1 — multi-part assembly store + revise
 import createConkayAssemblyRouter from "./routes/conkay-assembly.js";
 app.use("/api/conkay", createConkayAssemblyRouter({ requireAuth, db }));
+// ConKay industry verticals — molecular / hospital / prosthetics / studio / aero (NEW paths)
+import createConkayVerticalsRouter from "./routes/conkay-verticals.js";
+app.use("/api/conkay", createConkayVerticalsRouter({ requireAuth, db }));
 app.use("/api/wagers", createWagersRouter({ requireAuth, db, realtimeEmit }));
 app.use("/api/npc-shop", createNPCShopRouter({ requireAuth, db }));
 

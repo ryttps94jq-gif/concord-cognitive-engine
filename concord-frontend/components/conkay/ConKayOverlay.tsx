@@ -38,6 +38,7 @@ import { designViaApiOrClient } from '@/lib/conkay/nlp-design-to-world';
 import { runEvoGlbToWorld } from '@/lib/conkay/evo-glb-to-world';
 import { runAssemblyChatRevise, downloadStl, downloadAssemblyBom, downloadStep, downloadBrepStep, occFeatureRebuild, rebuildPartSolid, occFeatureAppend, fetchOccStatus, runAssemblyUndo, runAssemblyRedo, downloadAssemblyDrawing, downloadAssemblyDrawingPdf, explodeAssemblyApi, fetchMaterials, attachPartMaterial, listParts, mateSolveDof, sketchSolve, gdtDigital, occFeatureList } from '@/lib/conkay/assembly-to-world';
 import { ConKayActionConfirm } from './ConKayActionConfirm';
+import { ConKayVerticalsBar } from './ConKayVerticalsBar';
 import { ConKayCockpit } from './ConKayCockpit';
 import { CONKAY_SIGNATURE_GREETING, CONKAY_PERSONA_PROMPT, type ConKayState } from './conkay-persona';
 import { getLensById } from '@/lib/lens-registry';
@@ -1839,6 +1840,7 @@ export function ConKayOverlay() {
                 className="rounded-lg p-2 text-orange-200 hover:bg-orange-400/10 disabled:opacity-50">
                 <Sword className="h-4 w-4" />
               </button>
+              <ConKayVerticalsBar setWorkStatus={setWorkStatus} />
               <button type="button" onClick={() => {
                 const ok = clearTempPrimitives(`clear-${Date.now()}`);
                 setWorkStatus(ok ? 'Unity bridge: clear_temp posted' : 'Unity bridge: clear post failed');
