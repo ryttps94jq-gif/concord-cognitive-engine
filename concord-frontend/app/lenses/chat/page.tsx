@@ -145,6 +145,10 @@ import MeshStatusCard from '@/components/chat/MeshStatusCard';
 import IntelligenceCard from '@/components/chat/IntelligenceCard';
 import AtlasPrivacyMonitor from '@/components/chat/AtlasPrivacyMonitor';
 import { InitiativeChip, type Initiative } from '@/components/chat/InitiativeChip';
+import { ChatSystemsDrawer } from '@/components/chat/ChatSystemsDrawer';
+import { ToolTraceBlock } from '@/components/chat/ToolTraceBlock';
+import type { ChatMode } from '@/components/chat/ChatModeTypes';
+
 import { AssistantMoodChip } from '@/components/chat/AssistantMoodChip';
 import { ToolPalette } from '@/components/chat/ToolPalette';
 import { SafeCard } from '@/components/common/SafeCard';
@@ -572,23 +576,23 @@ export default function ChatLensPage() {
   // so the HUD/backdrop honestly reflect a run-command the same way they
   // reflect a skill run (no separate, lesser "processing" state for this path).
   const [conkayMacroRunning, setConkayMacroRunning] = useState(false);
-  const [showModeSelect, setShowModeSelect] = useState(false);
+  const [modeSelectOpen, setModeSelectOpen] = useState(false);
   const [localMessages, setLocalMessages] = useState<Message[]>([]);
   const [feedbackState, setFeedbackState] = useState<Record<string, 'up' | 'down'>>({});
   const [chatSidebarOpen, setChatSidebarOpen] = useState(false);
   const [conversationSearch, setConversationSearch] = useState('');
-  const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   // Front-door density: the 8 secondary workspace tools (Context/Tools/Systems/
   // Projects/Prompts/Schedule/Studio/Search) collapse into one "Workspace" overflow
   // so the header reads as a chat app, not a cockpit. Primary controls (AI mode,
   // persona, domain badge, mood) stay inline.
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editContent, setEditContent] = useState('');
   const [renamingConversation, setRenamingConversation] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
-  const [showFeatures, setShowFeatures] = useState(true);
+  const [featuresOpen, setFeaturesOpen] = useState(true);
   const [storedConversations, setStoredConversations] = useState<Conversation[]>(() =>
     loadConversations()
   );
@@ -631,10 +635,10 @@ export default function ChatLensPage() {
 
   // New state — Persona picker
   const [selectedPersona, setSelectedPersona] = useState<Persona>(PERSONAS[0]);
-  const [showPersonaPicker, setShowPersonaPicker] = useState(false);
+  const [personaPickerOpen, setPersonaPickerOpen] = useState(false);
 
   // New state — Slash commands
-  const [showSlashMenu, setShowSlashMenu] = useState(false);
+  const [slashMenuOpen, setSlashMenuOpen] = useState(false);
   const [slashFilter, setSlashFilter] = useState('');
   const [slashSelectedIndex, setSlashSelectedIndex] = useState(0);
 
@@ -675,9 +679,7 @@ export default function ChatLensPage() {
   }, []);
 
   // New state — Wired orphan components
-  const [chatMode, setChatMode] = useState<'welcome' | 'assist' | 'explore' | 'connect' | 'chat'>(
-    'chat'
-  );
+  const [chatMode, setChatMode] = useState<ChatMode>('chat');
   const [sessionSidebarOpen, setSessionSidebarOpen] = useState(false);
   const [contextOverlayOpen, setContextOverlayOpen] = useState(false);
 
@@ -692,9 +694,6 @@ export default function ChatLensPage() {
   // the Workspace menu), NOT inline in the message column — see the drawer near
   // the Systems drawer below. Default closed so the lens reads as a clean chat.
   const [toolsPanelOpen, setToolsPanelOpen] = useState(false);
-  const [systemsTab, setSystemsTab] = useState<
-    'shield' | 'mesh' | 'intel' | 'privacy' | 'initiatives'
-  >('shield');
 
   // Tool palette — every domain.action across all 200 lens manifests
   // is searchable + runnable from here. Open via /tool slash command
@@ -765,36 +764,6 @@ export default function ChatLensPage() {
       .put('/api/initiative/settings', { disabled: next })
       .catch(() => setInitiativesPaused(!next));
   }, [initiativesPaused]);
-  const { data: shieldData } = useQuery({
-    queryKey: ['chat-shield-status'],
-    queryFn: () =>
-      api
-        .get<{ ok: boolean; securityScore?: Record<string, unknown> }>('/api/shield/status')
-        .then((r) => (r.data?.securityScore || r.data || {}) as Record<string, unknown>),
-    enabled: systemsPanelOpen && systemsTab === 'shield',
-    refetchInterval: systemsPanelOpen && systemsTab === 'shield' ? 10_000 : false,
-  });
-  const { data: meshData } = useQuery({
-    queryKey: ['chat-mesh-status'],
-    queryFn: () => api.get<Record<string, unknown>>('/api/mesh/status').then((r) => r.data || {}),
-    enabled: systemsPanelOpen && systemsTab === 'mesh',
-    refetchInterval: systemsPanelOpen && systemsTab === 'mesh' ? 10_000 : false,
-  });
-  const { data: intelData } = useQuery({
-    queryKey: ['chat-intel-status'],
-    queryFn: () => api.get<Record<string, unknown>>('/api/intel/status').then((r) => r.data || {}),
-    enabled: systemsPanelOpen && systemsTab === 'intel',
-    refetchInterval: systemsPanelOpen && systemsTab === 'intel' ? 15_000 : false,
-  });
-  const { data: privacyData } = useQuery({
-    queryKey: ['chat-atlas-privacy'],
-    queryFn: () =>
-      api
-        .get<Record<string, unknown>>('/api/atlas/privacy_zones?view=stats')
-        .then((r) => r.data || null),
-    enabled: systemsPanelOpen && systemsTab === 'privacy',
-    refetchInterval: systemsPanelOpen && systemsTab === 'privacy' ? 20_000 : false,
-  });
   // Initiatives are Concord's proactive messages to the user. They
   // arrive unprompted — Concord can "double-text" — and need to appear
   // *inline in the conversation thread*, not buried in a drawer. Poll
@@ -983,7 +952,7 @@ export default function ChatLensPage() {
   }, [conversations, conversationSearch]);
 
   const [streamingContent, setStreamingContent] = useState('');
-  const [isStreaming, setIsStreaming] = useState(false);
+  const [streamActive, setStreamActive] = useState(false);
 
   // Scroll anchor — keeps the bottom of the streaming preview in view as
   // tokens arrive. Throttled via rAF so fast token bursts don't queue up
@@ -993,7 +962,7 @@ export default function ChatLensPage() {
   const streamingAnchorRef = useRef<HTMLDivElement | null>(null);
   const lastScrollTsRef = useRef<number>(0);
   useEffect(() => {
-    if (!isStreaming || !streamingContent || !streamingAnchorRef.current) return;
+    if (!streamActive || !streamingContent || !streamingAnchorRef.current) return;
     const now = performance.now();
     if (now - lastScrollTsRef.current < 80) return; // ~12 fps cap
     lastScrollTsRef.current = now;
@@ -1007,7 +976,7 @@ export default function ChatLensPage() {
     requestAnimationFrame(() => {
       anchor?.scrollIntoView({ behavior: 'auto', block: 'end' });
     });
-  }, [streamingContent, isStreaming]);
+  }, [streamingContent, streamActive]);
 
   // BYO key drawer + anon-nudge UI state.
   const [byoOpen, setByoOpen] = useState(false);
@@ -1145,7 +1114,7 @@ export default function ChatLensPage() {
               setLocalMessages((prev) => [...prev, sysMsg]);
             }
           } else {
-            setShowModeSelect(true);
+            setModeSelectOpen(true);
           }
           break;
         }
@@ -1223,7 +1192,7 @@ export default function ChatLensPage() {
       }
 
       setInput('');
-      setShowSlashMenu(false);
+      setSlashMenuOpen(false);
       setSlashFilter('');
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1356,7 +1325,7 @@ export default function ChatLensPage() {
       let idleStalled = false;
 
       try {
-        setIsStreaming(true);
+        setStreamActive(true);
         setStreamingContent('');
         const streamRes = await fetch(`${apiUrl}/api/chat/stream`, {
           method: 'POST',
@@ -1419,7 +1388,7 @@ export default function ChatLensPage() {
             }
           }
 
-          setIsStreaming(false);
+          setStreamActive(false);
           setStreamingContent('');
           return {
             reply: accumulated || ((finalOut as Record<string, unknown>)?.reply as string) || '',
@@ -1434,7 +1403,7 @@ export default function ChatLensPage() {
         }
 
         // Non-SSE response: fall back to regular JSON
-        setIsStreaming(false);
+        setStreamActive(false);
         setStreamingContent('');
         const data = await streamRes.json();
         return data;
@@ -1445,7 +1414,7 @@ export default function ChatLensPage() {
         if (abortController.signal.aborted && !idleStalled) throw err;
 
         // Stream endpoint failed OR stalled — fall back to regular POST.
-        setIsStreaming(false);
+        setStreamActive(false);
         setStreamingContent('');
         // If the stream was aborted by the stall watchdog, its signal is now
         // in the aborted state and would instantly kill this POST too. Use a
@@ -1530,7 +1499,7 @@ export default function ChatLensPage() {
       setInput('');
     },
     onError: (err) => {
-      setIsStreaming(false);
+      setStreamActive(false);
       setStreamingContent('');
       const errorMsg: Message = {
         id: `err-${Date.now()}`,
@@ -1692,7 +1661,7 @@ export default function ChatLensPage() {
     a.download = `chat-export-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
-    setShowMoreMenu(false);
+    setMoreMenuOpen(false);
   }, [messages]);
 
   // Markdown export — chat-history-as-document, far more useful than JSON
@@ -1720,7 +1689,7 @@ export default function ChatLensPage() {
     a.download = `${title.replace(/[^\w\s-]/g, '').replace(/\s+/g, '-').toLowerCase()}-${new Date().toISOString().slice(0, 10)}.md`;
     a.click();
     URL.revokeObjectURL(url);
-    setShowMoreMenu(false);
+    setMoreMenuOpen(false);
   }, [messages, conversations, selectedConversation]);
 
   // Copy a markdown transcript to the clipboard — instant share without
@@ -1733,7 +1702,7 @@ export default function ChatLensPage() {
     }
     try {
       await navigator.clipboard.writeText(lines.join('\n'));
-      setShowMoreMenu(false);
+      setMoreMenuOpen(false);
     } catch {
       console.warn('[Chat] clipboard write failed');
     }
@@ -1765,7 +1734,7 @@ export default function ChatLensPage() {
     saveMessagesForSession(newId, slice);
     setSelectedConversation(newId);
     setLocalMessages(slice);
-    setShowMoreMenu(false);
+    setMoreMenuOpen(false);
   }, [messages, conversations, selectedConversation]);
 
   // Global message search — scans every conversation in localStorage,
@@ -2186,7 +2155,7 @@ export default function ChatLensPage() {
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       // Slash menu navigation
-      if (showSlashMenu) {
+      if (slashMenuOpen) {
         if (e.key === 'ArrowDown') {
           e.preventDefault();
           setSlashSelectedIndex((prev) => Math.min(prev + 1, filteredSlashCommands.length - 1));
@@ -2203,7 +2172,7 @@ export default function ChatLensPage() {
           if (selected) {
             // Insert the command into the input
             setInput(selected.command + (selected.args ? ' ' : ''));
-            setShowSlashMenu(false);
+            setSlashMenuOpen(false);
             setSlashFilter('');
             // If no args needed, execute immediately
             if (!selected.args) {
@@ -2215,7 +2184,7 @@ export default function ChatLensPage() {
         }
         if (e.key === 'Escape') {
           e.preventDefault();
-          setShowSlashMenu(false);
+          setSlashMenuOpen(false);
           setSlashFilter('');
           return;
         }
@@ -2224,7 +2193,7 @@ export default function ChatLensPage() {
           const selected = filteredSlashCommands[slashSelectedIndex];
           if (selected) {
             setInput(selected.command + (selected.args ? ' ' : ''));
-            setShowSlashMenu(false);
+            setSlashMenuOpen(false);
             setSlashFilter('');
           }
           return;
@@ -2232,10 +2201,10 @@ export default function ChatLensPage() {
       }
 
       // Esc stops generation if streaming or pending
-      if (e.key === 'Escape' && (isStreaming || sendMutation.isPending || regenerateMutation.isPending)) {
+      if (e.key === 'Escape' && (streamActive || sendMutation.isPending || regenerateMutation.isPending)) {
         e.preventDefault();
         chatAbortControllerRef.current?.abort();
-        setIsStreaming(false);
+        setStreamActive(false);
         return;
       }
 
@@ -2244,8 +2213,8 @@ export default function ChatLensPage() {
         handleSend();
       }
     },
-    [showSlashMenu, filteredSlashCommands, slashSelectedIndex, handleSend, executeSlashCommand,
-     isStreaming, sendMutation.isPending, regenerateMutation.isPending]
+    [slashMenuOpen, filteredSlashCommands, slashSelectedIndex, handleSend, executeSlashCommand,
+     streamActive, sendMutation.isPending, regenerateMutation.isPending]
   );
 
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -2256,14 +2225,14 @@ export default function ChatLensPage() {
     if (value.startsWith('/')) {
       const commandText = value.slice(1).split(/\s/)[0]; // text after / before first space
       if (!value.includes(' ') || value.split(/\s/).length <= 1) {
-        setShowSlashMenu(true);
+        setSlashMenuOpen(true);
         setSlashFilter(commandText);
       } else {
-        setShowSlashMenu(false);
+        setSlashMenuOpen(false);
         setSlashFilter('');
       }
     } else {
-      setShowSlashMenu(false);
+      setSlashMenuOpen(false);
       setSlashFilter('');
     }
   }, []);
@@ -2271,7 +2240,7 @@ export default function ChatLensPage() {
   const handleSlashSelect = useCallback(
     (cmd: SlashCommand) => {
       setInput(cmd.command + (cmd.args ? ' ' : ''));
-      setShowSlashMenu(false);
+      setSlashMenuOpen(false);
       setSlashFilter('');
       inputRef.current?.focus();
       if (!cmd.args) {
@@ -3291,7 +3260,7 @@ export default function ChatLensPage() {
               {/* AI Mode selector */}
               <div className="relative">
                 <button
-                  onClick={() => setShowModeSelect(!showModeSelect)}
+                  onClick={() => setModeSelectOpen(!modeSelectOpen)}
                   className="flex items-center gap-2 px-4 py-2 bg-lattice-bg border border-lattice-border rounded-lg hover:border-gray-500 transition-colors"
                 >
                   <aiMode.icon className="w-4 h-4 text-neon-cyan" />
@@ -3300,7 +3269,7 @@ export default function ChatLensPage() {
                 </button>
 
                 <AnimatePresence>
-                  {showModeSelect && (
+                  {modeSelectOpen && (
                     <motion.div
                       initial={{ opacity: 0, y: -10 }}
                       animate={{ opacity: 1, y: 0 }}
@@ -3312,7 +3281,7 @@ export default function ChatLensPage() {
                           key={mode.id}
                           onClick={() => {
                             setAiMode(mode);
-                            setShowModeSelect(false);
+                            setModeSelectOpen(false);
                           }}
                           className={cn(
                             'w-full flex items-start gap-3 p-3 hover:bg-lattice-bg transition-colors',
@@ -3339,7 +3308,7 @@ export default function ChatLensPage() {
               {/* Persona Picker */}
               <div className="relative">
                 <button
-                  onClick={() => setShowPersonaPicker(!showPersonaPicker)}
+                  onClick={() => setPersonaPickerOpen(!personaPickerOpen)}
                   className="flex items-center gap-2 px-3 py-2 bg-lattice-bg border border-lattice-border rounded-lg hover:border-gray-500 transition-colors"
                   title="Select persona"
                 >
@@ -3351,7 +3320,7 @@ export default function ChatLensPage() {
                 </button>
 
                 <AnimatePresence>
-                  {showPersonaPicker && (
+                  {personaPickerOpen && (
                     <motion.div
                       initial={{ opacity: 0, y: -10 }}
                       animate={{ opacity: 1, y: 0 }}
@@ -3368,7 +3337,7 @@ export default function ChatLensPage() {
                           key={persona.id}
                           onClick={() => {
                             setSelectedPersona(persona);
-                            setShowPersonaPicker(false);
+                            setPersonaPickerOpen(false);
                             // Announce the change
                             if (persona.id !== selectedPersona.id) {
                               const sysMsg: Message = {
@@ -3580,14 +3549,14 @@ export default function ChatLensPage() {
                 <Layers className="w-5 h-5 text-gray-400" />
               </button>
               <button
-                onClick={() => setShowMoreMenu(!showMoreMenu)}
+                onClick={() => setMoreMenuOpen(!moreMenuOpen)}
                 className="p-2 hover:bg-lattice-bg rounded-lg transition-colors"
                 aria-label="Chat options"
               >
                 <MoreVertical className="w-5 h-5 text-gray-400" />
               </button>
               <AnimatePresence>
-                {showMoreMenu && (
+                {moreMenuOpen && (
                   <motion.div
                     initial={{ opacity: 0, y: -10 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -3597,7 +3566,7 @@ export default function ChatLensPage() {
                     <button
                       onClick={() => {
                         openGlobalSearch();
-                        setShowMoreMenu(false);
+                        setMoreMenuOpen(false);
                       }}
                       className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-200 hover:bg-lattice-bg transition-colors"
                       title="Search across every conversation"
@@ -3633,7 +3602,7 @@ export default function ChatLensPage() {
                     <button
                       onClick={() => {
                         startNewChat();
-                        setShowMoreMenu(false);
+                        setMoreMenuOpen(false);
                       }}
                       className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-200 hover:bg-lattice-bg transition-colors border-t border-lattice-border"
                     >
@@ -3644,7 +3613,7 @@ export default function ChatLensPage() {
                       <button
                         onClick={() => {
                           deleteConversationMutation.mutate(selectedConversation);
-                          setShowMoreMenu(false);
+                          setMoreMenuOpen(false);
                         }}
                         disabled={deleteConversationMutation.isPending}
                         className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-400 hover:bg-red-500/10 transition-colors border-t border-lattice-border disabled:opacity-50 disabled:cursor-not-allowed"
@@ -3844,7 +3813,7 @@ export default function ChatLensPage() {
             </GracefulFallback>
 
             {/* Streaming indicator */}
-            {isStreaming && streamingContent && (
+            {streamActive && streamingContent && (
               <div className="flex gap-4 px-4 lg:px-6 pb-2">
                 <div className="w-10 h-10 rounded-lg bg-neon-cyan/20 flex items-center justify-center flex-shrink-0">
                   <Bot className="w-5 h-5 text-neon-cyan animate-pulse" />
@@ -3860,7 +3829,7 @@ export default function ChatLensPage() {
             )}
 
             {/* Thinking indicator (when not streaming) */}
-            {(sendMutation.isPending || regenerateMutation.isPending) && !isStreaming && (
+            {(sendMutation.isPending || regenerateMutation.isPending) && !streamActive && (
               <div
                 className="flex gap-4 px-4 lg:px-6 pb-2"
                 role="status"
@@ -3951,7 +3920,7 @@ export default function ChatLensPage() {
               {/* Slash command autocomplete dropdown */}
               <div className="relative">
                 <AnimatePresence>
-                  {showSlashMenu && filteredSlashCommands.length > 0 && (
+                  {slashMenuOpen && filteredSlashCommands.length > 0 && (
                     <motion.div
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
@@ -4040,14 +4009,14 @@ export default function ChatLensPage() {
                     />
                     <div className="relative">
                       <button
-                        onClick={() => setShowEmojiPicker((prev) => !prev)}
+                        onClick={() => setEmojiPickerOpen((prev) => !prev)}
                         className="p-2 text-gray-400 hover:text-white transition-colors"
                         title="Add emoji"
                       >
                         <Smile className="w-5 h-5" />
                       </button>
                       <AnimatePresence>
-                        {showEmojiPicker && (
+                        {emojiPickerOpen && (
                           <motion.div
                             initial={{ opacity: 0, y: 8 }}
                             animate={{ opacity: 1, y: 0 }}
@@ -4084,7 +4053,7 @@ export default function ChatLensPage() {
                                 key={emoji}
                                 onClick={() => {
                                   setInput((prev) => prev + emoji);
-                                  setShowEmojiPicker(false);
+                                  setEmojiPickerOpen(false);
                                 }}
                                 className="w-8 h-8 flex items-center justify-center text-lg hover:bg-lattice-bg rounded-lg transition-colors"
                               >
@@ -4099,11 +4068,11 @@ export default function ChatLensPage() {
                   {/* Send / Stop toggle — when streaming, swap to a stop
                       button (ChatGPT / Claude pattern). Aborts in-flight
                       send + regenerate via the abort controller ref. */}
-                  {(isStreaming || sendMutation.isPending || regenerateMutation.isPending) ? (
+                  {(streamActive || sendMutation.isPending || regenerateMutation.isPending) ? (
                     <button
                       onClick={() => {
                         chatAbortControllerRef.current?.abort();
-                        setIsStreaming(false);
+                        setStreamActive(false);
                       }}
                       className="p-4 bg-rose-500 text-white rounded-2xl hover:bg-rose-400 transition-colors animate-pulse"
                       title="Stop generating (Esc)"
@@ -4438,7 +4407,7 @@ export default function ChatLensPage() {
         {/* Related lenses + spatial context — actionable, unlike a static feature list */}
         <div className="border-t border-white/10">
           <button
-            onClick={() => setShowFeatures(!showFeatures)}
+            onClick={() => setFeaturesOpen(!featuresOpen)}
             className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
           >
             <span className="flex items-center gap-2">
@@ -4446,10 +4415,10 @@ export default function ChatLensPage() {
               Related
             </span>
             <ChevronDown
-              className={`w-4 h-4 transition-transform ${showFeatures ? 'rotate-180' : ''}`}
+              className={`w-4 h-4 transition-transform ${featuresOpen ? 'rotate-180' : ''}`}
             />
           </button>
-          {showFeatures && (
+          {featuresOpen && (
             <div className="px-4 pb-4 space-y-4">
               {/* Lens Recommender — suggest relevant lenses based on chat context */}
               {lensRecommendations.length > 0 && (
@@ -4518,117 +4487,13 @@ export default function ChatLensPage() {
         onClose={() => setContextOverlayOpen(false)}
       />
 
-      {/* Systems drawer — shield / mesh / intel / privacy / initiatives.
-          Slides in from the right edge; lazy-fetches per-tab. */}
-      <AnimatePresence>
-        {systemsPanelOpen && (
-          <motion.div
-            initial={{ x: 420, opacity: 0 }}
-            animate={{ x: 0, opacity: 1 }}
-            exit={{ x: 420, opacity: 0 }}
-            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-            className="fixed top-20 right-4 bottom-4 w-[28rem] z-50 flex flex-col bg-lattice-surface border border-lattice-border rounded-lg shadow-2xl overflow-hidden"
-          >
-            <div className="flex items-center justify-between px-4 py-3 border-b border-lattice-border">
-              <div className="flex items-center gap-2">
-                <Activity className="w-4 h-4 text-neon-purple" />
-                <span className="text-sm font-semibold text-white">Systems</span>
-              </div>
-              <button
-                onClick={() => setSystemsPanelOpen(false)}
-                className="text-gray-400 hover:text-white transition-colors"
-                title="Close"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            {/* Tabs */}
-            <div className="flex gap-1 px-3 py-2 border-b border-lattice-border overflow-x-auto">
-              {(
-                [
-                  { key: 'shield', label: 'Shield' },
-                  { key: 'mesh', label: 'Mesh' },
-                  { key: 'intel', label: 'Intel' },
-                  { key: 'privacy', label: 'Privacy' },
-                  { key: 'initiatives', label: 'Initiatives' },
-                ] as const
-              ).map((t) => (
-                <button
-                  key={t.key}
-                  onClick={() => setSystemsTab(t.key)}
-                  className={cn(
-                    'px-3 py-1 rounded-md text-xs font-medium transition-colors whitespace-nowrap',
-                    systemsTab === t.key
-                      ? 'bg-neon-purple/20 text-neon-purple border border-neon-purple/30'
-                      : 'text-gray-400 hover:text-white hover:bg-lattice-bg'
-                  )}
-                >
-                  {t.label}
-                </button>
-              ))}
-            </div>
-            {/* Tab content */}
-            <div className="flex-1 overflow-y-auto p-3">
-              {systemsTab === 'shield' && (
-                <ShieldCard type="score" securityScore={shieldData as never} />
-              )}
-              {systemsTab === 'mesh' && (
-                <MeshStatusCard type="status" metrics={meshData as never} />
-              )}
-              {systemsTab === 'intel' && (
-                <IntelligenceCard type="overview" metrics={intelData as never} />
-              )}
-              {systemsTab === 'privacy' && (
-                <AtlasPrivacyMonitor data={privacyData as never} loading={!privacyData} />
-              )}
-              {systemsTab === 'initiatives' && (
-                <div className="space-y-2">
-                  {Array.isArray(initiativesData) && initiativesData.length > 0 ? (
-                    initiativesData.slice(0, 8).map((init: Initiative) => (
-                      <InitiativeChip
-                        key={init.id}
-                        initiative={init}
-                        onDismiss={(id: string) => {
-                          try {
-                            api.post(`/api/initiative/${encodeURIComponent(id)}/dismiss`, {});
-                          } catch {
-                            /* non-fatal */
-                          }
-                        }}
-                        onAction={(id: string, action: string) => {
-                          try {
-                            api.post(`/api/initiative/${encodeURIComponent(id)}/respond`, {
-                              response: action || 'acted',
-                            });
-                          } catch {
-                            /* non-fatal */
-                          }
-                        }}
-                        onRespond={(id: string) => {
-                          try {
-                            api.post(`/api/initiative/${encodeURIComponent(id)}/respond`, {
-                              response: 'engaged',
-                            });
-                          } catch {
-                            /* non-fatal */
-                          }
-                        }}
-                      />
-                    ))
-                  ) : (
-                    <p className="text-xs text-gray-400 text-center py-8">
-                      No proactive initiatives right now. Claude will surface them here when
-                      opportunities arise.
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <ChatSystemsDrawer
+        open={systemsPanelOpen}
+        onClose={() => setSystemsPanelOpen(false)}
+        initiativesData={Array.isArray(initiativesData) ? initiativesData : null}
+      />
 
-      {/* Atlas Overlay — material query results */}
+{/* Atlas Overlay — material query results */}
       {atlasLoading || atlasResult ? (
         <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-40">
           <AtlasOverlay query={atlasQuery} result={atlasResult as never} loading={atlasLoading} />
@@ -4894,57 +4759,3 @@ export default function ChatLensPage() {
 
 // ── Tool trace block ─────────────────────────────────────────────────────────
 
-interface ToolTraceBlockProps {
-  trace: {
-    id: string;
-    domain: string;
-    action: string;
-    result: unknown;
-    error?: string;
-    createdAt: string;
-  };
-}
-
-function ToolTraceBlock({ trace }: ToolTraceBlockProps) {
-  const [open, setOpen] = useState(false);
-  const failed = !!trace.error || (typeof trace.result === 'object' && trace.result && 'ok' in trace.result && (trace.result as { ok?: boolean }).ok === false);
-  return (
-    <div
-      className={cn(
-        'flex gap-4',
-        // Match the Concord-side message shape; trace is "Concord did a thing"
-      )}
-    >
-      <div className="w-10 h-10 rounded-lg bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center flex-shrink-0">
-        <Hammer className="w-4 h-4 text-cyan-300" aria-hidden="true" />
-      </div>
-      <div className="flex-1 max-w-2xl">
-        <button
-          type="button"
-          onClick={() => setOpen((v) => !v)}
-          className={cn(
-            'inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs font-mono',
-            failed
-              ? 'border-rose-500/40 bg-rose-500/10 text-rose-200'
-              : 'border-cyan-500/30 bg-cyan-500/10 text-cyan-200',
-            'hover:brightness-110'
-          )}
-          aria-expanded={open}
-        >
-          {open ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-          {trace.domain}.{trace.action}
-          <span className="ml-1 text-[10px] opacity-70">
-            {failed ? 'failed' : 'ok'}
-          </span>
-        </button>
-        {open && (
-          <pre className="mt-2 max-h-64 overflow-auto rounded-md border border-lattice-border bg-black/60 p-3 text-[11px] font-mono text-gray-300">
-            {trace.error
-              ? trace.error
-              : JSON.stringify(trace.result, null, 2)}
-          </pre>
-        )}
-      </div>
-    </div>
-  );
-}

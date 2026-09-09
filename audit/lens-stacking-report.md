@@ -1,15 +1,14 @@
 # Lens stacked-UI report
 
-Generated 2026-09-09T06:18:31.476Z · `node scripts/detect-lens-stacking.mjs`
+Generated 2026-09-09T06:21:24.702Z · `node scripts/detect-lens-stacking.mjs`
 
-266 lenses scanned. **2 heavy** (score ≥ 12) · **7 moderate** (7–12) · 257 clean.
+266 lenses scanned. **0 heavy** (score ≥ 12) · **8 moderate** (7–12) · 258 clean.
 
 `stackingScore` weights the **welded-piles** signature, NOT raw size: `inlineBloat` (LOC not explained by delegated panels), **independent view-state machines beyond the first** (one tab machine is fine — 2+ separate ones gating different regions is welded apps), heterogeneous render strategies in one file (tab-union + `&&`-screens + boolean modal toggles all coexisting = piled by different sessions), hook sprawl (`useState`/`useEffect` over the norm), top-level screen branches, literal-only dead view values, and duplicate action paths. A thin page that delegates 17 tabs to 17 panel components (e.g. `retail`, 191 LOC) is the GOOD pattern and scores low. Read the columns, not just the score.
 
 | lens | score | LOC | inlineBloat | feat-cmp | view-SM | render-strat | useState | useEffect | screen-br | dead-view | dup-act |
 |---|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|
-| `world` | 27.99 | 7625 | 4945 | 38 | 3 | 3 | 90 | 43 | 67 | 3 | 0 |
-| `chat` | 17.07 | 4951 | 1791 | 46 | 2 | 3 | 66 | 16 | 31 | 0 | 0 |
+| `chat` | 10.66 | 4762 | 1422 | 49 | 0 | 1 | 64 | 16 | 25 | 0 | 0 |
 | `board` | 8.7 | 2050 | 1530 | 2 | 1 | 2 | 21 | 2 | 9 | 0 | 0 |
 | `poetry` | 8.67 | 570 | 0 | 8 | 0 | 2 | 17 | 1 | 5 | 0 | 2 |
 | `healthcare` | 8.04 | 3779 | 2659 | 12 | 1 | 1 | 71 | 0 | 13 | 0 | 0 |
@@ -274,20 +273,13 @@ Generated 2026-09-09T06:18:31.476Z · `node scripts/detect-lens-stacking.mjs`
 | `vote` | 0 | 178 | 0 | 3 | 1 | 1 | 1 | 0 | 0 | 0 | 0 |
 | `wallet` | 0 | 153 | 0 | 8 | 0 | 0 | 1 | 0 | 0 | 0 | 0 |
 | `whiteboard` | 0 | 45 | 0 | 1 | 0 | 0 | 1 | 0 | 0 | 0 | 0 |
+| `world` | 0 | 28 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 
 ## Heavy — rebuild candidates (score ≥ 12)
 
-### `world` — 27.99
-- 7625 LOC (4945 inline-bloat) · 38 feature component imports · 191 files in `components/world/`
-- **3 view-state machine(s)** · 3/3 render strategies coexisting · 90 useState · 43 useEffect · 67 top-level screen branches
-- **3 dead view value(s)** (declared in a literal-only union, never navigated to): `combatContext:hacker`, `combatContext:underwater`, `combatContext:mixed`
-
-### `chat` — 17.07
-- 4951 LOC (1791 inline-bloat) · 46 feature component imports · 39 files in `components/chat/`
-- **2 view-state machine(s)** · 3/3 render strategies coexisting · 66 useState · 16 useEffect · 31 top-level screen branches
-
 ## Moderate — next consolidations (score 7–12)
 
+- `chat` — score 10.66, 4762 LOC, 0 view-SM, 1422 inline-bloat
 - `board` — score 8.7, 2050 LOC, 1 view-SM, 1530 inline-bloat
 - `poetry` — score 8.67, 570 LOC, 0 view-SM, 0 inline-bloat
 - `healthcare` — score 8.04, 3779 LOC, 1 view-SM, 2659 inline-bloat
