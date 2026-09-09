@@ -137,6 +137,7 @@ import { BrainModePanel } from '@/components/byo-keys/BrainModePanel';
 import { InitiativeChip, type Initiative } from '@/components/chat/InitiativeChip';
 import { ChatSystemsDrawer } from '@/components/chat/ChatSystemsDrawer';
 import { ChatToolsDrawer } from '@/components/chat/ChatToolsDrawer';
+import { ChatWorkspaceMenu } from '@/components/chat/ChatWorkspaceMenu';
 import {
   ACCEPTED_FILE_TYPES,
   MAX_BASE64_SIZE,
@@ -3181,87 +3182,26 @@ export default function ChatLensPage() {
                 </button>
               )}
 
-              {/* Workspace overflow — the 8 secondary tools (Context/Tools/Systems/
-                  Projects/Prompts/Schedule/Studio/Search) live behind ONE button so the
-                  header reads as a chat app, not a cockpit. Active tools show a colored
-                  dot on the trigger so at-a-glance state isn't lost. */}
-              <div className="relative hidden sm:block">
-                <button
-                  type="button"
-                  onClick={() => setWorkspaceMenuOpen((v) => !v)}
-                  className={cn(
-                    'inline-flex items-center gap-1.5 px-3 py-2 bg-lattice-bg border rounded-lg text-xs transition-colors',
-                    workspaceMenuOpen
-                      ? 'border-neon-cyan/50 text-neon-cyan'
-                      : 'border-lattice-border text-gray-300 hover:text-white hover:border-gray-500',
-                  )}
-                  aria-haspopup="menu"
-                  aria-expanded={workspaceMenuOpen}
-                  title="Workspace — context, tools, systems, projects, prompts, schedule, studio, search"
-                >
-                  <LayoutGrid className="w-4 h-4" />
-                  <span className="font-medium">Workspace</span>
-                  {(initiativesPaused || systemsPanelOpen || toolsPanelOpen || activeProject || studioOpen) && (
-                    <span className="w-1.5 h-1.5 rounded-full bg-neon-cyan" aria-hidden="true" />
-                  )}
-                  <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
-                </button>
+              <ChatWorkspaceMenu
+                open={workspaceMenuOpen}
+                onOpenChange={setWorkspaceMenuOpen}
+                initiativesPaused={initiativesPaused}
+                systemsPanelOpen={systemsPanelOpen}
+                toolsPanelOpen={toolsPanelOpen}
+                activeProject={activeProject}
+                studioOpen={studioOpen}
+                onViewContext={() => setContextOverlayOpen(true)}
+                onToolPalette={() => setToolPaletteOpen(true)}
+                onSearchChats={() => setThreadSearchOpen(true)}
+                onProjects={() => setProjectsPanelOpen(true)}
+                onPrompts={() => setPromptsPanelOpen(true)}
+                onSchedule={() => setScheduledPanelOpen(true)}
+                onStudio={() => setStudioOpen(true)}
+                onToggleAnalysis={() => setToolsPanelOpen((v) => !v)}
+                onToggleSystems={() => setSystemsPanelOpen((v) => !v)}
+                onToggleInitiativesPaused={toggleInitiativesPaused}
+              />
 
-                <AnimatePresence>
-                  {workspaceMenuOpen && (
-                    <>
-                      {/* click-away backdrop */}
-                      <button
-                        type="button"
-                        aria-hidden="true"
-                        tabIndex={-1}
-                        onClick={() => setWorkspaceMenuOpen(false)}
-                        className="fixed inset-0 z-40 cursor-default"
-                      />
-                      <motion.div
-                        initial={{ opacity: 0, y: -8 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -8 }}
-                        role="menu"
-                        className="absolute top-full right-0 mt-2 w-60 bg-lattice-surface border border-lattice-border rounded-lg shadow-xl z-50 overflow-hidden py-1"
-                      >
-                        {[
-                          { key: 'context', icon: Eye, label: 'View context', hint: 'working set', onClick: () => setContextOverlayOpen(true) },
-                          { key: 'tools', icon: Sparkles, label: 'Tool palette', hint: '⌘.', onClick: () => setToolPaletteOpen(true) },
-                          { key: 'search', icon: Search, label: 'Search chats', hint: '⌘K', onClick: () => setThreadSearchOpen(true) },
-                          { key: 'projects', icon: FolderOpen, label: 'Projects', active: !!activeProject, dot: 'bg-cyan-400', onClick: () => setProjectsPanelOpen(true) },
-                          { key: 'prompts', icon: BookOpen, label: 'Prompt library', onClick: () => setPromptsPanelOpen(true) },
-                          { key: 'schedule', icon: Clock, label: 'Scheduled tasks', onClick: () => setScheduledPanelOpen(true) },
-                          { key: 'studio', icon: Sparkles, label: 'Studio', active: studioOpen, dot: 'bg-violet-400', onClick: () => setStudioOpen(true) },
-                          { key: 'analysis', icon: Zap, label: 'Analysis & features', active: toolsPanelOpen, dot: 'bg-neon-yellow', onClick: () => setToolsPanelOpen((v) => !v) },
-                          { key: 'systems', icon: Activity, label: 'Systems', active: systemsPanelOpen, dot: 'bg-neon-purple', onClick: () => setSystemsPanelOpen((v) => !v) },
-                          { key: 'pause', icon: initiativesPaused ? PlayCircle : PauseCircle, label: initiativesPaused ? 'Resume Concord' : 'Pause Concord', active: initiativesPaused, dot: 'bg-amber-400', onClick: () => toggleInitiativesPaused() },
-                        ].map((item) => {
-                          const Icon = item.icon;
-                          return (
-                            <button
-                              key={item.key}
-                              type="button"
-                              role="menuitem"
-                              onClick={() => { item.onClick(); setWorkspaceMenuOpen(false); }}
-                              className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-200 hover:bg-lattice-bg transition-colors"
-                            >
-                              <Icon className={cn('w-4 h-4 flex-shrink-0', item.active ? 'text-white' : 'text-gray-400')} />
-                              <span className="flex-1 text-left">{item.label}</span>
-                              {item.active && item.dot && (
-                                <span className={cn('w-1.5 h-1.5 rounded-full', item.dot)} aria-hidden="true" />
-                              )}
-                              {item.hint && (
-                                <kbd className="text-[10px] text-gray-500">{item.hint}</kbd>
-                              )}
-                            </button>
-                          );
-                        })}
-                      </motion.div>
-                    </>
-                  )}
-                </AnimatePresence>
-              </div>
             </div>
 
             {/* Cognitive Status Bar */}

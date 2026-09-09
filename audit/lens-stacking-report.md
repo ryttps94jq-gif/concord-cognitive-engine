@@ -1,6 +1,6 @@
 # Lens stacked-UI report
 
-Generated 2026-09-09T06:22:12.577Z · `node scripts/detect-lens-stacking.mjs`
+Generated 2026-09-09T10:44:53.556Z · `node scripts/detect-lens-stacking.mjs`
 
 266 lenses scanned. **0 heavy** (score ≥ 12) · **8 moderate** (7–12) · 258 clean.
 
@@ -8,7 +8,7 @@ Generated 2026-09-09T06:22:12.577Z · `node scripts/detect-lens-stacking.mjs`
 
 | lens | score | LOC | inlineBloat | feat-cmp | view-SM | render-strat | useState | useEffect | screen-br | dead-view | dup-act |
 |---|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|
-| `chat` | 10.66 | 4762 | 1422 | 49 | 0 | 1 | 64 | 16 | 25 | 0 | 0 |
+| `chat` | 9.55 | 4149 | 869 | 48 | 0 | 1 | 63 | 16 | 19 | 0 | 0 |
 | `board` | 8.7 | 2050 | 1530 | 2 | 1 | 2 | 21 | 2 | 9 | 0 | 0 |
 | `poetry` | 8.67 | 570 | 0 | 8 | 0 | 2 | 17 | 1 | 5 | 0 | 2 |
 | `healthcare` | 8.04 | 3779 | 2659 | 12 | 1 | 1 | 71 | 0 | 13 | 0 | 0 |
@@ -279,7 +279,7 @@ Generated 2026-09-09T06:22:12.577Z · `node scripts/detect-lens-stacking.mjs`
 
 ## Moderate — next consolidations (score 7–12)
 
-- `chat` — score 10.66, 4762 LOC, 0 view-SM, 1422 inline-bloat
+- `chat` — score 9.55, 4149 LOC, 0 view-SM, 869 inline-bloat
 - `board` — score 8.7, 2050 LOC, 1 view-SM, 1530 inline-bloat
 - `poetry` — score 8.67, 570 LOC, 0 view-SM, 0 inline-bloat
 - `healthcare` — score 8.04, 3779 LOC, 1 view-SM, 2659 inline-bloat

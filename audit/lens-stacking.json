@@ -1,23 +1,23 @@
 {
-  "generatedAt": "2026-09-09T06:22:12.578Z",
+  "generatedAt": "2026-09-09T10:44:53.562Z",
   "rows": [
     {
       "lens": "chat",
-      "loc": 4762,
-      "inlineBloat": 1422,
-      "featureImports": 49,
+      "loc": 4149,
+      "inlineBloat": 869,
+      "featureImports": 48,
       "sharedImports": 8,
       "coLocatedImports": 0,
-      "useStateCount": 64,
+      "useStateCount": 63,
       "useEffectCount": 16,
       "viewStateMachines": 0,
       "renderStrategies": 1,
-      "screenBranches": 25,
+      "screenBranches": 19,
       "deadViewValues": 0,
       "deadViewList": [],
       "dupActionPaths": 0,
-      "domainComponentCount": 41,
-      "stackingScore": 10.66
+      "domainComponentCount": 43,
+      "stackingScore": 9.55
     },
     {
       "lens": "board",
