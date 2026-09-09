@@ -3482,6 +3482,19 @@ const READ_REPLICA = process.env.CONCORD_READ_REPLICA === "1" || process.env.CON
 // as before. See engines/concord-read-router/RUNBOOK.md-style deploy notes in
 // docs/CONCURRENCY_CEILING_AUDIT.md §4 Tier 1.
 const HEARTBEAT_ONLY = process.env.CONCORD_HEARTBEAT_ONLY === "1" || process.env.CONCORD_HEARTBEAT_ONLY === "true";
+
+// Multi-instance heartbeat guard (launchd dual-HTTP / fork workers).
+// Unset or "0" → this process may run the emergent tick (single-process default
+// and primary instance). Any other NODE_APP_INSTANCE ("1","2",…) → skip the
+// tick so N HTTP workers do not N× the sim. Composes with the explicit
+// CONCORD_DISABLE_HEARTBEAT / CONCORD_HEARTBEAT_ONLY knobs (those still win).
+// See docs/MULTI_INSTANCE_LAUNCHD.md + infra/launchd/*.plist.example.
+const NODE_APP_INSTANCE_RAW = process.env.NODE_APP_INSTANCE;
+const IS_HEARTBEAT_NODE = (
+  NODE_APP_INSTANCE_RAW === undefined ||
+  NODE_APP_INSTANCE_RAW === "" ||
+  String(NODE_APP_INSTANCE_RAW) === "0"
+);
 const AUTH_MODE_VALUES = new Set(["public", "apikey", "jwt", "hybrid"]);
 const LEGACY_AUTH_ENABLED = String(process.env.AUTH_ENABLED || "true").toLowerCase() === "true";
 const AUTH_MODE_RAW = String(process.env.AUTH_MODE || "").toLowerCase().trim();
@@ -37469,6 +37482,14 @@ function startHeartbeat() {
     structuredLog("info", "heartbeat_skipped_disabled_env", { mode: "http-only" });
     return;
   }
+  // Dual/multi HTTP: only NODE_APP_INSTANCE unset/0 owns the tick.
+  if (!IS_HEARTBEAT_NODE) {
+    structuredLog("info", "heartbeat_skipped_non_primary_instance", {
+      nodeAppInstance: String(NODE_APP_INSTANCE_RAW),
+      mode: "http-worker",
+    });
+    return;
+  }
   // Read-only replicas never simulate — the writer owns all emergent state +
   // every DB write. Without this guard a replica ran the full tick and spammed
   // `state_save_failed` / `[feed] DB write failed` / `persistEmergentName failed`
@@ -41920,6 +41941,7 @@ function _startGovernorHeartbeat() {
     // Layer 12.5 (cartographer): CONCORD_DISABLE_HEARTBEAT=true short-circuits
     // so runtime-introspect doesn't fire ticks during boot.
     if (process.env.CONCORD_DISABLE_HEARTBEAT === "true") return { ok:false, reason:"heartbeat_disabled_env" };
+    if (!IS_HEARTBEAT_NODE) return { ok:false, reason:"non_primary_instance", nodeAppInstance: String(NODE_APP_INSTANCE_RAW) };
     const s = STATE.settings || {};
     const ms = clamp(Number(s.heartbeatMs ?? 60000), 15000, 10*60*1000);
     if (s.heartbeatEnabled === false) return { ok:false, reason:"heartbeat_disabled" };
