@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-09T06:15:47.568Z",
+  "generatedAt": "2026-09-09T06:17:11.429Z",
   "rows": [
     {
       "lens": "world",
@@ -40,24 +40,6 @@
       "dupActionPaths": 0,
       "domainComponentCount": 39,
       "stackingScore": 17.07
-    },
-    {
-      "lens": "healthcare",
-      "loc": 4015,
-      "inlineBloat": 2955,
-      "featureImports": 11,
-      "sharedImports": 14,
-      "coLocatedImports": 0,
-      "useStateCount": 71,
-      "useEffectCount": 0,
-      "viewStateMachines": 3,
-      "renderStrategies": 2,
-      "screenBranches": 13,
-      "deadViewValues": 0,
-      "deadViewList": [],
-      "dupActionPaths": 0,
-      "domainComponentCount": 31,
-      "stackingScore": 16.37
     },
     {
       "lens": "studio",
@@ -112,6 +94,24 @@
       "dupActionPaths": 2,
       "domainComponentCount": 8,
       "stackingScore": 8.67
+    },
+    {
+      "lens": "healthcare",
+      "loc": 3779,
+      "inlineBloat": 2659,
+      "featureImports": 12,
+      "sharedImports": 14,
+      "coLocatedImports": 0,
+      "useStateCount": 71,
+      "useEffectCount": 0,
+      "viewStateMachines": 1,
+      "renderStrategies": 1,
+      "screenBranches": 13,
+      "deadViewValues": 0,
+      "deadViewList": [],
+      "dupActionPaths": 0,
+      "domainComponentCount": 32,
+      "stackingScore": 8.04
     },
     {
       "lens": "crafting",

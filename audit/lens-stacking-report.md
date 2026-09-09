@@ -1,8 +1,8 @@
 # Lens stacked-UI report
 
-Generated 2026-09-09T06:15:47.566Z · `node scripts/detect-lens-stacking.mjs`
+Generated 2026-09-09T06:17:11.428Z · `node scripts/detect-lens-stacking.mjs`
 
-266 lenses scanned. **4 heavy** (score ≥ 12) · **5 moderate** (7–12) · 257 clean.
+266 lenses scanned. **3 heavy** (score ≥ 12) · **6 moderate** (7–12) · 257 clean.
 
 `stackingScore` weights the **welded-piles** signature, NOT raw size: `inlineBloat` (LOC not explained by delegated panels), **independent view-state machines beyond the first** (one tab machine is fine — 2+ separate ones gating different regions is welded apps), heterogeneous render strategies in one file (tab-union + `&&`-screens + boolean modal toggles all coexisting = piled by different sessions), hook sprawl (`useState`/`useEffect` over the norm), top-level screen branches, literal-only dead view values, and duplicate action paths. A thin page that delegates 17 tabs to 17 panel components (e.g. `retail`, 191 LOC) is the GOOD pattern and scores low. Read the columns, not just the score.
 
@@ -10,10 +10,10 @@ Generated 2026-09-09T06:15:47.566Z · `node scripts/detect-lens-stacking.mjs`
 |---|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|
 | `world` | 27.99 | 7625 | 4945 | 38 | 3 | 3 | 90 | 43 | 67 | 3 | 0 |
 | `chat` | 17.07 | 4951 | 1791 | 46 | 2 | 3 | 66 | 16 | 31 | 0 | 0 |
-| `healthcare` | 16.37 | 4015 | 2955 | 11 | 3 | 2 | 71 | 0 | 13 | 0 | 0 |
 | `studio` | 14.88 | 2991 | 1391 | 20 | 2 | 2 | 50 | 6 | 20 | 0 | 1 |
 | `board` | 8.7 | 2050 | 1530 | 2 | 1 | 2 | 21 | 2 | 9 | 0 | 0 |
 | `poetry` | 8.67 | 570 | 0 | 8 | 0 | 2 | 17 | 1 | 5 | 0 | 2 |
+| `healthcare` | 8.04 | 3779 | 2659 | 12 | 1 | 1 | 71 | 0 | 13 | 0 | 0 |
 | `crafting` | 7.66 | 1401 | 821 | 3 | 1 | 1 | 45 | 6 | 25 | 0 | 0 |
 | `worldmodel` | 7.3 | 1212 | 572 | 4 | 1 | 1 | 45 | 0 | 32 | 0 | 0 |
 | `agents` | 7 | 1433 | 673 | 6 | 1 | 2 | 18 | 1 | 9 | 0 | 0 |
@@ -286,10 +286,6 @@ Generated 2026-09-09T06:15:47.566Z · `node scripts/detect-lens-stacking.mjs`
 - 4951 LOC (1791 inline-bloat) · 46 feature component imports · 39 files in `components/chat/`
 - **2 view-state machine(s)** · 3/3 render strategies coexisting · 66 useState · 16 useEffect · 31 top-level screen branches
 
-### `healthcare` — 16.37
-- 4015 LOC (2955 inline-bloat) · 11 feature component imports · 31 files in `components/healthcare/`
-- **3 view-state machine(s)** · 2/3 render strategies coexisting · 71 useState · 0 useEffect · 13 top-level screen branches
-
 ### `studio` — 14.88
 - 2991 LOC (1391 inline-bloat) · 20 feature component imports · 41 files in `components/studio/`
 - **2 view-state machine(s)** · 2/3 render strategies coexisting · 50 useState · 6 useEffect · 20 top-level screen branches
@@ -299,6 +295,7 @@ Generated 2026-09-09T06:15:47.566Z · `node scripts/detect-lens-stacking.mjs`
 
 - `board` — score 8.7, 2050 LOC, 1 view-SM, 1530 inline-bloat
 - `poetry` — score 8.67, 570 LOC, 0 view-SM, 0 inline-bloat
+- `healthcare` — score 8.04, 3779 LOC, 1 view-SM, 2659 inline-bloat
 - `crafting` — score 7.66, 1401 LOC, 1 view-SM, 821 inline-bloat
 - `worldmodel` — score 7.3, 1212 LOC, 1 view-SM, 572 inline-bloat
 - `agents` — score 7, 1433 LOC, 1 view-SM, 673 inline-bloat
