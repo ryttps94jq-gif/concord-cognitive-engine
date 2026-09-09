@@ -1,6 +1,6 @@
 # Lens stacked-UI report
 
-Generated 2026-09-09T06:21:24.702Z · `node scripts/detect-lens-stacking.mjs`
+Generated 2026-09-09T06:22:12.577Z · `node scripts/detect-lens-stacking.mjs`
 
 266 lenses scanned. **0 heavy** (score ≥ 12) · **8 moderate** (7–12) · 258 clean.
 
