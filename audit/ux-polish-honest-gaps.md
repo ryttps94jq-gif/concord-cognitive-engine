@@ -1,6 +1,6 @@
 # UX Polish Audit — HONEST mode
 
-Generated: 2026-09-07T16:02:13.232Z
+Generated: 2026-09-09T01:06:49.149Z
 
 Mode: **honest**
 
@@ -20,10 +20,10 @@ Lenses scanned: 266
 | Tier | Count | % | Weight |
 |---|---:|---:|---:|
 | raw | 1 | 0.4% | 0.2 |
-| functional | 1 | 0.4% | 0.6 |
-| polished | 264 | 99.2% | 1 |
+| functional | 2 | 0.8% | 0.6 |
+| polished | 263 | 98.9% | 1 |
 
-**Weighted UX polish score: 0.995** (1.0 = all polished)
+**Weighted UX polish score: 0.994** (1.0 = all polished)
 
 ## Signal coverage (% of lenses)
 
@@ -42,7 +42,7 @@ Lenses scanned: 266
 
 ## Anti-patterns
 
-- Lenses with at least one `<div onClick>` (missing keyboard handler / role / tabIndex): **1** (total instances: 1)
+- Lenses with at least one `<div onClick>` (missing keyboard handler / role / tabIndex): **2** (total instances: 3)
 - Lenses with inline hex colours (bypassing design tokens): **0** (total instances: 0)
 
 ## Generic-scaffold lenses capped this run (polished → functional)
@@ -61,6 +61,7 @@ Sorted by smallest gap first. Items with anti-patterns surface first within each
 
 | Lens | Pillars | Missing | Anti-patterns |
 |---|---:|---|---:|
+| `aviation` | 5/5 | anti-patterns(2 div-button, 0 inline-hex) | 1 |
 | `chat` | 5/5 | anti-patterns(1 div-button, 0 inline-hex) | 1 |
 
 ## What this audit does NOT measure
