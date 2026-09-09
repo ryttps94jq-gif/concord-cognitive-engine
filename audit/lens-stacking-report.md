@@ -1,8 +1,8 @@
 # Lens stacked-UI report
 
-Generated 2026-09-09T06:13:20.110Z · `node scripts/detect-lens-stacking.mjs`
+Generated 2026-09-09T06:14:53.542Z · `node scripts/detect-lens-stacking.mjs`
 
-266 lenses scanned. **6 heavy** (score ≥ 12) · **5 moderate** (7–12) · 255 clean.
+266 lenses scanned. **5 heavy** (score ≥ 12) · **5 moderate** (7–12) · 256 clean.
 
 `stackingScore` weights the **welded-piles** signature, NOT raw size: `inlineBloat` (LOC not explained by delegated panels), **independent view-state machines beyond the first** (one tab machine is fine — 2+ separate ones gating different regions is welded apps), heterogeneous render strategies in one file (tab-union + `&&`-screens + boolean modal toggles all coexisting = piled by different sessions), hook sprawl (`useState`/`useEffect` over the norm), top-level screen branches, literal-only dead view values, and duplicate action paths. A thin page that delegates 17 tabs to 17 panel components (e.g. `retail`, 191 LOC) is the GOOD pattern and scores low. Read the columns, not just the score.
 
@@ -13,14 +13,13 @@ Generated 2026-09-09T06:13:20.110Z · `node scripts/detect-lens-stacking.mjs`
 | `healthcare` | 16.37 | 4015 | 2955 | 11 | 3 | 2 | 71 | 0 | 13 | 0 | 0 |
 | `trades` | 15 | 2607 | 1127 | 18 | 3 | 2 | 58 | 0 | 21 | 0 | 0 |
 | `studio` | 14.88 | 2991 | 1391 | 20 | 2 | 2 | 50 | 6 | 20 | 0 | 1 |
-| `code` | 12.09 | 2684 | 1204 | 18 | 0 | 2 | 47 | 7 | 33 | 0 | 0 |
 | `board` | 8.7 | 2050 | 1530 | 2 | 1 | 2 | 21 | 2 | 9 | 0 | 0 |
 | `poetry` | 8.67 | 570 | 0 | 8 | 0 | 2 | 17 | 1 | 5 | 0 | 2 |
 | `crafting` | 7.66 | 1401 | 821 | 3 | 1 | 1 | 45 | 6 | 25 | 0 | 0 |
 | `worldmodel` | 7.3 | 1212 | 572 | 4 | 1 | 1 | 45 | 0 | 32 | 0 | 0 |
 | `agents` | 7 | 1433 | 673 | 6 | 1 | 2 | 18 | 1 | 9 | 0 | 0 |
+| `education` | 6.95 | 3192 | 1532 | 21 | 1 | 1 | 52 | 0 | 15 | 0 | 0 |
 | `attention` | 6.92 | 1016 | 76 | 9 | 2 | 1 | 11 | 2 | 7 | 0 | 2 |
-| `education` | 6.89 | 3193 | 1473 | 22 | 1 | 1 | 52 | 0 | 15 | 0 | 0 |
 | `import` | 6.86 | 1186 | 546 | 4 | 1 | 2 | 17 | 0 | 12 | 0 | 0 |
 | `understanding` | 6.66 | 1008 | 368 | 4 | 0 | 0 | 33 | 3 | 27 | 0 | 0 |
 | `inference` | 6.56 | 795 | 275 | 2 | 1 | 2 | 18 | 1 | 9 | 0 | 0 |
@@ -227,6 +226,7 @@ Generated 2026-09-09T06:13:20.110Z · `node scripts/detect-lens-stacking.mjs`
 | `billing` | 0 | 101 | 0 | 1 | 0 | 0 | 1 | 0 | 0 | 0 | 0 |
 | `bio` | 0 | 358 | 0 | 7 | 1 | 1 | 3 | 0 | 0 | 0 | 0 |
 | `carpentry` | 0 | 73 | 0 | 3 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| `code` | 0 | 5 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | `collab` | 0 | 14 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | `council` | 0 | 5 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | `creative-writing` | 0 | 74 | 0 | 3 | 0 | 0 | 1 | 0 | 0 | 0 | 0 |
@@ -298,10 +298,6 @@ Generated 2026-09-09T06:13:20.110Z · `node scripts/detect-lens-stacking.mjs`
 - 2991 LOC (1391 inline-bloat) · 20 feature component imports · 41 files in `components/studio/`
 - **2 view-state machine(s)** · 2/3 render strategies coexisting · 50 useState · 6 useEffect · 20 top-level screen branches
 - **1 macro(s) called from 2+ sites** — candidate duplicate flows for the same action
-
-### `code` — 12.09
-- 2684 LOC (1204 inline-bloat) · 18 feature component imports · 30 files in `components/code/`
-- **0 view-state machine(s)** · 2/3 render strategies coexisting · 47 useState · 7 useEffect · 33 top-level screen branches
 
 ## Moderate — next consolidations (score 7–12)
 

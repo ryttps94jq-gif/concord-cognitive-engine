@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-09T06:13:20.111Z",
+  "generatedAt": "2026-09-09T06:14:53.544Z",
   "rows": [
     {
       "lens": "world",
@@ -96,24 +96,6 @@
       "stackingScore": 14.88
     },
     {
-      "lens": "code",
-      "loc": 2684,
-      "inlineBloat": 1204,
-      "featureImports": 18,
-      "sharedImports": 16,
-      "coLocatedImports": 0,
-      "useStateCount": 47,
-      "useEffectCount": 7,
-      "viewStateMachines": 0,
-      "renderStrategies": 2,
-      "screenBranches": 33,
-      "deadViewValues": 0,
-      "deadViewList": [],
-      "dupActionPaths": 0,
-      "domainComponentCount": 30,
-      "stackingScore": 12.09
-    },
-    {
       "lens": "board",
       "loc": 2050,
       "inlineBloat": 1530,
@@ -204,6 +186,24 @@
       "stackingScore": 7
     },
     {
+      "lens": "education",
+      "loc": 3192,
+      "inlineBloat": 1532,
+      "featureImports": 21,
+      "sharedImports": 13,
+      "coLocatedImports": 0,
+      "useStateCount": 52,
+      "useEffectCount": 0,
+      "viewStateMachines": 1,
+      "renderStrategies": 1,
+      "screenBranches": 15,
+      "deadViewValues": 0,
+      "deadViewList": [],
+      "dupActionPaths": 0,
+      "domainComponentCount": 29,
+      "stackingScore": 6.95
+    },
+    {
       "lens": "attention",
       "loc": 1016,
       "inlineBloat": 76,
@@ -220,24 +220,6 @@
       "dupActionPaths": 2,
       "domainComponentCount": 2,
       "stackingScore": 6.92
-    },
-    {
-      "lens": "education",
-      "loc": 3193,
-      "inlineBloat": 1473,
-      "featureImports": 22,
-      "sharedImports": 13,
-      "coLocatedImports": 0,
-      "useStateCount": 52,
-      "useEffectCount": 0,
-      "viewStateMachines": 1,
-      "renderStrategies": 1,
-      "screenBranches": 15,
-      "deadViewValues": 0,
-      "deadViewList": [],
-      "dupActionPaths": 0,
-      "domainComponentCount": 29,
-      "stackingScore": 6.89
     },
     {
       "lens": "import",
@@ -3945,6 +3927,24 @@
       "deadViewList": [],
       "dupActionPaths": 0,
       "domainComponentCount": 3,
+      "stackingScore": 0
+    },
+    {
+      "lens": "code",
+      "loc": 5,
+      "inlineBloat": 0,
+      "featureImports": 1,
+      "sharedImports": 0,
+      "coLocatedImports": 0,
+      "useStateCount": 0,
+      "useEffectCount": 0,
+      "viewStateMachines": 0,
+      "renderStrategies": 0,
+      "screenBranches": 0,
+      "deadViewValues": 0,
+      "deadViewList": [],
+      "dupActionPaths": 0,
+      "domainComponentCount": 31,
       "stackingScore": 0
     },
     {
