@@ -51,10 +51,7 @@ import {
   Quote,
   X,
   Hash,
-  Terminal,
-  GraduationCap,
   Globe,
-  HelpCircle,
   Trash2,
   Download,
   Users,
@@ -62,8 +59,6 @@ import {
   ExternalLink,
   Layers,
   Loader2,
-  XCircle,
-  BarChart3,
   Hammer,
   ChevronRight,
   PauseCircle,
@@ -117,7 +112,6 @@ import { ReasoningIndicator } from '@/components/chat/ReasoningIndicator';
 import { MessageContinuationMarker } from '@/components/chat/MessageContinuationMarker';
 import { useOracleSolve, type OracleResponseData } from '@/hooks/useOracleSolve';
 import AtlasOverlay from '@/components/chat/AtlasOverlay';
-import AtlasViewer from '@/components/chat/AtlasViewer';
 import ProjectsPanel, { type ChatProject } from '@/components/chat/ProjectsPanel';
 import PromptsLibrary from '@/components/chat/PromptsLibrary';
 import ThreadSearchOverlay from '@/components/chat/ThreadSearchOverlay';
@@ -140,12 +134,24 @@ import { BrainModePanel } from '@/components/byo-keys/BrainModePanel';
 // conversation — security posture, mesh state, inference model
 // status, proactive initiative chips, and Atlas privacy zones.
 // All fully built, all previously orphaned.
-import ShieldCard from '@/components/chat/ShieldCard';
-import MeshStatusCard from '@/components/chat/MeshStatusCard';
-import IntelligenceCard from '@/components/chat/IntelligenceCard';
-import AtlasPrivacyMonitor from '@/components/chat/AtlasPrivacyMonitor';
 import { InitiativeChip, type Initiative } from '@/components/chat/InitiativeChip';
 import { ChatSystemsDrawer } from '@/components/chat/ChatSystemsDrawer';
+import { ChatToolsDrawer } from '@/components/chat/ChatToolsDrawer';
+import {
+  ACCEPTED_FILE_TYPES,
+  MAX_BASE64_SIZE,
+  deleteMessagesForSession,
+  fileToBase64,
+  formatRelativeTime,
+  generateUUID,
+  loadConversations,
+  loadMessagesForSession,
+  loadSessionId,
+  saveConversations,
+  saveMessagesForSession,
+  saveSessionId,
+} from '@/components/chat/chatLocalStore';
+import { AI_MODES, PERSONAS, SLASH_COMMANDS } from '@/components/chat/ChatModeConfig';
 import { ToolTraceBlock } from '@/components/chat/ToolTraceBlock';
 import type { ChatMode } from '@/components/chat/ChatModeTypes';
 
@@ -262,239 +268,6 @@ interface SlashCommand {
 // Constants
 // ──────────────────────────────────────────────
 
-const AI_MODES: AIMode[] = [
-  { id: 'overview', name: 'Overview', icon: MessageSquare, description: 'General conversation' },
-  { id: 'deep', name: 'Deep', icon: Brain, description: 'In-depth analysis' },
-  {
-    id: 'creative',
-    name: 'Creative',
-    icon: Sparkles,
-    description: 'Creative writing & brainstorming',
-  },
-  { id: 'code', name: 'Code', icon: Code, description: 'Programming help' },
-  { id: 'research', name: 'Research', icon: BookOpen, description: 'Research mode with citations' },
-  { id: 'creti', name: 'CRETI', icon: Zap, description: 'Structured CRETI format' },
-  { id: 'conkay', name: 'ConKay', icon: Sparkles, description: 'Voice-native majordomo — archives + research, holographic' },
-];
-
-const PERSONAS: Persona[] = [
-  {
-    id: 'default',
-    name: 'Default Assistant',
-    icon: Bot,
-    description: 'Standard helpful assistant',
-    systemPrompt: '',
-  },
-  {
-    id: 'research-analyst',
-    name: 'Research Analyst',
-    icon: Search,
-    description: 'Thorough analysis with citations and evidence',
-    systemPrompt:
-      'You are a rigorous research analyst. Provide well-structured analysis backed by evidence and citations. Always consider multiple perspectives, identify assumptions, and note limitations in the evidence. Use structured formatting with clear sections.',
-  },
-  {
-    id: 'creative-writer',
-    name: 'Creative Writer',
-    icon: Sparkles,
-    description: 'Imaginative and expressive writing style',
-    systemPrompt:
-      'You are a talented creative writer. Use vivid language, metaphors, and engaging narrative techniques. Be imaginative and expressive while remaining clear. Adapt your tone to match the creative task at hand.',
-  },
-  {
-    id: 'code-expert',
-    name: 'Code Expert',
-    icon: Terminal,
-    description: 'Expert programmer with best practices',
-    systemPrompt:
-      'You are an expert software engineer. Write clean, well-documented, production-quality code. Always explain your approach, consider edge cases, suggest optimizations, and follow established design patterns and best practices for the relevant language/framework.',
-  },
-  {
-    id: 'domain-specialist',
-    name: 'Domain Specialist',
-    icon: Globe,
-    description: 'Uses current lens context for domain expertise',
-    systemPrompt:
-      'You are a domain specialist who deeply understands the current context and domain. Reference relevant domain-specific terminology, frameworks, and knowledge. Connect new information to existing domain knowledge in the lattice.',
-  },
-  {
-    id: 'socratic-tutor',
-    name: 'Socratic Tutor',
-    icon: GraduationCap,
-    description: 'Teaches through guided questioning',
-    systemPrompt:
-      'You are a Socratic tutor. Instead of giving direct answers, guide the learner through carefully crafted questions that help them discover the answer themselves. Break complex topics into smaller concepts. Validate understanding at each step before proceeding.',
-  },
-];
-
-const SLASH_COMMANDS: SlashCommand[] = [
-  {
-    command: '/mode',
-    label: '/mode [mode]',
-    description: 'Switch AI mode',
-    icon: Settings,
-    args: 'mode',
-  },
-  { command: '/clear', label: '/clear', description: 'Clear chat history', icon: Trash2 },
-  {
-    command: '/export',
-    label: '/export',
-    description: 'Export conversation as JSON',
-    icon: Download,
-  },
-  { command: '/forge', label: '/forge', description: 'Forge last response to DTU', icon: Zap },
-  {
-    command: '/tool',
-    label: '/tool',
-    description: 'Open the tool palette (every domain.action runnable)',
-    icon: Sparkles,
-  },
-  { command: '/help', label: '/help', description: 'Show available commands', icon: HelpCircle },
-  {
-    command: '/context',
-    label: '/context [domain]',
-    description: 'Set domain context',
-    icon: Hash,
-    args: 'domain',
-  },
-  {
-    command: '/oracle',
-    label: '/oracle [query]',
-    description: 'Ask the Oracle Engine (rich response)',
-    icon: Sparkles,
-    args: 'query',
-  },
-];
-
-const ACCEPTED_FILE_TYPES = '.txt,.md,.json,.csv,.pdf,.png,.jpg,.jpeg';
-const MAX_BASE64_SIZE = 512 * 1024; // 512KB — encode files smaller than this
-
-const STORAGE_KEY_CONVERSATIONS = 'concord_chat_conversations';
-const STORAGE_KEY_SESSION = 'concord_chat_session';
-const STORAGE_KEY_MESSAGES_PREFIX = 'concord_chat_msgs_';
-
-// ──────────────────────────────────────────────
-// Helper: UUID generation
-// ──────────────────────────────────────────────
-
-function generateUUID(): string {
-  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-    return crypto.randomUUID();
-  }
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0;
-    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
-  });
-}
-
-// ──────────────────────────────────────────────
-// Helper: localStorage-backed conversation registry
-// ──────────────────────────────────────────────
-
-function loadConversations(): Conversation[] {
-  if (typeof window === 'undefined') return [];
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY_CONVERSATIONS);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveConversations(convs: Conversation[]) {
-  if (typeof window === 'undefined') return;
-  try {
-    localStorage.setItem(STORAGE_KEY_CONVERSATIONS, JSON.stringify(convs));
-  } catch {
-    // Storage full or unavailable
-  }
-}
-
-function loadSessionId(): string | null {
-  if (typeof window === 'undefined') return null;
-  try {
-    return localStorage.getItem(STORAGE_KEY_SESSION);
-  } catch {
-    return null;
-  }
-}
-
-function saveSessionId(id: string | null) {
-  if (typeof window === 'undefined') return;
-  try {
-    if (id) {
-      localStorage.setItem(STORAGE_KEY_SESSION, id);
-    } else {
-      localStorage.removeItem(STORAGE_KEY_SESSION);
-    }
-  } catch {
-    // Storage unavailable
-  }
-}
-
-function loadMessagesForSession(sessionId: string): Message[] {
-  if (typeof window === 'undefined') return [];
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY_MESSAGES_PREFIX + sessionId);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveMessagesForSession(sessionId: string, messages: Message[]) {
-  if (typeof window === 'undefined') return;
-  try {
-    localStorage.setItem(STORAGE_KEY_MESSAGES_PREFIX + sessionId, JSON.stringify(messages));
-  } catch {
-    // Storage full
-  }
-}
-
-function deleteMessagesForSession(sessionId: string) {
-  if (typeof window === 'undefined') return;
-  try {
-    localStorage.removeItem(STORAGE_KEY_MESSAGES_PREFIX + sessionId);
-  } catch {
-    // noop
-  }
-}
-
-function formatRelativeTime(dateStr: string): string {
-  const now = Date.now();
-  const then = new Date(dateStr).getTime();
-  const diffMs = now - then;
-  const diffMin = Math.floor(diffMs / 60000);
-  if (diffMin < 1) return 'Just now';
-  if (diffMin < 60) return `${diffMin}m ago`;
-  const diffHr = Math.floor(diffMin / 60);
-  if (diffHr < 24) return `${diffHr}h ago`;
-  const diffDay = Math.floor(diffHr / 24);
-  if (diffDay < 7) return `${diffDay}d ago`;
-  return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-}
-
-// ──────────────────────────────────────────────
-// Helper: file to base64
-// ──────────────────────────────────────────────
-
-function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
-
-// ──────────────────────────────────────────────
-// ConKay macro-execution backport (Unit A5) — see ConKayOverlay.tsx#executeMacro
-// for the canonical implementation this mirrors. `newConKayRunId` is the same
-// correlation-id shape the overlay stamps onto `lensRun` calls (echoed back on
-// the `macro:started`/`macro:completed` socket events so the cockpit's
-// telemetry/orchestration-trace panels can bind a step to the REAL backend
-// call — never a guessed spinner).
-// ──────────────────────────────────────────────
 
 function newConKayRunId(): string {
   return `ck-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -592,9 +365,8 @@ export default function ChatLensPage() {
   const [editContent, setEditContent] = useState('');
   const [renamingConversation, setRenamingConversation] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
-  const [featuresOpen, setFeaturesOpen] = useState(true);
   const [storedConversations, setStoredConversations] = useState<Conversation[]>(() =>
-    loadConversations()
+    loadConversations<Conversation>()
   );
 
   // Hydrate sidebar from server-persisted sessions (authenticated users
@@ -865,7 +637,7 @@ export default function ChatLensPage() {
   // clobbering unsynced drafts from a recent send.
   useEffect(() => {
     if (!selectedConversation) return;
-    const saved = loadMessagesForSession(selectedConversation);
+    const saved = loadMessagesForSession<Message>(selectedConversation);
     if (saved.length > 0) {
       setLocalMessages(saved);
       return;
@@ -1752,7 +1524,7 @@ export default function ChatLensPage() {
       if (conv.id === selectedConversation) {
         msgs = messages;
       } else {
-        try { msgs = loadMessagesForSession(conv.id); } catch { msgs = []; }
+        try { msgs = loadMessagesForSession<Message>(conv.id); } catch { msgs = []; }
       }
       for (const m of msgs) {
         const lc = (m.content || '').toLowerCase();
@@ -4123,348 +3895,23 @@ export default function ChatLensPage() {
           </div>
         </main>
 
-        {/* Chat tools drawer — Analysis (thread-summarize / participant / topic)
-            + Lens features. Opened from the Workspace menu; slides in from the
-            right and is position:fixed so it is OUT of the chat column's flex
-            flow. Pre-fix these two panels were flex-row siblings of <main>,
-            stealing horizontal width and compressing the message thread into an
-            unusable sliver (the "scrunched / can't see messages" bug). */}
-        <AnimatePresence>
-          {toolsPanelOpen && (
-            <>
-              <button
-                type="button"
-                aria-label="Close chat tools"
-                tabIndex={-1}
-                onClick={() => setToolsPanelOpen(false)}
-                className="fixed inset-0 z-40 cursor-default"
-              />
-              <motion.aside
-                initial={{ x: 480, opacity: 0 }}
-                animate={{ x: 0, opacity: 1 }}
-                exit={{ x: 480, opacity: 0 }}
-                transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-                role="complementary"
-                aria-label="Chat analysis and features"
-                className="fixed top-20 right-4 bottom-4 w-[28rem] max-w-[92vw] z-50 flex flex-col bg-lattice-surface border border-lattice-border rounded-lg shadow-2xl overflow-hidden"
-              >
-                <div className="flex items-center justify-between px-4 py-3 border-b border-lattice-border flex-shrink-0">
-                  <div className="flex items-center gap-2">
-                    <Zap className="w-4 h-4 text-neon-yellow" />
-                    <span className="text-sm font-semibold text-white">Analysis &amp; features</span>
-                  </div>
-                  <button
-                    onClick={() => setToolsPanelOpen(false)}
-                    className="text-gray-400 hover:text-white transition-colors"
-                    title="Close"
-                    aria-label="Close chat tools"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-                <div className="flex-1 overflow-y-auto">
-        {/* ── Chat Computational Actions ── */}
-        <div className="border-t border-white/10 px-4 py-4 space-y-3">
-          <div className="panel p-4">
-            <h3 className="font-semibold text-white mb-4 flex items-center gap-2">
-              <Zap className="w-4 h-4 text-neon-yellow" /> Computational Actions
-            </h3>
-            <div className="grid grid-cols-3 gap-3">
-              <button
-                onClick={() => handleChatAction('threadSummarize')}
-                disabled={chatActionRunning !== null}
-                className="flex flex-col items-center gap-2 p-3 bg-lattice-bg rounded-lg border border-lattice-border hover:border-neon-cyan/50 transition-colors disabled:opacity-50"
-              >
-                {chatActionRunning === 'threadSummarize' ? (
-                  <Loader2 className="w-5 h-5 text-neon-cyan animate-spin" />
-                ) : (
-                  <MessageSquare className="w-5 h-5 text-neon-cyan" />
-                )}
-                <span className="text-xs text-gray-300">Thread Summarize</span>
-              </button>
-              <button
-                onClick={() => handleChatAction('participantAnalysis')}
-                disabled={chatActionRunning !== null}
-                className="flex flex-col items-center gap-2 p-3 bg-lattice-bg rounded-lg border border-lattice-border hover:border-neon-purple/50 transition-colors disabled:opacity-50"
-              >
-                {chatActionRunning === 'participantAnalysis' ? (
-                  <Loader2 className="w-5 h-5 text-neon-purple animate-spin" />
-                ) : (
-                  <Users className="w-5 h-5 text-neon-purple" />
-                )}
-                <span className="text-xs text-gray-300">Participant Analysis</span>
-              </button>
-              <button
-                onClick={() => handleChatAction('topicDetection')}
-                disabled={chatActionRunning !== null}
-                className="flex flex-col items-center gap-2 p-3 bg-lattice-bg rounded-lg border border-lattice-border hover:border-neon-green/50 transition-colors disabled:opacity-50"
-              >
-                {chatActionRunning === 'topicDetection' ? (
-                  <Loader2 className="w-5 h-5 text-neon-green animate-spin" />
-                ) : (
-                  <BarChart3 className="w-5 h-5 text-neon-green" />
-                )}
-                <span className="text-xs text-gray-300">Topic Detection</span>
-              </button>
-            </div>
-          </div>
+        {/* Chat tools drawer — Analysis & features (extracted panel) */}
+        <ChatToolsDrawer
+          open={toolsPanelOpen}
+          onClose={() => setToolsPanelOpen(false)}
+          chatActionRunning={chatActionRunning}
+          onChatAction={handleChatAction}
+          threadSummarizeResult={threadSummarizeResult}
+          onClearThreadSummarize={() => setThreadSummarizeResult(null)}
+          participantAnalysisResult={participantAnalysisResult}
+          onClearParticipantAnalysis={() => setParticipantAnalysisResult(null)}
+          topicDetectionResult={topicDetectionResult}
+          onClearTopicDetection={() => setTopicDetectionResult(null)}
+          lensRecommendations={lensRecommendations}
+          lensSessionCtx={lensSessionCtx}
+          lensTelemetry={lensTelemetry}
+        />
 
-          {/* Thread Summarize Result */}
-          {threadSummarizeResult && (
-            <motion.div
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="panel p-4"
-            >
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="font-semibold text-white flex items-center gap-2">
-                  <MessageSquare className="w-4 h-4 text-neon-cyan" /> Thread Summary
-                </h3>
-                <button
-                  onClick={() => setThreadSummarizeResult(null)}
-                  className="text-gray-400 hover:text-white"
-                aria-label="Xcircle">
-                  <XCircle className="w-4 h-4" />
-                </button>
-              </div>
-              <div className="space-y-2 text-sm text-gray-300">
-                {!!threadSummarizeResult.summary && (
-                  <p className="text-white">{threadSummarizeResult.summary as string}</p>
-                )}
-                {Array.isArray(threadSummarizeResult.keyPoints) &&
-                  (threadSummarizeResult.keyPoints as string[]).length > 0 && (
-                    <div className="mt-2 space-y-1">
-                      <p className="text-xs text-gray-400 uppercase tracking-wider">Key Points</p>
-                      {(threadSummarizeResult.keyPoints as string[]).map((pt, i) => (
-                        <div key={i} className="flex items-start gap-2 text-xs text-gray-300">
-                          <CheckCircle2 className="w-3 h-3 text-neon-cyan flex-shrink-0 mt-0.5" />{' '}
-                          {pt}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                {threadSummarizeResult.messageCount !== undefined && (
-                  <div className="grid grid-cols-2 gap-2 mt-2">
-                    <div className="p-2 bg-lattice-bg rounded text-center">
-                      <p className="text-sm font-bold text-neon-cyan">
-                        {threadSummarizeResult.messageCount as number}
-                      </p>
-                      <p className="text-[10px] text-gray-400">Messages</p>
-                    </div>
-                    {threadSummarizeResult.participants !== undefined && (
-                      <div className="p-2 bg-lattice-bg rounded text-center">
-                        <p className="text-sm font-bold text-neon-purple">
-                          {threadSummarizeResult.participants as number}
-                        </p>
-                        <p className="text-[10px] text-gray-400">Participants</p>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            </motion.div>
-          )}
-
-          {/* Participant Analysis Result */}
-          {participantAnalysisResult && (
-            <motion.div
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="panel p-4"
-            >
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="font-semibold text-white flex items-center gap-2">
-                  <Users className="w-4 h-4 text-neon-purple" /> Participant Analysis
-                </h3>
-                <button
-                  onClick={() => setParticipantAnalysisResult(null)}
-                  className="text-gray-400 hover:text-white"
-                aria-label="Xcircle">
-                  <XCircle className="w-4 h-4" />
-                </button>
-              </div>
-              <div className="space-y-2 text-sm text-gray-300">
-                {participantAnalysisResult.totalParticipants !== undefined && (
-                  <div className="grid grid-cols-3 gap-2">
-                    <div className="p-2 bg-lattice-bg rounded text-center">
-                      <p className="text-sm font-bold text-neon-purple">
-                        {participantAnalysisResult.totalParticipants as number}
-                      </p>
-                      <p className="text-[10px] text-gray-400">Total</p>
-                    </div>
-                    {participantAnalysisResult.activeParticipants !== undefined && (
-                      <div className="p-2 bg-lattice-bg rounded text-center">
-                        <p className="text-sm font-bold text-neon-green">
-                          {participantAnalysisResult.activeParticipants as number}
-                        </p>
-                        <p className="text-[10px] text-gray-400">Active</p>
-                      </div>
-                    )}
-                    {participantAnalysisResult.engagementScore !== undefined && (
-                      <div className="p-2 bg-lattice-bg rounded text-center">
-                        <p className="text-sm font-bold text-neon-cyan">
-                          {participantAnalysisResult.engagementScore as number}
-                        </p>
-                        <p className="text-[10px] text-gray-400">Engagement</p>
-                      </div>
-                    )}
-                  </div>
-                )}
-                {Array.isArray(participantAnalysisResult.participants) &&
-                  (participantAnalysisResult.participants as Array<Record<string, unknown>>)
-                    .length > 0 && (
-                    <div className="mt-2 space-y-1">
-                      <p className="text-xs text-gray-400 uppercase tracking-wider">
-                        Top Participants
-                      </p>
-                      {(participantAnalysisResult.participants as Array<Record<string, unknown>>)
-                        .slice(0, 5)
-                        .map((p, i) => (
-                          <div
-                            key={i}
-                            className="flex items-center justify-between text-xs bg-lattice-bg rounded px-2 py-1"
-                          >
-                            <span className="text-gray-300">{p.name as string}</span>
-                            <span className="text-neon-purple">
-                              {p.messageCount as number} msgs
-                            </span>
-                          </div>
-                        ))}
-                    </div>
-                  )}
-              </div>
-            </motion.div>
-          )}
-
-          {/* Topic Detection Result */}
-          {topicDetectionResult && (
-            <motion.div
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="panel p-4"
-            >
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="font-semibold text-white flex items-center gap-2">
-                  <BarChart3 className="w-4 h-4 text-neon-green" /> Topic Detection
-                </h3>
-                <button
-                  onClick={() => setTopicDetectionResult(null)}
-                  className="text-gray-400 hover:text-white"
-                aria-label="Xcircle">
-                  <XCircle className="w-4 h-4" />
-                </button>
-              </div>
-              <div className="space-y-2 text-sm text-gray-300">
-                {!!topicDetectionResult.primaryTopic && (
-                  <div className="p-2 bg-neon-green/10 border border-neon-green/30 rounded">
-                    <p className="text-xs text-gray-400 mb-0.5">Primary Topic</p>
-                    <p className="text-white font-medium">
-                      {topicDetectionResult.primaryTopic as string}
-                    </p>
-                  </div>
-                )}
-                {Array.isArray(topicDetectionResult.topics) &&
-                  (topicDetectionResult.topics as Array<Record<string, unknown>>).length > 0 && (
-                    <div className="mt-2 space-y-1">
-                      <p className="text-xs text-gray-400 uppercase tracking-wider">
-                        Detected Topics
-                      </p>
-                      {(topicDetectionResult.topics as Array<Record<string, unknown>>).map(
-                        (t, i) => (
-                          <div
-                            key={i}
-                            className="flex items-center justify-between text-xs bg-lattice-bg rounded px-2 py-1"
-                          >
-                            <span className="text-gray-300">{t.topic as string}</span>
-                            <span className="text-neon-green">
-                              {typeof t.confidence === 'number'
-                                ? `${Math.round((t.confidence as number) * 100)}%`
-                                : (t.confidence as string)}
-                            </span>
-                          </div>
-                        )
-                      )}
-                    </div>
-                  )}
-                {Array.isArray(topicDetectionResult.keywords) &&
-                  (topicDetectionResult.keywords as string[]).length > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-1">
-                      {(topicDetectionResult.keywords as string[]).map((kw, i) => (
-                        <span
-                          key={i}
-                          className="text-[10px] px-2 py-0.5 bg-neon-green/10 text-neon-green rounded-full"
-                        >
-                          {kw}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-              </div>
-            </motion.div>
-          )}
-        </div>
-
-        {/* Related lenses + spatial context — actionable, unlike a static feature list */}
-        <div className="border-t border-white/10">
-          <button
-            onClick={() => setFeaturesOpen(!featuresOpen)}
-            className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-300 hover:text-white transition-colors bg-white/[0.02] hover:bg-white/[0.04] rounded-lg"
-          >
-            <span className="flex items-center gap-2">
-              <Layers className="w-4 h-4" />
-              Related
-            </span>
-            <ChevronDown
-              className={`w-4 h-4 transition-transform ${featuresOpen ? 'rotate-180' : ''}`}
-            />
-          </button>
-          {featuresOpen && (
-            <div className="px-4 pb-4 space-y-4">
-              {/* Lens Recommender — suggest relevant lenses based on chat context */}
-              {lensRecommendations.length > 0 && (
-                <div className="p-3 rounded-lg border border-neon-purple/20 bg-neon-purple/5 space-y-2">
-                  <p className="text-xs font-semibold text-neon-purple flex items-center gap-1.5">
-                    <Layers className="w-3.5 h-3.5" />
-                    Suggested Lenses
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    {lensRecommendations.map((rec) => (
-                      <button
-                        key={rec.lensId}
-                        onClick={() => {
-                          recordLensOpened(
-                            lensTelemetry.current,
-                            rec.lensId,
-                            lensSessionCtx.current.currentTurn
-                          );
-                          window.location.href = `/lenses/${rec.lensId}`;
-                        }}
-                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-lattice-surface border border-lattice-border hover:border-neon-purple/50 transition-colors text-left group"
-                      >
-                        <span className="text-xs font-medium text-white group-hover:text-neon-purple transition-colors">
-                          {rec.name}
-                        </span>
-                        <span className="text-[10px] text-gray-400">
-                          {Math.round(rec.score * 100)}%
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                  <p className="text-[10px] text-gray-400">
-                    Based on your current conversation context
-                  </p>
-                </div>
-              )}
-              {/* Atlas Viewer — spatial/material data overview */}
-              <AtlasViewer type="overview" />
-            </div>
-          )}
-        </div>
-                </div>
-              </motion.aside>
-            </>
-          )}
-        </AnimatePresence>
       </div>
 
       {/* DTU Detail Overlay -- opened when clicking a DTU reference */}
