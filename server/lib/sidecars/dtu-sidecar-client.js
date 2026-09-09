@@ -102,13 +102,20 @@ export async function recent({ limit = 50, scope, tier, source } = {}) {
 
 export const socketPath = SOCK;
 
-// ── Phase 3b: generalized hot reads (same UDS, fail-soft, separate opt-in) ──
-// CONCORD_WALLET_SIDECAR=1  → balance sums off Node loop
-// CONCORD_SESSION_SIDECAR=1 → auth sessions token_hash lookup off loop
-// Both require the Rust sidecar process to be running (same socket as DTU).
+// ── Phase 3b: generalized hot reads (same UDS, fail-soft) ──
+// CONCORD_WALLET_SIDECAR / CONCORD_SESSION_SIDECAR default ON when
+// CONCORD_DTU_SIDECAR=1 (explicit =0 disables). Same socket as DTU.
 
-export const WALLET_ENABLED = process.env.CONCORD_WALLET_SIDECAR === "1";
-export const SESSION_ENABLED = process.env.CONCORD_SESSION_SIDECAR === "1";
+// When DTU sidecar is already opted in, wallet/session reads default ON
+// (same socket, fail-soft). Explicit CONCORD_*=0 disables.
+function _sidecarFlag(name, { defaultOnWhenDtu = false } = {}) {
+  const raw = process.env[name];
+  if (raw === "0" || raw === "false") return false;
+  if (raw === "1" || raw === "true") return true;
+  return defaultOnWhenDtu && ENABLED;
+}
+export const WALLET_ENABLED = _sidecarFlag("CONCORD_WALLET_SIDECAR", { defaultOnWhenDtu: true });
+export const SESSION_ENABLED = _sidecarFlag("CONCORD_SESSION_SIDECAR", { defaultOnWhenDtu: true });
 
 /**
  * Wallet balance — mirrors economy/balances.js#getBalance.

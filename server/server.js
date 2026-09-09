@@ -77,6 +77,8 @@ import { initAll as initLoaf } from "./loaf/index.js";
 import { init as initEmergent } from "./emergent/index.js";
 import { tickAllRegistered, registerHeartbeat } from "./emergent/heartbeat-registry.js";
 import * as presenceIdle from "./lib/presence-idle.js";
+import { createSessionActivityBridge, createMacroRateBridge, createApiRateBridge } from "./lib/concurrency/shared-state.js";
+import { touchStickySession } from "./lib/concurrency/sticky-session.js";
 import { markActivity as _markActivity } from "./lib/presence-idle.js";
 import * as _macroTelemetry from "./lib/detectors/macro-telemetry.js";
 // Wave-4 gap-closure (privacy row) — shared recorder also used by the
@@ -2639,6 +2641,10 @@ try {
 
 // ---- Rate Limiting for Expensive Macros (Phase 5.2 + Phase 1-6 hardening) ----
 const _macroRateLimits = new LruMap();
+// Bridges assigned after redisClient init (Wave 9). Optional chaining keeps this safe pre-init.
+let _macroRateBridge = null;
+let _sessionActivityBridge = null;
+let _apiRateBridge = null;
 const EXPENSIVE_MACROS = new Map([
   ["scope.metrics", { maxPerMinute: 30, windowMs: 60000 }],
   ["system.autogen", { maxPerMinute: 10, windowMs: 60000 }],
@@ -2704,6 +2710,8 @@ function checkMacroRateLimit(domain, name) {
 
   bucket.calls.push(now);
   _macroRateLimits.set(key, bucket);
+  // Multi-HTTP: write-behind shared counter (fail-soft; local Map remains authority for this node)
+  try { _macroRateBridge?.writeBehindHit(key, limit.windowMs); } catch (_e) { /* intentional */ }
   return true;
 }
 
@@ -6950,7 +6958,8 @@ const _SESSION_ACTIVITY = {
 
   touch(jti) {
     if (!jti) return;
-    this.lastSeen.set(jti, Date.now());
+    const ts = Date.now();
+    this.lastSeen.set(jti, ts);
     if (this.lastSeen.size > this.MAX_ENTRIES) {
       // Evict oldest entries
       const it = this.lastSeen.keys();
@@ -6958,6 +6967,9 @@ const _SESSION_ACTIVITY = {
         this.lastSeen.delete(it.next().value);
       }
     }
+    // Multi-HTTP write-behind (Redis) + optional sticky observability map
+    try { _sessionActivityBridge?.writeBehindTouch(jti, ts); } catch (_e) { /* intentional */ }
+    try { touchStickySession({ redisClient, prefix: REDIS_CONFIG?.prefix }, jti); } catch (_e) { /* intentional */ }
   },
 
   /**
@@ -6983,7 +6995,9 @@ const _SESSION_ACTIVITY = {
   },
 
   clear(jti) {
-    if (jti) this.lastSeen.delete(jti);
+    if (!jti) return;
+    this.lastSeen.delete(jti);
+    try { _sessionActivityBridge?.writeBehindClear(jti); } catch (_e) { /* intentional */ }
   },
 };
 
@@ -7179,6 +7193,30 @@ const _TOKEN_BLACKLIST = {
 
 // Cleanup in-memory blacklist every hour (Redis keys expire via TTL automatically)
 _unrefInTest(setInterval(() => _TOKEN_BLACKLIST.cleanup(), 3600000));
+
+// Session row lookup — prefer Rust sidecar when CONCORD_SESSION_SIDECAR effective (fail-soft).
+async function getSessionPreferSidecar(tokenHash) {
+  if (!tokenHash) return null;
+  try {
+    const sc = await import("./lib/sidecars/dtu-sidecar-client.js");
+    if (sc.SESSION_ENABLED) {
+      const r = await sc.sessionByTokenHash(tokenHash);
+      if (r && r.ok === true && r.session) {
+        return { ...r.session, via: "sidecar" };
+      }
+    }
+  } catch (_e) { /* fail soft */ }
+  if (!db) return null;
+  try {
+    const row = db.prepare(
+      "SELECT id, user_id as userId, token_hash as tokenHash, created_at as createdAt, expires_at as expiresAt, is_revoked as isRevoked FROM sessions WHERE token_hash = ?"
+    ).get(tokenHash);
+    return row ? { ...row, isRevoked: !!row.isRevoked, via: "sqlite" } : null;
+  } catch (_e) {
+    return null;
+  }
+}
+
 
 // ---- Refresh Token Family Tracking (detects token theft via reuse) ----
 // SQLite-backed so theft detection survives server restarts.
@@ -10397,7 +10435,8 @@ async function tryInitWebSockets(server) {
       const subClient = pubClient.duplicate();
       await Promise.all([pubClient.connect(), subClient.connect()]);
       io.adapter(createAdapter(pubClient, subClient));
-      console.info("[Socket.IO] Redis adapter active —", process.env.REDIS_URL);
+      console.info("[Socket.IO] Redis adapter active");
+      structuredLog("info", "socketio_redis_adapter_active", { active: true });
     } catch (err) {
       console.warn("[Socket.IO] Redis adapter failed, falling back to in-memory:", err.message);
     }
@@ -56109,6 +56148,9 @@ register("db", "syncToPostgres", async (ctx, input) => {
 
 const REDIS_CONFIG = { enabled: !!process.env.REDIS_URL, url: process.env.REDIS_URL || null, prefix: process.env.REDIS_PREFIX || "concord:", ttl: Number(process.env.REDIS_TTL) || 300 };
 let redisClient = null;
+_macroRateBridge = createMacroRateBridge(() => redisClient);
+_sessionActivityBridge = createSessionActivityBridge(() => redisClient);
+_apiRateBridge = createApiRateBridge(() => redisClient);
 
 async function initRedis() {
   if (!REDIS_CONFIG.enabled) return { ok: false, reason: "Redis not configured" };

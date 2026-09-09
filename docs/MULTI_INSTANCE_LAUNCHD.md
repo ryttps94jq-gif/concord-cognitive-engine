@@ -1,8 +1,9 @@
 # Multi-instance launchd scaffold (no pm2 cluster)
 
-**Status (2026-09-09):** scaffold + `NODE_APP_INSTANCE` heartbeat guard **landed,
-inert by default**. Not activated on the 16 GB Mac (swap-maxed). Activate on
-A40 / a box with RAM headroom only.
+**Status (2026-09-09):** scaffold + heartbeat guard landed. **Dutch override:**
+dual-HTTP activating carefully on the 16 GB Mac with `--max-old-space-size=3072`
+per process (not 8192). Auto-rollback to single instance if OOM/swap death.
+A40 still preferred for headroom; Mac is honesty-constrained.
 
 ## Why
 
@@ -47,7 +48,7 @@ Pinned by `server/tests/concurrency-process-modes.test.js`.
 Never run B's heartbeat plist **and** leave instance 0 with heartbeat enabled —
 that double-runs the sim.
 
-## Activation checklist (A40 — do NOT run on 16 GB Mac)
+## Activation checklist (A40 preferred; Mac OK with 3072 heaps + rollback)
 
 1. Confirm free RAM (≥16 GB free after Ollama + sidecar) and disk headroom.
 2. Copy example plists → `~/Library/LaunchAgents/`, replace `PLACEHOLDER_*`.
@@ -68,7 +69,8 @@ Unload i1 (and/or heartbeat) plists; leave a single backend with neither
 
 ## Still open (not this scaffold)
 
-- STATE write-through for process-local maps (`docs/CONCURRENCY_STATE_AUDIT.md`
-  steps 3–7) before trusting multi-HTTP for every macro path.
-- Redis for socket.io adapter + rate limits.
+- STATE write-through: Tier S `_SESSION_ACTIVITY` + `_macroRateLimits` Redis
+  write-behind landed (`server/lib/concurrency/shared-state.js`). Chat
+  `STATE.sessions` still sticky-required.
+- Redis for socket.io adapter (needs working `redis`/`@redis/client` install).
 - Read-replica + read-router (RAM-gated; `engines/concord-read-router/RUNBOOK.md`).

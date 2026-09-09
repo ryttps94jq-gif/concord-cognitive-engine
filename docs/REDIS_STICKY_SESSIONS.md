@@ -1,8 +1,9 @@
 # Redis sticky sessions — prep (not activated on 16 GB Mac)
 
-**Status (2026-09-09):** docs + nginx example + code notes. **Do not** bootstrap a
-second Node process on the 16 GB self-host (swap-maxed). Activate on A40 / a box
-with RAM headroom together with `docs/MULTI_INSTANCE_LAUNCHD.md`.
+**Status (2026-09-09):** docs + nginx example + sticky helper + shared-state
+write-behind. **Dutch override:** dual-instance may run on 16 GB Mac with reduced
+heaps; nginx sticky optional (nginx may be absent — use direct :5050/:5051 +
+`CONCORD_STICKY_REDIS=1` observability).
 
 ## Why
 
@@ -53,7 +54,7 @@ Env (inert until multi-instance):
 | `CONCORD_STICKY_REDIS=0` | off | When `1`, record sticky map on chat session touch |
 | `CONCORD_NODE_ID` | `hostname:PORT` | Value written to the sticky key |
 
-## Activation order (A40 only)
+## Activation order (A40 preferred; Mac with rollback)
 
 1. RAM headroom confirmed; DTU sidecar running.
 2. Redis up (`REDIS_URL`); confirm socket.io adapter log line.

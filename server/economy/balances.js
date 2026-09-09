@@ -162,10 +162,11 @@ export function getSystemBalanceSummary(db) {
  * @returns {Promise<{ balance: number, totalCredits: number, totalDebits: number, via: string }>}
  */
 export async function getBalancePreferSidecar(db, userId) {
-  if (process.env.CONCORD_WALLET_SIDECAR === "1") {
-    try {
-      const { walletBalance } = await import("../lib/sidecars/dtu-sidecar-client.js");
-      const r = await walletBalance(userId);
+  try {
+    const sc = await import("../lib/sidecars/dtu-sidecar-client.js");
+    // WALLET_ENABLED defaults ON when CONCORD_DTU_SIDECAR=1 (explicit =0 disables)
+    if (sc.WALLET_ENABLED) {
+      const r = await sc.walletBalance(userId);
       if (r && r.ok === true && typeof r.balance === "number") {
         return {
           balance: r.balance,
@@ -174,9 +175,9 @@ export async function getBalancePreferSidecar(db, userId) {
           via: "sidecar",
         };
       }
-    } catch {
-      /* fail soft */
     }
+  } catch {
+    /* fail soft */
   }
   return { ...getBalance(db, userId), via: "sqlite" };
 }
