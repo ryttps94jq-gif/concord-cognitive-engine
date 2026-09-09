@@ -3,12 +3,9 @@
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensCommand } from '@/hooks/useLensCommand';
 import { LensShell } from '@/components/lens/LensShell';
-import { RecentMineCard } from '@/components/lens/RecentMineCard';
-import { AutoActionStrip } from '@/components/lens/AutoActionStrip';
 import { CrossLensRecentsPanel } from '@/components/lens/CrossLensRecentsPanel';
 import { FirstRunTour } from '@/components/lens/FirstRunTour';
 import { DepthBadge } from '@/components/lens/DepthBadge';
-import { ManifestActionBar } from '@/components/lens/ManifestActionBar';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { api, apiHelpers } from '@/lib/api/client';
 import { useState, useRef, useEffect, useCallback } from 'react';
@@ -76,8 +73,8 @@ export default function DebugLensPage() {
     | 'monitoring'
     | 'compute'
     | 'templates'
+    | 'cve'
   >('status');
-  const [showNvdCveFeed, setShowNvdCveFeed] = useState(false);
 
 
   // Lens-scoped keyboard commands (auto-wired by codemod).
@@ -95,6 +92,7 @@ export default function DebugLensPage() {
       { id: 'tab-monitoring', keys: 'm', description: 'Monitoring', category: 'navigation', action: () => setActiveTab('monitoring') },
       { id: 'tab-compute', keys: 'o', description: 'Compute', category: 'navigation', action: () => setActiveTab('compute') },
       { id: 'tab-templates', keys: 't', description: 'Templates', category: 'navigation', action: () => setActiveTab('templates') },
+      { id: 'tab-cve', keys: 'v', description: 'CVE feed', category: 'navigation', action: () => setActiveTab('cve') },
       { id: 'tab-test', keys: '0', description: 'Test', category: 'navigation', action: () => setActiveTab('test') },
     ],
     { lensId: 'debug' }
@@ -296,9 +294,7 @@ export default function DebugLensPage() {
 
   return (
     <LensShell lensId="debug" asMain={false}>
-      <FirstRunTour lensId="debug" />
-      <ManifestActionBar />
-      <DepthBadge lensId="debug" size="sm" className="ml-2" />
+      <FirstRunTour lensId="debug" />      <DepthBadge lensId="debug" size="sm" className="ml-2" />
     <div data-lens-theme="debug" className="p-6 space-y-6">
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -816,6 +812,7 @@ export default function DebugLensPage() {
             'monitoring',
             'compute',
             'templates',
+            'cve',
           ] as const
         ).map((tab) => (
           <button
@@ -1150,6 +1147,12 @@ export default function DebugLensPage() {
         </div>
       )}
 
+      {activeTab === 'cve' && (
+        <div className="panel p-4">
+          <NvdCveFeed />
+        </div>
+      )}
+
       {activeTab === 'test' && (
         <div className="panel p-4">
           <h2 className="font-semibold mb-4 flex items-center gap-2">
@@ -1269,24 +1272,8 @@ export default function DebugLensPage() {
         </div>
       )}
       <div className="mt-6">
-        <button
-          type="button"
-          onClick={() => setShowNvdCveFeed(v => !v)}
-          className="flex items-center gap-2 text-sm font-medium text-zinc-300 hover:text-white"
-        >
-          {showNvdCveFeed ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-          NVD CVE Feed (external reference)
-        </button>
-        {showNvdCveFeed && (
-          <section className="mt-3 rounded-xl border border-zinc-800 bg-zinc-950/40 p-4">
-            <NvdCveFeed />
-          </section>
-        )}
       </div>
-    </div>
-          <RecentMineCard domain="debug" limit={10} hideWhenEmpty className="mt-4" />
-          <AutoActionStrip domain="debug" hideWhenEmpty className="mt-3" />
-          <CrossLensRecentsPanel lensId="debug" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
+    </div>          <CrossLensRecentsPanel lensId="debug" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
     </LensShell>
   );
 }

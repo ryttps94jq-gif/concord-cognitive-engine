@@ -2,7 +2,6 @@
 
 import { motion } from 'framer-motion';
 import { LensShell } from '@/components/lens/LensShell';
-import { RecentMineCard } from '@/components/lens/RecentMineCard';
 import { CrossLensRecentsPanel } from '@/components/lens/CrossLensRecentsPanel';
 import { FirstRunTour } from '@/components/lens/FirstRunTour';
 import { DepthBadge } from '@/components/lens/DepthBadge';
@@ -78,7 +77,7 @@ export default function EntityLensPage() {
   const isCouncilEligible = isAuthenticated && !!currentUser?.role && COUNCIL_ROLES.has(currentUser.role);
   const queryClient = useQueryClient();
   const [showCreate, setShowCreate] = useState(false);
-  const [showWikidataSearch, setShowWikidataSearch] = useState(false);
+  const [desk, setDesk] = useState<'entities' | 'wikidata'>('entities');
   const [newEntityName, setNewEntityName] = useState('');
   const [newEntityType, setNewEntityType] = useState<Entity['type']>('worker');
   const [terminalEntity, setTerminalEntity] = useState<string | null>(null);
@@ -769,21 +768,18 @@ export default function EntityLensPage() {
       <div className="mt-6">
         <button
           type="button"
-          onClick={() => setShowWikidataSearch(v => !v)}
+          onClick={() => setDesk(d => d === 'wikidata' ? 'entities' : 'wikidata')}
           className="flex items-center gap-2 text-sm font-medium text-zinc-300 hover:text-white"
         >
-          {showWikidataSearch ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-          Wikidata Search (external reference)
+          {desk === 'wikidata' ? 'Entities' : 'Wikidata'}
         </button>
-        {showWikidataSearch && (
+        {desk === 'wikidata' && (
           <section className="mt-3 rounded-xl border border-zinc-800 bg-zinc-950/40 p-4">
             <WikidataSearch />
           </section>
         )}
       </div>
-    </div>
-          <RecentMineCard domain="entity" limit={10} hideWhenEmpty className="mt-4" />
-          <CrossLensRecentsPanel lensId="entity" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
+    </div>          <CrossLensRecentsPanel lensId="entity" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
     </LensShell>
   );
 }

@@ -2,8 +2,6 @@
 
 import { useState, useMemo, useRef} from 'react';
 import { LensShell } from '@/components/lens/LensShell';
-import { RecentMineCard } from '@/components/lens/RecentMineCard';
-import { AutoActionStrip } from '@/components/lens/AutoActionStrip';
 import { CrossLensRecentsPanel } from '@/components/lens/CrossLensRecentsPanel';
 import { FirstRunTour } from '@/components/lens/FirstRunTour';
 import { DepthBadge } from '@/components/lens/DepthBadge';
@@ -63,7 +61,9 @@ type ModeTab =
   | 'Analysis'
   | 'Protocols'
   | 'Publications'
-  | 'Dashboard';
+  | 'Dashboard'
+  | 'Lab'
+  | 'arXiv';
 
 type ArtifactType = 'Experiment' | 'Sample' | 'Equipment' | 'Analysis' | 'Protocol' | 'Publication';
 
@@ -205,6 +205,8 @@ const MODE_TABS: { id: ModeTab; icon: typeof FlaskConical; artifactType?: Artifa
   { id: 'Analysis', icon: LineChart, artifactType: 'Analysis' },
   { id: 'Protocols', icon: ClipboardList, artifactType: 'Protocol' },
   { id: 'Publications', icon: GraduationCap, artifactType: 'Publication' },
+  { id: 'Lab', icon: FlaskConical },
+  { id: 'arXiv', icon: BookOpen },
 ];
 
 const ALL_STATUSES: ExperimentStatus[] = [
@@ -362,8 +364,6 @@ export default function ScienceLensPage() {
 
   const [mode, setMode] = useState<ModeTab>('Dashboard');
   const [workbenchOpen, setWorkbenchOpen] = useState(false);
-  const [showExperimentPanel, setShowExperimentPanel] = useState(false);
-  const [showScienceArxiv, setShowScienceArxiv] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [showEditor, setShowEditor] = useState(false);
@@ -2026,43 +2026,18 @@ export default function ScienceLensPage() {
         Science Workbench
       </button>
       <ScienceWorkbench open={workbenchOpen} onClose={() => setWorkbenchOpen(false)} />
-      {/* Quartzy + Benchling-shape experiment workbench: calibration / protocol / quality / custody + actions */}
-      <div className="mt-6 mx-auto max-w-7xl">
-        <button
-          type="button"
-          onClick={() => setShowExperimentPanel(v => !v)}
-          className="flex items-center gap-2 text-sm font-medium text-zinc-300 hover:text-white"
-        >
-          {showExperimentPanel ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-          Experiment Workbench (calibration / protocol / quality / custody)
-        </button>
-        {showExperimentPanel && (
-          <PipingProvider>
-            <section className="mt-3">
-              <ExperimentActionPanel />
-            </section>
-          </PipingProvider>
-        )}
-      </div>
-
-      <div className="mt-6 mx-auto max-w-7xl">
-        <button
-          type="button"
-          onClick={() => setShowScienceArxiv(v => !v)}
-          className="flex items-center gap-2 text-sm font-medium text-zinc-300 hover:text-white"
-        >
-          {showScienceArxiv ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-          arXiv Search (external reference)
-        </button>
-        {showScienceArxiv && (
-          <section className="mt-3 rounded-xl border border-zinc-800 bg-zinc-950/40 p-4">
-            <ScienceArxiv />
+      {mode === 'Lab' && (
+        <PipingProvider>
+          <section className="mt-3 mx-auto max-w-7xl">
+            <ExperimentActionPanel />
           </section>
-        )}
-      </div>
-          <RecentMineCard domain="science" limit={10} hideWhenEmpty className="mt-4" />
-          <AutoActionStrip domain="science" hideWhenEmpty className="mt-3" title="More actions" />
-          <CrossLensRecentsPanel lensId="science" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
+        </PipingProvider>
+      )}
+      {mode === 'arXiv' && (
+        <section className="mt-3 mx-auto max-w-7xl rounded-xl border border-zinc-800 bg-zinc-950/40 p-4">
+          <ScienceArxiv />
+        </section>
+      )}          <CrossLensRecentsPanel lensId="science" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
     </LensShell>
   );
 }

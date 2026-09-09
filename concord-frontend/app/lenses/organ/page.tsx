@@ -3,14 +3,11 @@
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensCommand } from "@/hooks/useLensCommand";
 import { LensShell } from '@/components/lens/LensShell';
-import { RecentMineCard } from '@/components/lens/RecentMineCard';
-import { AutoActionStrip } from '@/components/lens/AutoActionStrip';
 import { CrossLensRecentsPanel } from '@/components/lens/CrossLensRecentsPanel';
 import { FirstRunTour } from '@/components/lens/FirstRunTour';
 import { DepthBadge } from '@/components/lens/DepthBadge';
 import { AnatomyExplorer } from '@/components/organ/AnatomyExplorer';
 import { OrgDesigner } from '@/components/organ/OrgDesigner';
-import { ManifestActionBar } from '@/components/lens/ManifestActionBar';
 import { useQuery } from '@tanstack/react-query';
 import { api, lensRun } from '@/lib/api/client';
 import { useState, useMemo } from 'react';
@@ -220,9 +217,7 @@ export default function OrganLensPage() {
 
   return (
     <LensShell lensId="organ" asMain={false}>
-      <FirstRunTour lensId="organ" />
-      <ManifestActionBar />
-      <DepthBadge lensId="organ" size="sm" className="ml-2" />
+      <FirstRunTour lensId="organ" />      <DepthBadge lensId="organ" size="sm" className="ml-2" />
     <div className="p-6 space-y-6">
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -637,10 +632,7 @@ export default function OrganLensPage() {
           </div>
         )}
       </section>
-    </div>
-          <RecentMineCard domain="organ" limit={10} hideWhenEmpty className="mt-4" />
-          <AutoActionStrip domain="organ" hideWhenEmpty className="mt-3" />
-          <CrossLensRecentsPanel lensId="organ" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
+    </div>          <CrossLensRecentsPanel lensId="organ" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
     </LensShell>
   );
 }

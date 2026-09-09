@@ -3,8 +3,6 @@
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensCommand } from "@/hooks/useLensCommand";
 import { LensShell } from '@/components/lens/LensShell';
-import { RecentMineCard } from '@/components/lens/RecentMineCard';
-import { AutoActionStrip } from '@/components/lens/AutoActionStrip';
 import { CrossLensRecentsPanel } from '@/components/lens/CrossLensRecentsPanel';
 import { FirstRunTour } from '@/components/lens/FirstRunTour';
 import { DepthBadge } from '@/components/lens/DepthBadge';
@@ -13,7 +11,6 @@ import { CommonsenseActionPanel } from '@/components/commonsense/CommonsenseActi
 import { KnowledgeBaseWorkbench } from '@/components/commonsense/KnowledgeBaseWorkbench';
 import { PipingProvider } from '@/components/panel-polish';
 import { useArtifacts, useCreateArtifact } from '@/lib/hooks/use-lens-artifacts';
-import { ManifestActionBar } from '@/components/lens/ManifestActionBar';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiHelpers, lensRun } from '@/lib/api/client';
 import { useUIStore } from '@/store/ui';
@@ -252,9 +249,7 @@ export default function CommonsenseLensPage() {
 
   return (
     <LensShell lensId="commonsense" asMain={false}>
-      <FirstRunTour lensId="commonsense" />
-      <ManifestActionBar />
-      <DepthBadge lensId="commonsense" size="sm" className="ml-2" />
+      <FirstRunTour lensId="commonsense" />      <DepthBadge lensId="commonsense" size="sm" className="ml-2" />
     <div data-lens-theme="commonsense" className="p-6 space-y-6">
       {/* Header */}
       <header className="flex items-center justify-between">
@@ -827,10 +822,7 @@ export default function CommonsenseLensPage() {
       </PipingProvider>
     </div>
 
-      <a href="#commonsense-skip" className="sr-only focus:not-sr-only focus:ring-2 focus:ring-amber-500 focus:outline-none">Skip to commonsense content</a>
-          <RecentMineCard domain="commonsense" limit={10} hideWhenEmpty className="mt-4" />
-          <AutoActionStrip domain="commonsense" hideWhenEmpty className="mt-3" title="More actions" />
-          <CrossLensRecentsPanel lensId="commonsense" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
+      <a href="#commonsense-skip" className="sr-only focus:not-sr-only focus:ring-2 focus:ring-amber-500 focus:outline-none">Skip to commonsense content</a>          <CrossLensRecentsPanel lensId="commonsense" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
     </LensShell>
   );
 }

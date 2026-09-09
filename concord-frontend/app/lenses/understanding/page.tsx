@@ -24,13 +24,10 @@
 
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import { LensShell } from '@/components/lens/LensShell';
-import { RecentMineCard } from '@/components/lens/RecentMineCard';
-import { AutoActionStrip } from '@/components/lens/AutoActionStrip';
 import { CrossLensRecentsPanel } from '@/components/lens/CrossLensRecentsPanel';
 import { FirstRunTour } from '@/components/lens/FirstRunTour';
 import { DepthBadge } from '@/components/lens/DepthBadge';
 import { LensVerticalHero } from '@/components/lens/LensVerticalHero';
-import { ManifestActionBar } from '@/components/lens/ManifestActionBar';
 import { useLensCommand } from '@/hooks/useLensCommand';
 import { api, lensRun } from '@/lib/api/client';
 import { useArtifacts, useCreateArtifact } from '@/lib/hooks/use-lens-artifacts';
@@ -166,9 +163,7 @@ export default function UnderstandingPage() {
 
   return (
     <LensShell lensId="understanding" asMain={false}>
-      <FirstRunTour lensId="understanding" />
-      <ManifestActionBar />
-      <DepthBadge lensId="understanding" size="sm" className="ml-2" />
+      <FirstRunTour lensId="understanding" />      <DepthBadge lensId="understanding" size="sm" className="ml-2" />
       <LensVerticalHero lensId="understanding" className="mx-6 mt-4" />
       <main className="min-h-screen p-6 max-w-6xl mx-auto text-white">
         <header className="flex items-start justify-between gap-3 mb-5 flex-wrap">
@@ -211,11 +206,7 @@ export default function UnderstandingPage() {
         {tab === 'compose'   && <ComposeTab subjectKinds={subjectKinds} onComposed={refreshHeader} />}
         {tab === 'evolution' && <EvolutionTab onChanged={refreshHeader} />}
         {tab === 'lineage'   && <LineageTab />}
-      </main>
-    
-          <RecentMineCard domain="understanding" limit={10} hideWhenEmpty className="mt-4" />
-          <AutoActionStrip domain="understanding" hideWhenEmpty className="mt-3" />
-          <CrossLensRecentsPanel lensId="understanding" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
+      </main>          <CrossLensRecentsPanel lensId="understanding" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
     </LensShell>
   );
 }

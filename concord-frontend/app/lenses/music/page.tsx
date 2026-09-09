@@ -2,8 +2,6 @@
 
 import { useState, useCallback, useMemo, useEffect, useRef} from 'react';
 import { LensShell } from '@/components/lens/LensShell';
-import { RecentMineCard } from '@/components/lens/RecentMineCard';
-import { AutoActionStrip } from '@/components/lens/AutoActionStrip';
 import { SessionRail } from '@/components/lens/SessionRail';
 import { CrossLensRecentsPanel } from '@/components/lens/CrossLensRecentsPanel';
 import { FirstRunTour } from '@/components/lens/FirstRunTour';
@@ -2450,10 +2448,7 @@ export default function MusicLensPage() {
       lensPrompt="You're inside Concord's Music lens — a marketplace + playlist + curation surface. Prefer run_lens_action for music actions, expert_mode for cited research about artists/tracks, generate_image for cover art."
     />
     
-          <SessionRail lensId="music" hideWhenEmpty className="mt-4" />
-          <RecentMineCard domain="music" limit={10} hideWhenEmpty className="mt-4" />
-          <AutoActionStrip domain="music" hideWhenEmpty className="mt-3" title="More actions" />
-          <CrossLensRecentsPanel lensId="music" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
+          <SessionRail lensId="music" hideWhenEmpty className="mt-4" />          <CrossLensRecentsPanel lensId="music" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
     </LensShell>
   );
 }

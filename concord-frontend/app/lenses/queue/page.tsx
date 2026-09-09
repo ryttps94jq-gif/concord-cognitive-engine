@@ -3,13 +3,10 @@
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensCommand } from '@/hooks/useLensCommand';
 import { LensShell } from '@/components/lens/LensShell';
-import { RecentMineCard } from '@/components/lens/RecentMineCard';
-import { AutoActionStrip } from '@/components/lens/AutoActionStrip';
 import { CrossLensRecentsPanel } from '@/components/lens/CrossLensRecentsPanel';
 import { FirstRunTour } from '@/components/lens/FirstRunTour';
 import { DepthBadge } from '@/components/lens/DepthBadge';
 import { QueueRepos } from '@/components/queue/QueueRepos';
-import { ManifestActionBar } from '@/components/lens/ManifestActionBar';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { lensRun } from '@/lib/api/client';
 import { useUIStore } from '@/store/ui';
@@ -206,9 +203,7 @@ export default function QueueLensPage() {
 
   return (
     <LensShell lensId="queue" asMain={false}>
-      <FirstRunTour lensId="queue" />
-      <ManifestActionBar />
-      <DepthBadge lensId="queue" size="sm" className="ml-2" />
+      <FirstRunTour lensId="queue" />      <DepthBadge lensId="queue" size="sm" className="ml-2" />
       <div data-lens-theme="queue" className="space-y-6 p-6">
         <header className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
@@ -626,10 +621,7 @@ export default function QueueLensPage() {
           className="sr-only focus:not-sr-only focus:outline-none focus:ring-2 focus:ring-amber-500"
         >
           Skip to queue content
-        </a>
-        <RecentMineCard domain="queue" limit={10} hideWhenEmpty className="mt-4" />
-        <AutoActionStrip domain="queue" hideWhenEmpty className="mt-3" />
-        <CrossLensRecentsPanel lensId="queue" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
+        </a>        <CrossLensRecentsPanel lensId="queue" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
       </div>
 
       <JobDetailDrawer

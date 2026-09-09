@@ -3,13 +3,10 @@
 import { useLensNav } from '@/hooks/useLensNav';
 import { lensRun } from '@/lib/api/client';
 import { LensShell } from '@/components/lens/LensShell';
-import { RecentMineCard } from '@/components/lens/RecentMineCard';
-import { AutoActionStrip } from '@/components/lens/AutoActionStrip';
 import { SessionRail } from '@/components/lens/SessionRail';
 import { CrossLensRecentsPanel } from '@/components/lens/CrossLensRecentsPanel';
 import { FirstRunTour } from '@/components/lens/FirstRunTour';
 import { DepthBadge } from '@/components/lens/DepthBadge';
-import { ManifestActionBar } from '@/components/lens/ManifestActionBar';
 import { useLensCommand } from '@/hooks/useLensCommand';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
@@ -108,8 +105,8 @@ export default function AgentsLensPage() {
   const { latestData: realtimeData, alerts: realtimeAlerts, insights: realtimeInsights, isLive, lastUpdated } = useRealtimeLens('agents');
 
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
-  const [showAgentRoster, setShowAgentRoster] = useState(false);
-  const [showForkPreview, setShowForkPreview] = useState(false);
+  type AgentDesk = 'fleet' | 'roster' | 'fork';
+  const [desk, setDesk] = useState<AgentDesk>('fleet');
   const [showCreate, setShowCreate] = useState(false);
   const [filter, setFilter] = useState<AgentFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -450,9 +447,7 @@ export default function AgentsLensPage() {
   }
   return (
     <LensShell lensId="agents" asMain={false}>
-      <FirstRunTour lensId="agents" />
-      <ManifestActionBar />
-      <DepthBadge lensId="agents" size="sm" className="ml-2" />
+      <FirstRunTour lensId="agents" />      <DepthBadge lensId="agents" size="sm" className="ml-2" />
     <div data-lens-theme="agents" className="min-h-full bg-lattice-bg">
       {/* Header */}
       <header className="sticky top-0 z-10 bg-lattice-surface border-b border-lattice-border">
@@ -1402,43 +1397,36 @@ export default function AgentsLensPage() {
         )}
       </AnimatePresence>
 
-      <div className="mt-6">
-        <button
-          type="button"
-          onClick={() => setShowAgentRoster(v => !v)}
-          className="flex items-center gap-2 text-sm font-medium text-zinc-300 hover:text-white"
-        >
-          {showAgentRoster ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-          Agent Roster
-        </button>
-        {showAgentRoster && (
-          <section className="mt-3 rounded-xl border border-zinc-800 bg-zinc-950/40 p-4">
-            <AgentRoster />
-          </section>
-        )}
+      <div className="mt-4 flex flex-wrap gap-1">
+        {([
+          { id: 'fleet' as const, label: 'Fleet' },
+          { id: 'roster' as const, label: 'Roster' },
+          { id: 'fork' as const, label: 'Forked self' },
+        ]).map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => setDesk(t.id)}
+            className={`px-3 py-1.5 rounded-md text-xs font-medium ${
+              desk === t.id ? 'bg-violet-500/20 text-violet-300' : 'text-gray-400 hover:text-white'
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
       </div>
-      {/* P-D — lattice-fork "forked self" preview (preview-only, non-money;
-          see docs/GOVERNANCE_DESIGN.md §5.5). */}
-      <div className="mt-6">
-        <button
-          type="button"
-          onClick={() => setShowForkPreview(v => !v)}
-          className="flex items-center gap-2 text-sm font-medium text-zinc-300 hover:text-white"
-        >
-          {showForkPreview ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-          Forked-Self Preview
-        </button>
-        {showForkPreview && (
-          <section className="mt-3 rounded-xl border border-zinc-800 bg-zinc-950/40 p-4">
-            <ForkPreviewPanel />
-          </section>
-        )}
-      </div>
+      {desk === 'roster' && (
+        <section className="mt-3 rounded-xl border border-zinc-800 bg-zinc-950/40 p-4">
+          <AgentRoster />
+        </section>
+      )}
+      {desk === 'fork' && (
+        <section className="mt-3 rounded-xl border border-zinc-800 bg-zinc-950/40 p-4">
+          <ForkPreviewPanel />
+        </section>
+      )}
     </div>
-          <SessionRail lensId="agents" hideWhenEmpty className="mt-4" />
-          <RecentMineCard domain="agents" limit={10} hideWhenEmpty className="mt-4" />
-          <AutoActionStrip domain="agents" hideWhenEmpty className="mt-3" />
-          <CrossLensRecentsPanel lensId="agents" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
+          <SessionRail lensId="agents" hideWhenEmpty className="mt-4" />          <CrossLensRecentsPanel lensId="agents" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
     </LensShell>
   );
 }

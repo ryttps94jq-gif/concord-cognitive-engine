@@ -3,9 +3,7 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { LensShell } from '@/components/lens/LensShell';
 import { DraftedTextarea } from '@/components/lens/DraftedTextarea';
-import { RecentMineCard } from '@/components/lens/RecentMineCard';
 import { LensFeedButton } from '@/components/lens/LensFeedButton';
-import { AutoActionStrip } from '@/components/lens/AutoActionStrip';
 import { CrossLensRecentsPanel } from '@/components/lens/CrossLensRecentsPanel';
 import { FirstRunTour } from '@/components/lens/FirstRunTour';
 import { DepthBadge } from '@/components/lens/DepthBadge';
@@ -13,7 +11,6 @@ import { PhotographyLightroomSection } from '@/components/photography/Photograph
 import { PexelsBrowser } from '@/components/photography/PexelsBrowser';
 import { PhotographyActionPanel } from '@/components/photography/PhotographyActionPanel';
 import { PipingProvider } from '@/components/panel-polish';
-import { ManifestActionBar } from '@/components/lens/ManifestActionBar';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensCommand } from '@/hooks/useLensCommand';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -353,9 +350,7 @@ export default function PhotographyPage() {
 
   return (
     <LensShell lensId="photography" asMain={false}>
-      <FirstRunTour lensId="photography" />
-      <ManifestActionBar />
-      <DepthBadge lensId="photography" size="sm" className="ml-2" />
+      <FirstRunTour lensId="photography" />      <DepthBadge lensId="photography" size="sm" className="ml-2" />
       <div className="px-4 mt-3">
         <PhotographyLightroomSection />
       </div>
@@ -914,8 +909,6 @@ export default function PhotographyPage() {
       </section>
     </div>
           <section className="mt-4"><LensFeedButton domain="photography" label="Live photo-archive feed" /></section>
-          <RecentMineCard domain="photography" limit={10} hideWhenEmpty className="mt-4" />
-          <AutoActionStrip domain="photography" hideWhenEmpty className="mt-3" title="More actions" />
           <CrossLensRecentsPanel lensId="photography" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
     </LensShell>
   );

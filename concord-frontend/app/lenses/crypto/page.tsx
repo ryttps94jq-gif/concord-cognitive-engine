@@ -3,8 +3,6 @@
 import { useLensNav } from '@/hooks/useLensNav';
 import { LensShell } from '@/components/lens/LensShell';
 import { LensFeedButton } from '@/components/lens/LensFeedButton';
-import { RecentMineCard } from '@/components/lens/RecentMineCard';
-import { AutoActionStrip } from '@/components/lens/AutoActionStrip';
 import { CrossLensRecentsPanel } from '@/components/lens/CrossLensRecentsPanel';
 import { FirstRunTour } from '@/components/lens/FirstRunTour';
 import { DepthBadge } from '@/components/lens/DepthBadge';
@@ -16,7 +14,6 @@ import { PipingProvider } from '@/components/panel-polish';
 import { SwapRoutePanel } from '@/components/crypto-explorer/SwapRoutePanel';
 import { ShellPreview } from '@/components/lens/ShellPreview';
 import { ExchangeSection } from '@/components/crypto/ExchangeSection';
-import { ManifestActionBar } from '@/components/lens/ManifestActionBar';
 import { useLensCommand } from '@/hooks/useLensCommand';
 import { useTilePush } from '@/hooks/useTilePush';
 import { useState, useCallback, useMemo, useEffect } from 'react';
@@ -604,9 +601,7 @@ export default function CryptoLensPage() {
 
   return (
     <LensShell lensId="crypto" asMain={false}>
-      <FirstRunTour lensId="crypto" />
-      <ManifestActionBar />
-      <DepthBadge lensId="crypto" size="sm" className="ml-2" />
+      <FirstRunTour lensId="crypto" />      <DepthBadge lensId="crypto" size="sm" className="ml-2" />
       <ShellPreview lensId="crypto" defaultOpen={true} />
       <div className="px-4 mt-3">
         <ExchangeSection />
@@ -1702,10 +1697,7 @@ export default function CryptoLensPage() {
           </PipingProvider>
         )}
       </div>
-    </div>
-          <RecentMineCard domain="crypto" limit={10} hideWhenEmpty className="mt-4" />
-          <AutoActionStrip domain="crypto" hideWhenEmpty className="mt-3" title="More actions" />
-          <CrossLensRecentsPanel lensId="crypto" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
+    </div>          <CrossLensRecentsPanel lensId="crypto" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
     </LensShell>
   );
 }

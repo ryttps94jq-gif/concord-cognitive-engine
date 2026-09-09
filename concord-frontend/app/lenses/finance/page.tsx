@@ -27,8 +27,8 @@
  * `markets` domain, scoped to SPARKS-currency prediction-market pools
  * (yes/no), not securities; its depth-chart UI lives at
  * components/markets/DepthChart.tsx and cross-mounts into this destination.
- * RETIRED generic scaffold: AutoActionStrip, ShellPreview, UniversalActions
- * strip, raw button walls, RecentMineCard, CrossLensRecentsPanel.
+ * RETIRED generic scaffold: ShellPreview, UniversalActions
+ * strip, raw button walls, CrossLensRecentsPanel.
  *
  * Full capability map: docs/lens-specs/finance-capability-map.md
  * ─────────────────────────────────────────────────────────────────────────

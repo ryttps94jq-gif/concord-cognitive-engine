@@ -22,13 +22,10 @@ import { StackOverflowSearch } from '@/components/answers/StackOverflowSearch';
 import { AnswersQA } from '@/components/answers/AnswersQA';
 import { LensFeedButton } from '@/components/lens/LensFeedButton';
 import { LensShell } from '@/components/lens/LensShell';
-import { RecentMineCard } from '@/components/lens/RecentMineCard';
-import { AutoActionStrip } from '@/components/lens/AutoActionStrip';
 import { CrossLensRecentsPanel } from '@/components/lens/CrossLensRecentsPanel';
 import { FirstRunTour } from '@/components/lens/FirstRunTour';
 import { DepthBadge } from '@/components/lens/DepthBadge';
 import { useArtifacts, useCreateArtifact } from '@/lib/hooks/use-lens-artifacts';
-import { ManifestActionBar } from '@/components/lens/ManifestActionBar';
 import { motion } from 'framer-motion';
 import {
   Atom,
@@ -548,9 +545,7 @@ export default function AnswersLensPage() {
 
   return (
     <LensShell lensId="answers" asMain={false}>
-      <FirstRunTour lensId="answers" />
-      <ManifestActionBar />
-      <DepthBadge lensId="answers" size="sm" className="ml-2" />
+      <FirstRunTour lensId="answers" />      <DepthBadge lensId="answers" size="sm" className="ml-2" />
     <div data-lens-theme="answers" className={cn(ds.pageContainer, 'space-y-6')}>
       {/* ── Header ─────────────────────────────────────────────────── */}
       <header className="space-y-4">
@@ -742,11 +737,7 @@ export default function AnswersLensPage() {
           </div>
         )}
       </section>
-    </div>
-
-          <RecentMineCard domain="answers" limit={10} hideWhenEmpty className="mt-4" />
-          <AutoActionStrip domain="answers" hideWhenEmpty className="mt-3" />
-          <CrossLensRecentsPanel lensId="answers" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
+    </div>          <CrossLensRecentsPanel lensId="answers" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
     </LensShell>
   );
 }

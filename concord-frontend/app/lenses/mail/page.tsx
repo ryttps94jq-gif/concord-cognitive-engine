@@ -13,7 +13,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { Mail, Send, Inbox, Pencil, Coins, Package, RefreshCcw, X, Check, AlertCircle, Paperclip, Search } from 'lucide-react';
 import { LensShell } from '@/components/lens/LensShell';
-import { ManifestActionBar } from '@/components/lens/ManifestActionBar';
 import { subscribe } from '@/lib/realtime/socket';
 import { DTUPickerModal } from '@/components/dtu/DTUPickerModal';
 import { RecipientSearchInput } from '@/components/message/RecipientSearchInput';
@@ -191,9 +190,7 @@ export default function MailLensPage() {
   const unreadCount = useMemo(() => inbox.filter((m) => m.status === 'unread').length, [inbox]);
 
   return (
-    <LensShell lensId="mail" asMain={false}>
-      <ManifestActionBar />
-      <main className="min-h-screen bg-lattice-void text-gray-100">
+    <LensShell lensId="mail" asMain={false}>      <main className="min-h-screen bg-lattice-void text-gray-100">
         <header className="border-b border-lattice-border bg-lattice-surface/70 px-4 py-3 backdrop-blur sm:px-6">
           <div className="mx-auto flex max-w-screen-2xl items-center gap-3">
             <div className="rounded-lg border border-neon-blue/30 bg-neon-blue/10 p-2">

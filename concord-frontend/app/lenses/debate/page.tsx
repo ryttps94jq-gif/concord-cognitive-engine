@@ -4,16 +4,13 @@ import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLensNav } from '@/hooks/useLensNav';
 import { LensShell } from '@/components/lens/LensShell';
-import { RecentMineCard } from '@/components/lens/RecentMineCard';
 import { SessionRail } from '@/components/lens/SessionRail';
-import { AutoActionStrip } from '@/components/lens/AutoActionStrip';
 import { CrossLensRecentsPanel } from '@/components/lens/CrossLensRecentsPanel';
 import { FirstRunTour } from '@/components/lens/FirstRunTour';
 import { DepthBadge } from '@/components/lens/DepthBadge';
 import { CmvFeed } from '@/components/debate/CmvFeed';
 import { KialoArgumentMap } from '@/components/debate/KialoArgumentMap';
 import { SharedDebateView } from '@/components/debate/SharedDebateView';
-import { ManifestActionBar } from '@/components/lens/ManifestActionBar';
 import { useLensCommand } from '@/hooks/useLensCommand';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useRunArtifact } from '@/lib/hooks/use-lens-artifacts';
@@ -567,9 +564,7 @@ export default function DebateLensPage() {
 
   return (
     <LensShell lensId="debate" asMain={false}>
-      <FirstRunTour lensId="debate" />
-      <ManifestActionBar />
-      <DepthBadge lensId="debate" size="sm" className="ml-2" />
+      <FirstRunTour lensId="debate" />      <DepthBadge lensId="debate" size="sm" className="ml-2" />
     <div data-lens-theme="debate" className="p-6 space-y-6">
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -1070,10 +1065,7 @@ export default function DebateLensPage() {
         )}
       </div>
     </div>
-          <SessionRail lensId="debate" hideWhenEmpty className="mt-4" />
-          <RecentMineCard domain="debate" limit={10} hideWhenEmpty className="mt-4" />
-          <AutoActionStrip domain="debate" hideWhenEmpty className="mt-3" title="More actions" />
-          <CrossLensRecentsPanel lensId="debate" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
+          <SessionRail lensId="debate" hideWhenEmpty className="mt-4" />          <CrossLensRecentsPanel lensId="debate" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
     </LensShell>
   );
 }

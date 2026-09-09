@@ -2,15 +2,12 @@
 
 import { useState, useMemo, useCallback, useRef} from 'react';
 import { LensShell } from '@/components/lens/LensShell';
-import { RecentMineCard } from '@/components/lens/RecentMineCard';
-import { AutoActionStrip } from '@/components/lens/AutoActionStrip';
 import { CrossLensRecentsPanel } from '@/components/lens/CrossLensRecentsPanel';
 import { FirstRunTour } from '@/components/lens/FirstRunTour';
 import { DepthBadge } from '@/components/lens/DepthBadge';
 import { HvacFeed } from '@/components/hvac/HvacFeed';
 import { ManualJCalc } from '@/components/hvac/ManualJCalc';
 import { FieldService } from '@/components/hvac/FieldService';
-import { ManifestActionBar } from '@/components/lens/ManifestActionBar';
 import { motion } from 'framer-motion';
 import { useLensData, LensItem } from '@/lib/hooks/use-lens-data';
 import { useLensCommand } from "@/hooks/useLensCommand";
@@ -641,9 +638,7 @@ export default function HVACLensPage() {
 
   return (
     <LensShell lensId="hvac" asMain={false}>
-      <FirstRunTour lensId="hvac" />
-      <ManifestActionBar />
-      <DepthBadge lensId="hvac" size="sm" className="ml-2" />
+      <FirstRunTour lensId="hvac" />      <DepthBadge lensId="hvac" size="sm" className="ml-2" />
     <LensPageShell
       domain="hvac"
       title="HVAC"
@@ -779,10 +774,7 @@ export default function HVACLensPage() {
       </section>
     </LensPageShell>
     
-      <a href="#hvac-skip" className="sr-only focus:not-sr-only focus:ring-2 focus:ring-amber-500 focus:outline-none">Skip to hvac content</a>
-          <RecentMineCard domain="hvac" limit={10} hideWhenEmpty className="mt-4" />
-          <AutoActionStrip domain="hvac" hideWhenEmpty className="mt-3" />
-          <CrossLensRecentsPanel lensId="hvac" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
+      <a href="#hvac-skip" className="sr-only focus:not-sr-only focus:ring-2 focus:ring-amber-500 focus:outline-none">Skip to hvac content</a>          <CrossLensRecentsPanel lensId="hvac" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
     </LensShell>
   );
 }

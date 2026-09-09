@@ -3,14 +3,11 @@
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensCommand } from '@/hooks/useLensCommand';
 import { LensShell } from '@/components/lens/LensShell';
-import { RecentMineCard } from '@/components/lens/RecentMineCard';
-import { AutoActionStrip } from '@/components/lens/AutoActionStrip';
 import { CrossLensRecentsPanel } from '@/components/lens/CrossLensRecentsPanel';
 import { FirstRunTour } from '@/components/lens/FirstRunTour';
 import { DepthBadge } from '@/components/lens/DepthBadge';
 import { FormalVerificationRepos } from '@/components/invariant/FormalVerificationRepos';
 import { FormalVerificationWorkbench } from '@/components/invariant/FormalVerificationWorkbench';
-import { ManifestActionBar } from '@/components/lens/ManifestActionBar';
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { apiHelpers, lensRun } from '@/lib/api/client';
@@ -232,9 +229,7 @@ export default function InvariantLensPage() {
   }
   return (
     <LensShell lensId="invariant" asMain={false}>
-      <FirstRunTour lensId="invariant" />
-      <ManifestActionBar />
-      <DepthBadge lensId="invariant" size="sm" className="ml-2" />
+      <FirstRunTour lensId="invariant" />      <DepthBadge lensId="invariant" size="sm" className="ml-2" />
     <div data-lens-theme="invariant" className="p-6 space-y-6">
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -691,10 +686,7 @@ export default function InvariantLensPage() {
       <section className="mt-6 rounded-xl border border-zinc-800 bg-zinc-950/40 p-4">
         <FormalVerificationRepos />
       </section>
-    </div>
-          <RecentMineCard domain="invariant" limit={10} hideWhenEmpty className="mt-4" />
-          <AutoActionStrip domain="invariant" hideWhenEmpty className="mt-3" />
-          <CrossLensRecentsPanel lensId="invariant" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
+    </div>          <CrossLensRecentsPanel lensId="invariant" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
     </LensShell>
   );
 }

@@ -3,15 +3,12 @@
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensCommand } from '@/hooks/useLensCommand';
 import { LensShell } from '@/components/lens/LensShell';
-import { RecentMineCard } from '@/components/lens/RecentMineCard';
-import { AutoActionStrip } from '@/components/lens/AutoActionStrip';
 import { CrossLensRecentsPanel } from '@/components/lens/CrossLensRecentsPanel';
 import { FirstRunTour } from '@/components/lens/FirstRunTour';
 import { DepthBadge } from '@/components/lens/DepthBadge';
 import { ExportFormatGallery } from '@/components/export/ExportFormatGallery';
 import { ExportToolkit } from '@/components/export/ExportToolkit';
 import { ObsidianVaultExport } from '@/components/export/ObsidianVaultExport';
-import { ManifestActionBar } from '@/components/lens/ManifestActionBar';
 import { useQuery } from '@tanstack/react-query';
 import { api, lensRun } from '@/lib/api/client';
 import { useState } from 'react';
@@ -245,9 +242,7 @@ export default function ExportLensPage() {
 
   return (
     <LensShell lensId="export" asMain={false}>
-      <FirstRunTour lensId="export" />
-      <ManifestActionBar />
-      <DepthBadge lensId="export" size="sm" className="ml-2" />
+      <FirstRunTour lensId="export" />      <DepthBadge lensId="export" size="sm" className="ml-2" />
     <div className="p-6 space-y-6">
       <header className="flex items-center gap-3">
         <SvgIcon name="export-package" size={28} className="text-neon-green" />
@@ -621,10 +616,7 @@ export default function ExportLensPage() {
           </div>
         )}
       </section>
-    </div>
-          <RecentMineCard domain="export" limit={10} hideWhenEmpty className="mt-4" />
-          <AutoActionStrip domain="export" hideWhenEmpty className="mt-3" />
-          <CrossLensRecentsPanel lensId="export" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
+    </div>          <CrossLensRecentsPanel lensId="export" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
     </LensShell>
   );
 }

@@ -2,8 +2,6 @@
 
 import { useState, useMemo, useCallback, useRef } from 'react';
 import { LensShell } from '@/components/lens/LensShell';
-import { RecentMineCard } from '@/components/lens/RecentMineCard';
-import { AutoActionStrip } from '@/components/lens/AutoActionStrip';
 import { SessionRail } from '@/components/lens/SessionRail';
 import { CrossLensRecentsPanel } from '@/components/lens/CrossLensRecentsPanel';
 import { FirstRunTour } from '@/components/lens/FirstRunTour';
@@ -163,9 +161,8 @@ export default function ResearchLensPage() {
   const [query, setQuery] = useState('');
   const [domainFilter, setDomainFilter] = useState('');
   const [workbenchOpen, setWorkbenchOpen] = useState(false);
-  const [showLibrarySection, setShowLibrarySection] = useState(false);
-  const [showCrossRefPanel, setShowCrossRefPanel] = useState(false);
-  const [showResearchArxiv, setShowResearchArxiv] = useState(false);
+  type ResearchDesk = 'search' | 'library' | 'crossref' | 'arxiv';
+  const [desk, setDesk] = useState<ResearchDesk>('search');
   const [tierFilter, setTierFilter] = useState('');
   const [sortBy, setSortBy] = useState<'relevance' | 'date' | 'tier'>('date');
   const [selectedDtu, setSelectedDtu] = useState<DTUResult | null>(null);
@@ -383,40 +380,32 @@ export default function ResearchLensPage() {
           full audit. The real Hypothesis Generator form below already
           gives `generate` a proper designed home. */}
       <DepthBadge lensId="research" size="sm" className="ml-2" />
-      <div className="px-4 mt-3">
-        <button
-          type="button"
-          onClick={() => setShowLibrarySection(v => !v)}
-          className="flex items-center gap-2 text-sm font-medium text-zinc-300 hover:text-white"
-        >
-          {showLibrarySection ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-          Reference Library (Zotero-shape)
-        </button>
-        {showLibrarySection && (
-          <div className="mt-3">
-            <ResearchLibrarySection />
-          </div>
-        )}
+      <div className="px-4 mt-3 flex flex-wrap gap-1">
+        {([
+          { id: 'search' as const, label: 'Search' },
+          { id: 'library' as const, label: 'Library' },
+          { id: 'crossref' as const, label: 'CrossRef' },
+          { id: 'arxiv' as const, label: 'arXiv' },
+        ]).map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => setDesk(t.id)}
+            className={`px-3 py-1.5 rounded-md text-xs font-medium ${
+              desk === t.id ? 'bg-cyan-500/20 text-cyan-300' : 'text-gray-400 hover:text-white'
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
       </div>
+      {desk === 'library' && (
+        <div className="px-4 mt-3"><ResearchLibrarySection /></div>
+      )}
     <div data-lens-theme="research" className="p-6 space-y-6">
       {/* Phase 5 — open research-arc sessions for this lens. */}
       <SessionRail lensId="research" hideWhenEmpty />
-      {/* Phase 4 (third wave) — REAL CrossRef DOI metadata search. */}
-      <div>
-        <button
-          type="button"
-          onClick={() => setShowCrossRefPanel(v => !v)}
-          className="flex items-center gap-2 text-sm font-medium text-zinc-300 hover:text-white"
-        >
-          {showCrossRefPanel ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-          CrossRef DOI Search (external reference)
-        </button>
-        {showCrossRefPanel && (
-          <div className="mt-3">
-            <CrossRefPanel domain="research" />
-          </div>
-        )}
-      </div>
+      {desk === 'crossref' && <CrossRefPanel domain="research" />}
       <header className="flex items-center gap-3">
         <BookOpen className="w-6 h-6 text-neon-cyan" />
         <div>
@@ -978,24 +967,11 @@ export default function ResearchLensPage() {
       Research Workbench
     </button>
     <ResearchWorkbench open={workbenchOpen} onClose={() => setWorkbenchOpen(false)} />
-    <div className="mt-6 mx-auto max-w-7xl">
-      <button
-        type="button"
-        onClick={() => setShowResearchArxiv(v => !v)}
-        className="flex items-center gap-2 text-sm font-medium text-zinc-300 hover:text-white"
-      >
-        {showResearchArxiv ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-        arXiv Search (external reference)
-      </button>
-      {showResearchArxiv && (
-        <section className="mt-3 rounded-xl border border-zinc-800 bg-zinc-950/40 p-4">
-          <ResearchArxiv />
-        </section>
-      )}
-    </div>
-          <RecentMineCard domain="research" limit={10} hideWhenEmpty className="mt-4" />
-          <AutoActionStrip domain="research" hideWhenEmpty className="mt-3" />
-          <CrossLensRecentsPanel lensId="research" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
+    {desk === 'arxiv' && (
+      <section className="mt-3 mx-auto max-w-7xl rounded-xl border border-zinc-800 bg-zinc-950/40 p-4">
+        <ResearchArxiv />
+      </section>
+    )}          <CrossLensRecentsPanel lensId="research" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
     </LensShell>
   );
 }

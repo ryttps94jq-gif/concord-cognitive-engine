@@ -25,14 +25,11 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useLensCommand } from '@/hooks/useLensCommand';
 import { LensShell } from '@/components/lens/LensShell';
-import { RecentMineCard } from '@/components/lens/RecentMineCard';
-import { AutoActionStrip } from '@/components/lens/AutoActionStrip';
 import { CrossLensRecentsPanel } from '@/components/lens/CrossLensRecentsPanel';
 import { FirstRunTour } from '@/components/lens/FirstRunTour';
 import { DepthBadge } from '@/components/lens/DepthBadge';
 import { RecipeLedger } from '@/components/crafting/RecipeLedger';
 import { CraftingWorkbench } from '@/components/crafting/CraftingWorkbench';
-import { ManifestActionBar } from '@/components/lens/ManifestActionBar';
 import {
   useArtifacts,
   useCreateArtifact,
@@ -137,7 +134,7 @@ interface CraftingRecipe {
   } | string;
 }
 
-type Tab = 'mine' | 'forge' | 'browse' | 'skills' | 'workbench' | 'author';
+type Tab = 'mine' | 'forge' | 'browse' | 'skills' | 'workbench' | 'author' | 'ledger';
 
 const TYPE_META: Record<string, { label: string; icon: React.ReactNode; color: string }> = {
   food_recipe:           { label: 'Food',    icon: <Flame className="w-3.5 h-3.5" />,    color: 'text-orange-300' },
@@ -159,7 +156,6 @@ function activeAvatarId(): string | null {
 
 export default function CraftingPage() {
   const [tab, setTab] = useState<Tab>('mine');
-  const [showRecipeLedger, setShowRecipeLedger] = useState(false);
 
   useLensCommand(
     [
@@ -169,6 +165,7 @@ export default function CraftingPage() {
       { id: 'tab-skills', keys: 's', description: 'Skills',   category: 'navigation', action: () => setTab('skills') },
       { id: 'tab-workbench', keys: 'w', description: 'Workbench', category: 'navigation', action: () => setTab('workbench') },
       { id: 'tab-author', keys: 'a', description: 'Author',   category: 'navigation', action: () => setTab('author') },
+      { id: 'tab-ledger', keys: 'g', description: 'Ledger',   category: 'navigation', action: () => setTab('ledger') },
     ],
     { lensId: 'crafting' }
   );
@@ -234,9 +231,7 @@ export default function CraftingPage() {
 
   return (
     <LensShell lensId="crafting" asMain={false}>
-      <FirstRunTour lensId="crafting" />
-      <ManifestActionBar />
-      <DepthBadge lensId="crafting" size="sm" className="ml-2" />
+      <FirstRunTour lensId="crafting" />      <DepthBadge lensId="crafting" size="sm" className="ml-2" />
       <main className="min-h-screen p-6 max-w-6xl mx-auto text-white">
         <header className="flex items-start justify-between gap-3 mb-5 flex-wrap">
           <div>
@@ -281,6 +276,7 @@ export default function CraftingPage() {
           <TabButton current={tab} value="skills" label="Skills"              onClick={() => setTab('skills')} icon={<Award className="w-3.5 h-3.5" />} />
           <TabButton current={tab} value="workbench" label="Workbench"        onClick={() => setTab('workbench')} icon={<Wrench className="w-3.5 h-3.5" />} />
           <TabButton current={tab} value="author" label="Author New"          onClick={() => setTab('author')} icon={<Plus className="w-3.5 h-3.5" />} />
+          <TabButton current={tab} value="ledger" label="Ledger"              onClick={() => setTab('ledger')} icon={<BookOpen className="w-3.5 h-3.5" />} />
         </nav>
 
         {tab === 'mine'   && <MineTab onChanged={refreshHeader} />}
@@ -293,26 +289,8 @@ export default function CraftingPage() {
             <RecipeAuthorPanel onPublished={() => { setTab('mine'); refreshHeader(); }} />
           </section>
         )}
-        <div className="mt-6">
-          <button
-            type="button"
-            onClick={() => setShowRecipeLedger(v => !v)}
-            className="flex items-center gap-2 text-sm font-medium text-zinc-300 hover:text-white"
-          >
-            {showRecipeLedger ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-            Recipe & Skill Ledger
-          </button>
-          {showRecipeLedger && (
-            <section className="mt-3 rounded-xl border border-zinc-800 bg-zinc-950/40 p-4">
-              <RecipeLedger />
-            </section>
-          )}
-        </div>
-      </main>
-
-          <RecentMineCard domain="crafting" limit={10} hideWhenEmpty className="mt-4" />
-          <AutoActionStrip domain="crafting" hideWhenEmpty className="mt-3" />
-          <CrossLensRecentsPanel lensId="crafting" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
+        {tab === 'ledger' && <RecipeLedger />}
+      </main>          <CrossLensRecentsPanel lensId="crafting" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
     </LensShell>
   );
 }

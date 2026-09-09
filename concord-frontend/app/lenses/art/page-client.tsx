@@ -9,7 +9,7 @@ import { CrossLensRecentsPanel } from '@/components/lens/CrossLensRecentsPanel';
 import { FirstRunTour } from '@/components/lens/FirstRunTour';
 import { DepthBadge } from '@/components/lens/DepthBadge';
 import { MetMuseumPanel } from '@/components/art/MetMuseumPanel';
-import { ManifestActionBar } from '@/components/lens/ManifestActionBar';
+
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensCommand } from '@/hooks/useLensCommand';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -1043,7 +1043,6 @@ export default function ArtLensPage() {
   return (
     <LensShell lensId="art" asMain={false}>
       <FirstRunTour lensId="art" />
-      <ManifestActionBar />
       <DepthBadge lensId="art" size="sm" className="ml-2" />
       <div className="px-4 mt-3">
         <ArtStudioSection />

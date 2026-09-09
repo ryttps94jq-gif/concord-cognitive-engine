@@ -17,7 +17,6 @@ import { useLensCommand } from '@/hooks/useLensCommand';
 import { LensShell } from '@/components/lens/LensShell';
 import { FirstRunTour } from '@/components/lens/FirstRunTour';
 import { DepthBadge } from '@/components/lens/DepthBadge';
-import { ManifestActionBar } from '@/components/lens/ManifestActionBar';
 import { CrossLensRecentsPanel } from '@/components/lens/CrossLensRecentsPanel';
 import { BookmarksList } from '@/components/social/BookmarksList';
 import { FoldersSidebar } from '@/components/saved/FoldersSidebar';
@@ -60,7 +59,7 @@ export default function SavedLensPage() {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showBookmarks, setShowBookmarks] = useState(false);
+  const [desk, setDesk] = useState<'folders' | 'bookmarks'>('folders');
   const [notice, setNotice] = useState('');
   const [saveFormOpen, setSaveFormOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -223,9 +222,7 @@ export default function SavedLensPage() {
 
   return (
     <LensShell lensId="saved" asMain={false}>
-      <FirstRunTour lensId="saved" />
-      <ManifestActionBar />
-      <DepthBadge lensId="saved" size="sm" className="ml-2" />
+      <FirstRunTour lensId="saved" />      <DepthBadge lensId="saved" size="sm" className="ml-2" />
 
       <div className="min-h-screen bg-lattice-void text-zinc-100">
         <header className="border-b border-zinc-800 bg-zinc-950/70">
@@ -446,12 +443,12 @@ export default function SavedLensPage() {
             <div className="pt-2">
               <button
                 type="button"
-                onClick={() => setShowBookmarks((v) => !v)}
+                onClick={() => setDesk(d => d === 'bookmarks' ? 'folders' : 'bookmarks')}
                 className="text-xs text-zinc-400 hover:text-amber-300"
               >
-                {showBookmarks ? '▾' : '▸'} Social posts bookmarked via the post button
+                {desk === 'bookmarks' ? 'Folders' : 'Social bookmarks'}
               </button>
-              {showBookmarks && (
+              {desk === 'bookmarks' && (
                 <div className="mt-2">
                   <BookmarksList currentUserId={me?.user?.id} />
                 </div>

@@ -19,8 +19,6 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Virtuoso } from 'react-virtuoso';
 
 import { LensShell } from '@/components/lens/LensShell';
-import { RecentMineCard } from '@/components/lens/RecentMineCard';
-import { AutoActionStrip } from '@/components/lens/AutoActionStrip';
 import { CrossLensRecentsPanel } from '@/components/lens/CrossLensRecentsPanel';
 import { FirstRunTour } from '@/components/lens/FirstRunTour';
 import { DepthBadge } from '@/components/lens/DepthBadge';
@@ -28,7 +26,6 @@ import { MessagingRepos } from '@/components/message/MessagingRepos';
 import { LabelManagerPanel } from '@/components/message/LabelManagerPanel';
 import { ThreadLabelBar } from '@/components/message/ThreadLabelBar';
 import { RecipientSearchInput } from '@/components/message/RecipientSearchInput';
-import { ManifestActionBar } from '@/components/lens/ManifestActionBar';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensCommand } from '@/hooks/useLensCommand';
 import { InboxShell, type InboxThread } from '@/components/message/InboxShell';
@@ -283,9 +280,7 @@ export default function MessageLensPage() {
 
   return (
     <LensShell lensId="message" asMain={false}>
-      <FirstRunTour lensId="message" />
-      <ManifestActionBar />
-      <DepthBadge lensId="message" size="sm" className="ml-2" />
+      <FirstRunTour lensId="message" />      <DepthBadge lensId="message" size="sm" className="ml-2" />
       <div className="px-4 mt-3 space-y-3">
         <GmailSection />
         <SlackSection />
@@ -463,8 +458,6 @@ export default function MessageLensPage() {
       <section className="mt-6 rounded-xl border border-lattice-border bg-lattice-surface/40 p-4">
         <MessagingRepos />
       </section>
-          <RecentMineCard domain="message" limit={10} hideWhenEmpty className="mt-4" />
-          <AutoActionStrip domain="message" hideWhenEmpty className="mt-3" />
           <CrossLensRecentsPanel lensId="message" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
     </LensShell>
   );

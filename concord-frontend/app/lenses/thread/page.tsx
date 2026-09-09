@@ -2,15 +2,12 @@
 
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { LensShell } from '@/components/lens/LensShell';
-import { RecentMineCard } from '@/components/lens/RecentMineCard';
-import { AutoActionStrip } from '@/components/lens/AutoActionStrip';
 import { CrossLensRecentsPanel } from '@/components/lens/CrossLensRecentsPanel';
 import { FirstRunTour } from '@/components/lens/FirstRunTour';
 import { DepthBadge } from '@/components/lens/DepthBadge';
 import { ThreadFeed } from '@/components/thread/ThreadFeed';
 import { ThreadComposer } from '@/components/thread/ThreadComposer';
 import { ThreadStudio } from '@/components/thread/ThreadStudio';
-import { ManifestActionBar } from '@/components/lens/ManifestActionBar';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensCommand } from "@/hooks/useLensCommand";
 import { useAuth } from '@/hooks/useAuth';
@@ -187,9 +184,8 @@ export default function ThreadLensPage() {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const newThreadInputRef = useRef<HTMLInputElement>(null);
   const { user } = useAuth();
-  const [showThreadComposer, setShowThreadComposer] = useState(false);
-  const [showThreadStudio, setShowThreadStudio] = useState(false);
-  const [showThreadFeed, setShowThreadFeed] = useState(false);
+  type ThreadDesk = 'map' | 'composer' | 'studio' | 'feed';
+  const [desk, setDesk] = useState<ThreadDesk>('map');
 
   useLensNav('thread');
   const { latestData: realtimeData, alerts: realtimeAlerts, insights: realtimeInsights, isLive, lastUpdated } = useRealtimeLens('thread');
@@ -555,9 +551,7 @@ export default function ThreadLensPage() {
 
   return (
     <LensShell lensId="thread" asMain={false}>
-      <FirstRunTour lensId="thread" />
-      <ManifestActionBar />
-      <DepthBadge lensId="thread" size="sm" className="ml-2" />
+      <FirstRunTour lensId="thread" />      <DepthBadge lensId="thread" size="sm" className="ml-2" />
     <div data-lens-theme="thread" className="h-[calc(100vh-4rem)] flex flex-col">
       <header className="flex items-center justify-between p-4 border-b border-lattice-border">
         <div className="flex items-center gap-3">
@@ -1072,55 +1066,29 @@ export default function ThreadLensPage() {
         )}
       </div>
       </div>
-      <div className="mt-6">
-        <button
-          type="button"
-          onClick={() => setShowThreadComposer(v => !v)}
-          className="flex items-center gap-2 text-sm font-medium text-zinc-300 hover:text-white"
-        >
-          {showThreadComposer ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-          Composer (Typefully-shape)
-        </button>
-        {showThreadComposer && (
-          <section className="mt-3 rounded-xl border border-zinc-800 bg-zinc-950/40 p-4">
-            <ThreadComposer />
-          </section>
-        )}
+      <div className="mt-4 flex flex-wrap gap-1 px-4">
+        {([
+          { id: 'map' as const, label: 'Map' },
+          { id: 'composer' as const, label: 'Composer' },
+          { id: 'studio' as const, label: 'Studio' },
+          { id: 'feed' as const, label: 'Feed' },
+        ]).map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => setDesk(t.id)}
+            className={`px-3 py-1.5 rounded-md text-xs font-medium ${
+              desk === t.id ? 'bg-neon-purple/20 text-neon-purple' : 'text-gray-400 hover:text-white'
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
       </div>
-      <div className="mt-6">
-        <button
-          type="button"
-          onClick={() => setShowThreadStudio(v => !v)}
-          className="flex items-center gap-2 text-sm font-medium text-zinc-300 hover:text-white"
-        >
-          {showThreadStudio ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-          Publishing Studio (accounts / media / calendar / AI / style / analytics)
-        </button>
-        {showThreadStudio && (
-          <section className="mt-3 rounded-xl border border-zinc-800 bg-zinc-950/40 p-4">
-            <ThreadStudio />
-          </section>
-        )}
-      </div>
-      <div className="mt-6">
-        <button
-          type="button"
-          onClick={() => setShowThreadFeed(v => !v)}
-          className="flex items-center gap-2 text-sm font-medium text-zinc-300 hover:text-white"
-        >
-          {showThreadFeed ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-          Discussion (external reference)
-        </button>
-        {showThreadFeed && (
-          <section className="mt-3 rounded-xl border border-zinc-800 bg-zinc-950/40 p-4">
-            <ThreadFeed />
-          </section>
-        )}
-      </div>
-    </div>
-          <RecentMineCard domain="thread" limit={10} hideWhenEmpty className="mt-4" />
-          <AutoActionStrip domain="thread" hideWhenEmpty className="mt-3" />
-          <CrossLensRecentsPanel lensId="thread" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
+      {desk === 'composer' && <section className="p-4"><ThreadComposer /></section>}
+      {desk === 'studio' && <section className="p-4"><ThreadStudio /></section>}
+      {desk === 'feed' && <section className="p-4"><ThreadFeed /></section>}
+    </div>          <CrossLensRecentsPanel lensId="thread" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
     </LensShell>
   );
 }

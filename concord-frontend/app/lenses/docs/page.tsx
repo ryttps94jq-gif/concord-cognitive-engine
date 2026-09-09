@@ -3,14 +3,11 @@
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensCommand } from "@/hooks/useLensCommand";
 import { LensShell } from '@/components/lens/LensShell';
-import { RecentMineCard } from '@/components/lens/RecentMineCard';
-import { AutoActionStrip } from '@/components/lens/AutoActionStrip';
 import { CrossLensRecentsPanel } from '@/components/lens/CrossLensRecentsPanel';
 import { FirstRunTour } from '@/components/lens/FirstRunTour';
 import { DepthBadge } from '@/components/lens/DepthBadge';
 import { DocsToolingGallery } from '@/components/docs/DocsToolingGallery';
 import { DocsWorkspace } from '@/components/docs/DocsWorkspace';
-import { ManifestActionBar } from '@/components/lens/ManifestActionBar';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api/client';
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
@@ -313,9 +310,7 @@ export default function DocsLensPage() {
 
   return (
     <LensShell lensId="docs" asMain={false}>
-      <FirstRunTour lensId="docs" />
-      <ManifestActionBar />
-      <DepthBadge lensId="docs" size="sm" className="ml-2" />
+      <FirstRunTour lensId="docs" />      <DepthBadge lensId="docs" size="sm" className="ml-2" />
     <div data-lens-theme="docs" className="p-6 space-y-6">
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -1014,10 +1009,7 @@ export default function DocsLensPage() {
       </div>
     </div>
 
-      <a href="#docs-skip" className="sr-only focus:not-sr-only focus:ring-2 focus:ring-amber-500 focus:outline-none">Skip to docs content</a>
-          <RecentMineCard domain="docs" limit={10} hideWhenEmpty className="mt-4" />
-          <AutoActionStrip domain="docs" hideWhenEmpty className="mt-3" />
-          <CrossLensRecentsPanel lensId="docs" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
+      <a href="#docs-skip" className="sr-only focus:not-sr-only focus:ring-2 focus:ring-amber-500 focus:outline-none">Skip to docs content</a>          <CrossLensRecentsPanel lensId="docs" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
     </LensShell>
   );
 }

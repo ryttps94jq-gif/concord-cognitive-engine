@@ -2,14 +2,11 @@
 
 import { useState, useMemo, useCallback, useRef} from 'react';
 import { LensShell } from '@/components/lens/LensShell';
-import { RecentMineCard } from '@/components/lens/RecentMineCard';
-import { AutoActionStrip } from '@/components/lens/AutoActionStrip';
 import { CrossLensRecentsPanel } from '@/components/lens/CrossLensRecentsPanel';
 import { FirstRunTour } from '@/components/lens/FirstRunTour';
 import { DepthBadge } from '@/components/lens/DepthBadge';
 import { DiyShowcase } from '@/components/diy/DiyShowcase';
 import { ProjectWorkshop } from '@/components/diy/ProjectWorkshop';
-import { ManifestActionBar } from '@/components/lens/ManifestActionBar';
 import { motion } from 'framer-motion';
 import { useLensData, LensItem } from '@/lib/hooks/use-lens-data';
 import { useLensCommand } from "@/hooks/useLensCommand";
@@ -758,9 +755,7 @@ export default function DIYLensPage() {
 
   return (
     <LensShell lensId="diy" asMain={false}>
-      <FirstRunTour lensId="diy" />
-      <ManifestActionBar />
-      <DepthBadge lensId="diy" size="sm" className="ml-2" />
+      <FirstRunTour lensId="diy" />      <DepthBadge lensId="diy" size="sm" className="ml-2" />
     <LensPageShell
       domain="diy"
       title="DIY"
@@ -870,10 +865,7 @@ export default function DIYLensPage() {
       </section>
     </LensPageShell>
     
-      <a href="#diy-skip" className="sr-only focus:not-sr-only focus:ring-2 focus:ring-amber-500 focus:outline-none">Skip to diy content</a>
-          <RecentMineCard domain="diy" limit={10} hideWhenEmpty className="mt-4" />
-          <AutoActionStrip domain="diy" hideWhenEmpty className="mt-3" />
-          <CrossLensRecentsPanel lensId="diy" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
+      <a href="#diy-skip" className="sr-only focus:not-sr-only focus:ring-2 focus:ring-amber-500 focus:outline-none">Skip to diy content</a>          <CrossLensRecentsPanel lensId="diy" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
     </LensShell>
   );
 }

@@ -3,8 +3,6 @@
 import { motion } from 'framer-motion';
 import { LensShell } from '@/components/lens/LensShell';
 import { DraftedTextarea } from '@/components/lens/DraftedTextarea';
-import { RecentMineCard } from '@/components/lens/RecentMineCard';
-import { AutoActionStrip } from '@/components/lens/AutoActionStrip';
 import { CrossLensRecentsPanel } from '@/components/lens/CrossLensRecentsPanel';
 import { FirstRunTour } from '@/components/lens/FirstRunTour';
 import { DepthBadge } from '@/components/lens/DepthBadge';
@@ -2534,8 +2532,6 @@ export default function TradesLensPage() {
       <section className="mt-6 mx-auto max-w-7xl rounded-xl border border-zinc-800 bg-zinc-950/40 p-4">
         <TradesFeed />
       </section>
-          <RecentMineCard domain="trades" limit={10} hideWhenEmpty className="mt-4" />
-          <AutoActionStrip domain="trades" hideWhenEmpty className="mt-3" />
           <CrossLensRecentsPanel lensId="trades" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
     </LensShell>
   );

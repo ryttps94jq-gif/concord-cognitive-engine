@@ -16,8 +16,6 @@
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensCommand } from '@/hooks/useLensCommand';
 import { LensShell } from '@/components/lens/LensShell';
-import { RecentMineCard } from '@/components/lens/RecentMineCard';
-import { AutoActionStrip } from '@/components/lens/AutoActionStrip';
 import { CrossLensRecentsPanel } from '@/components/lens/CrossLensRecentsPanel';
 import { FirstRunTour } from '@/components/lens/FirstRunTour';
 import { DepthBadge } from '@/components/lens/DepthBadge';
@@ -25,7 +23,6 @@ import { LensVerticalHero } from '@/components/lens/LensVerticalHero';
 import { MakerShowcase } from '@/components/maker/MakerShowcase';
 import { ProjectBuilder } from '@/components/maker/ProjectBuilder';
 import { QuestGraphEditor } from '@/components/maker/QuestGraphEditor';
-import { ManifestActionBar } from '@/components/lens/ManifestActionBar';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
 import { useState } from 'react';
@@ -140,9 +137,7 @@ export default function MakerLensPage() {
 
   return (
     <LensShell lensId="maker" asMain={false}>
-      <FirstRunTour lensId="maker" />
-      <ManifestActionBar />
-      <DepthBadge lensId="maker" size="sm" className="ml-2" />
+      <FirstRunTour lensId="maker" />      <DepthBadge lensId="maker" size="sm" className="ml-2" />
       <LensVerticalHero lensId="maker" className="mx-6 mt-4" />
     <div className="min-h-screen bg-black pb-12 text-pink-50">
       <header className="sticky top-0 z-10 border-b border-pink-900/50 bg-black/95 px-4 py-3 backdrop-blur md:px-8">
@@ -328,11 +323,7 @@ export default function MakerLensPage() {
       <section className="mt-6 rounded-xl border border-zinc-800 bg-zinc-950/40 p-4">
         <MakerShowcase />
       </section>
-    </div>
-
-          <RecentMineCard domain="maker" limit={10} hideWhenEmpty className="mt-4" />
-          <AutoActionStrip domain="maker" hideWhenEmpty className="mt-3" />
-          <CrossLensRecentsPanel lensId="maker" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
+    </div>          <CrossLensRecentsPanel lensId="maker" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
     </LensShell>
   );
 }

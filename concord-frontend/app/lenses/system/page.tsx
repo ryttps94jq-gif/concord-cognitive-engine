@@ -17,13 +17,10 @@
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensCommand } from '@/hooks/useLensCommand';
 import { LensShell } from '@/components/lens/LensShell';
-import { RecentMineCard } from '@/components/lens/RecentMineCard';
-import { AutoActionStrip } from '@/components/lens/AutoActionStrip';
 import { CrossLensRecentsPanel } from '@/components/lens/CrossLensRecentsPanel';
 import { FirstRunTour } from '@/components/lens/FirstRunTour';
 import { DepthBadge } from '@/components/lens/DepthBadge';
 import { SystemHealthPanel } from '@/components/system/SystemHealthPanel';
-import { ManifestActionBar } from '@/components/lens/ManifestActionBar';
 import { useQuery } from '@tanstack/react-query';
 import { apiHelpers } from '@/lib/api/client';
 import { useState, useMemo } from 'react';
@@ -373,9 +370,7 @@ export default function SystemLensPage() {
 
   return (
     <LensShell lensId="system" asMain={false}>
-      <FirstRunTour lensId="system" />
-      <ManifestActionBar />
-      <DepthBadge lensId="system" size="sm" className="ml-2" />
+      <FirstRunTour lensId="system" />      <DepthBadge lensId="system" size="sm" className="ml-2" />
     <div className="min-h-screen bg-black pb-12 text-cyan-50">
       {/* Header */}
       <header className="sticky top-0 z-10 border-b border-cyan-900/50 bg-black/95 px-4 py-3 backdrop-blur md:px-8">
@@ -865,11 +860,7 @@ export default function SystemLensPage() {
           </section>
         )}
       </div>
-    </div>
-
-          <RecentMineCard domain="system" limit={10} hideWhenEmpty className="mt-4" />
-          <AutoActionStrip domain="system" hideWhenEmpty className="mt-3" />
-          <CrossLensRecentsPanel lensId="system" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
+    </div>          <CrossLensRecentsPanel lensId="system" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
     </LensShell>
   );
 }

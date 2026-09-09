@@ -2,8 +2,6 @@
 
 import { useLensNav } from '@/hooks/useLensNav';
 import { LensShell } from '@/components/lens/LensShell';
-import { RecentMineCard } from '@/components/lens/RecentMineCard';
-import { AutoActionStrip } from '@/components/lens/AutoActionStrip';
 import { CrossLensRecentsPanel } from '@/components/lens/CrossLensRecentsPanel';
 import { FirstRunTour } from '@/components/lens/FirstRunTour';
 import { DepthBadge } from '@/components/lens/DepthBadge';
@@ -64,7 +62,7 @@ import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 type ColumnId = 'backlog' | 'todo' | 'in_progress' | 'in_review' | 'testing' | 'done';
 type Priority = 'low' | 'medium' | 'high' | 'urgent';
 type TaskType = 'task' | 'feature' | 'bug' | 'design' | 'research' | 'docs';
-type ViewMode = 'board' | 'timeline' | 'table';
+type ViewMode = 'board' | 'timeline' | 'table' | 'workspace' | 'bgg';
 
 interface Subtask {
   id: string;
@@ -376,7 +374,6 @@ export default function BoardLensPage() {
 
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('board');
-  const [showBggHotList, setShowBggHotList] = useState(false);
   const [activeProject, setActiveProject] = useState(projects[0]);
   const [projectDropdownOpen, setProjectDropdownOpen] = useState(false);
   const [dragOverColumn, setDragOverColumn] = useState<ColumnId | null>(null);
@@ -400,6 +397,8 @@ export default function BoardLensPage() {
       { id: 'view-board', keys: 'b', description: 'Board view', category: 'view', action: () => setViewMode('board') },
       { id: 'view-timeline', keys: 't', description: 'Timeline view', category: 'view', action: () => setViewMode('timeline') },
       { id: 'view-table', keys: 'g', description: 'Table view', category: 'view', action: () => setViewMode('table') },
+      { id: 'view-workspace', keys: 'w', description: 'Workspace', category: 'view', action: () => setViewMode('workspace') },
+      { id: 'view-bgg', keys: 'h', description: 'BGG hot list', category: 'view', action: () => setViewMode('bgg') },
       { id: 'toggle-filters', keys: 'f', description: 'Toggle filters', category: 'view', action: () => setShowFilters((v) => !v) },      { id: "focus-search", keys: "/", description: "Focus search", category: "navigation", action: () => searchInputRef.current?.focus() },
 
     ],
@@ -742,6 +741,8 @@ export default function BoardLensPage() {
                   { mode: 'board' as ViewMode, icon: LayoutGrid, label: 'Board' },
                   { mode: 'timeline' as ViewMode, icon: BarChart3, label: 'Timeline' },
                   { mode: 'table' as ViewMode, icon: Table, label: 'Table' },
+                  { mode: 'workspace' as ViewMode, icon: Kanban, label: 'Workspace' },
+                  { mode: 'bgg' as ViewMode, icon: Rocket, label: 'BGG' },
                 ].map(({ mode, icon: Icon, label }) => (
                   <button
                     key={mode}
@@ -1628,37 +1629,17 @@ export default function BoardLensPage() {
 
       <RealtimeDataPanel data={realtimeInsights} />
 
-      {/* Real macro-backed Trello-shape workspace: persisted per-user
-          boards/columns/cards with drag-and-drop, card detail modal
-          (comments/attachments/activity/cover), calendar view, label
-          filtering, automation rules, sharing, and custom fields. */}
-      <section className="mt-6 px-6">
-        <BoardWorkspace />
-      </section>
-
-      {/* External reference — BoardGameGeek hot-games list, not this
-          lens's own boards. Collapsed by default rather than promoted
-          open on every visit. */}
-      <section className="mt-6 rounded-xl border border-zinc-800 bg-zinc-950/40">
-        <button
-          type="button"
-          onClick={() => setShowBggHotList((v) => !v)}
-          className="w-full flex items-center justify-between gap-2 px-4 py-3 text-sm font-medium text-gray-200 hover:text-white"
-          aria-expanded={showBggHotList}
-        >
-          <span>BoardGameGeek hot list (external reference)</span>
-          {showBggHotList ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-        </button>
-        {showBggHotList && (
-          <div className="px-4 pb-4">
-            <BggHotList />
-          </div>
-        )}
-      </section>
-    </div>
-          <RecentMineCard domain="board" limit={10} hideWhenEmpty className="mt-4" />
-          <AutoActionStrip domain="board" hideWhenEmpty className="mt-3" />
-          <CrossLensRecentsPanel lensId="board" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
+      {viewMode === 'workspace' && (
+        <section className="mt-6 px-6">
+          <BoardWorkspace />
+        </section>
+      )}
+      {viewMode === 'bgg' && (
+        <section className="mt-6 px-6">
+          <BggHotList />
+        </section>
+      )}
+    </div>          <CrossLensRecentsPanel lensId="board" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
     </LensShell>
   );
 }

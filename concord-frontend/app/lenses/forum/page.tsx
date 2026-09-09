@@ -3,9 +3,7 @@
 import { useState, useMemo, useCallback, useEffect, useRef} from 'react';
 import { LensShell } from '@/components/lens/LensShell';
 import { DraftedTextarea } from '@/components/lens/DraftedTextarea';
-import { RecentMineCard } from '@/components/lens/RecentMineCard';
 import { SessionRail } from '@/components/lens/SessionRail';
-import { AutoActionStrip } from '@/components/lens/AutoActionStrip';
 import { CrossLensRecentsPanel } from '@/components/lens/CrossLensRecentsPanel';
 import { FirstRunTour } from '@/components/lens/FirstRunTour';
 import { DepthBadge } from '@/components/lens/DepthBadge';
@@ -14,7 +12,6 @@ import { ForumChatter } from '@/components/forum/ForumChatter';
 import { ForumActionPanel } from '@/components/forum/ForumActionPanel';
 import { PostInsightsPanel } from '@/components/forum/PostInsightsPanel';
 import { PipingProvider } from '@/components/panel-polish';
-import { ManifestActionBar } from '@/components/lens/ManifestActionBar';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensCommand } from "@/hooks/useLensCommand";
 import { useQuery } from '@tanstack/react-query';
@@ -248,8 +245,8 @@ export default function ForumLensPage() {
 
   // Comment reply
   const [modToolsOpenId, setModToolsOpenId] = useState<string | null>(null);
-  const [showForumChatter, setShowForumChatter] = useState(false);
-  const [showForumActionPanel, setShowForumActionPanel] = useState(false);
+  type ForumDesk = 'board' | 'chatter' | 'actions';
+  const [desk, setDesk] = useState<ForumDesk>('board');
   const [replyTo, setReplyTo] = useState<string | null>(null);
   const [replyContent, setReplyContent] = useState('');
   const [postReplyContent, setPostReplyContent] = useState('');
@@ -854,9 +851,7 @@ export default function ForumLensPage() {
   }
   return (
     <LensShell lensId="forum" asMain={false}>
-      <FirstRunTour lensId="forum" />
-      <ManifestActionBar />
-      <DepthBadge lensId="forum" size="sm" className="ml-2" />
+      <FirstRunTour lensId="forum" />      <DepthBadge lensId="forum" size="sm" className="ml-2" />
       <div className="px-4 mt-3">
         <ForumSection />
       </div>
@@ -1239,44 +1234,36 @@ export default function ForumLensPage() {
         />
       )}
       </div>
-      <div className="mt-6">
-        <button
-          type="button"
-          onClick={() => setShowForumChatter(v => !v)}
-          className="flex items-center gap-2 text-sm font-medium text-zinc-300 hover:text-white"
-        >
-          {showForumChatter ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-          Discussion (external reference)
-        </button>
-        {showForumChatter && (
-          <section className="mt-3 rounded-xl border border-zinc-800 bg-zinc-950/40 p-4">
-            <ForumChatter />
-          </section>
-        )}
+      <div className="mt-4 flex flex-wrap gap-1">
+        {([
+          { id: 'board' as const, label: 'Board' },
+          { id: 'chatter' as const, label: 'Chatter' },
+          { id: 'actions' as const, label: 'Mod tools' },
+        ]).map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => setDesk(t.id)}
+            className={`px-3 py-1.5 rounded-md text-xs font-medium ${
+              desk === t.id ? 'bg-orange-500/20 text-orange-300' : 'text-gray-400 hover:text-white'
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
       </div>
-
-      <div className="mt-6">
-        <button
-          type="button"
-          onClick={() => setShowForumActionPanel(v => !v)}
-          className="flex items-center gap-2 text-sm font-medium text-zinc-300 hover:text-white"
-        >
-          {showForumActionPanel ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-          More Actions
-        </button>
-        {showForumActionPanel && (
-          <PipingProvider>
-            <section className="mt-3">
-              <ForumActionPanel />
-            </section>
-          </PipingProvider>
-        )}
-      </div>
+      {desk === 'chatter' && (
+        <section className="mt-3 rounded-xl border border-zinc-800 bg-zinc-950/40 p-4">
+          <ForumChatter />
+        </section>
+      )}
+      {desk === 'actions' && (
+        <PipingProvider>
+          <section className="mt-3"><ForumActionPanel /></section>
+        </PipingProvider>
+      )}
     </div>
-          <SessionRail lensId="forum" hideWhenEmpty className="mt-4" />
-          <RecentMineCard domain="forum" limit={10} hideWhenEmpty className="mt-4" />
-          <AutoActionStrip domain="forum" hideWhenEmpty className="mt-3" title="More actions" />
-          <CrossLensRecentsPanel lensId="forum" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
+          <SessionRail lensId="forum" hideWhenEmpty className="mt-4" />          <CrossLensRecentsPanel lensId="forum" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
     </LensShell>
   );
 }

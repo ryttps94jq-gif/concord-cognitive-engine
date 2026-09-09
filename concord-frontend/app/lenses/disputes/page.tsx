@@ -11,15 +11,12 @@
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensCommand } from '@/hooks/useLensCommand';
 import { LensShell } from '@/components/lens/LensShell';
-import { RecentMineCard } from '@/components/lens/RecentMineCard';
-import { AutoActionStrip } from '@/components/lens/AutoActionStrip';
 import { CrossLensRecentsPanel } from '@/components/lens/CrossLensRecentsPanel';
 import { FirstRunTour } from '@/components/lens/FirstRunTour';
 import { DepthBadge } from '@/components/lens/DepthBadge';
 import { Icon as SvgIcon } from '@/components/icons/Icon';
 import { LawStackFeed } from '@/components/disputes/LawStackFeed';
 import { CaseWorkbench } from '@/components/disputes/CaseWorkbench';
-import { ManifestActionBar } from '@/components/lens/ManifestActionBar';
 import { useState, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -721,9 +718,7 @@ export default function DisputesPage() {
 
   return (
     <LensShell lensId="disputes" asMain={false}>
-      <FirstRunTour lensId="disputes" />
-      <ManifestActionBar />
-      <DepthBadge lensId="disputes" size="sm" className="ml-2" />
+      <FirstRunTour lensId="disputes" />      <DepthBadge lensId="disputes" size="sm" className="ml-2" />
     <div className={ds.pageContainer}>
       {/* Header */}
       <div className={ds.sectionHeader}>
@@ -1055,11 +1050,7 @@ export default function DisputesPage() {
       <section className="mt-6 rounded-xl border border-zinc-800 bg-zinc-950/40 p-4">
         <LawStackFeed />
       </section>
-    </div>
-
-          <RecentMineCard domain="disputes" limit={10} hideWhenEmpty className="mt-4" />
-          <AutoActionStrip domain="disputes" hideWhenEmpty className="mt-3" />
-          <CrossLensRecentsPanel lensId="disputes" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
+    </div>          <CrossLensRecentsPanel lensId="disputes" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
     </LensShell>
   );
 }

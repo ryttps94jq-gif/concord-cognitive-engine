@@ -2,8 +2,6 @@
 
 import { motion } from 'framer-motion';
 import { LensShell } from '@/components/lens/LensShell';
-import { RecentMineCard } from '@/components/lens/RecentMineCard';
-import { AutoActionStrip } from '@/components/lens/AutoActionStrip';
 import { CrossLensRecentsPanel } from '@/components/lens/CrossLensRecentsPanel';
 import { FirstRunTour } from '@/components/lens/FirstRunTour';
 import { DepthBadge } from '@/components/lens/DepthBadge';
@@ -14,7 +12,6 @@ import { BiasChecklist } from '@/components/metacognition/BiasChecklist';
 import { StrategyLibrary } from '@/components/metacognition/StrategyLibrary';
 import { AccuracyTracker } from '@/components/metacognition/AccuracyTracker';
 import { ReasoningToolkit } from '@/components/metacognition/ReasoningToolkit';
-import { ManifestActionBar } from '@/components/lens/ManifestActionBar';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensCommand } from '@/hooks/useLensCommand';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -517,9 +514,7 @@ export default function MetacognitionLensPage() {
 
   return (
     <LensShell lensId="metacognition" asMain={false}>
-      <FirstRunTour lensId="metacognition" />
-      <ManifestActionBar />
-      <DepthBadge lensId="metacognition" size="sm" className="ml-2" />
+      <FirstRunTour lensId="metacognition" />      <DepthBadge lensId="metacognition" size="sm" className="ml-2" />
     <div data-lens-theme="metacognition" className="p-6 space-y-6">
       {/* Header */}
       <header className="flex items-center gap-3">
@@ -1552,10 +1547,7 @@ export default function MetacognitionLensPage() {
           </section>
         )}
       </div>
-    </div>
-          <RecentMineCard domain="metacognition" limit={10} hideWhenEmpty className="mt-4" />
-          <AutoActionStrip domain="metacognition" hideWhenEmpty className="mt-3" />
-          <CrossLensRecentsPanel lensId="metacognition" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
+    </div>          <CrossLensRecentsPanel lensId="metacognition" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
     </LensShell>
   );
 }

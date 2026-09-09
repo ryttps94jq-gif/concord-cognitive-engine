@@ -2,8 +2,6 @@
 
 import { useState, useMemo, useCallback, useRef} from 'react';
 import { LensShell } from '@/components/lens/LensShell';
-import { RecentMineCard } from '@/components/lens/RecentMineCard';
-import { AutoActionStrip } from '@/components/lens/AutoActionStrip';
 import { CrossLensRecentsPanel } from '@/components/lens/CrossLensRecentsPanel';
 import { FirstRunTour } from '@/components/lens/FirstRunTour';
 import { DepthBadge } from '@/components/lens/DepthBadge';
@@ -15,7 +13,6 @@ import { EstimateInvoiceFlow } from '@/components/electrical/EstimateInvoiceFlow
 import { OneLineDiagram } from '@/components/electrical/OneLineDiagram';
 import { InspectionChecklists } from '@/components/electrical/InspectionChecklists';
 import { MaterialPriceList } from '@/components/electrical/MaterialPriceList';
-import { ManifestActionBar } from '@/components/lens/ManifestActionBar';
 import { motion } from 'framer-motion';
 import { useLensData, LensItem } from '@/lib/hooks/use-lens-data';
 import { useLensCommand } from "@/hooks/useLensCommand";
@@ -41,12 +38,12 @@ import {
   Receipt,
   ShieldCheck,
   Bolt,
-  ChevronDown,
-  ChevronRight,
+  Cpu,
 } from 'lucide-react';
 import { LensPageShell } from '@/components/lens/LensPageShell';
 
 type ModeTab =
+  | 'dashboard'
   | 'jobs'
   | 'codes'
   | 'clients'
@@ -56,7 +53,9 @@ type ModeTab =
   | 'estimating'
   | 'diagrams'
   | 'checklists'
-  | 'pricelist';
+  | 'pricelist'
+  | 'hardware'
+  | 'neccalc';
 type ArtifactType =
   | 'Job'
   | 'CodeRef'
@@ -121,10 +120,12 @@ const MODE_TABS: { id: ModeTab; label: string; icon: typeof Zap; artifactType: A
 const TOOL_TABS: { id: ModeTab; label: string; icon: typeof Zap }[] = [
   { id: 'panels', label: 'Panel Schedule', icon: Bolt },
   { id: 'calculators', label: 'NEC Calculators', icon: Calculator },
+  { id: 'neccalc', label: 'Code Calc', icon: Calculator },
   { id: 'estimating', label: 'Estimate→Invoice', icon: Receipt },
   { id: 'diagrams', label: 'One-Line', icon: ShieldCheck },
   { id: 'checklists', label: 'Inspections', icon: ClipboardList },
   { id: 'pricelist', label: 'Price List', icon: DollarSign },
+  { id: 'hardware', label: 'Open Hardware', icon: Cpu },
 ];
 const TOOL_TAB_IDS = TOOL_TABS.map((t) => t.id);
 
@@ -150,21 +151,11 @@ const ELECTRICAL_CERTS = [
 
 export default function ElectricalLensPage() {
   const searchInputRef = useRef<HTMLInputElement>(null);
-  useLensCommand(
-    [
-      { id: "focus-search", keys: "/", description: "Focus search", category: "navigation", action: () => searchInputRef.current?.focus() },
-    ],
-    { lensId: "electrical" }
-  );
-
   const [activeTab, setActiveTab] = useState<ModeTab>('jobs');
-  const [showHardwarePulse, setShowHardwarePulse] = useState(false);
-  const [showNecCodeCalc, setShowNecCodeCalc] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<LensItem<TradeArtifact> | null>(null);
-  const [showDashboard, setShowDashboard] = useState(false);
 
   const [formName, setFormName] = useState('');
   const [formDescription, setFormDescription] = useState('');
@@ -185,6 +176,17 @@ export default function ElectricalLensPage() {
   const [formCodeReference, setFormCodeReference] = useState('');
   const [formCodeSection, setFormCodeSection] = useState('');
   const [formJurisdiction, setFormJurisdiction] = useState('');
+
+  useLensCommand(
+    [
+      { id: "focus-search", keys: "/", description: "Focus search", category: "navigation", action: () => searchInputRef.current?.focus() },
+      { id: "tab-dashboard", keys: "d", description: "Dashboard", category: "navigation", action: () => setActiveTab('dashboard') },
+      { id: "tab-jobs", keys: "j", description: "Jobs", category: "navigation", action: () => setActiveTab('jobs') },
+      { id: "tab-neccalc", keys: "n", description: "NEC code calc", category: "navigation", action: () => setActiveTab('neccalc') },
+      { id: "tab-hardware", keys: "h", description: "Open hardware", category: "navigation", action: () => setActiveTab('hardware') },
+    ],
+    { lensId: "electrical" }
+  );
 
   const activeArtifactType = MODE_TABS.find((t) => t.id === activeTab)?.artifactType || 'Job';
   const { items, isLoading, isError, error, refetch, create, update, remove } =
@@ -584,6 +586,7 @@ export default function ElectricalLensPage() {
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input
+            ref={searchInputRef}
             className={cn(ds.input, 'pl-10')}
             placeholder="Search..."
             value={searchQuery}
@@ -681,9 +684,7 @@ export default function ElectricalLensPage() {
 
   return (
     <LensShell lensId="electrical" asMain={false}>
-      <FirstRunTour lensId="electrical" />
-      <ManifestActionBar />
-      <DepthBadge lensId="electrical" size="sm" className="ml-2" />
+      <FirstRunTour lensId="electrical" />      <DepthBadge lensId="electrical" size="sm" className="ml-2" />
     <LensPageShell
       domain="electrical"
       title="Electrical"
@@ -698,12 +699,6 @@ export default function ElectricalLensPage() {
           {runAction.isPending && (
             <span className="text-xs text-neon-cyan animate-pulse">AI processing...</span>
           )}
-          <button
-            onClick={() => setShowDashboard(!showDashboard)}
-            className={cn(showDashboard ? ds.btnPrimary : ds.btnSecondary)}
-          >
-            <BarChart3 className="w-4 h-4" /> Dashboard
-          </button>
         </>
       }
     >
@@ -748,17 +743,28 @@ export default function ElectricalLensPage() {
         );
       })()}
 
-      <nav className="flex items-center gap-2 border-b border-lattice-border pb-2 flex-wrap">
+      <nav className="flex items-center gap-2 border-b border-lattice-border pb-2 flex-wrap" aria-label="Electrical views">
+        <button
+          type="button"
+          onClick={() => setActiveTab('dashboard')}
+          className={cn(
+            'flex items-center gap-2 px-4 py-2 rounded-lg transition-colors whitespace-nowrap',
+            activeTab === 'dashboard'
+              ? 'bg-neon-blue/20 text-neon-blue'
+              : 'text-gray-400 hover:text-white hover:bg-lattice-elevated'
+          )}
+        >
+          <BarChart3 className="w-4 h-4" />
+          Dashboard
+        </button>
         {MODE_TABS.map((tab) => (
           <button
             key={tab.id}
-            onClick={() => {
-              setActiveTab(tab.id);
-              setShowDashboard(false);
-            }}
+            type="button"
+            onClick={() => setActiveTab(tab.id)}
             className={cn(
               'flex items-center gap-2 px-4 py-2 rounded-lg transition-colors whitespace-nowrap',
-              activeTab === tab.id && !showDashboard
+              activeTab === tab.id
                 ? 'bg-neon-blue/20 text-neon-blue'
                 : 'text-gray-400 hover:text-white hover:bg-lattice-elevated'
             )}
@@ -768,18 +774,16 @@ export default function ElectricalLensPage() {
           </button>
         ))}
       </nav>
-      <nav className="flex items-center gap-2 border-b border-lattice-border pb-4 flex-wrap">
+      <nav className="flex items-center gap-2 border-b border-lattice-border pb-4 flex-wrap" aria-label="Electrical trade tools">
         <span className="px-2 text-[10px] uppercase tracking-wider text-gray-400">Trade Tools</span>
         {TOOL_TABS.map((tab) => (
           <button
             key={tab.id}
-            onClick={() => {
-              setActiveTab(tab.id);
-              setShowDashboard(false);
-            }}
+            type="button"
+            onClick={() => setActiveTab(tab.id)}
             className={cn(
               'flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors whitespace-nowrap',
-              activeTab === tab.id && !showDashboard
+              activeTab === tab.id
                 ? 'bg-yellow-500/20 text-yellow-300'
                 : 'text-gray-400 hover:text-white hover:bg-lattice-elevated'
             )}
@@ -789,58 +793,26 @@ export default function ElectricalLensPage() {
           </button>
         ))}
       </nav>
-      {showDashboard ? (
+      {activeTab === 'dashboard' ? (
         renderDashboard()
       ) : TOOL_TAB_IDS.includes(activeTab) ? (
         <div className="space-y-4">
           {activeTab === 'panels' && <PanelScheduleBuilder />}
           {activeTab === 'calculators' && <NecCalculators />}
+          {activeTab === 'neccalc' && <NecCodeCalc />}
           {activeTab === 'estimating' && <EstimateInvoiceFlow />}
           {activeTab === 'diagrams' && <OneLineDiagram />}
           {activeTab === 'checklists' && <InspectionChecklists />}
           {activeTab === 'pricelist' && <MaterialPriceList />}
+          {activeTab === 'hardware' && <OpenHardwarePulse />}
         </div>
       ) : (
         renderLibrary()
       )}
       {renderEditor()}
-      <section className="mt-6 rounded-xl border border-zinc-800 bg-zinc-950/40 p-4">
-        <button
-          type="button"
-          onClick={() => setShowHardwarePulse(v => !v)}
-          className="flex w-full items-center justify-between text-left text-sm font-semibold text-white"
-        >
-          <span>Open hardware tooling (external reference)</span>
-          {showHardwarePulse ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-        </button>
-        {showHardwarePulse && (
-          <div className="mt-3">
-            <OpenHardwarePulse />
-          </div>
-        )}
-      </section>
-
-      <section className="mt-6 rounded-xl border border-zinc-800 bg-zinc-950/40 p-4">
-        <button
-          type="button"
-          onClick={() => setShowNecCodeCalc(v => !v)}
-          className="flex w-full items-center justify-between text-left text-sm font-semibold text-white"
-        >
-          <span>NEC code calculator suite</span>
-          {showNecCodeCalc ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-        </button>
-        {showNecCodeCalc && (
-          <div className="mt-3">
-            <NecCodeCalc />
-          </div>
-        )}
-      </section>
     </LensPageShell>
     
-      <a href="#electrical-skip" className="sr-only focus:not-sr-only focus:ring-2 focus:ring-amber-500 focus:outline-none">Skip to electrical content</a>
-          <RecentMineCard domain="electrical" limit={10} hideWhenEmpty className="mt-4" />
-          <AutoActionStrip domain="electrical" hideWhenEmpty className="mt-3" />
-          <CrossLensRecentsPanel lensId="electrical" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
+      <a href="#electrical-skip" className="sr-only focus:not-sr-only focus:ring-2 focus:ring-amber-500 focus:outline-none">Skip to electrical content</a>          <CrossLensRecentsPanel lensId="electrical" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
     </LensShell>
   );
 }

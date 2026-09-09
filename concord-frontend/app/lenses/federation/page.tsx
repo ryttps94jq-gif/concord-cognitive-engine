@@ -11,8 +11,6 @@
 
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { LensShell } from '@/components/lens/LensShell';
-import { RecentMineCard } from '@/components/lens/RecentMineCard';
-import { AutoActionStrip } from '@/components/lens/AutoActionStrip';
 import { CrossLensRecentsPanel } from '@/components/lens/CrossLensRecentsPanel';
 import { FirstRunTour } from '@/components/lens/FirstRunTour';
 import { DepthBadge } from '@/components/lens/DepthBadge';
@@ -26,7 +24,6 @@ import { MetricsDashboardPanel } from '@/components/federation/MetricsDashboardP
 import { ActorKeysPanel } from '@/components/federation/ActorKeysPanel';
 import { FediverseIdentityPanel } from '@/components/federation/FediverseIdentityPanel';
 import { CommunesPanel } from '@/components/federation/CommunesPanel';
-import { ManifestActionBar } from '@/components/lens/ManifestActionBar';
 import { useLensCommand } from '@/hooks/useLensCommand';
 import {
   useArtifacts,
@@ -152,9 +149,7 @@ export default function FederationPage() {
 
   return (
     <LensShell lensId="federation" asMain={false}>
-      <FirstRunTour lensId="federation" />
-      <ManifestActionBar />
-      <DepthBadge lensId="federation" size="sm" className="ml-2" />
+      <FirstRunTour lensId="federation" />      <DepthBadge lensId="federation" size="sm" className="ml-2" />
       <div className="min-h-screen bg-[#0b0f17] text-gray-100 p-6">
         <header className="mb-5 flex items-start justify-between gap-3 flex-wrap">
           <div>
@@ -266,11 +261,7 @@ export default function FederationPage() {
           )}
         </section>
         </>)}
-      </div>
-
-          <RecentMineCard domain="federation" limit={10} hideWhenEmpty className="mt-4" />
-          <AutoActionStrip domain="federation" hideWhenEmpty className="mt-3" />
-          <CrossLensRecentsPanel lensId="federation" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
+      </div>          <CrossLensRecentsPanel lensId="federation" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
     </LensShell>
   );
 }

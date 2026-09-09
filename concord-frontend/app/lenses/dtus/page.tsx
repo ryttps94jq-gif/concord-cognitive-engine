@@ -13,14 +13,11 @@
 
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { LensShell } from '@/components/lens/LensShell';
-import { RecentMineCard } from '@/components/lens/RecentMineCard';
-import { AutoActionStrip } from '@/components/lens/AutoActionStrip';
 import { CrossLensRecentsPanel } from '@/components/lens/CrossLensRecentsPanel';
 import { FirstRunTour } from '@/components/lens/FirstRunTour';
 import { DepthBadge } from '@/components/lens/DepthBadge';
 import { TrendingDtus } from '@/components/dtus/TrendingDtus';
 import { KnowledgeWorkbench } from '@/components/dtus/KnowledgeWorkbench';
-import { ManifestActionBar } from '@/components/lens/ManifestActionBar';
 import { motion } from 'framer-motion';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensCommand } from '@/hooks/useLensCommand';
@@ -276,9 +273,7 @@ export default function DTUBrowserPage() {
 
   return (
     <LensShell lensId="dtus" asMain={false}>
-      <FirstRunTour lensId="dtus" />
-      <ManifestActionBar />
-      <DepthBadge lensId="dtus" size="sm" className="ml-2" />
+      <FirstRunTour lensId="dtus" />      <DepthBadge lensId="dtus" size="sm" className="ml-2" />
     <div data-lens-theme="dtus" className="min-h-screen bg-lattice-void text-white">
       {/* Header */}
       <header className="sticky top-0 z-30 bg-lattice-surface/80 backdrop-blur border-b border-lattice-border">
@@ -823,11 +818,7 @@ export default function DTUBrowserPage() {
       <section className="mt-6 rounded-xl border border-lattice-border bg-lattice-deep/40 p-4">
         <TrendingDtus />
       </section>
-    </div>
-
-          <RecentMineCard domain="dtus" limit={10} hideWhenEmpty className="mt-4" />
-          <AutoActionStrip domain="dtus" hideWhenEmpty className="mt-3" />
-          <CrossLensRecentsPanel lensId="dtus" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
+    </div>          <CrossLensRecentsPanel lensId="dtus" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
     </LensShell>
   );
 }

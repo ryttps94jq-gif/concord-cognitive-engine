@@ -3,8 +3,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useLensCommand } from '@/hooks/useLensCommand';
 import { LensShell } from '@/components/lens/LensShell';
-import { RecentMineCard } from '@/components/lens/RecentMineCard';
-import { AutoActionStrip } from '@/components/lens/AutoActionStrip';
 import { CrossLensRecentsPanel } from '@/components/lens/CrossLensRecentsPanel';
 import { FirstRunTour } from '@/components/lens/FirstRunTour';
 import { DepthBadge } from '@/components/lens/DepthBadge';
@@ -14,7 +12,6 @@ import { GeometryEditor } from '@/components/engineering/GeometryEditor';
 import { BomPanel } from '@/components/engineering/BomPanel';
 import { TolerancePanel } from '@/components/engineering/TolerancePanel';
 import { PipingProvider } from '@/components/panel-polish';
-import { ManifestActionBar } from '@/components/lens/ManifestActionBar';
 import { useRunArtifact, useCreateArtifact } from '@/lib/hooks/use-lens-artifacts';
 import { lensRun } from '@/lib/api/client';
 import { FEAResultViewer } from '@/components/engineering/FEAResultViewer';
@@ -500,9 +497,7 @@ export default function EngineeringPage() {
 
   return (
     <LensShell lensId="engineering" asMain={false}>
-      <FirstRunTour lensId="engineering" />
-      <ManifestActionBar />
-      <DepthBadge lensId="engineering" size="sm" className="ml-2" />
+      <FirstRunTour lensId="engineering" />      <DepthBadge lensId="engineering" size="sm" className="ml-2" />
     <div className="min-h-screen bg-lattice-void text-white p-4 space-y-4 max-w-6xl mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between">
@@ -1208,11 +1203,7 @@ export default function EngineeringPage() {
           </PipingProvider>
         )}
       </div>
-    </div>
-
-          <RecentMineCard domain="engineering" limit={10} hideWhenEmpty className="mt-4" />
-          <AutoActionStrip domain="engineering" hideWhenEmpty className="mt-3" title="More actions" />
-          <CrossLensRecentsPanel lensId="engineering" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
+    </div>          <CrossLensRecentsPanel lensId="engineering" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
     </LensShell>
   );
 }

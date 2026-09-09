@@ -3,8 +3,6 @@
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensCommand } from '@/hooks/useLensCommand';
 import { LensShell } from '@/components/lens/LensShell';
-import { RecentMineCard } from '@/components/lens/RecentMineCard';
-import { AutoActionStrip } from '@/components/lens/AutoActionStrip';
 import { CrossLensRecentsPanel } from '@/components/lens/CrossLensRecentsPanel';
 import { FirstRunTour } from '@/components/lens/FirstRunTour';
 import { DepthBadge } from '@/components/lens/DepthBadge';
@@ -13,7 +11,6 @@ import { ProductivityFeed } from '@/components/goals/ProductivityFeed';
 import { OKRWorkspace } from '@/components/goals/OKRWorkspace';
 import { GoalsAnalyticsTools } from '@/components/goals/GoalsAnalyticsTools';
 import { AgentAutonomyPanel } from '@/components/goals/AgentAutonomyPanel';
-import { ManifestActionBar } from '@/components/lens/ManifestActionBar';
 import { useMutation } from '@tanstack/react-query';
 import { useLensData } from '@/lib/hooks/use-lens-data';
 import { useState, useMemo } from 'react';
@@ -222,11 +219,8 @@ export default function GoalsLensPage() {
   useLensNav('goals');
   const { latestData: realtimeData, alerts: realtimeAlerts, insights: realtimeInsights, isLive, lastUpdated } = useRealtimeLens('goals');
 
-  const [activeTab, setActiveTab] = useState<'goals' | 'challenges' | 'milestones'>('goals');
-  const [showAnalyticsTools, setShowAnalyticsTools] = useState(false);
-  const [showOKRWorkspace, setShowOKRWorkspace] = useState(false);
-  const [showAgentAutonomy, setShowAgentAutonomy] = useState(false);
-  const [showProductivityFeed, setShowProductivityFeed] = useState(false);
+  type GoalTab = 'goals' | 'challenges' | 'milestones' | 'okr' | 'analytics' | 'autonomy' | 'feed';
+  const [activeTab, setActiveTab] = useState<GoalTab>('goals');
 
   // Lens-scoped keyboard commands (auto-wired by codemod).
   useLensCommand(
@@ -234,6 +228,8 @@ export default function GoalsLensPage() {
       { id: 'tab-goals', keys: 'g', description: 'Goals', category: 'navigation', action: () => setActiveTab('goals') },
       { id: 'tab-challenges', keys: 'c', description: 'Challenges', category: 'navigation', action: () => setActiveTab('challenges') },
       { id: 'tab-milestones', keys: 'm', description: 'Milestones', category: 'navigation', action: () => setActiveTab('milestones') },
+      { id: 'tab-okr', keys: 'o', description: 'OKRs', category: 'navigation', action: () => setActiveTab('okr') },
+      { id: 'tab-analytics', keys: 'a', description: 'Analytics', category: 'navigation', action: () => setActiveTab('analytics') },
     ],
     { lensId: 'goals' }
   );
@@ -426,6 +422,10 @@ export default function GoalsLensPage() {
     { key: 'goals' as const, label: 'Goals', icon: Target, count: activeGoalCount },
     { key: 'challenges' as const, label: 'Challenges', icon: Swords, count: acceptedChallengeCount },
     { key: 'milestones' as const, label: 'Milestones', icon: TrendingUp, count: completedGoals.length },
+    { key: 'okr' as const, label: 'OKRs', icon: Flag, count: 0 },
+    { key: 'analytics' as const, label: 'Analytics', icon: TrendingUp, count: 0 },
+    { key: 'autonomy' as const, label: 'Autonomy', icon: Zap, count: 0 },
+    { key: 'feed' as const, label: 'Feed', icon: Users, count: 0 },
   ];
 
   const filterPills = ['All', 'Active', 'Completed', 'Career', 'Health', 'Learning', 'Creative', 'Financial', 'Personal'];
@@ -451,9 +451,7 @@ export default function GoalsLensPage() {
   }
   return (
     <LensShell lensId="goals" asMain={false}>
-      <FirstRunTour lensId="goals" />
-      <ManifestActionBar />
-      <DepthBadge lensId="goals" size="sm" className="ml-2" />
+      <FirstRunTour lensId="goals" />      <DepthBadge lensId="goals" size="sm" className="ml-2" />
     <div data-lens-theme="goals" className="p-6 space-y-6 max-w-5xl mx-auto">
       {/* ---- Header ---- */}
       <header className="flex items-center justify-between flex-wrap gap-3">
@@ -566,7 +564,9 @@ export default function GoalsLensPage() {
           >
             <t.icon className="w-4 h-4" />
             <span className="hidden sm:inline">{t.label}</span>
-            <span className="text-[10px] bg-white/10 px-1.5 py-0.5 rounded-full">{t.count}</span>
+            {t.count > 0 && (
+              <span className="text-[10px] bg-white/10 px-1.5 py-0.5 rounded-full">{t.count}</span>
+            )}
           </button>
         ))}
       </div>
@@ -1016,73 +1016,11 @@ export default function GoalsLensPage() {
         />
       )}
 
-      <div className="mt-6">
-        <button
-          type="button"
-          onClick={() => setShowAnalyticsTools(v => !v)}
-          className="flex items-center gap-2 text-sm font-medium text-zinc-300 hover:text-white"
-        >
-          {showAnalyticsTools ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-          Analytics Tools (OKR scoring / decomposition / forecast)
-        </button>
-        {showAnalyticsTools && (
-          <div className="mt-3">
-            <GoalsAnalyticsTools />
-          </div>
-        )}
-      </div>
-
-      <div className="mt-6">
-        <button
-          type="button"
-          onClick={() => setShowOKRWorkspace(v => !v)}
-          className="flex items-center gap-2 text-sm font-medium text-zinc-300 hover:text-white"
-        >
-          {showOKRWorkspace ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-          OKR Workspace
-        </button>
-        {showOKRWorkspace && (
-          <section className="mt-3 rounded-xl border border-zinc-800 bg-zinc-950/40 p-4">
-            <OKRWorkspace />
-          </section>
-        )}
-      </div>
-
-      <div className="mt-6">
-        <button
-          type="button"
-          onClick={() => setShowAgentAutonomy(v => !v)}
-          className="flex items-center gap-2 text-sm font-medium text-zinc-300 hover:text-white"
-        >
-          {showAgentAutonomy ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-          Agent Autonomy (Concord's self-directed goals)
-        </button>
-        {showAgentAutonomy && (
-          <div className="mt-3">
-            <AgentAutonomyPanel />
-          </div>
-        )}
-      </div>
-
-      <div className="mt-6">
-        <button
-          type="button"
-          onClick={() => setShowProductivityFeed(v => !v)}
-          className="flex items-center gap-2 text-sm font-medium text-zinc-300 hover:text-white"
-        >
-          {showProductivityFeed ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-          Productivity Discussion (external reference)
-        </button>
-        {showProductivityFeed && (
-          <section className="mt-3 rounded-xl border border-zinc-800 bg-zinc-950/40 p-4">
-            <ProductivityFeed />
-          </section>
-        )}
-      </div>
-    </div>
-          <RecentMineCard domain="goals" limit={10} hideWhenEmpty className="mt-4" />
-          <AutoActionStrip domain="goals" hideWhenEmpty className="mt-3" />
-          <CrossLensRecentsPanel lensId="goals" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
+      {activeTab === 'okr' && <OKRWorkspace />}
+      {activeTab === 'analytics' && <GoalsAnalyticsTools />}
+      {activeTab === 'autonomy' && <AgentAutonomyPanel />}
+      {activeTab === 'feed' && <ProductivityFeed />}
+    </div>          <CrossLensRecentsPanel lensId="goals" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
     </LensShell>
   );
 }

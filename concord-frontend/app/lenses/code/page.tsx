@@ -4,15 +4,12 @@ import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useLensCommand } from '@/hooks/useLensCommand';
 import { SafeCard } from '@/components/common/SafeCard';
 import { LensShell } from '@/components/lens/LensShell';
-import { RecentMineCard } from '@/components/lens/RecentMineCard';
-import { AutoActionStrip } from '@/components/lens/AutoActionStrip';
 import { SessionRail } from '@/components/lens/SessionRail';
 import { CrossLensRecentsPanel } from '@/components/lens/CrossLensRecentsPanel';
 import { FirstRunTour } from '@/components/lens/FirstRunTour';
 import { DepthBadge } from '@/components/lens/DepthBadge';
 import LensAgentFab from '@/components/lens/LensAgentFab';
 import { ShellPreview } from '@/components/lens/ShellPreview';
-import { ManifestActionBar } from '@/components/lens/ManifestActionBar';
 import { CodeWorkbenchSection } from '@/components/code/CodeWorkbenchSection';
 import { CodeAdvancedPanel } from '@/components/code/CodeAdvancedPanel';
 import { CodeProjectProvider } from '@/components/code/CodeProjectContext';
@@ -1336,9 +1333,7 @@ export default function CodeLensPage() {
   return (
     <LensShell lensId="code" asMain={false} disableAgentFab={true}>
      <CodeProjectProvider>
-      <FirstRunTour lensId="code" />
-      <ManifestActionBar />
-      <DepthBadge lensId="code" size="sm" className="ml-2" />
+      <FirstRunTour lensId="code" />      <DepthBadge lensId="code" size="sm" className="ml-2" />
       <ShellPreview lensId="code" defaultOpen={true} />
       {/* Full project workbench (file tree, git, agent composer, run/problems
           panels) — a separate, more IDE-like flow from the scratch-script
@@ -2662,10 +2657,7 @@ export default function CodeLensPage() {
         )}
       </section>
     </PipingProvider>
-          <SessionRail lensId="code" hideWhenEmpty className="mt-4" />
-          <RecentMineCard domain="code" limit={10} hideWhenEmpty className="mt-4" />
-          <AutoActionStrip domain="code" hideWhenEmpty className="mt-3" title="More actions" />
-          <CrossLensRecentsPanel lensId="code" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
+          <SessionRail lensId="code" hideWhenEmpty className="mt-4" />          <CrossLensRecentsPanel lensId="code" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
           {/* Phase 12 (Item 5) — mobile thumb-reachable activity bar.
               Surfaces the most-used activities on touch. */}
           <MobileTabBar

@@ -3,8 +3,6 @@
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensCommand } from '@/hooks/useLensCommand';
 import { LensShell } from '@/components/lens/LensShell';
-import { RecentMineCard } from '@/components/lens/RecentMineCard';
-import { AutoActionStrip } from '@/components/lens/AutoActionStrip';
 import { CrossLensRecentsPanel } from '@/components/lens/CrossLensRecentsPanel';
 import { FirstRunTour } from '@/components/lens/FirstRunTour';
 import { DepthBadge } from '@/components/lens/DepthBadge';
@@ -16,7 +14,6 @@ import { ProgressAnalyticsPanel } from '@/components/metalearning/ProgressAnalyt
 import { GoalTrackerPanel } from '@/components/metalearning/GoalTrackerPanel';
 import { StrategyExperimentPanel } from '@/components/metalearning/StrategyExperimentPanel';
 import { StudyJournalPanel } from '@/components/metalearning/StudyJournalPanel';
-import { ManifestActionBar } from '@/components/lens/ManifestActionBar';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiHelpers, lensRun } from '@/lib/api/client';
 import { useState, useEffect, useMemo, useRef } from 'react';
@@ -241,9 +238,7 @@ export default function MetalearningLensPage() {
   }
   return (
     <LensShell lensId="metalearning" asMain={false}>
-      <FirstRunTour lensId="metalearning" />
-      <ManifestActionBar />
-      <DepthBadge lensId="metalearning" size="sm" className="ml-2" />
+      <FirstRunTour lensId="metalearning" />      <DepthBadge lensId="metalearning" size="sm" className="ml-2" />
     <div data-lens-theme="metalearning" className="p-6 space-y-6">
       <header className="flex items-center gap-3">
         <span className="text-2xl">🎓</span>
@@ -815,10 +810,7 @@ export default function MetalearningLensPage() {
       </section>
     </div>
 
-      <a href="#metalearning-skip" className="sr-only focus:not-sr-only focus:ring-2 focus:ring-amber-500 focus:outline-none">Skip to metalearning content</a>
-          <RecentMineCard domain="metalearning" limit={10} hideWhenEmpty className="mt-4" />
-          <AutoActionStrip domain="metalearning" hideWhenEmpty className="mt-3" />
-          <CrossLensRecentsPanel lensId="metalearning" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
+      <a href="#metalearning-skip" className="sr-only focus:not-sr-only focus:ring-2 focus:ring-amber-500 focus:outline-none">Skip to metalearning content</a>          <CrossLensRecentsPanel lensId="metalearning" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
     </LensShell>
   );
 }

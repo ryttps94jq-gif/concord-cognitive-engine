@@ -3,7 +3,6 @@
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensCommand } from '@/hooks/useLensCommand';
 import { LensShell } from '@/components/lens/LensShell';
-import { RecentMineCard } from '@/components/lens/RecentMineCard';
 import { CrossLensRecentsPanel } from '@/components/lens/CrossLensRecentsPanel';
 import { FirstRunTour } from '@/components/lens/FirstRunTour';
 import { DepthBadge } from '@/components/lens/DepthBadge';
@@ -12,7 +11,6 @@ import { WorkflowsPanel } from '@/components/integrations/WorkflowsPanel';
 import { ConnectorCatalog } from '@/components/integrations/ConnectorCatalog';
 import { AnalysisPanel } from '@/components/integrations/AnalysisPanel';
 import { WebhookSignatureVerifier } from '@/components/integrations/WebhookSignatureVerifier';
-import { ManifestActionBar } from '@/components/lens/ManifestActionBar';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiHelpers, lensRun } from '@/lib/api/client';
 import type { CreateWebhookRequest } from '@/lib/api/generated-types';
@@ -197,9 +195,7 @@ export default function IntegrationsLensPage() {
 
   return (
     <LensShell lensId="integrations" asMain={false}>
-      <FirstRunTour lensId="integrations" />
-      <ManifestActionBar />
-      <DepthBadge lensId="integrations" size="sm" className="ml-2" />
+      <FirstRunTour lensId="integrations" />      <DepthBadge lensId="integrations" size="sm" className="ml-2" />
     <div className="p-6 space-y-6">
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -433,9 +429,7 @@ export default function IntegrationsLensPage() {
           </div>
         )}
       </section>
-    </div>
-          <RecentMineCard domain="integrations" limit={10} hideWhenEmpty className="mt-4" />
-          <CrossLensRecentsPanel lensId="integrations" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
+    </div>          <CrossLensRecentsPanel lensId="integrations" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
     </LensShell>
   );
 }

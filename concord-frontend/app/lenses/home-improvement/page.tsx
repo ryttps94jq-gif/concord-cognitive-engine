@@ -2,8 +2,6 @@
 
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { LensShell } from '@/components/lens/LensShell';
-import { RecentMineCard } from '@/components/lens/RecentMineCard';
-import { AutoActionStrip } from '@/components/lens/AutoActionStrip';
 import { CrossLensRecentsPanel } from '@/components/lens/CrossLensRecentsPanel';
 import { FirstRunTour } from '@/components/lens/FirstRunTour';
 import { DepthBadge } from '@/components/lens/DepthBadge';
@@ -16,7 +14,6 @@ import { HomeInventory } from '@/components/home-improvement/HomeInventory';
 import { ProjectGantt } from '@/components/home-improvement/ProjectGantt';
 import { MaintenanceReminders } from '@/components/home-improvement/MaintenanceReminders';
 import { ProductRecalls } from '@/components/home-improvement/ProductRecalls';
-import { ManifestActionBar } from '@/components/lens/ManifestActionBar';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensCommand } from '@/hooks/useLensCommand';
@@ -152,9 +149,8 @@ export default function HomeImprovementLensPage() {
   const [statusFilter, setStatusFilter] = useState('');
   const [showCreate, setShowCreate] = useState(false);
   const [activeTab, setActiveTab] = useState<
-    'projects' | 'budget' | 'timeline' | 'gallery' | 'ideas' | 'pros' | 'shopping' | 'inventory' | 'maintenance'
+    'projects' | 'budget' | 'timeline' | 'gallery' | 'ideas' | 'pros' | 'shopping' | 'inventory' | 'maintenance' | 'discussion'
   >('projects');
-  const [showHomeImprovementFeed, setShowHomeImprovementFeed] = useState(false);
 
   // Lens-scoped keyboard commands (auto-wired by codemod).
   useLensCommand(
@@ -168,6 +164,7 @@ export default function HomeImprovementLensPage() {
       { id: 'tab-shopping', keys: 's', description: 'Shopping list', category: 'navigation', action: () => setActiveTab('shopping') },
       { id: 'tab-inventory', keys: 'v', description: 'Home inventory', category: 'navigation', action: () => setActiveTab('inventory') },
       { id: 'tab-maintenance', keys: 'm', description: 'Maintenance', category: 'navigation', action: () => setActiveTab('maintenance') },
+      { id: 'tab-discussion', keys: 'd', description: 'Discussion', category: 'navigation', action: () => setActiveTab('discussion') },
     ],
     { lensId: 'home-improvement' }
   );
@@ -315,13 +312,12 @@ export default function HomeImprovementLensPage() {
     { key: 'shopping' as const, label: 'Shopping', icon: ShoppingCart },
     { key: 'inventory' as const, label: 'Inventory', icon: Boxes },
     { key: 'maintenance' as const, label: 'Maintenance', icon: CalendarClock },
+    { key: 'discussion' as const, label: 'Discussion', icon: Lightbulb },
   ];
 
   return (
     <LensShell lensId="home-improvement" asMain={false}>
-      <FirstRunTour lensId="home-improvement" />
-      <ManifestActionBar />
-      <DepthBadge lensId="home-improvement" size="sm" className="ml-2" />
+      <FirstRunTour lensId="home-improvement" />      <DepthBadge lensId="home-improvement" size="sm" className="ml-2" />
     <div data-lens-theme="home-improvement" className="p-6 space-y-6">
       <motion.header
         initial={{ opacity: 0, y: -10 }}
@@ -729,6 +725,11 @@ export default function HomeImprovementLensPage() {
             <MaintenanceReminders />
           </motion.div>
         )}
+        {activeTab === 'discussion' && (
+          <motion.div key="discussion" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} transition={{ duration: 0.25 }} className="panel p-4">
+            <HomeImprovementFeed />
+          </motion.div>
+        )}
       </AnimatePresence>
 
       <RealtimeDataPanel domain="home-improvement" data={realtimeData} isLive={isLive} lastUpdated={lastUpdated} insights={insights} compact />
@@ -945,25 +946,8 @@ export default function HomeImprovementLensPage() {
         })()}
       </div>
 
-      <div className="mt-6">
-        <button
-          type="button"
-          onClick={() => setShowHomeImprovementFeed(v => !v)}
-          className="flex items-center gap-2 text-sm font-medium text-zinc-300 hover:text-white"
-        >
-          {showHomeImprovementFeed ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-          Discussion (external reference)
-        </button>
-        {showHomeImprovementFeed && (
-          <section className="mt-3 rounded-xl border border-zinc-800 bg-zinc-950/40 p-4">
-            <HomeImprovementFeed />
-          </section>
-        )}
-      </div>
     </div>
           <section className="mt-4"><ProductRecalls /></section>
-          <RecentMineCard domain="home-improvement" limit={10} hideWhenEmpty className="mt-4" />
-          <AutoActionStrip domain="home-improvement" hideWhenEmpty className="mt-3" />
           <CrossLensRecentsPanel lensId="home-improvement" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
     </LensShell>
   );

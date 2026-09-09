@@ -3,15 +3,12 @@
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensCommand } from '@/hooks/useLensCommand';
 import { LensShell } from '@/components/lens/LensShell';
-import { RecentMineCard } from '@/components/lens/RecentMineCard';
-import { AutoActionStrip } from '@/components/lens/AutoActionStrip';
 import { CrossLensRecentsPanel } from '@/components/lens/CrossLensRecentsPanel';
 import { FirstRunTour } from '@/components/lens/FirstRunTour';
 import { DepthBadge } from '@/components/lens/DepthBadge';
 import { PrivacyFeed } from '@/components/privacy/PrivacyFeed';
 import { DataControlsPanel } from '@/components/privacy/DataControlsPanel';
 import { DpoStudioPanel } from '@/components/privacy/DpoStudioPanel';
-import { ManifestActionBar } from '@/components/lens/ManifestActionBar';
 import { useState, useCallback, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -546,9 +543,7 @@ export default function PrivacySharingPage() {
 
   return (
     <LensShell lensId="privacy" asMain={false}>
-      <FirstRunTour lensId="privacy" />
-      <ManifestActionBar />
-      <DepthBadge lensId="privacy" size="sm" className="ml-2" />
+      <FirstRunTour lensId="privacy" />      <DepthBadge lensId="privacy" size="sm" className="ml-2" />
     <div className={ds.pageContainer}>
       {/* Header */}
       <div className="flex items-center justify-between">
@@ -805,11 +800,7 @@ export default function PrivacySharingPage() {
           </div>
         )}
       </section>
-    </div>
-
-          <RecentMineCard domain="privacy" limit={10} hideWhenEmpty className="mt-4" />
-          <AutoActionStrip domain="privacy" hideWhenEmpty className="mt-3" />
-          <CrossLensRecentsPanel lensId="privacy" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
+    </div>          <CrossLensRecentsPanel lensId="privacy" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
     </LensShell>
   );
 }

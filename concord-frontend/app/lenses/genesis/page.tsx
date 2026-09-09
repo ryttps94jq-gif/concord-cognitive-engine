@@ -4,8 +4,6 @@ import { useState, useEffect, useMemo } from 'react';
 import { useLensCommand } from '@/hooks/useLensCommand';
 import { LensShell } from '@/components/lens/LensShell';
 import { SavedSearchesPanel } from '@/components/genesis/SavedSearchesPanel';
-import { RecentMineCard } from '@/components/lens/RecentMineCard';
-import { AutoActionStrip } from '@/components/lens/AutoActionStrip';
 import { CrossLensRecentsPanel } from '@/components/lens/CrossLensRecentsPanel';
 import { FirstRunTour } from '@/components/lens/FirstRunTour';
 import { DepthBadge } from '@/components/lens/DepthBadge';
@@ -17,7 +15,6 @@ import { LineageView } from '@/components/genesis/LineageView';
 import { RelationshipGraph } from '@/components/genesis/RelationshipGraph';
 import { GenesisMetrics } from '@/components/genesis/GenesisMetrics';
 import { useArtifacts, useCreateArtifact } from '@/lib/hooks/use-lens-artifacts';
-import { ManifestActionBar } from '@/components/lens/ManifestActionBar';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Cpu, Zap, MessageSquare, Eye, Star, X, Filter, ChevronDown, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
@@ -273,9 +270,7 @@ export default function GenesisLens() {
 
   return (
     <LensShell lensId="genesis" asMain={false}>
-      <FirstRunTour lensId="genesis" />
-      <ManifestActionBar />
-      <DepthBadge lensId="genesis" size="sm" className="ml-2" />
+      <FirstRunTour lensId="genesis" />      <DepthBadge lensId="genesis" size="sm" className="ml-2" />
       <LensVerticalHero lensId="genesis" className="mx-6 mt-4" />
       <div className="min-h-screen bg-gray-950 text-white p-6">
         {/* Header */}
@@ -479,11 +474,7 @@ export default function GenesisLens() {
             </div>
           )}
         </section>
-      </div>
-
-      <RecentMineCard domain="genesis" limit={10} hideWhenEmpty className="mt-4" />
-      <AutoActionStrip domain="genesis" hideWhenEmpty className="mt-3" />
-      <CrossLensRecentsPanel lensId="genesis" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
+      </div>      <CrossLensRecentsPanel lensId="genesis" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
     </LensShell>
   );
 }

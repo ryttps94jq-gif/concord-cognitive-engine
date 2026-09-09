@@ -2,14 +2,11 @@
 
 import { useState, useCallback, useMemo, useRef} from 'react';
 import { LensShell } from '@/components/lens/LensShell';
-import { RecentMineCard } from '@/components/lens/RecentMineCard';
-import { AutoActionStrip } from '@/components/lens/AutoActionStrip';
 import { CrossLensRecentsPanel } from '@/components/lens/CrossLensRecentsPanel';
 import { FirstRunTour } from '@/components/lens/FirstRunTour';
 import { DepthBadge } from '@/components/lens/DepthBadge';
 import { FilmStackFeed } from '@/components/film-studios/FilmStackFeed';
 import { FilmStudioSection } from '@/components/film-studios/FilmStudioSection';
-import { ManifestActionBar } from '@/components/lens/ManifestActionBar';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensCommand } from '@/hooks/useLensCommand';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -219,9 +216,7 @@ export default function FilmStudiosPage() {
 
   return (
     <LensShell lensId="film-studios" asMain={false}>
-      <FirstRunTour lensId="film-studios" />
-      <ManifestActionBar />
-      <DepthBadge lensId="film-studios" size="sm" className="ml-2" />
+      <FirstRunTour lensId="film-studios" />      <DepthBadge lensId="film-studios" size="sm" className="ml-2" />
       <div className="px-4 mt-3">
         <FilmStudioSection />
       </div>
@@ -884,10 +879,7 @@ export default function FilmStudiosPage() {
           </div>
         )}
       </section>
-    </div>
-          <RecentMineCard domain="film-studios" limit={10} hideWhenEmpty className="mt-4" />
-          <AutoActionStrip domain="film-studios" hideWhenEmpty className="mt-3" />
-          <CrossLensRecentsPanel lensId="film-studios" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
+    </div>          <CrossLensRecentsPanel lensId="film-studios" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
     </LensShell>
   );
 }

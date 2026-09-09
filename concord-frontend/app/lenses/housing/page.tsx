@@ -15,7 +15,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Home, Lock, Eye, Users, RefreshCcw, Plus, Trash2, MapPin, Building2 } from 'lucide-react';
 import { LensShell } from '@/components/lens/LensShell';
-import { ManifestActionBar } from '@/components/lens/ManifestActionBar';
 import { lensRun } from '@/lib/api/client';
 
 interface HouseRow {
@@ -288,9 +287,7 @@ export default function HousingLensPage() {
   }, [loadHouseDetail]);
 
   return (
-    <LensShell lensId="housing" asMain={false}>
-      <ManifestActionBar />
-      <main className="min-h-screen bg-gradient-to-br from-slate-950 via-zinc-950 to-emerald-950/10 text-slate-100">
+    <LensShell lensId="housing" asMain={false}>      <main className="min-h-screen bg-gradient-to-br from-slate-950 via-zinc-950 to-emerald-950/10 text-slate-100">
         <header className="border-b border-emerald-500/20 bg-zinc-950/60 px-4 py-3 backdrop-blur sm:px-6">
           <div className="mx-auto flex max-w-screen-2xl items-center gap-3">
             <div className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 p-2">

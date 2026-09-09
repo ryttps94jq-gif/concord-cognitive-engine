@@ -3,13 +3,10 @@
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensCommand } from '@/hooks/useLensCommand';
 import { LensShell } from '@/components/lens/LensShell';
-import { RecentMineCard } from '@/components/lens/RecentMineCard';
-import { AutoActionStrip } from '@/components/lens/AutoActionStrip';
 import { CrossLensRecentsPanel } from '@/components/lens/CrossLensRecentsPanel';
 import { FirstRunTour } from '@/components/lens/FirstRunTour';
 import { DepthBadge } from '@/components/lens/DepthBadge';
 import { Icon as SvgIcon } from '@/components/icons/Icon';
-import { ManifestActionBar } from '@/components/lens/ManifestActionBar';
 import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { Boxes, Plus, CheckCircle, ArrowUp, Layers, Rocket, Layout, ShoppingCart, Briefcase, UserCircle, Star, TrendingUp, Loader2, XCircle, Zap, BarChart3, Code, Ruler, ClipboardCheck, AlertTriangle, ChevronDown, ChevronRight } from 'lucide-react';
@@ -225,9 +222,7 @@ export default function AppMakerLens() {
 
   return (
     <LensShell lensId="app-maker" asMain={false}>
-      <FirstRunTour lensId="app-maker" />
-      <ManifestActionBar />
-      <DepthBadge lensId="app-maker" size="sm" className="ml-2" />
+      <FirstRunTour lensId="app-maker" />      <DepthBadge lensId="app-maker" size="sm" className="ml-2" />
     <div data-lens-theme="app-maker" className="p-6 max-w-4xl mx-auto space-y-6">
       <div className="flex items-center gap-3">
         <Boxes className="w-6 h-6 text-neon-cyan" />
@@ -702,11 +697,7 @@ export default function AppMakerLens() {
           </div>
         )}
       </section>
-    </div>
-
-          <RecentMineCard domain="app-maker" limit={10} hideWhenEmpty className="mt-4" />
-          <AutoActionStrip domain="app-maker" hideWhenEmpty className="mt-3" />
-          <CrossLensRecentsPanel lensId="app-maker" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
+    </div>          <CrossLensRecentsPanel lensId="app-maker" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
     </LensShell>
   );
 }

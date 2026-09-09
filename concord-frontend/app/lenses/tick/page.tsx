@@ -3,14 +3,11 @@
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensCommand } from '@/hooks/useLensCommand';
 import { LensShell } from '@/components/lens/LensShell';
-import { RecentMineCard } from '@/components/lens/RecentMineCard';
-import { AutoActionStrip } from '@/components/lens/AutoActionStrip';
 import { CrossLensRecentsPanel } from '@/components/lens/CrossLensRecentsPanel';
 import { FirstRunTour } from '@/components/lens/FirstRunTour';
 import { DepthBadge } from '@/components/lens/DepthBadge';
 import { TickRate } from '@/components/tick/TickRate';
 import { MonitorPanel } from '@/components/tick/MonitorPanel';
-import { ManifestActionBar } from '@/components/lens/ManifestActionBar';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api/client';
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
@@ -28,8 +25,6 @@ import {
   BarChart3,
   Timer,
   Eye,
-  ChevronDown,
-  ChevronRight,
   Gauge,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -55,7 +50,7 @@ interface TickEvent {
   organ?: string;
 }
 
-type TickViewTab = 'stream' | 'stats' | 'timeline' | 'health';
+type TickViewTab = 'stream' | 'stats' | 'timeline' | 'health' | 'monitor' | 'rate';
 
 // ============================================================================
 // Heartbeat Pulse Visualization
@@ -340,8 +335,6 @@ export default function TickLensPage() {
   const [isLive, setIsLive] = useState(true);
   const [tickHistory, setTickHistory] = useState<TickEvent[]>([]);
   const [activeTab, setActiveTab] = useState<TickViewTab>('stream');
-  const [showMonitorPanel, setShowMonitorPanel] = useState(false);
-  const [showTickRate, setShowTickRate] = useState(false);
 
   // Lens-scoped keyboard commands (auto-wired by codemod).
   useLensCommand(
@@ -350,6 +343,8 @@ export default function TickLensPage() {
       { id: 'tab-stats', keys: 't', description: 'Stats', category: 'navigation', action: () => setActiveTab('stats') },
       { id: 'tab-timeline', keys: 'i', description: 'Timeline', category: 'navigation', action: () => setActiveTab('timeline') },
       { id: 'tab-health', keys: 'h', description: 'Health', category: 'navigation', action: () => setActiveTab('health') },
+      { id: 'tab-monitor', keys: 'm', description: 'Heartbeat monitor', category: 'navigation', action: () => setActiveTab('monitor') },
+      { id: 'tab-rate', keys: 'r', description: 'Tick rate', category: 'navigation', action: () => setActiveTab('rate') },
     ],
     { lensId: 'tick' }
   );
@@ -541,9 +536,7 @@ export default function TickLensPage() {
 
   return (
     <LensShell lensId="tick" asMain={false}>
-      <FirstRunTour lensId="tick" />
-      <ManifestActionBar />
-      <DepthBadge lensId="tick" size="sm" className="ml-2" />
+      <FirstRunTour lensId="tick" />      <DepthBadge lensId="tick" size="sm" className="ml-2" />
     <div data-lens-theme="tick" className="p-6 space-y-6">
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-4">
@@ -604,34 +597,15 @@ export default function TickLensPage() {
         </motion.div>
       </div>
 
-      {/* Heartbeat Monitor — Datadog / Better Uptime parity surface.
-          Real macros: heartbeatRegistry / heartbeatList / stream /
-          skipReport / alerts / latencyHistogram / heartbeatControl /
-          uptimeSLA — all fed by recordSample over genuine governor
-          tick history. */}
-      <div>
-        <button
-          type="button"
-          onClick={() => setShowMonitorPanel(v => !v)}
-          className="flex items-center gap-2 text-sm font-medium text-zinc-300 hover:text-white"
-        >
-          {showMonitorPanel ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-          Heartbeat Monitor (Datadog/Better Uptime-shape)
-        </button>
-        {showMonitorPanel && (
-          <section className="mt-3 rounded-xl border border-zinc-800 bg-zinc-950/40 p-4">
-            <MonitorPanel />
-          </section>
-        )}
-      </div>
-
-      {/* Tabs */}
-      <div className="flex gap-2">
+      {/* Tabs — one view union (stream/stats/timeline/health/monitor/rate). */}
+      <div className="flex gap-2 flex-wrap">
         {([
           { id: 'stream' as TickViewTab, icon: Activity, label: 'Stream' },
           { id: 'stats' as TickViewTab, icon: BarChart3, label: 'Statistics' },
           { id: 'timeline' as TickViewTab, icon: Timer, label: 'Timeline' },
           { id: 'health' as TickViewTab, icon: Heart, label: 'Health' },
+          { id: 'monitor' as TickViewTab, icon: Eye, label: 'Monitor' },
+          { id: 'rate' as TickViewTab, icon: Gauge, label: 'Tick Rate' },
         ]).map(tab => (
           <button
             key={tab.id}
@@ -1058,6 +1032,18 @@ export default function TickLensPage() {
         </div>
       )}
 
+      {activeTab === 'monitor' && (
+        <section className="rounded-xl border border-zinc-800 bg-zinc-950/40 p-4">
+          <MonitorPanel />
+        </section>
+      )}
+
+      {activeTab === 'rate' && (
+        <section className="rounded-xl border border-zinc-800 bg-zinc-950/40 p-4">
+          <TickRate />
+        </section>
+      )}
+
       {/* Tick Actions Panel */}
       <div className="p-4 border-t border-lattice-border bg-lattice-surface/30">
         <div className="flex items-center justify-between mb-3">
@@ -1155,28 +1141,9 @@ export default function TickLensPage() {
           </div>
         )}
       </div>
-
-      <div className="mt-6">
-        <button
-          type="button"
-          onClick={() => setShowTickRate(v => !v)}
-          className="flex items-center gap-2 text-sm font-medium text-zinc-300 hover:text-white"
-        >
-          {showTickRate ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-          Tick Rate
-        </button>
-        {showTickRate && (
-          <section className="mt-3 rounded-xl border border-zinc-800 bg-zinc-950/40 p-4">
-            <TickRate />
-          </section>
-        )}
-      </div>
     </div>
 
-      <a href="#tick-skip" className="sr-only focus:not-sr-only focus:ring-2 focus:ring-amber-500 focus:outline-none">Skip to tick content</a>
-          <RecentMineCard domain="tick" limit={10} hideWhenEmpty className="mt-4" />
-          <AutoActionStrip domain="tick" hideWhenEmpty className="mt-3" />
-          <CrossLensRecentsPanel lensId="tick" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
+      <a href="#tick-skip" className="sr-only focus:not-sr-only focus:ring-2 focus:ring-amber-500 focus:outline-none">Skip to tick content</a>          <CrossLensRecentsPanel lensId="tick" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
     </LensShell>
   );
 }

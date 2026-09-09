@@ -3,8 +3,6 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { LensShell } from '@/components/lens/LensShell';
-import { RecentMineCard } from '@/components/lens/RecentMineCard';
-import { AutoActionStrip } from '@/components/lens/AutoActionStrip';
 import { CrossLensRecentsPanel } from '@/components/lens/CrossLensRecentsPanel';
 import { FirstRunTour } from '@/components/lens/FirstRunTour';
 import { DepthBadge } from '@/components/lens/DepthBadge';
@@ -14,7 +12,6 @@ import { ItunesSearch } from '@/components/podcast/ItunesSearch';
 import { PodcastActionPanel } from '@/components/podcast/PodcastActionPanel';
 import { PodcastListeningHub } from '@/components/podcast/PodcastListeningHub';
 import { PipingProvider } from '@/components/panel-polish';
-import { ManifestActionBar } from '@/components/lens/ManifestActionBar';
 import { useLensCommand } from '@/hooks/useLensCommand';
 import { useLensDTUs } from '@/hooks/useLensDTUs';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -23,7 +20,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Mic2, Play, Pause, Plus, Search, Rss, BarChart3,
   Clock, Users, X, Headphones, ListMusic, Trash2, Check,
-  Square, CircleDot, ChevronDown, ChevronRight,
+  Square, CircleDot,
 } from 'lucide-react';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
@@ -38,7 +35,7 @@ import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 /*  Types                                                              */
 /* ------------------------------------------------------------------ */
 
-type ViewTab = 'episodes' | 'create' | 'analytics';
+type ViewTab = 'episodes' | 'create' | 'analytics' | 'listen' | 'itunes' | 'actions';
 
 // Shape returned by the real podcastLens engine (server/domains/podcast.js
 // getPodState/episodeView) — the Episodes/Create/Analytics tabs read and
@@ -137,9 +134,6 @@ export default function PodcastLensPage() {
 
   // ---- State ----
   const [activeTab, setActiveTab] = useState<ViewTab>('episodes');
-  const [showListeningHub, setShowListeningHub] = useState(false);
-  const [showItunesSearch, setShowItunesSearch] = useState(false);
-  const [showPodcastActionPanel, setShowPodcastActionPanel] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [rssCopied, setRssCopied] = useState(false);
@@ -373,6 +367,9 @@ export default function PodcastLensPage() {
       { id: 'goto-episodes',  keys: 'g e',   description: 'Go to Episodes',      category: 'navigation', action: () => setActiveTab('episodes') },
       { id: 'goto-create',    keys: 'g c',   description: 'Go to Create',        category: 'navigation', action: () => setActiveTab('create') },
       { id: 'goto-analytics', keys: 'g a',   description: 'Go to Analytics',     category: 'navigation', action: () => setActiveTab('analytics') },
+      { id: 'goto-listen',    keys: 'g l',   description: 'Go to Listening Hub', category: 'navigation', action: () => setActiveTab('listen') },
+      { id: 'goto-itunes',    keys: 'g i',   description: 'Go to iTunes Search', category: 'navigation', action: () => setActiveTab('itunes') },
+      { id: 'goto-actions',   keys: 'g x',   description: 'Go to Studio bench',  category: 'navigation', action: () => setActiveTab('actions') },
       { id: 'focus-search',   keys: '/',     description: 'Focus search',        category: 'navigation', action: () => searchInputRef.current?.focus() },
       { id: 'new-episode',    keys: 'n',     description: 'New episode',          category: 'actions',    action: () => setActiveTab('create') },
     ],
@@ -457,13 +454,14 @@ export default function PodcastLensPage() {
     { id: 'episodes', label: 'Episodes', icon: <ListMusic className="w-4 h-4" /> },
     { id: 'create', label: 'New Episode', icon: <Plus className="w-4 h-4" /> },
     { id: 'analytics', label: 'Analytics', icon: <BarChart3 className="w-4 h-4" /> },
+    { id: 'listen', label: 'Listening Hub', icon: <Headphones className="w-4 h-4" /> },
+    { id: 'itunes', label: 'iTunes Search', icon: <Search className="w-4 h-4" /> },
+    { id: 'actions', label: 'Studio', icon: <CircleDot className="w-4 h-4" /> },
   ];
 
   return (
     <LensShell lensId="podcast" asMain={false}>
-      <FirstRunTour lensId="podcast" />
-      <ManifestActionBar />
-      <DepthBadge lensId="podcast" size="sm" className="ml-2" />
+      <FirstRunTour lensId="podcast" />      <DepthBadge lensId="podcast" size="sm" className="ml-2" />
       <div className="px-4 mt-3">
         <PodcastPlayerSection />
       </div>
@@ -976,11 +974,7 @@ export default function PodcastLensPage() {
           </PipingProvider>
         )}
       </div>
-    </div>
-
-          <RecentMineCard domain="podcast" limit={10} hideWhenEmpty className="mt-4" />
-          <AutoActionStrip domain="podcast" hideWhenEmpty className="mt-3" title="More actions" />
-          <CrossLensRecentsPanel lensId="podcast" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
+    </div>          <CrossLensRecentsPanel lensId="podcast" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
     </LensShell>
   );
 }

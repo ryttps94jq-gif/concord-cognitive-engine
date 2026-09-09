@@ -2,8 +2,6 @@
 
 import { useState, useMemo, useCallback, useRef} from 'react';
 import { LensShell } from '@/components/lens/LensShell';
-import { RecentMineCard } from '@/components/lens/RecentMineCard';
-import { AutoActionStrip } from '@/components/lens/AutoActionStrip';
 import { CrossLensRecentsPanel } from '@/components/lens/CrossLensRecentsPanel';
 import { FirstRunTour } from '@/components/lens/FirstRunTour';
 import { DepthBadge } from '@/components/lens/DepthBadge';
@@ -17,7 +15,6 @@ import { ProgressDashboard } from '@/components/linguistics/ProgressDashboard';
 import { WordDecks } from '@/components/linguistics/WordDecks';
 import { WordTools } from '@/components/linguistics/WordTools';
 import { PipingProvider } from '@/components/panel-polish';
-import { ManifestActionBar } from '@/components/lens/ManifestActionBar';
 import { motion } from 'framer-motion';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensCommand } from "@/hooks/useLensCommand";
@@ -288,9 +285,7 @@ export default function LinguisticsLensPage() {
 
   return (
     <LensShell lensId="linguistics" asMain={false}>
-      <FirstRunTour lensId="linguistics" />
-      <ManifestActionBar />
-      <DepthBadge lensId="linguistics" size="sm" className="ml-2" />
+      <FirstRunTour lensId="linguistics" />      <DepthBadge lensId="linguistics" size="sm" className="ml-2" />
     <div data-lens-theme="linguistics" className="p-6 space-y-6">
       {/* Phase 4 (third wave) — REAL Datamuse + Dictionary panels. */}
       <section className="rounded-xl border border-zinc-800 bg-zinc-950/40 p-4">
@@ -876,10 +871,7 @@ export default function LinguisticsLensPage() {
           {showActionPanel && <div className="mt-3"><LinguisticsActionPanel /></div>}
         </section>
       </PipingProvider>
-    </div>
-          <RecentMineCard domain="linguistics" limit={10} hideWhenEmpty className="mt-4" />
-          <AutoActionStrip domain="linguistics" hideWhenEmpty className="mt-3" title="More actions" />
-          <CrossLensRecentsPanel lensId="linguistics" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
+    </div>          <CrossLensRecentsPanel lensId="linguistics" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
     </LensShell>
   );
 }

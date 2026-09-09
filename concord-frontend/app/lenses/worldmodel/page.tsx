@@ -25,7 +25,6 @@
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensCommand } from '@/hooks/useLensCommand';
 import { LensShell } from '@/components/lens/LensShell';
-import { ManifestActionBar } from '@/components/lens/ManifestActionBar';
 import { DepthBadge } from '@/components/lens/DepthBadge';
 import { WorldModelArxiv } from '@/components/worldmodel/WorldModelArxiv';
 import { GraphCanvas, type GraphNode, type GraphEdge } from '@/components/worldmodel/GraphCanvas';
@@ -43,7 +42,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 
-type TabKey = 'graph' | 'entities' | 'relations' | 'simulate' | 'compare' | 'snapshots' | 'library' | 'ingest';
+type TabKey = 'graph' | 'entities' | 'relations' | 'simulate' | 'compare' | 'snapshots' | 'library' | 'ingest' | 'arxiv';
 
 interface WmEntity { id: string; name: string; type: string; attributes?: Record<string, any>; updatedAt?: string }
 interface WmRelation { id: string; from: string; to: string; type: string; weight?: number }
@@ -74,7 +73,6 @@ export default function WorldmodelLensPage() {
   useLensNav('worldmodel');
   const qc = useQueryClient();
   const [activeTab, setActiveTab] = useState<TabKey>('graph');
-  const [showWorldModelArxiv, setShowWorldModelArxiv] = useState(false);
 
   useLensCommand(
     [
@@ -86,6 +84,7 @@ export default function WorldmodelLensPage() {
       { id: 'tab-snapshots', keys: 'n', description: 'Snapshots', category: 'navigation', action: () => setActiveTab('snapshots') },
       { id: 'tab-library', keys: 'l', description: 'Library', category: 'navigation', action: () => setActiveTab('library') },
       { id: 'tab-ingest', keys: 'd', description: 'Ingest', category: 'navigation', action: () => setActiveTab('ingest') },
+      { id: 'tab-arxiv', keys: 'x', description: 'arXiv', category: 'navigation', action: () => setActiveTab('arxiv') },
     ],
     { lensId: 'worldmodel' },
   );
@@ -145,12 +144,11 @@ export default function WorldmodelLensPage() {
     { key: 'snapshots', label: 'Snapshots', icon: Camera },
     { key: 'library', label: 'Library', icon: Library },
     { key: 'ingest', label: 'Ingest', icon: Upload },
+    { key: 'arxiv', label: 'arXiv', icon: FileSearch },
   ];
 
   return (
-    <LensShell lensId="worldmodel" asMain={false}>
-      <ManifestActionBar />
-      <DepthBadge lensId="worldmodel" size="sm" className="ml-2" />
+    <LensShell lensId="worldmodel" asMain={false}>      <DepthBadge lensId="worldmodel" size="sm" className="ml-2" />
       <div className="min-h-screen bg-black pb-12 text-emerald-50">
         <header className="sticky top-0 z-10 border-b border-emerald-900/50 bg-black/95 px-4 py-3 backdrop-blur md:px-8">
           <div className="mx-auto flex max-w-7xl items-center gap-3">
@@ -256,24 +254,11 @@ export default function WorldmodelLensPage() {
             {activeTab === 'ingest' && (
               <Pane key="ingest"><IngestTab entities={entityList} onIngested={refreshAll} /></Pane>
             )}
+            {activeTab === 'arxiv' && (
+              <Pane key="arxiv"><WorldModelArxiv /></Pane>
+            )}
           </AnimatePresence>
         </main>
-
-        <div className="mx-4 mt-6 md:mx-8">
-          <button
-            type="button"
-            onClick={() => setShowWorldModelArxiv(v => !v)}
-            className="flex items-center gap-2 text-sm font-medium text-zinc-300 hover:text-white"
-          >
-            {showWorldModelArxiv ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-            arXiv Search (external reference)
-          </button>
-          {showWorldModelArxiv && (
-            <section className="mt-3 rounded-xl border border-zinc-800 bg-zinc-950/40 p-4">
-              <WorldModelArxiv />
-            </section>
-          )}
-        </div>
       </div>
     </LensShell>
   );

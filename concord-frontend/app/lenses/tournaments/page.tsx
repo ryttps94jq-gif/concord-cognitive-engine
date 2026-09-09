@@ -16,14 +16,11 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useLensCommand } from '@/hooks/useLensCommand';
 import { LensShell } from '@/components/lens/LensShell';
-import { RecentMineCard } from '@/components/lens/RecentMineCard';
-import { AutoActionStrip } from '@/components/lens/AutoActionStrip';
 import { CrossLensRecentsPanel } from '@/components/lens/CrossLensRecentsPanel';
 import { FirstRunTour } from '@/components/lens/FirstRunTour';
 import { DepthBadge } from '@/components/lens/DepthBadge';
 import { LensVerticalHero } from '@/components/lens/LensVerticalHero';
 import { EsportsFeed } from '@/components/tournaments/EsportsFeed';
-import { ManifestActionBar } from '@/components/lens/ManifestActionBar';
 import { BracketView } from '@/components/tournaments/BracketView';
 import { EntrantsManager } from '@/components/tournaments/EntrantsManager';
 import { StandingsPanel } from '@/components/tournaments/StandingsPanel';
@@ -139,9 +136,7 @@ export default function TournamentsPage() {
 
   return (
     <LensShell lensId="tournaments" asMain={false}>
-      <FirstRunTour lensId="tournaments" />
-      <ManifestActionBar />
-      <DepthBadge lensId="tournaments" size="sm" className="ml-2" />
+      <FirstRunTour lensId="tournaments" />      <DepthBadge lensId="tournaments" size="sm" className="ml-2" />
       <LensVerticalHero lensId="tournaments" className="mx-6 mt-4" />
       <div className="min-h-screen bg-slate-950 p-6 text-slate-100">
         <div className="mx-auto max-w-6xl">
@@ -229,11 +224,7 @@ export default function TournamentsPage() {
             )}
           </section>
         </div>
-      </div>
-
-      <RecentMineCard domain="tournaments" limit={10} hideWhenEmpty className="mt-4" />
-      <AutoActionStrip domain="tournaments" hideWhenEmpty className="mt-3" />
-      <CrossLensRecentsPanel lensId="tournaments" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
+      </div>      <CrossLensRecentsPanel lensId="tournaments" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
     </LensShell>
   );
 }

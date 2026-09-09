@@ -12,8 +12,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useLensCommand } from '@/hooks/useLensCommand';
 import { LensShell } from '@/components/lens/LensShell';
-import { RecentMineCard } from '@/components/lens/RecentMineCard';
-import { AutoActionStrip } from '@/components/lens/AutoActionStrip';
 import { CrossLensRecentsPanel } from '@/components/lens/CrossLensRecentsPanel';
 import { SessionRail } from '@/components/lens/SessionRail';
 import { DraftedTextarea } from '@/components/lens/DraftedTextarea';
@@ -25,9 +23,7 @@ import { WarCampaignSession } from '@/components/kingdoms/WarCampaignSession';
 import { DynastyRealmManager } from '@/components/kingdoms/DynastyRealmManager';
 import { RegionPolygonEditor } from '@/components/kingdoms/RegionPolygonEditor';
 import { MobileTabBar } from '@/components/mobile/MobileTabBar';
-import { ManifestActionBar } from '@/components/lens/ManifestActionBar';
-import { PipingProvider } from '@/components/panel-polish';
-import { Crown, Flag, Hammer, Users, Plus, ChevronRight, ChevronDown, AlertTriangle, List, Eye, Loader2 } from 'lucide-react';
+import { Crown, Flag, Hammer, Users, Plus, AlertTriangle, List, Eye, Loader2, ScrollText, Swords } from 'lucide-react';
 
 interface Kingdom {
   id: string;
@@ -62,9 +58,8 @@ interface DecreeKindMeta {
 }
 
 export default function KingdomsPage() {
-  const [view, setView] = useState<'list' | 'detail' | 'create'>('list');
-  const [showHistoryExplorer, setShowHistoryExplorer] = useState(false);
-  const [showRealmActionPanel, setShowRealmActionPanel] = useState(false);
+  type KingdomView = 'list' | 'detail' | 'create' | 'history' | 'realm' | 'dynasty';
+  const [view, setView] = useState<KingdomView>('list');
 
   // Lens-scoped keyboard commands (auto-wired by codemod).
   useLensCommand(
@@ -72,6 +67,9 @@ export default function KingdomsPage() {
       { id: 'tab-list', keys: 'l', description: 'List', category: 'navigation', action: () => setView('list') },
       { id: 'tab-create', keys: 'c', description: 'Create', category: 'navigation', action: () => setView('create') },
       { id: 'tab-detail', keys: 'd', description: 'Detail', category: 'navigation', action: () => setView('detail') },
+      { id: 'tab-history', keys: 'h', description: 'History', category: 'navigation', action: () => setView('history') },
+      { id: 'tab-realm', keys: 'r', description: 'Realm', category: 'navigation', action: () => setView('realm') },
+      { id: 'tab-dynasty', keys: 'y', description: 'Dynasty', category: 'navigation', action: () => setView('dynasty') },
     ],
     { lensId: 'kingdoms' }
   );
@@ -128,7 +126,6 @@ export default function KingdomsPage() {
   return (
     <LensShell lensId="kingdoms" asMain={false}>
       <FirstRunTour lensId="kingdoms" />
-      <ManifestActionBar />
       <DepthBadge lensId="kingdoms" size="sm" className="ml-2" />
     <div className="min-h-screen bg-slate-950 p-6 text-slate-100">
       <div className="mx-auto max-w-6xl">
@@ -150,6 +147,24 @@ export default function KingdomsPage() {
             >
               <Plus className="h-3.5 w-3.5" /> Found
             </button>
+            <button
+              onClick={() => setView('history')}
+              className={`rounded px-3 py-1 text-sm ${view === 'history' ? 'bg-amber-600' : 'bg-slate-800 hover:bg-slate-700'}`}
+            >
+              History
+            </button>
+            <button
+              onClick={() => setView('realm')}
+              className={`rounded px-3 py-1 text-sm ${view === 'realm' ? 'bg-amber-600' : 'bg-slate-800 hover:bg-slate-700'}`}
+            >
+              Realm
+            </button>
+            <button
+              onClick={() => setView('dynasty')}
+              className={`rounded px-3 py-1 text-sm ${view === 'dynasty' ? 'bg-amber-600' : 'bg-slate-800 hover:bg-slate-700'}`}
+            >
+              Dynasty
+            </button>
           </div>
         </header>
 
@@ -169,58 +184,22 @@ export default function KingdomsPage() {
             onCreated={(id) => { setActiveId(id); setView('detail'); fetchList(); }}
           />
         )}
-        {/* Phase 5 — open war-campaign / decree sessions belonging to this lens. */}
+        {view === 'history' && <HistoryExplorer />}
+        {view === 'realm' && <RealmActionPanel />}
+        {view === 'dynasty' && <DynastyRealmManager />}
         <SessionRail lensId="kingdoms" className="mt-6" hideWhenEmpty />
-        <section className="mt-6 rounded-xl border border-zinc-800 bg-zinc-950/40 p-4">
-          <button
-            type="button"
-            onClick={() => setShowHistoryExplorer(v => !v)}
-            className="flex w-full items-center justify-between text-left text-sm font-semibold text-white"
-          >
-            <span>Historical kingdoms (external reference)</span>
-            {showHistoryExplorer ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-          </button>
-          {showHistoryExplorer && (
-            <div className="mt-3">
-              <HistoryExplorer />
-            </div>
-          )}
-        </section>
-
-        {/* Crusader Kings III-shape realm command: list / decree / loyalty / takeover + actions */}
-        <PipingProvider>
-          <section className="mt-6 rounded-xl border border-zinc-800 bg-zinc-950/40 p-4">
-            <button
-              type="button"
-              onClick={() => setShowRealmActionPanel(v => !v)}
-              className="flex w-full items-center justify-between text-left text-sm font-semibold text-white"
-            >
-              <span>Realm command panel</span>
-              {showRealmActionPanel ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-            </button>
-            {showRealmActionPanel && <div className="mt-3"><RealmActionPanel /></div>}
-          </section>
-        </PipingProvider>
-
-        {/* CK3-parity dynasty / council / diplomacy / war / economy / intrigue / law */}
-        <section className="mt-6">
-          <DynastyRealmManager />
-        </section>
       </div>
     </div>
-
-          <RecentMineCard domain="kingdoms" limit={10} hideWhenEmpty className="mt-4" />
-          <AutoActionStrip domain="kingdoms" hideWhenEmpty className="mt-3" title="More actions" />
-          <CrossLensRecentsPanel lensId="kingdoms" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
-      {/* Phase 5 mobile — thumb-friendly bottom tab bar; hides on desktop. */}
+      <CrossLensRecentsPanel lensId="kingdoms" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
       <MobileTabBar
         tabs={[
           { id: 'list', label: 'Browse', icon: List },
           { id: 'create', label: 'Found', icon: Plus },
           { id: 'detail', label: 'Detail', icon: Eye },
+          { id: 'dynasty', label: 'Dynasty', icon: Crown },
         ]}
         active={view}
-        onSelect={(id) => setView(id as 'list' | 'create' | 'detail')}
+        onSelect={(id) => setView(id as KingdomView)}
       />
     </LensShell>
   );

@@ -2,8 +2,6 @@
 
 import { useState, useMemo, useCallback } from 'react';
 import { LensShell } from '@/components/lens/LensShell';
-import { RecentMineCard } from '@/components/lens/RecentMineCard';
-import { AutoActionStrip } from '@/components/lens/AutoActionStrip';
 import { CrossLensRecentsPanel } from '@/components/lens/CrossLensRecentsPanel';
 import { FirstRunTour } from '@/components/lens/FirstRunTour';
 import { DepthBadge } from '@/components/lens/DepthBadge';
@@ -11,7 +9,6 @@ import { QualityDistribution } from '@/components/cri/QualityDistribution';
 import { QualityLoopPanel } from '@/components/cri/QualityLoopPanel';
 import { CrisisActionPanel } from '@/components/cri/CrisisActionPanel';
 import { PipingProvider } from '@/components/panel-polish';
-import { ManifestActionBar } from '@/components/lens/ManifestActionBar';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensCommand } from '@/hooks/useLensCommand';
 import { useRunArtifact, useArtifacts, useCreateArtifact } from '@/lib/hooks/use-lens-artifacts';
@@ -198,9 +195,7 @@ export default function CRILensPage() {
 
   return (
     <LensShell lensId="cri" asMain={false}>
-      <FirstRunTour lensId="cri" />
-      <ManifestActionBar />
-      <DepthBadge lensId="cri" size="sm" className="ml-2" />
+      <FirstRunTour lensId="cri" />      <DepthBadge lensId="cri" size="sm" className="ml-2" />
     <div data-lens-theme="cri" className="p-6 space-y-6">
       <header className="flex items-center gap-3">
         <BarChart3 className="w-6 h-6 text-neon-cyan" />
@@ -779,10 +774,7 @@ export default function CRILensPage() {
       </PipingProvider>
     </div>
 
-      <a href="#cri-skip" className="sr-only focus:not-sr-only focus:ring-2 focus:ring-amber-500 focus:outline-none">Skip to cri content</a>
-          <RecentMineCard domain="cri" limit={10} hideWhenEmpty className="mt-4" />
-          <AutoActionStrip domain="cri" hideWhenEmpty className="mt-3" title="More actions" />
-          <CrossLensRecentsPanel lensId="cri" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
+      <a href="#cri-skip" className="sr-only focus:not-sr-only focus:ring-2 focus:ring-amber-500 focus:outline-none">Skip to cri content</a>          <CrossLensRecentsPanel lensId="cri" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
     </LensShell>
   );
 }

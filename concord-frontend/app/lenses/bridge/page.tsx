@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { LensShell } from '@/components/lens/LensShell';
-import { RecentMineCard } from '@/components/lens/RecentMineCard';
 import { CrossLensRecentsPanel } from '@/components/lens/CrossLensRecentsPanel';
 import { FirstRunTour } from '@/components/lens/FirstRunTour';
 import { DepthBadge } from '@/components/lens/DepthBadge';
@@ -561,9 +560,7 @@ export default function BridgeLens() {
 
       {/* Cross-lens continuity: recent bridge artifacts + recents from adjacent lenses.
           FederationConsole (above) is the real designed surface for every bridge
-          macro — no generic action-button wall is mounted here on purpose. */}
-      <RecentMineCard domain="bridge" limit={10} hideWhenEmpty className="mt-4" />
-      <CrossLensRecentsPanel lensId="bridge" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
+          macro — no generic action-button wall is mounted here on purpose. */}      <CrossLensRecentsPanel lensId="bridge" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
     </LensShell>
   );
 }

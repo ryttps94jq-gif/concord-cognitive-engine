@@ -2,15 +2,12 @@
 
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { LensShell } from '@/components/lens/LensShell';
-import { RecentMineCard } from '@/components/lens/RecentMineCard';
-import { AutoActionStrip } from '@/components/lens/AutoActionStrip';
 import { CrossLensRecentsPanel } from '@/components/lens/CrossLensRecentsPanel';
 import { FirstRunTour } from '@/components/lens/FirstRunTour';
 import { DepthBadge } from '@/components/lens/DepthBadge';
 import { DbProjectExplorer } from '@/components/database/DbProjectExplorer';
 import { SchemaDesigner } from '@/components/database/SchemaDesigner';
 import { LiveDbClient } from '@/components/database/LiveDbClient';
-import { ManifestActionBar } from '@/components/lens/ManifestActionBar';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensCommand } from '@/hooks/useLensCommand';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -21,9 +18,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Database, Server, HardDrive, Cpu, RefreshCw, Play, CheckCircle, XCircle,
   AlertCircle, Table2, Search, Clock, Columns, Eye, Trash2,
-  Copy, ChevronLeft, ChevronRight, ChevronDown, List, BarChart3, Link2, Key,
+  Copy, ChevronLeft, ChevronRight, List, BarChart3, Link2, Key,
   FileJson, FileSpreadsheet, Terminal, History, Layers, Loader2, Zap,
-  Plug,
+  Plug, PenLine, FolderGit2,
 } from 'lucide-react';
 import { ErrorState } from '@/components/common/EmptyState';
 import { useRealtimeLens } from '@/hooks/useRealtimeLens';
@@ -91,16 +88,18 @@ interface PerfSnapshot {
 // Tab definitions
 // ---------------------------------------------------------------------------
 
-type TabId = 'live' | 'query' | 'tables' | 'schema' | 'indexes' | 'monitor' | 'history';
+type TabId = 'live' | 'query' | 'tables' | 'schema' | 'indexes' | 'monitor' | 'history' | 'designer' | 'projects';
 
 const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
   { id: 'live', label: 'Live Client', icon: <Plug className="w-4 h-4" /> },
   { id: 'query', label: 'Query Editor', icon: <Terminal className="w-4 h-4" /> },
   { id: 'tables', label: 'Table Browser', icon: <Table2 className="w-4 h-4" /> },
   { id: 'schema', label: 'Schema Map', icon: <Layers className="w-4 h-4" /> },
+  { id: 'designer', label: 'Designer', icon: <PenLine className="w-4 h-4" /> },
   { id: 'indexes', label: 'Indexes', icon: <Key className="w-4 h-4" /> },
   { id: 'monitor', label: 'Monitoring', icon: <BarChart3 className="w-4 h-4" /> },
   { id: 'history', label: 'History', icon: <History className="w-4 h-4" /> },
+  { id: 'projects', label: 'Projects', icon: <FolderGit2 className="w-4 h-4" /> },
 ];
 
 // ---------------------------------------------------------------------------
@@ -238,8 +237,6 @@ export default function DatabaseLensPage() {
 
   // --- Tab state ---
   const [activeTab, setActiveTab] = useState<TabId>('live');
-  const [showSchemaDesigner, setShowSchemaDesigner] = useState(false);
-  const [showDbProjectExplorer, setShowDbProjectExplorer] = useState(false);
 
   useLensCommand(
     [
@@ -247,9 +244,11 @@ export default function DatabaseLensPage() {
       { id: 'tab-query', keys: 'q', description: 'Query Editor', category: 'navigation', action: () => setActiveTab('query') },
       { id: 'tab-tables', keys: 't', description: 'Table Browser', category: 'navigation', action: () => setActiveTab('tables') },
       { id: 'tab-schema', keys: 'm', description: 'Schema Map', category: 'navigation', action: () => setActiveTab('schema') },
+      { id: 'tab-designer', keys: 'd', description: 'Schema designer', category: 'navigation', action: () => setActiveTab('designer') },
       { id: 'tab-indexes', keys: 'i', description: 'Indexes', category: 'navigation', action: () => setActiveTab('indexes') },
       { id: 'tab-monitor', keys: 'o', description: 'Monitoring', category: 'navigation', action: () => setActiveTab('monitor') },
       { id: 'tab-history', keys: 'h', description: 'History', category: 'navigation', action: () => setActiveTab('history') },
+      { id: 'tab-projects', keys: 'p', description: 'Database projects', category: 'navigation', action: () => setActiveTab('projects') },
     ],
     { lensId: 'database' }
   );
@@ -438,9 +437,7 @@ export default function DatabaseLensPage() {
   }
   return (
     <LensShell lensId="database" asMain={false}>
-      <FirstRunTour lensId="database" />
-      <ManifestActionBar />
-      <DepthBadge lensId="database" size="sm" className="ml-2" />
+      <FirstRunTour lensId="database" />      <DepthBadge lensId="database" size="sm" className="ml-2" />
     <div data-lens-theme="database" className="p-6 space-y-6 bg-lattice-bg min-h-screen">
       {/* Header */}
       <header className="flex items-center justify-between">
@@ -1254,42 +1251,19 @@ export default function DatabaseLensPage() {
       )}
             </div>
           )}
+          {activeTab === 'designer' && (
+            <section className="rounded-xl border border-zinc-800 bg-zinc-950/40 p-4">
+              <SchemaDesigner />
+            </section>
+          )}
+          {activeTab === 'projects' && (
+            <section className="rounded-xl border border-zinc-800 bg-zinc-950/40 p-4">
+              <DbProjectExplorer />
+            </section>
+          )}
         </motion.div>
       </AnimatePresence>
-      <div className="mt-6">
-        <button
-          type="button"
-          onClick={() => setShowSchemaDesigner(v => !v)}
-          className="flex items-center gap-2 text-sm font-medium text-zinc-300 hover:text-white"
-        >
-          {showSchemaDesigner ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-          Schema Designer (dbdiagram.io/DrawSQL-shape)
-        </button>
-        {showSchemaDesigner && (
-          <section className="mt-3">
-            <SchemaDesigner />
-          </section>
-        )}
-      </div>
-      <div className="mt-6">
-        <button
-          type="button"
-          onClick={() => setShowDbProjectExplorer(v => !v)}
-          className="flex items-center gap-2 text-sm font-medium text-zinc-300 hover:text-white"
-        >
-          {showDbProjectExplorer ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-          Real-world Database Projects (external reference)
-        </button>
-        {showDbProjectExplorer && (
-          <section className="mt-3 rounded-xl border border-zinc-800 bg-zinc-950/40 p-4">
-            <DbProjectExplorer />
-          </section>
-        )}
-      </div>
-    </div>
-          <RecentMineCard domain="database" limit={10} hideWhenEmpty className="mt-4" />
-          <AutoActionStrip domain="database" hideWhenEmpty className="mt-3" />
-          <CrossLensRecentsPanel lensId="database" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
+    </div>          <CrossLensRecentsPanel lensId="database" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
     </LensShell>
   );
 }

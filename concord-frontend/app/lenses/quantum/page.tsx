@@ -4,21 +4,18 @@
 // page component's render path); this page always renders its shell.
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import {
   Atom, Zap, Play, Loader2, Layers, X, StepForward,
   StepBack, Save, FolderOpen, Trash2, Download, Upload, Sparkles,
-  ChevronDown, ChevronRight,
 } from 'lucide-react';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensCommand } from '@/hooks/useLensCommand';
 import { LensShell } from '@/components/lens/LensShell';
-import { RecentMineCard } from '@/components/lens/RecentMineCard';
-import { AutoActionStrip } from '@/components/lens/AutoActionStrip';
 import { CrossLensRecentsPanel } from '@/components/lens/CrossLensRecentsPanel';
 import { FirstRunTour } from '@/components/lens/FirstRunTour';
 import { DepthBadge } from '@/components/lens/DepthBadge';
 import { LensVerticalHero } from '@/components/lens/LensVerticalHero';
-import { ManifestActionBar } from '@/components/lens/ManifestActionBar';
 import { ArxivPanel } from '@/components/research/ArxivPanel';
 import { QuantumArxiv } from '@/components/quantum/QuantumArxiv';
 import { ChartKit } from '@/components/viz';
@@ -92,11 +89,25 @@ const TEMPLATES: { id: string; label: string }[] = [
   { id: 'superposition', label: 'Superposition' },
 ];
 
+/** IBM Quantum / Quirk: composer is the product; papers are a view, not an accordion. */
+export type QuantumView = 'composer' | 'research';
+
+const QUANTUM_VIEWS: { id: QuantumView; label: string }[] = [
+  { id: 'composer', label: 'Composer' },
+  { id: 'research', label: 'Research' },
+];
+
+function prefersReducedMotion() {
+  if (typeof window === 'undefined') return false;
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
 export default function QuantumLensPage() {
   useLensNav('quantum');
 
   const [qubits, setQubits] = useState(2);
-  const [showQuantumArxiv, setShowQuantumArxiv] = useState(false);
+  const [activeView, setActive] = useState<QuantumView>('composer');
+  const reduced = prefersReducedMotion();
   const [placed, setPlaced] = useState<PlacedGate[]>([]);
   const [gateLib, setGateLib] = useState<GateDef[]>([]);
   const [noisePresets, setNoisePresets] = useState<NoisePreset[]>([]);
@@ -230,6 +241,10 @@ export default function QuantumLensPage() {
 
   useLensCommand(
     [
+      { id: 'view-composer', keys: 'c', description: 'Circuit composer', category: 'navigation',
+        action: () => setActive('composer') },
+      { id: 'view-research', keys: 'r', description: 'Quantum research', category: 'navigation',
+        action: () => setActive('research') },
       { id: 'run', keys: 'mod+enter', description: 'Simulate circuit', category: 'actions',
         action: () => { if (!busy) handleSimulate(); }, global: true },
       { id: 'step', keys: 'mod+shift+enter', description: 'Step-through execution', category: 'actions',
@@ -260,14 +275,10 @@ export default function QuantumLensPage() {
 
   return (
     <LensShell lensId="quantum" asMain={false}>
-      <FirstRunTour lensId="quantum" />
-      <ManifestActionBar />
-      <DepthBadge lensId="quantum" size="sm" className="ml-2" />
+      <FirstRunTour lensId="quantum" />      <DepthBadge lensId="quantum" size="sm" className="ml-2" />
       <LensVerticalHero lensId="quantum" className="mx-6 mt-4" />
 
       <div data-lens-theme="quantum" className="p-6 space-y-6">
-        <ArxivPanel domain="quantum" title="arXiv · Quantum Physics (quant-ph)" />
-
         <header className="flex items-center gap-3">
           <Atom className="w-7 h-7 text-neon-purple" />
           <div>
@@ -278,6 +289,23 @@ export default function QuantumLensPage() {
           </div>
         </header>
 
+        <nav className="flex items-center gap-1 border-b border-lattice-border pb-3" aria-label="Quantum views">
+          {QUANTUM_VIEWS.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActive(tab.id)}
+              className={`px-3 py-1.5 rounded-md text-xs font-medium whitespace-nowrap transition-colors ${
+                activeView === tab.id
+                  ? 'bg-neon-purple/20 text-neon-purple border border-neon-purple/30'
+                  : 'text-gray-400 hover:text-white hover:bg-lattice-elevated border border-transparent'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </nav>
+
         {error && (
           <div className="flex items-center justify-between p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-sm text-red-300">
             <span>{error}</span>
@@ -285,6 +313,23 @@ export default function QuantumLensPage() {
           </div>
         )}
 
+        <AnimatePresence mode="wait">
+        <motion.div
+          key={activeView}
+          initial={reduced ? false : { opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={reduced ? undefined : { opacity: 0, y: -6 }}
+          transition={{ duration: 0.18 }}
+          className="space-y-6"
+        >
+        {activeView === 'research' && (
+          <div className="space-y-4">
+            <ArxivPanel domain="quantum" title="arXiv · Quantum Physics (quant-ph)" />
+            <QuantumArxiv />
+          </div>
+        )}
+        {activeView === 'composer' && (
+        <>
         {/* ── Visual circuit composer ───────────────────────────── */}
         <div className="panel p-4 space-y-4">
           <h2 className="font-semibold flex items-center gap-2">
@@ -635,29 +680,15 @@ export default function QuantumLensPage() {
           )}
         </div>
 
-        <section className="mt-2 rounded-xl border border-zinc-800 bg-zinc-950/40 p-4">
-          <button
-            type="button"
-            onClick={() => setShowQuantumArxiv(v => !v)}
-            className="flex w-full items-center justify-between text-left text-sm font-semibold text-white"
-          >
-            <span>Quantum computing research (external reference)</span>
-            {showQuantumArxiv ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-          </button>
-          {showQuantumArxiv && (
-            <div className="mt-3">
-              <QuantumArxiv />
-            </div>
-          )}
-        </section>
+        </>
+        )}
+        </motion.div>
+        </AnimatePresence>
       </div>
 
       <a href="#quantum-skip" className="sr-only focus:not-sr-only focus:ring-2 focus:ring-amber-500 focus:outline-none">
         Skip to quantum content
-      </a>
-      <RecentMineCard domain="quantum" limit={10} hideWhenEmpty className="mt-4" />
-      <AutoActionStrip domain="quantum" hideWhenEmpty className="mt-3" />
-      <CrossLensRecentsPanel lensId="quantum" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
+      </a>      <CrossLensRecentsPanel lensId="quantum" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
     </LensShell>
   );
 }

@@ -3,8 +3,6 @@
 import { useState, useMemo, useRef} from 'react';
 import { LensShell } from '@/components/lens/LensShell';
 import { DraftedTextarea } from '@/components/lens/DraftedTextarea';
-import { RecentMineCard } from '@/components/lens/RecentMineCard';
-import { AutoActionStrip } from '@/components/lens/AutoActionStrip';
 import { CrossLensRecentsPanel } from '@/components/lens/CrossLensRecentsPanel';
 import { FirstRunTour } from '@/components/lens/FirstRunTour';
 import { DepthBadge } from '@/components/lens/DepthBadge';
@@ -14,7 +12,6 @@ import { CorrosionThermalPanel } from '@/components/materials/CorrosionThermalPa
 import { MaterialShortlist } from '@/components/materials/MaterialShortlist';
 import { MaterialsToolkit } from '@/components/materials/MaterialsToolkit';
 import { CrystalViewer } from '@/components/materials/CrystalViewer';
-import { ManifestActionBar } from '@/components/lens/ManifestActionBar';
 import { motion } from 'framer-motion';
 import { useLensNav } from '@/hooks/useLensNav';
 import { useLensCommand } from "@/hooks/useLensCommand";
@@ -329,9 +326,7 @@ export default function MaterialsLensPage() {
 
   return (
     <LensShell lensId="materials" asMain={false}>
-      <FirstRunTour lensId="materials" />
-      <ManifestActionBar />
-      <DepthBadge lensId="materials" size="sm" className="ml-2" />
+      <FirstRunTour lensId="materials" />      <DepthBadge lensId="materials" size="sm" className="ml-2" />
     <div data-lens-theme="materials" className="space-y-6 p-6">
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-4">
@@ -383,10 +378,7 @@ export default function MaterialsLensPage() {
       </section>
     </div>
 
-      <a href="#materials-skip" className="sr-only focus:not-sr-only focus:ring-2 focus:ring-amber-500 focus:outline-none">Skip to materials content</a>
-          <RecentMineCard domain="materials" limit={10} hideWhenEmpty className="mt-4" />
-          <AutoActionStrip domain="materials" hideWhenEmpty className="mt-3" />
-          <CrossLensRecentsPanel lensId="materials" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
+      <a href="#materials-skip" className="sr-only focus:not-sr-only focus:ring-2 focus:ring-amber-500 focus:outline-none">Skip to materials content</a>          <CrossLensRecentsPanel lensId="materials" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
     </LensShell>
   );
 }

@@ -5,8 +5,6 @@ import MarketHeatmap from '@/components/market/MarketHeatmap';
 import Watchlist from '@/components/market/Watchlist';
 import { useLensCommand } from "@/hooks/useLensCommand";
 import { LensShell } from '@/components/lens/LensShell';
-import { RecentMineCard } from '@/components/lens/RecentMineCard';
-import { AutoActionStrip } from '@/components/lens/AutoActionStrip';
 import { CrossLensRecentsPanel } from '@/components/lens/CrossLensRecentsPanel';
 import { FirstRunTour } from '@/components/lens/FirstRunTour';
 import { DepthBadge } from '@/components/lens/DepthBadge';
@@ -568,10 +566,7 @@ export default function MarketLensPage() {
       <section className="mt-4">
         <CompetitiveIntelligence />
       </section>
-    </div>
-          <RecentMineCard domain="market" limit={10} hideWhenEmpty className="mt-4" />
-          <AutoActionStrip domain="market" hideWhenEmpty className="mt-3" />
-          <CrossLensRecentsPanel lensId="market" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
+    </div>          <CrossLensRecentsPanel lensId="market" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
     </LensShell>
   );
 }
