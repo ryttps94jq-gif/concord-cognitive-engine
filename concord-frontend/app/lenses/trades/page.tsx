@@ -73,6 +73,7 @@ import { RealtimeDataPanel } from '@/components/lens/RealtimeDataPanel';
 import { VisionAnalyzeButton } from '@/components/common/VisionAnalyzeButton';
 import QuoteChart, { type QuoteSnapshot } from '@/components/lens/QuoteChart';
 import TradesWorkbench from '@/components/trades/TradesWorkbench';
+import { ServiceTitanWorkbenchSection } from '@/components/trades/ServiceTitanWorkbenchSection';
 import TechniciansPanel from '@/components/trades/TechniciansPanel';
 import DispatchBoardPanel from '@/components/trades/DispatchBoardPanel';
 import QuotesPanel from '@/components/trades/QuotesPanel';
@@ -96,6 +97,7 @@ import { ShellPreview } from '@/components/lens/ShellPreview';
 // ---------------------------------------------------------------------------
 
 type ModeTab = 'jobs' | 'estimates' | 'materials' | 'permits' | 'equipment' | 'clients';
+type PhotoPhase = 'before' | 'during' | 'after';
 type SubView = 'list' | 'timeline' | 'changeOrders' | 'timeTracking' | 'profitLoss' | 'photos' | 'estimateBuilder' | 'materialsTracker' | 'invoiceGenerator';
 type ArtifactType = 'Job' | 'Estimate' | 'MaterialsList' | 'Permit' | 'Equipment' | 'Client';
 type Status = 'quoted' | 'approved' | 'in_progress' | 'inspection' | 'completed' | 'invoiced' | 'paid';
@@ -347,7 +349,7 @@ export default function TradesLensPage() {
 
   // ----- Photo Documentation state -----
   const [photoEntries, setPhotoEntries] = useState<PhotoEntry[]>([]);
-  const [photoPhase, setPhotoPhase] = useState<'before' | 'during' | 'after'>('before');
+  const [photoPhase, setPhotoPhase] = useState<PhotoPhase>('before');
   const [photoLocation, setPhotoLocation] = useState('');
   const [photoNotes, setPhotoNotes] = useState('');
 
@@ -2537,70 +2539,3 @@ export default function TradesLensPage() {
   );
 }
 
-/* ------------------------------------------------------------------ */
-/*  ServiceTitan / Jobber-parity workbench section                      */
-/* ------------------------------------------------------------------ */
-
-function ServiceTitanWorkbenchSection() {
-  const [active, setActive] = useState<
-    'dispatch' | 'calendar' | 'techs' | 'field' | 'route' | 'quotes' | 'bookings' | 'timesheets'
-    | 'invoices' | 'payments' | 'portal' | 'recurring' | 'pricebook' | 'reminders' | 'reviews' | 'reports'
-  >('dispatch');
-  const TABS = [
-    { id: 'dispatch', label: 'Dispatch' },
-    { id: 'calendar', label: 'Calendar' },
-    { id: 'techs', label: 'Technicians' },
-    { id: 'field', label: 'Field/GPS' },
-    { id: 'route', label: 'Route opt' },
-    { id: 'quotes', label: 'Quotes' },
-    { id: 'bookings', label: 'Bookings' },
-    { id: 'timesheets', label: 'Timesheets' },
-    { id: 'invoices', label: 'Invoices' },
-    { id: 'payments', label: 'Payments' },
-    { id: 'portal', label: 'Portal' },
-    { id: 'recurring', label: 'Recurring' },
-    { id: 'pricebook', label: 'Pricebook' },
-    { id: 'reminders', label: 'Reminders' },
-    { id: 'reviews', label: 'Reviews' },
-    { id: 'reports', label: 'Reports' },
-  ] as const;
-  return (
-    <section className="mt-6 space-y-3">
-      <h2 className="text-sm font-semibold text-cyan-300 uppercase tracking-wider">ServiceTitan/Jobber-parity workbench</h2>
-      <nav className="flex items-center gap-1 border-b border-cyan-900/30 pb-2 overflow-x-auto">
-        {TABS.map(t => (
-          <button
-            key={t.id}
-            onClick={() => setActive(t.id)}
-            className={
-              'px-3 py-1.5 rounded-md text-xs font-mono whitespace-nowrap transition ' +
-              (active === t.id
-                ? 'bg-cyan-500/15 text-cyan-300 border border-cyan-500/20'
-                : 'text-gray-400 hover:text-cyan-300 hover:bg-cyan-900/10 border border-transparent')
-            }
-          >
-            {t.label}
-          </button>
-        ))}
-      </nav>
-      <div>
-        {active === 'dispatch' && <DispatchBoardPanel />}
-        {active === 'calendar' && <SchedulingCalendarPanel />}
-        {active === 'techs' && <TechniciansPanel />}
-        {active === 'field' && <FieldTrackingPanel />}
-        {active === 'route' && <RouteOptimizerPanel />}
-        {active === 'quotes' && <QuotesPanel />}
-        {active === 'bookings' && <BookingsPanel />}
-        {active === 'timesheets' && <TimesheetsPanel />}
-        {active === 'invoices' && <InvoicesPanel />}
-        {active === 'payments' && <PaymentsPanel />}
-        {active === 'portal' && <CustomerPortalPanel />}
-        {active === 'recurring' && <RecurringPlansPanel />}
-        {active === 'pricebook' && <PricebookPanel />}
-        {active === 'reminders' && <NotificationsPanel />}
-        {active === 'reviews' && <ReviewsPanel />}
-        {active === 'reports' && <ReportingPanel />}
-      </div>
-    </section>
-  );
-}

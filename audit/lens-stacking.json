@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-09T06:14:53.544Z",
+  "generatedAt": "2026-09-09T06:15:47.568Z",
   "rows": [
     {
       "lens": "world",
@@ -58,24 +58,6 @@
       "dupActionPaths": 0,
       "domainComponentCount": 31,
       "stackingScore": 16.37
-    },
-    {
-      "lens": "trades",
-      "loc": 2607,
-      "inlineBloat": 1127,
-      "featureImports": 18,
-      "sharedImports": 13,
-      "coLocatedImports": 0,
-      "useStateCount": 58,
-      "useEffectCount": 0,
-      "viewStateMachines": 3,
-      "renderStrategies": 2,
-      "screenBranches": 21,
-      "deadViewValues": 0,
-      "deadViewList": [],
-      "dupActionPaths": 0,
-      "domainComponentCount": 19,
-      "stackingScore": 15
     },
     {
       "lens": "studio",
@@ -328,6 +310,24 @@
       "dupActionPaths": 0,
       "domainComponentCount": 8,
       "stackingScore": 5.92
+    },
+    {
+      "lens": "trades",
+      "loc": 2542,
+      "inlineBloat": 1002,
+      "featureImports": 19,
+      "sharedImports": 13,
+      "coLocatedImports": 0,
+      "useStateCount": 57,
+      "useEffectCount": 0,
+      "viewStateMachines": 1,
+      "renderStrategies": 1,
+      "screenBranches": 5,
+      "deadViewValues": 0,
+      "deadViewList": [],
+      "dupActionPaths": 0,
+      "domainComponentCount": 20,
+      "stackingScore": 5.53
     },
     {
       "lens": "forum",

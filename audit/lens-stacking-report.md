@@ -1,8 +1,8 @@
 # Lens stacked-UI report
 
-Generated 2026-09-09T06:14:53.542Z · `node scripts/detect-lens-stacking.mjs`
+Generated 2026-09-09T06:15:47.566Z · `node scripts/detect-lens-stacking.mjs`
 
-266 lenses scanned. **5 heavy** (score ≥ 12) · **5 moderate** (7–12) · 256 clean.
+266 lenses scanned. **4 heavy** (score ≥ 12) · **5 moderate** (7–12) · 257 clean.
 
 `stackingScore` weights the **welded-piles** signature, NOT raw size: `inlineBloat` (LOC not explained by delegated panels), **independent view-state machines beyond the first** (one tab machine is fine — 2+ separate ones gating different regions is welded apps), heterogeneous render strategies in one file (tab-union + `&&`-screens + boolean modal toggles all coexisting = piled by different sessions), hook sprawl (`useState`/`useEffect` over the norm), top-level screen branches, literal-only dead view values, and duplicate action paths. A thin page that delegates 17 tabs to 17 panel components (e.g. `retail`, 191 LOC) is the GOOD pattern and scores low. Read the columns, not just the score.
 
@@ -11,7 +11,6 @@ Generated 2026-09-09T06:14:53.542Z · `node scripts/detect-lens-stacking.mjs`
 | `world` | 27.99 | 7625 | 4945 | 38 | 3 | 3 | 90 | 43 | 67 | 3 | 0 |
 | `chat` | 17.07 | 4951 | 1791 | 46 | 2 | 3 | 66 | 16 | 31 | 0 | 0 |
 | `healthcare` | 16.37 | 4015 | 2955 | 11 | 3 | 2 | 71 | 0 | 13 | 0 | 0 |
-| `trades` | 15 | 2607 | 1127 | 18 | 3 | 2 | 58 | 0 | 21 | 0 | 0 |
 | `studio` | 14.88 | 2991 | 1391 | 20 | 2 | 2 | 50 | 6 | 20 | 0 | 1 |
 | `board` | 8.7 | 2050 | 1530 | 2 | 1 | 2 | 21 | 2 | 9 | 0 | 0 |
 | `poetry` | 8.67 | 570 | 0 | 8 | 0 | 2 | 17 | 1 | 5 | 0 | 2 |
@@ -26,6 +25,7 @@ Generated 2026-09-09T06:14:53.542Z · `node scripts/detect-lens-stacking.mjs`
 | `app-maker` | 6.3 | 704 | 124 | 3 | 1 | 2 | 16 | 1 | 14 | 0 | 0 |
 | `podcast` | 6.06 | 981 | 281 | 5 | 1 | 1 | 23 | 2 | 24 | 0 | 0 |
 | `metalearning` | 5.92 | 817 | 0 | 8 | 1 | 2 | 16 | 1 | 11 | 0 | 0 |
+| `trades` | 5.53 | 2542 | 1002 | 19 | 1 | 1 | 57 | 0 | 5 | 0 | 0 |
 | `forum` | 5.45 | 1270 | 630 | 4 | 0 | 1 | 26 | 2 | 9 | 0 | 0 |
 | `art` | 5.1 | 1255 | 315 | 9 | 0 | 1 | 30 | 2 | 9 | 0 | 0 |
 | `federation` | 5.08 | 793 | 0 | 10 | 1 | 1 | 21 | 1 | 22 | 0 | 0 |
@@ -289,10 +289,6 @@ Generated 2026-09-09T06:14:53.542Z · `node scripts/detect-lens-stacking.mjs`
 ### `healthcare` — 16.37
 - 4015 LOC (2955 inline-bloat) · 11 feature component imports · 31 files in `components/healthcare/`
 - **3 view-state machine(s)** · 2/3 render strategies coexisting · 71 useState · 0 useEffect · 13 top-level screen branches
-
-### `trades` — 15
-- 2607 LOC (1127 inline-bloat) · 18 feature component imports · 19 files in `components/trades/`
-- **3 view-state machine(s)** · 2/3 render strategies coexisting · 58 useState · 0 useEffect · 21 top-level screen branches
 
 ### `studio` — 14.88
 - 2991 LOC (1391 inline-bloat) · 20 feature component imports · 41 files in `components/studio/`
