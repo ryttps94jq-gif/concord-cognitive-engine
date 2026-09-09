@@ -35,7 +35,8 @@ Pinned by `server/tests/concurrency-process-modes.test.js`.
 2. Worker: `infra/launchd/com.concord.backend-i1.plist.example` → `PORT=5051`,
    `NODE_APP_INSTANCE=1`, `CONCORD_DTU_SIDECAR=1`.
 3. Point nginx / Cloudflare tunnel upstream at both ports (sticky sessions for
-   socket.io when Redis adapter is live).
+   socket.io when Redis adapter is live — see `docs/REDIS_STICKY_SESSIONS.md` +
+   `infra/nginx/sticky-sessions.conf.example`).
 
 ### B) HTTP + heartbeat-only (Tier 1 D)
 

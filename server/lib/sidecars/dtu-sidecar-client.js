@@ -101,3 +101,33 @@ export async function recent({ limit = 50, scope, tier, source } = {}) {
 }
 
 export const socketPath = SOCK;
+
+// ── Phase 3b: generalized hot reads (same UDS, fail-soft, separate opt-in) ──
+// CONCORD_WALLET_SIDECAR=1  → balance sums off Node loop
+// CONCORD_SESSION_SIDECAR=1 → auth sessions token_hash lookup off loop
+// Both require the Rust sidecar process to be running (same socket as DTU).
+
+export const WALLET_ENABLED = process.env.CONCORD_WALLET_SIDECAR === "1";
+export const SESSION_ENABLED = process.env.CONCORD_SESSION_SIDECAR === "1";
+
+/**
+ * Wallet balance — mirrors economy/balances.js#getBalance.
+ * @param {string} userId
+ * @returns {Promise<{ ok, userId?, balance?, totalCredits?, totalDebits?, error? }>}
+ */
+export async function walletBalance(userId) {
+  if (!userId) return { ok: false, error: "user_required" };
+  const r = await get(`/v1/wallet/balance?user=${encodeURIComponent(userId)}`, { timeoutMs: 3_000 });
+  return r.body || { ok: false, error: "empty_response" };
+}
+
+/**
+ * Auth session by token_hash / JTI.
+ * @param {string} tokenHash
+ * @returns {Promise<{ ok, session?, error? }>}
+ */
+export async function sessionByTokenHash(tokenHash) {
+  if (!tokenHash) return { ok: false, error: "tokenHash_required" };
+  const r = await get(`/v1/session?tokenHash=${encodeURIComponent(tokenHash)}`, { timeoutMs: 2_000 });
+  return r.body || { ok: false, error: "empty_response" };
+}
