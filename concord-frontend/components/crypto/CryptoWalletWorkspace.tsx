@@ -1668,7 +1668,8 @@ export function CryptoWalletWorkspace() {
         )}
       </div>
       <section className="mt-6"><LensFeedButton domain="crypto" /></section>
-          <CrossLensRecentsPanel lensId="crypto" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
+      <CrossLensRecentsPanel lensId="crypto" sinceDays={7} limit={6} hideWhenEmpty className="mt-3" />
+    </div>
     </LensShell>
   );
 }

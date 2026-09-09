@@ -1544,11 +1544,8 @@ export function PhysicsSandboxPanel() {
             </div>
           </div>
         </div>
+      </div>
 
     </div>
   );
-
-  function toggleSimulation(running: boolean) {
-    setIsRunning(running);
-  }
 }
