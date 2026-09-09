@@ -18,6 +18,24 @@ import { platformProviderIdForSlot } from "./platform-providers.js";
 // Environment-based toggle for adaptive brain scaling
 const ADAPTIVE_BRAIN_SCALING = process.env.CONCORD_ADAPTIVE_BRAIN_SCALING !== 'false';
 
+// Concurrency Refactor Phase 4 — fail-fast ollama-proxy cutover.
+// When OLLAMA_PROXY_URL is set, every local Ollama endpoint (http/https scheme)
+// is rewritten to the proxy address. The proxy reads `model` from each request
+// body, so one URL serves all brains. Non-http endpoints (cloudflare://, cloud
+// sentinels) pass through untouched. Applied inside _parseEndpoints so it covers
+// BOTH the static BRAIN_CONFIG.<brain>.url/.urls reads (chat-parallel-brains,
+// conversation-memory/summarizer, oracle-brain, repair-brain, brain-router, and
+// the ~4 direct server.js fetch sites) AND pickBrainEndpoint's candidate list.
+// Default unset → behaviour unchanged.
+const _OLLAMA_PROXY_URL = process.env.OLLAMA_PROXY_URL || "";
+function _applyProxy(list) {
+  if (!_OLLAMA_PROXY_URL) return list;
+  const mapped = list.map((u) =>
+    typeof u === "string" && /^https?:\/\//i.test(u) ? _OLLAMA_PROXY_URL : u,
+  );
+  return [...new Set(mapped)];
+}
+
 // Phase D — multi-endpoint scale-out.
 // If BRAIN_<NAME>_URLS is set (comma-separated), it overrides the singular
 // BRAIN_<NAME>_URL and a round-robin picker spreads requests across the
@@ -25,9 +43,9 @@ const ADAPTIVE_BRAIN_SCALING = process.env.CONCORD_ADAPTIVE_BRAIN_SCALING !== 'f
 function _parseEndpoints(plural, singular, fallback) {
   if (plural) {
     const list = String(plural).split(",").map(s => s.trim()).filter(Boolean);
-    if (list.length) return list;
+    if (list.length) return _applyProxy(list);
   }
-  return [singular || fallback];
+  return _applyProxy([singular || fallback]);
 }
 
 // Single-instance fallback: someone who just ran `ollama serve` (or set
@@ -68,6 +86,41 @@ const _vision_urls = _parseEndpoints(
   "http://ollama-vision:11434",
 );
 
+// Single-Ollama "hot-swap" collapse (Mac self-host).
+// The A40 deploy runs 7 Ollama instances, each with ONE resident model — so
+// pointing every brain slot at its own differentiated model is free there.
+// A single-Ollama box (one `ollama serve`, OLLAMA_MAX_LOADED_MODELS defaults
+// to 1) pointing 4 brain slots at 4 different models makes Ollama evict and
+// reload a model from disk on nearly every cross-brain call. That model
+// churn dominates latency and, under memory pressure, thrashes swap.
+// Set BRAIN_LOCAL_UNIFIED_MODEL to force every LOCAL (http/https) brain slot
+// onto one model so Ollama never swaps. Cloud slots (cloudflare://, cloud
+// sentinels) are untouched. An explicit per-slot BRAIN_<NAME>_MODEL still
+// wins if you deliberately want one slot differentiated.
+const _localUnifiedModel = String(process.env.BRAIN_LOCAL_UNIFIED_MODEL || "").trim();
+function _isLocalHttpEndpoint(u) {
+  return typeof u === "string" && /^https?:\/\//i.test(u);
+}
+/**
+ * Resolve a brain slot's model, honoring BRAIN_LOCAL_UNIFIED_MODEL.
+ * @param {string|undefined} perSlotEnv  value of BRAIN_<NAME>_MODEL (wins if set)
+ * @param {string} fallback              the built-in default for this slot
+ * @param {string} url                   the slot's resolved endpoint (a local
+ *                                       http(s):// endpoint is collapsible; a
+ *                                       cloudflare:// / cloud sentinel is not)
+ * @returns {string}
+ * Exported so the hand-written BRAIN object in server.js (the live source of
+ * truth for the 4 cognitive brains) resolves models identically.
+ */
+export function resolveBrainModel(perSlotEnv, fallback, url) {
+  if (perSlotEnv) return perSlotEnv; // explicit per-slot override always wins
+  if (_localUnifiedModel && _isLocalHttpEndpoint(url)) return _localUnifiedModel;
+  return fallback;
+}
+function _resolveBrainModel(perSlotEnv, fallback, urls) {
+  return resolveBrainModel(perSlotEnv, fallback, urls && urls[0]);
+}
+
 // 4-lane cutover: vision/multimodal may be Cloudflare Workers AI (not A40 VRAM).
 const _visionProvider = String(process.env.BRAIN_VISION_PROVIDER || "").toLowerCase().trim();
 const _visionIsCloudflare = _visionProvider === "cloudflare"
@@ -82,7 +135,7 @@ export const BRAIN_CONFIG = Object.freeze({
   conscious: {
     url: _conscious_urls[0],
     urls: _conscious_urls,
-    model: process.env.BRAIN_CONSCIOUS_MODEL || "concord-conscious:latest",
+    model: _resolveBrainModel(process.env.BRAIN_CONSCIOUS_MODEL, "concord-conscious:latest", _conscious_urls),
     role: "chat, deep reasoning, council deliberation, user-facing interactions",
     temperature: 0.7,
     timeout: Number(process.env.BRAIN_CONSCIOUS_TIMEOUT_MS) || 45000, // GPU inference; override per-deployment
@@ -104,7 +157,7 @@ contextWindow: Math.min(Number(process.env.BRAIN_CONSCIOUS_CONTEXT) || 8192, 819
   subconscious: {
     url: _subconscious_urls[0],
     urls: _subconscious_urls,
-    model: process.env.BRAIN_SUBCONSCIOUS_MODEL || "qwen2.5:7b-instruct-q4_K_M",
+    model: _resolveBrainModel(process.env.BRAIN_SUBCONSCIOUS_MODEL, "qwen2.5:7b-instruct-q4_K_M", _subconscious_urls),
     role: "autogen, dream, evolution, synthesis, birth, background analysis",
     temperature: 0.85,
     timeout: Number(process.env.BRAIN_SUBCONSCIOUS_TIMEOUT_MS) || 30000,
@@ -119,7 +172,7 @@ contextWindow: Math.min(Number(process.env.BRAIN_CONSCIOUS_CONTEXT) || 8192, 819
   utility: {
     url: _utility_urls[0],
     urls: _utility_urls,
-    model: process.env.BRAIN_UTILITY_MODEL || "qwen2.5:3b",
+    model: _resolveBrainModel(process.env.BRAIN_UTILITY_MODEL, "qwen2.5:3b", _utility_urls),
     role: "lens interactions, entity actions, quick domain tasks, function calls",
     temperature: 0.3,
     timeout: Number(process.env.BRAIN_UTILITY_TIMEOUT_MS) || 20000,
@@ -141,7 +194,7 @@ contextWindow: Math.min(Number(process.env.BRAIN_CONSCIOUS_CONTEXT) || 8192, 819
     // (the hand-written object at server.js:14712 is the live source
     // of truth — see Phase 12 audit). 0.5b was the pre-Sprint-D
     // choice; 1.5b proved necessary for the auto-repair quality bar.
-    model: process.env.BRAIN_REPAIR_MODEL || "qwen2.5:1.5b",
+    model: _resolveBrainModel(process.env.BRAIN_REPAIR_MODEL, "qwen2.5:1.5b", _repair_urls),
     role: "error detection, auto-fix, runtime repair (aliased to subconscious when env matches)",
     temperature: 0.1,
     timeout: Number(process.env.BRAIN_REPAIR_TIMEOUT_MS) || 10000,
@@ -381,6 +434,9 @@ const _rrCursor = new Map();
 
 function _candidatesForBrain(brainName, { includeCloud = false } = {}) {
   const cfg = getActiveBrainConfig()[brainName];
+  // Phase 4 proxy substitution already happened in _parseEndpoints when
+  // BRAIN_CONFIG was built, so cfg.url/.urls are the proxy already if
+  // OLLAMA_PROXY_URL is set — nothing to do here.
   const local = cfg
     ? (Array.isArray(cfg.urls) && cfg.urls.length ? cfg.urls : (cfg.url ? [cfg.url] : []))
     : [];

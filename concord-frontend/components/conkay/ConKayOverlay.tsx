@@ -36,8 +36,10 @@ import { runFeaBeamToWorld } from '@/lib/conkay/fea-beam-to-world';
 import { runPartMeshToWorld } from '@/lib/conkay/part-mesh-to-world';
 import { designViaApiOrClient } from '@/lib/conkay/nlp-design-to-world';
 import { runEvoGlbToWorld } from '@/lib/conkay/evo-glb-to-world';
-import { runAssemblyChatRevise, downloadStl, downloadAssemblyBom, downloadStep } from '@/lib/conkay/assembly-to-world';
+import { runAssemblyChatRevise, downloadStl, downloadAssemblyBom, downloadErpBomJson, downloadErpBomCsv, downloadStep, downloadBrepStep, occFeatureRebuild, rebuildPartSolid, occFeatureAppend, fetchOccStatus, runAssemblyUndo, runAssemblyRedo, downloadAssemblyDrawing, downloadAssemblyDrawingPdf, explodeAssemblyApi, fetchMaterials, attachPartMaterial, listParts, mateSolveDof, sketchSolve, gdtDigital, occFeatureList } from '@/lib/conkay/assembly-to-world';
 import { ConKayActionConfirm } from './ConKayActionConfirm';
+import { ConKayVerticalsBar } from './ConKayVerticalsBar';
+import { mintConkayArtifactDtu } from '@/lib/conkay/mint-artifact-dtu';
 import { ConKayCockpit } from './ConKayCockpit';
 import { CONKAY_SIGNATURE_GREETING, CONKAY_PERSONA_PROMPT, type ConKayState } from './conkay-persona';
 import { getLensById } from '@/lib/lens-registry';
@@ -201,6 +203,23 @@ export function ConKayOverlay() {
   // ConKay works (the JARVIS "you can see it building" surface).
   const [steps, setSteps] = useState<WorkStep[]>([]);
   const [workStatus, setWorkStatus] = useState('');
+
+  /** CAD/vertical toolbar: set status line AND mint inspectable locker DTU (same shape as chat persistArtifact). */
+  const reportCadAction = useCallback((label: string, payload: Record<string, unknown> = {}) => {
+    setWorkStatus(label);
+    const action = typeof payload.action === 'string' ? payload.action : 'cad_toolbar';
+    void mintConkayArtifactDtu({
+      title: label.slice(0, 100),
+      work: { channel: 'cad', action, status: label, ...payload },
+      tags: ['conkay', 'cad', 'artifact', `action:${action}`],
+    }).then((r) => {
+      if (r.ok && r.id) {
+        setWorkStatus(`${label} · dtu=${r.id.slice(0, 8)}…`);
+      } else if (!r.ok) {
+        setWorkStatus(`${label} · mint failed: ${r.error || 'error'}`);
+      }
+    });
+  }, []);
   const inputRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const spokeRef = useRef<string | null>(null);
@@ -281,7 +300,20 @@ export function ConKayOverlay() {
   const [nlpBuilding, setNlpBuilding] = useState(false);
   const [evoGlbBusy, setEvoGlbBusy] = useState(false);
   const [assemblyId, setAssemblyId] = useState<string | null>(null);
+
+  // Share current assembly with cockpit CAD panels (feature-tree / ERP BOM) — minimal bridge.
+  useEffect(() => {
+    if (!assemblyId) return;
+    try {
+      sessionStorage.setItem('conkay.assemblyId', assemblyId);
+      window.dispatchEvent(new CustomEvent('conkay:assembly', { detail: { assemblyId } }));
+    } catch {
+      /* ignore */
+    }
+  }, [assemblyId]);
   const [assemblyBusy, setAssemblyBusy] = useState(false);
+  const [materialPicker, setMaterialPicker] = useState('steel');
+  const [materialsList, setMaterialsList] = useState<Array<{ id: string; name: string; color?: string }>>([]);
   useEffect(() => {
     if (!open) {
       setUnityPresent(false);
@@ -323,7 +355,8 @@ export function ConKayOverlay() {
       },
       id,
     );
-    setWorkStatus(ok ? `Unity bridge: spawn_primitive posted · ${id}` : 'Unity bridge: spawn post failed');
+    if (ok) reportCadAction(`Unity bridge: spawn_primitive posted · ${id}`, { action: 'spawn_primitive', id });
+    else setWorkStatus('Unity bridge: spawn post failed');
   }, []);
 
   /**
@@ -345,8 +378,9 @@ export function ConKayOverlay() {
     const band = res.band ?? '?';
     const hex = res.color?.hex ?? '?';
     if (res.spawnPosted) {
-      setWorkStatus(
+      reportCadAction(
         `Industrial slice LIVE: util=${util} band=${band} color=${hex} · spawn_primitive posted · ${res.spawnId || ''} (cube proxy — not apply_mesh)`,
+        { action: 'fea_beam', util, band, hex, spawnId: res.spawnId || null },
       );
     } else {
       setWorkStatus(
@@ -375,8 +409,9 @@ export function ConKayOverlay() {
     const hex = res.color?.hex ?? '?';
     const band = res.band ?? '?';
     if (res.applyPosted) {
-      setWorkStatus(
+      reportCadAction(
         `Mesh apply LIVE: kind=${res.kind} verts=${verts} tris=${tris} band=${band} color=${hex} · apply_mesh posted · ${res.applyId || ''}`,
+        { action: 'part_mesh', kind: res.kind, verts, tris, band, hex, applyId: res.applyId || null },
       );
     } else {
       setWorkStatus(
@@ -408,11 +443,8 @@ export function ConKayOverlay() {
       },
       id,
     );
-    setWorkStatus(
-      ok
-        ? `GLB load: load_glb posted · ${id} · ${url} (wait glb_loaded)`
-        : 'GLB load: post failed',
-    );
+    if (ok) reportCadAction(`GLB load: load_glb posted · ${id} · ${url} (wait glb_loaded)`, { action: 'load_glb', id, url });
+    else setWorkStatus('GLB load: post failed');
   }, []);
 
   /**
@@ -434,8 +466,9 @@ export function ConKayOverlay() {
         setWorkStatus(`Evo GLB: failed — ${res.error || 'unknown'}${res.glbUrl ? ` · ${res.glbUrl}` : ''}`);
         return;
       }
-      setWorkStatus(
+      reportCadAction(
         `Evo GLB LIVE: ${res.archetype} → ${res.glbUrl} · glb_loaded · ${res.loadId || ''} (archetypes only — not full CAD)`,
+        { action: 'evo_glb', archetype: res.archetype, glbUrl: res.glbUrl, loadId: res.loadId || null },
       );
     } catch (e) {
       setWorkStatus(`Evo GLB: error — ${e instanceof Error ? e.message : String(e)}`);
@@ -471,8 +504,9 @@ export function ConKayOverlay() {
       const util = res.fea?.maxUtilization != null ? res.fea.maxUtilization.toFixed(4) : (res.partMesh?.maxUtilization?.toFixed(4) ?? '?');
       const hex = res.fea?.color?.hex ?? res.partMesh?.color?.hex ?? res.applyPayload?.color ?? '?';
       if (res.applyPosted) {
-        setWorkStatus(
+        reportCadAction(
           `NLP CAD LIVE: “${text.slice(0, 40)}” → ${kind}${span != null ? ` ${span}m` : ''} util=${util} color=${hex} · apply_mesh · ${res.applyId || ''} (not industrial CAD suite / GLB)`,
+          { action: 'nlp_design', kind, span: span ?? null, util, hex, applyId: res.applyId || null, prompt: text.slice(0, 120) },
         );
       } else {
         setWorkStatus(
@@ -509,8 +543,9 @@ export function ConKayOverlay() {
       }
       if (res.assemblyId) setAssemblyId(res.assemblyId);
       const n = res.parts?.length ?? 0;
-      setWorkStatus(
+      reportCadAction(
         `ASSEMBLY LIVE: action=${res.action || '?'} parts=${n} id=${(res.assemblyId || '').slice(0, 8)}… · Unity synced (not full CAD suite)`,
+        { action: 'assembly_revise', assemblyAction: res.action || null, parts: n, assemblyId: res.assemblyId || null },
       );
     } catch (e) {
       setWorkStatus(`Assembly: error — ${e instanceof Error ? e.message : String(e)}`);
@@ -519,6 +554,50 @@ export function ConKayOverlay() {
     }
   }, [nlpDesignText, assemblyId]);
 
+  const runAssemblyUndoClick = useCallback(async () => {
+    if (!assemblyId) {
+      setWorkStatus('Undo: no assembly yet — Asm revise first');
+      return;
+    }
+    setAssemblyBusy(true);
+    setWorkStatus('Assembly undo…');
+    try {
+      const res = await runAssemblyUndo({ assemblyId, syncUnity: true });
+      if (!res.ok) {
+        setWorkStatus(`Undo failed: ${res.error || 'error'}`);
+        return;
+      }
+      const n = res.parts?.length ?? 0;
+      reportCadAction(`UNDO LIVE: parts=${n} canRedo=${res.canRedo ? 'yes' : 'no'} · not parametric CAD history`, { action: 'assembly_undo', parts: n, canRedo: !!res.canRedo });
+    } catch (e) {
+      setWorkStatus(`Undo error: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setAssemblyBusy(false);
+    }
+  }, [assemblyId]);
+
+  const runAssemblyRedoClick = useCallback(async () => {
+    if (!assemblyId) {
+      setWorkStatus('Redo: no assembly yet — Asm revise first');
+      return;
+    }
+    setAssemblyBusy(true);
+    setWorkStatus('Assembly redo…');
+    try {
+      const res = await runAssemblyRedo({ assemblyId, syncUnity: true });
+      if (!res.ok) {
+        setWorkStatus(`Redo failed: ${res.error || 'error'}`);
+        return;
+      }
+      const n = res.parts?.length ?? 0;
+      reportCadAction(`REDO LIVE: parts=${n} canUndo=${res.canUndo ? 'yes' : 'no'} · not parametric CAD history`, { action: 'assembly_redo', parts: n, canUndo: !!res.canUndo });
+    } catch (e) {
+      setWorkStatus(`Redo error: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setAssemblyBusy(false);
+    }
+  }, [assemblyId]);
+
   const downloadAssemblyStl = useCallback(async () => {
     if (!assemblyId) {
       setWorkStatus('STL: no assembly yet — Asm revise first (build assembly / add …)');
@@ -526,7 +605,7 @@ export function ConKayOverlay() {
     }
     try {
       const r = await downloadStl({ assemblyId });
-      setWorkStatus(`STL download LIVE: ${r.filename} (${r.size} bytes) — Wave 2 export`);
+      reportCadAction(`STL download LIVE: ${r.filename} (${r.size} bytes) — Wave 2 export`, { action: 'export_stl', filename: r.filename, size: r.size });
     } catch (e) {
       setWorkStatus(`STL download failed — ${e instanceof Error ? e.message : String(e)}`);
     }
@@ -540,11 +619,226 @@ export function ConKayOverlay() {
     }
     try {
       const r = await downloadStep({ assemblyId });
-      setWorkStatus(`STEP download LIVE: ${r.filename} (${r.size} bytes) — faceted AP214 (not OCC B-rep)`);
+      reportCadAction(`STEP download LIVE: ${r.filename} (${r.size} bytes) — faceted AP214 (not OCC B-rep)`, { action: 'export_step', filename: r.filename, size: r.size });
     } catch (e) {
       setWorkStatus(`STEP download failed — ${e instanceof Error ? e.message : String(e)}`);
     }
   }, [assemblyId]);
+
+  const downloadAssemblyBrep = useCallback(async () => {
+    if (!assemblyId) {
+      setWorkStatus('B-rep: no assembly yet — Asm revise first');
+      return;
+    }
+    try {
+      const r = await downloadBrepStep({ assemblyId });
+      reportCadAction(`OCC B-rep LIVE: ${r.filename} (${r.size} bytes) — advanced B-rep STEP (not SolidWorks)`, { action: 'export_brep', filename: r.filename, size: r.size });
+    } catch (e) {
+      setWorkStatus(`B-rep download failed — ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }, [assemblyId]);
+
+  const addFeatureDemo = useCallback(async () => {
+    setAssemblyBusy(true);
+    try {
+      const partId = `ui_feat_${Date.now().toString(36)}`;
+      const created = await occFeatureRebuild({
+        partId,
+        features: [
+          { type: 'box', dx: 40, dy: 24, dz: 16 },
+          { type: 'shell', thickness: 1.5 },
+          { type: 'chamfer', distance: 0.4 },
+          { type: 'union', tool: { type: 'cylinder', r: 4, h: 18, position: { x: 20, y: 12, z: -1 } } },
+          { type: 'circular_pattern', count: 3, angle: 360, axis: 'z' },
+          { type: 'revolve', angle: 360, sketch: { type: 'rect', x: 2, y: 0, w: 2, h: 4 }, position: { x: 0, y: -40, z: 0 } },
+        ],
+        mesh_summary_only: true,
+      });
+      if (!created?.ok) {
+        setWorkStatus(`Add feature failed — ${created?.reason || created?.error || 'unknown'}`);
+        return;
+      }
+      const listed = await occFeatureList(partId);
+      reportCadAction(`Add feature LIVE (industrial): part=${partId} ops=${(created.notes || []).join(',')} features=${listed?.count ?? created.featureCount} advanced=${!!created.export?.advanced_brep} — not SolidWorks UI parity`, { action: 'add_feature' });
+    } catch (e) {
+      setWorkStatus(`Add feature failed — ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setAssemblyBusy(false);
+    }
+  }, []);
+
+  const industrialMateSolveDemo = useCallback(async () => {
+    setAssemblyBusy(true);
+    try {
+      const out = await mateSolveDof({
+        bodies: [
+          { id: 'cylA', kind: 'cylinder', params: { r: 5, h: 30 }, position: { x: 0, y: 0, z: 0 }, fixed: true },
+          { id: 'cylB', kind: 'cylinder', params: { r: 5, h: 30 }, position: { x: 12, y: 8, z: 2 }, rotation: { rz_deg: 8 }, lock: ['rx', 'ry'] },
+          { id: 'plate', kind: 'plate', params: { dx: 40, dy: 40, dz: 4 }, position: { x: -10, y: -10, z: 45 }, lock: ['rx', 'ry', 'rz'] },
+        ],
+        mates: [
+          { type: 'concentric', a: 0, b: 1 },
+          { type: 'distance', a: 0, b: 2, axis: 'z', distance: 22, centered: true },
+          { type: 'parallel', a: 0, b: 1, on: 'axis' },
+        ],
+        tol_mm: 0.001,
+        tol_rad: 0.001,
+        include_mesh: false,
+      });
+      {
+        const mateLine = out?.pass
+          ? `Industrial mate-solve-dof LIVE: bodies=${out.bodyCount} residual_max=${out?.remeasure_after_trsf?.max_abs ?? out?.residual?.max_abs} (gp_Trsf; not AABB snap)`
+          : `Industrial mate-solve-dof FAIL — ${out?.reason || out?.error || 'residual above tol'}`;
+        if (out?.pass) {
+          reportCadAction(mateLine, {
+            action: 'mate_solve_dof',
+            bodyCount: out.bodyCount,
+            residual_max: out?.remeasure_after_trsf?.max_abs ?? out?.residual?.max_abs,
+          });
+        } else {
+          setWorkStatus(mateLine);
+        }
+      }
+    } catch (e) {
+      setWorkStatus(`Mate-solve-dof failed — ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setAssemblyBusy(false);
+    }
+  }, []);
+
+  const digitalGdtDemo = useCallback(async () => {
+    setAssemblyBusy(true);
+    try {
+      const out = await gdtDigital({
+        features: [
+          { type: 'box', dx: 40, dy: 30, dz: 20 },
+          { type: 'cut', tool: { type: 'cylinder', r: 5, h: 30, position: { x: 20, y: 15, z: -5 } } },
+        ],
+        checks: [
+          { type: 'flatness', tol: 0.05 },
+          { type: 'perpendicularity', tol: 0.5 },
+          { type: 'position', tol: 0.1, mode: 'cylinder_axis', axes: 'xy', nominal: { x: 20, y: 15, z: -5 } },
+          { type: 'cylindricity', tol: 0.05 },
+        ],
+      });
+      {
+        const gdtLine = out?.pass
+          ? `Digital GD&T LIVE: harness=${out.harness} checks=${(out.checks || []).map((c: any) => c.type + ':' + (c.pass ? 'PASS' : 'FAIL')).join(',')} — NOT ISO CMM / ISO 17025`
+          : `Digital GD&T FAIL — ${out?.reason || 'check failed'} (still not physical CMM)`;
+        if (out?.pass) reportCadAction(gdtLine, { action: 'gdt_digital', harness: out.harness, checks: (out.checks || []).map((c: any) => ({ type: c.type, pass: !!c.pass })) });
+        else setWorkStatus(gdtLine);
+      }
+    } catch (e) {
+      setWorkStatus(`Digital GD&T failed — ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setAssemblyBusy(false);
+    }
+  }, []);
+
+  const industrialCertDemo = useCallback(async () => {
+    try {
+      const st = await fetchOccStatus();
+      const cmds = Array.isArray(st?.commands) ? st.commands : [];
+      const has = ['mate-solve-dof', 'gdt-digital', 'sketch-solve'].every((c) => cmds.includes(c) || cmds.includes(c.replace(/-/g, '_')));
+      let sketchNote = '';
+      try {
+        const sk = await sketchSolve({
+          sketch: {
+            points: [
+              { id: 'p0', x: 0, y: 0 },
+              { id: 'p1', x: 12, y: 0.5 },
+              { id: 'p2', x: 11, y: 8 },
+              { id: 'p3', x: 0.2, y: 7.5 },
+            ],
+            locked: ['p0.x', 'p0.y'],
+            segments: [
+              { type: 'line', a: 'p0', b: 'p1' },
+              { type: 'line', a: 'p1', b: 'p2' },
+              { type: 'line', a: 'p2', b: 'p3' },
+              { type: 'line', a: 'p3', b: 'p0' },
+            ],
+            constraints: [
+              { type: 'horizontal', a: 'p0', b: 'p1' },
+              { type: 'vertical', a: 'p0', b: 'p3' },
+            ],
+            dimensions: [{ a: 'p0', b: 'p1', value: 16, axis: 'x' }],
+          },
+          distance: 8,
+          mesh_summary_only: true,
+        });
+        sketchNote = sk?.pass ? ` sketch-solve=PASS` : ` sketch-solve=FAIL`;
+      } catch {
+        sketchNote = ' sketch-solve=ERR';
+      }
+      {
+        const certLine = has
+          ? `INDUSTRIAL_CLASS probe LIVE: OCC ok=${!!st?.ok} cmds=mate-solve-dof|gdt-digital|sketch-solve${sketchNote} — run scripts/conkay-industrial-class-cert.mjs for CERTIFIED (NOT SolidWorks UI / NOT ISO 17025 CMM)`
+          : `INDUSTRIAL_CLASS probe incomplete — OCC ok=${!!st?.ok}; missing industrial cmds${sketchNote}`;
+        if (has) reportCadAction(certLine, { action: 'industrial_cert', occOk: !!st?.ok, sketchNote });
+        else setWorkStatus(certLine);
+      }
+    } catch (e) {
+      setWorkStatus(`Industrial cert probe failed — ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }, []);
+
+  const rebuildSolidDemo = useCallback(async () => {
+    setAssemblyBusy(true);
+    try {
+      // Prefer assembly part with featureTree; else demo rebuild
+      let usedAssembly = false;
+      if (assemblyId) {
+        const partsRes = await listParts(assemblyId);
+        const parts = partsRes?.parts || partsRes || [];
+        const withTree = Array.isArray(parts) ? parts.find((p: any) => p?.meta?.featureTree?.length) : null;
+        if (withTree?.id) {
+          const out = await rebuildPartSolid(assemblyId, withTree.id, {});
+          if (out?.ok) {
+            usedAssembly = true;
+            reportCadAction(
+              `Rebuild solid LIVE: part=${withTree.id} solids=${out.solids} tris=${out.mesh?.triangleCount ?? '?'} advanced=${!!out.export?.advanced_brep}`,
+              { action: 'rebuild_solid', partId: withTree.id, solids: out.solids, tris: out.mesh?.triangleCount ?? null, advanced: !!out.export?.advanced_brep },
+            );
+          }
+        }
+      }
+      if (!usedAssembly) {
+        const out = await occFeatureRebuild({
+          partId: 'ui_rebuild_demo',
+          features: [
+            { type: 'box', dx: 40, dy: 30, dz: 20 },
+            { type: 'cut', tool: { type: 'cylinder', r: 5, h: 30, position: { x: 20, y: 15, z: -5 } } },
+            { type: 'fillet', radius: 1 },
+          ],
+          mesh_summary_only: true,
+        });
+        if (!out?.ok) {
+          setWorkStatus(`Rebuild solid failed — ${out?.reason || out?.error || 'unknown'}`);
+          return;
+        }
+        reportCadAction(
+          `Rebuild solid LIVE: demo tris=${out.mesh?.triangleCount ?? '?'} advanced=${!!out.export?.advanced_brep} — Unity apply via mesh path`,
+          { action: 'rebuild_solid', mode: 'demo', tris: out.mesh?.triangleCount ?? null, advanced: !!out.export?.advanced_brep },
+        );
+      }
+    } catch (e) {
+      setWorkStatus(`Rebuild solid failed — ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setAssemblyBusy(false);
+    }
+  }, [assemblyId]);
+
+  const showCertStatus = useCallback(async () => {
+    try {
+      const st = await fetchOccStatus();
+      reportCadAction(
+        `OCC cert probe: ok=${!!st?.ok} kernel=${st?.kernel || '?'} — SOLID WORLD + INDUSTRIAL_CLASS via scripts/conkay-industrial-class-cert.mjs (digital ASME harness; NOT ISO 17025 CMM; NOT SolidWorks UI parity)`,
+        { action: 'solid_cert', occOk: !!st?.ok, kernel: st?.kernel || null },
+      );
+    } catch (e) {
+      setWorkStatus(`OCC status failed — ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }, []);
 
   const downloadBomJson = useCallback(async () => {
     if (!assemblyId) {
@@ -557,11 +851,128 @@ export function ConKayOverlay() {
         setWorkStatus(`BOM failed — ${r.error}`);
         return;
       }
-      setWorkStatus(`BOM download LIVE: ${r.filename} parts=${r.bom?.totalParts ?? '?'} — Wave 2`);
+      reportCadAction(`BOM download LIVE: ${r.filename} parts=${r.bom?.totalParts ?? '?'} — Wave 2`, { action: 'export_bom', filename: r.filename, totalParts: r.bom?.totalParts ?? null });
     } catch (e) {
       setWorkStatus(`BOM download failed — ${e instanceof Error ? e.message : String(e)}`);
     }
   }, [assemblyId]);
+
+  const exportErpBom = useCallback(async () => {
+    if (!assemblyId) {
+      setWorkStatus('ERP BOM: no assembly yet — build/revise an assembly first');
+      return;
+    }
+    try {
+      const r = await downloadErpBomJson(assemblyId);
+      if (!r.ok) {
+        setWorkStatus(`ERP BOM failed — ${r.error || 'unknown'}`);
+        return;
+      }
+      const csv = await downloadErpBomCsv(assemblyId);
+      reportCadAction(
+        `ERP BOM LIVE: ${r.filename}${csv.ok ? ` + ${csv.filename}` : ''} parts=${r.bom?.totalParts ?? '?'} rollup=$${Number(r.bom?.rollup?.rollupCostUsd ?? 0).toFixed(2)} — not SAP/Oracle`,
+        {
+          action: 'export_erp_bom',
+          filename: r.filename,
+          csv: csv.ok ? csv.filename : null,
+          totalParts: r.bom?.totalParts ?? null,
+          rollupCostUsd: r.bom?.rollup?.rollupCostUsd ?? null,
+        },
+      );
+    } catch (e) {
+      setWorkStatus(`ERP BOM failed — ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }, [assemblyId]);
+
+
+  const downloadAssemblyDrawingSvg = useCallback(async () => {
+    if (!assemblyId) {
+      setWorkStatus('Drawing: no assembly yet — Asm revise first');
+      return;
+    }
+    try {
+      const r = await downloadAssemblyDrawing(assemblyId);
+      reportCadAction(`DRAWING LIVE: ${r.filename} (${r.size} bytes) — orthographic SVG (not drafting CAD)`, { action: 'export_drawing', filename: r.filename, size: r.size });
+    } catch (e) {
+      setWorkStatus(`Drawing download failed — ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }, [assemblyId]);
+
+  const downloadAssemblyDrawingPdfClick = useCallback(async () => {
+    if (!assemblyId) {
+      setWorkStatus('PDF: no assembly yet — Asm revise first');
+      return;
+    }
+    try {
+      const r = await downloadAssemblyDrawingPdf(assemblyId);
+      reportCadAction(`PDF PACK LIVE: ${r.filename} (${r.size} bytes) — 3 views + title/BOM (not CMM GD&T)`, { action: 'export_pdf', filename: r.filename, size: r.size });
+    } catch (e) {
+      setWorkStatus(`PDF download failed — ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }, [assemblyId]);
+
+  const explodeAssemblyClick = useCallback(async () => {
+    if (!assemblyId) {
+      setWorkStatus('Explode: no assembly yet — Asm revise first');
+      return;
+    }
+    setAssemblyBusy(true);
+    try {
+      const out = await explodeAssemblyApi(assemblyId, 1);
+      if (!out?.ok) {
+        setWorkStatus(`Explode failed — ${out?.error || 'unknown'}`);
+        return;
+      }
+      const n = out.updates?.length ?? out.parts?.length ?? 0;
+      reportCadAction(`EXPLODE LIVE: factor=1 parts=${n} COM-centroid deltas — undoable · Unity set_transform/redraw`, { action: 'explode', parts: n, factor: 1 });
+    } catch (e) {
+      setWorkStatus(`Explode error — ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setAssemblyBusy(false);
+    }
+  }, [assemblyId]);
+
+
+
+  useEffect(() => {
+    if (!assemblyId) return;
+    void (async () => {
+      try {
+        const m = await fetchMaterials();
+        if (m?.ok && Array.isArray(m.materials)) setMaterialsList(m.materials);
+      } catch {
+        /* catalog optional */
+      }
+    })();
+  }, [assemblyId]);
+
+  const attachMaterialClick = useCallback(async () => {
+    if (!assemblyId) {
+      setWorkStatus('Material: no assembly yet — Asm revise first');
+      return;
+    }
+    setAssemblyBusy(true);
+    try {
+      const partsRes = await listParts(assemblyId);
+      const parts = partsRes?.parts || [];
+      if (!parts.length) {
+        setWorkStatus('Material: assembly has no parts');
+        return;
+      }
+      const part = parts[parts.length - 1];
+      const out = await attachPartMaterial(assemblyId, part.id, materialPicker);
+      if (!out?.ok) {
+        setWorkStatus(`Material attach failed — ${out?.error || 'unknown'}`);
+        return;
+      }
+      reportCadAction(`MATERIAL LIVE: ${out.material?.id || materialPicker} → part ${part.name || part.id.slice(0, 8)} (library attach — not FEM model)`, { action: 'attach_material', materialId: out.material?.id || materialPicker, partId: part.id });
+    } catch (e) {
+      setWorkStatus(`Material error — ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setAssemblyBusy(false);
+    }
+  }, [assemblyId, materialPicker]);
+
 
 
 
@@ -765,19 +1176,12 @@ export function ConKayOverlay() {
   // result — as a DTU in the user's locker (fire-and-forget; never blocks the UX).
   // "show its work and the task it was provided" → a real, reopenable record.
   const persistArtifact = useCallback((title: string, work: Record<string, unknown>) => {
-    try {
-      const base = getApiBase();
-      fetch(`${base}/api/dtus`, {
-        method: 'POST', credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: `ConKay · ${title}`.slice(0, 120),
-          content: `**ConKay task artifact**\n\n\`\`\`json\n${JSON.stringify(work, null, 2)}\n\`\`\``,
-          tags: ['conkay', 'artifact', work.lens ? `lens:${work.lens}` : ''].filter(Boolean),
-          kind: 'conkay_artifact',
-        }),
-      }).catch(() => {});
-    } catch { /* never throws */ }
+    // Shared mint helper (same POST /api/dtus shape); fire-and-forget — never blocks UX.
+    void mintConkayArtifactDtu({
+      title,
+      work: { channel: 'chat', ...work },
+      tags: ['conkay', 'artifact', work.lens ? `lens:${work.lens}` : ''].filter(Boolean) as string[],
+    });
   }, []);
 
   // ── voice ───────────────────────────────────────────────────────────
@@ -922,21 +1326,14 @@ export function ConKayOverlay() {
       }
       if (ok) {
         // LIVE stub: tell Unity iframe something happened (no-op if iframe absent).
-        // Not a CAD/mesh push — thin notify + optional F0 marker when WebGL present.
+        // No automatic spawn_primitive — mesh happy-paths use apply_mesh/load_glb/set_transform.
+        // F0 cube markers only via explicit Drop-marker / FEA-proxy buttons.
         postUnityCmd('notify', {
           source: 'conkay',
           domain,
           macro,
           ok: true,
         });
-        if (unityIframePresent()) {
-          spawnPrimitive({
-            kind: 'cube',
-            position: { x: 0, y: 1.1, z: 0 },
-            scale: 0.35,
-            color: '#5eead4',
-          }, `macro-${domain}-${macro}-${Date.now()}`);
-        }
       }
       const resultStr = data?.result != null ? JSON.stringify(data.result, null, 2) : (ok ? '(done)' : (data?.error || 'no result'));
       const spoken = ok ? `Done — ran ${macro} on the ${domain} lens.` : `${macro} on ${domain} returned: ${data?.error || 'an error'}.`;
@@ -1319,12 +1716,28 @@ export function ConKayOverlay() {
                 </button>
                 <button type="button" onClick={() => { void runAssemblyRevise(); }}
                   disabled={assemblyBusy}
-                  title="Assembly revise: build assembly | add beam… | move part X to x,y,z → APIs + Unity (ASSEMBLY LIVE — not full suite)"
+                  title="Assembly revise: build assembly | add beam… | move part X to x,y,z | undo | redo → APIs + Unity (ASSEMBLY LIVE — not full suite)"
                   aria-label="Assembly chat revise"
                   data-testid="ck-assembly-revise"
                   className="rounded-lg px-2 py-1 text-[10px] text-fuchsia-100 hover:bg-fuchsia-400/15 border border-fuchsia-400/30 disabled:opacity-50 flex items-center gap-1">
                   <Layers className="h-3 w-3" />
                   {assemblyBusy ? '…' : 'Asm'}
+                </button>
+                <button type="button" onClick={() => { void runAssemblyUndoClick(); }}
+                  disabled={!assemblyId || assemblyBusy}
+                  title="Assembly undo — restore prior parts+transforms snapshot (not parametric CAD history)"
+                  aria-label="Assembly undo"
+                  data-testid="ck-assembly-undo"
+                  className="rounded-lg px-2 py-1 text-[10px] text-fuchsia-100/90 hover:bg-fuchsia-400/15 border border-fuchsia-400/20 disabled:opacity-40">
+                  Undo
+                </button>
+                <button type="button" onClick={() => { void runAssemblyRedoClick(); }}
+                  disabled={!assemblyId || assemblyBusy}
+                  title="Assembly redo — restore forward parts+transforms snapshot"
+                  aria-label="Assembly redo"
+                  data-testid="ck-assembly-redo"
+                  className="rounded-lg px-2 py-1 text-[10px] text-fuchsia-100/90 hover:bg-fuchsia-400/15 border border-fuchsia-400/20 disabled:opacity-40">
+                  Redo
                 </button>
                 <button type="button" onClick={() => { void downloadAssemblyStl(); }}
                   disabled={!assemblyId}
@@ -1342,6 +1755,16 @@ export function ConKayOverlay() {
                   className="rounded-lg px-2 py-1 text-[10px] text-lime-100 hover:bg-lime-400/15 border border-lime-400/30 disabled:opacity-40">
                   BOM
                 </button>
+                <button
+                  type="button"
+                  onClick={() => { void exportErpBom(); }}
+                  className="rounded border border-emerald-400/25 bg-emerald-400/10 px-2 py-1 text-[10px] text-emerald-100/90 hover:bg-emerald-400/20"
+                  title="ERP-shaped BOM JSON+CSV — part numbers, mass/volume, vendor stubs, rollup (not SAP/Oracle)"
+                  aria-label="Export ERP BOM"
+                  data-testid="ck-assembly-erp-bom"
+                >
+                  ERP BOM
+                </button>
                 <button type="button" onClick={() => { void downloadAssemblyStep(); }}
                   disabled={!assemblyId}
                   title="Download assembly faceted STEP (AP214-style MANIFOLD_SOLID_BREP from triangles — not SolidWorks B-rep)"
@@ -1349,6 +1772,113 @@ export function ConKayOverlay() {
                   data-testid="ck-export-step"
                   className="rounded-lg px-2 py-1 text-[10px] text-orange-100 hover:bg-orange-400/15 border border-orange-400/30 disabled:opacity-40">
                   STEP
+                </button>
+                <button type="button" onClick={() => { void downloadAssemblyBrep(); }}
+                  disabled={!assemblyId}
+                  title="Download OCC advanced B-rep STEP (cadquery-ocp) — not SolidWorks"
+                  aria-label="Download OCC B-rep STEP"
+                  data-testid="ck-export-brep"
+                  className="rounded-lg px-2 py-1 text-[10px] text-violet-100 hover:bg-violet-400/15 border border-violet-400/30 disabled:opacity-40">
+                  B-rep
+                </button>
+                <button type="button" onClick={() => { void addFeatureDemo(); }}
+                  disabled={assemblyBusy}
+                  title="Add industrial OCC features (shell/chamfer/union/pattern/revolve) — not SolidWorks UI parity"
+                  aria-label="Add solid feature"
+                  data-testid="ck-add-feature"
+                  className="rounded-lg px-2 py-1 text-[10px] text-fuchsia-100 hover:bg-fuchsia-400/15 border border-fuchsia-400/30 disabled:opacity-40">
+                  Feat
+                </button>
+                <button type="button" onClick={() => { void rebuildSolidDemo(); }}
+                  disabled={assemblyBusy}
+                  title="Rebuild OCC solid from feature tree + tessellate for Unity"
+                  aria-label="Rebuild solid"
+                  data-testid="ck-rebuild-solid"
+                  className="rounded-lg px-2 py-1 text-[10px] text-fuchsia-100 hover:bg-fuchsia-400/15 border border-fuchsia-400/30 disabled:opacity-40">
+                  Rebuild
+                </button>
+                <button type="button" onClick={() => { void showCertStatus(); }}
+                  title="OCC / solid-world cert probe (geometry verification harness — not ISO CMM)"
+                  aria-label="Solid world cert status"
+                  data-testid="ck-solid-cert"
+                  className="rounded-lg px-2 py-1 text-[10px] text-emerald-100 hover:bg-emerald-400/15 border border-emerald-400/30">
+                  Cert
+                </button>
+                <button type="button" onClick={() => { void industrialMateSolveDemo(); }}
+                  disabled={assemblyBusy}
+                  title="Industrial multi-DOF mate solve (concentric+distance on OCC gp_Trsf — not AABB snap)"
+                  aria-label="Industrial mate solve"
+                  data-testid="ck-mate-solve-dof"
+                  className="rounded-lg px-2 py-1 text-[10px] text-amber-100 hover:bg-amber-400/15 border border-amber-400/30 disabled:opacity-40">
+                  DOF
+                </button>
+                <button type="button" onClick={() => { void digitalGdtDemo(); }}
+                  disabled={assemblyBusy}
+                  title="Digital ASME Y14.5-style GD&T from B-rep/tessellation — NOT physical ISO 17025 CMM"
+                  aria-label="Digital GD&T"
+                  data-testid="ck-gdt-digital"
+                  className="rounded-lg px-2 py-1 text-[10px] text-amber-100 hover:bg-amber-400/15 border border-amber-400/30 disabled:opacity-40">
+                  GD&T
+                </button>
+                <button type="button" onClick={() => { void industrialCertDemo(); }}
+                  title="INDUSTRIAL_CLASS cert probe (kernel capabilities — not SolidWorks UI parity / not ISO CMM lab)"
+                  aria-label="Industrial class cert"
+                  data-testid="ck-industrial-cert"
+                  className="rounded-lg px-2 py-1 text-[10px] text-amber-100 hover:bg-amber-400/15 border border-amber-400/30">
+                  IND
+                </button>
+                <button type="button" onClick={() => { void downloadAssemblyDrawingSvg(); }}
+                  disabled={!assemblyId}
+                  title="Download orthographic drawing SVG (front/top/side projected mesh lines — not drafting CAD)"
+                  aria-label="Download assembly drawing SVG"
+                  data-testid="ck-export-drawing"
+                  className="rounded-lg px-2 py-1 text-[10px] text-sky-100 hover:bg-sky-400/15 border border-sky-400/30 disabled:opacity-40">
+                  DWG
+                </button>
+
+                <button type="button" onClick={() => { void downloadAssemblyDrawingPdfClick(); }}
+                  disabled={!assemblyId}
+                  title="Download multi-page drawing PDF (3 orthographic views + title block + BOM — drafting pack, not CMM GD&T)"
+                  aria-label="Download assembly drawing PDF"
+                  data-testid="ck-export-drawing-pdf"
+                  className="rounded-lg px-2 py-1 text-[10px] text-sky-100 hover:bg-sky-400/15 border border-sky-400/30 disabled:opacity-40">
+                  PDF
+                </button>
+                <button type="button" onClick={() => { void explodeAssemblyClick(); }}
+                  disabled={!assemblyId || assemblyBusy}
+                  title="Explode assembly along part centroids from COM (factor=1) — undoable; Unity set_transform/redraw"
+                  aria-label="Explode assembly"
+                  data-testid="ck-assembly-explode"
+                  className="rounded-lg px-2 py-1 text-[10px] text-amber-100 hover:bg-amber-400/15 border border-amber-400/30 disabled:opacity-40">
+                  Explode
+                </button>
+
+                <select
+                  value={materialPicker}
+                  onChange={(e) => setMaterialPicker(e.target.value)}
+                  disabled={!assemblyId}
+                  title="Material library picker"
+                  aria-label="Material picker"
+                  data-testid="ck-material-picker"
+                  className="rounded-lg px-1 py-1 text-[10px] text-slate-100 bg-black/40 border border-slate-400/30 disabled:opacity-40 max-w-[5.5rem]"
+                >
+                  {(materialsList.length ? materialsList : [
+                    { id: 'steel', name: 'steel' },
+                    { id: 'aluminum', name: 'aluminum' },
+                    { id: 'concrete', name: 'concrete' },
+                    { id: 'timber', name: 'timber' },
+                    { id: 'plastic', name: 'plastic' },
+                  ]).map((m) => (
+                    <option key={m.id} value={m.id}>{m.id}</option>
+                  ))}
+                </select>
+                <button type="button" onClick={() => { void attachMaterialClick(); }}
+                  disabled={!assemblyId || assemblyBusy}
+                  title="Attach selected material to latest assembly part (GET /api/conkay/materials + POST …/material)"
+                  aria-label="Attach material to part"
+                  data-testid="ck-material-attach"
+                  className="rounded-lg px-2 py-1 text-[10px] text-slate-100 hover:bg-slate-400/15 border border-slate-400/30 disabled:opacity-40">
+                  Mat
                 </button>
 
               </div>
@@ -1387,6 +1917,7 @@ export function ConKayOverlay() {
                 className="rounded-lg p-2 text-orange-200 hover:bg-orange-400/10 disabled:opacity-50">
                 <Sword className="h-4 w-4" />
               </button>
+              <ConKayVerticalsBar setWorkStatus={setWorkStatus} />
               <button type="button" onClick={() => {
                 const ok = clearTempPrimitives(`clear-${Date.now()}`);
                 setWorkStatus(ok ? 'Unity bridge: clear_temp posted' : 'Unity bridge: clear post failed');

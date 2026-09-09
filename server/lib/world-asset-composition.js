@@ -83,7 +83,7 @@ export function composeFromRegistry(db, opts = {}) {
   if (db && !assets) {
     try {
       const rows = db.prepare(`
-        SELECT asset_id as id, kind, source, source_id as sourceId
+        SELECT id, kind, source, source_id as sourceId
         FROM evo_assets ORDER BY evolution_score DESC LIMIT ?
       `).all(opts.limit || 5);
       if (rows?.length) {

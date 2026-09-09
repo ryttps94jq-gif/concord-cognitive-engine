@@ -1862,7 +1862,20 @@ import { readReplicaGate } from "./lib/read-replica-allowlist.js";
 import { createLLMQueue } from "./lib/llm-queue.js";
 import { getCurrentLagMs as getEventLoopLagMs } from "./lib/event-loop-pressure.js";
 import { createLoadSheddingMiddleware } from "./lib/request-admission.js";
-import { BRAIN_CONFIG, SYSTEM_TO_BRAIN, BRAIN_PRIORITY, getBrainForSystem, getActiveBrainConfig, getSystemStatus, pickBrainEndpoint, noteEndpointStart, noteEndpointFinish } from "./lib/brain-config.js";
+import * as goSidecar from "./lib/sidecars/go-sidecar-client.js"; // Concurrency Refactor Phase 1 — Whisper/Piper/sandbox off the event loop
+import * as dtuSidecar from "./lib/sidecars/dtu-sidecar-client.js"; // Concurrency Refactor Phase 3 — DTU get/list off the event loop (CONCORD_DTU_SIDECAR=1)
+// Concurrency Refactor (2026-09-08, session 2 finding): the sidecar's UDS
+// double-hop is a WIN under normal load but a LOSS under loop starvation — a
+// starved loop can't schedule the `await fetch(sidecar)` continuation promptly,
+// so the sidecar reply queues behind everything and dtu.list tail latency gets
+// WORSE than the pure in-memory path. When lag is already high, skip the
+// sidecar and read STATE.dtus inline (no await boundary). This picks between
+// two functionally-equivalent read paths — it does NOT gate macro execution.
+const _DTU_SIDECAR_LAG_BYPASS_MS = Number(process.env.CONCORD_DTU_SIDECAR_LAG_BYPASS_MS) || 250;
+function _dtuSidecarLagBypass() {
+  try { return getEventLoopLagMs() > _DTU_SIDECAR_LAG_BYPASS_MS; } catch { return false; }
+}
+import { BRAIN_CONFIG, SYSTEM_TO_BRAIN, BRAIN_PRIORITY, getBrainForSystem, getActiveBrainConfig, getSystemStatus, pickBrainEndpoint, noteEndpointStart, noteEndpointFinish, resolveBrainModel } from "./lib/brain-config.js";
 import { preloadBrains, getBrainPriority, resolveBrain } from "./lib/brain-router.js";
 // BYO key router — when a user has plugged their own provider key into a
 // brain slot, ctx.llm.chat() routes through this instead of the default.
@@ -3457,6 +3470,18 @@ const NODE_ENV = process.env.NODE_ENV || "development";
 // schema; replicas share the same DB file via WAL (unlimited concurrent readers).
 // Default OFF → an ordinary writer process is byte-identical to before.
 const READ_REPLICA = process.env.CONCORD_READ_REPLICA === "1" || process.env.CONCORD_READ_REPLICA === "true";
+
+// Concurrency Refactor Tier 1 (docs/CONCURRENCY_CEILING_AUDIT.md): split the
+// emergent simulation off the HTTP event loop into its own process.
+//   HTTP process:  CONCORD_DISABLE_HEARTBEAT=true  — serves requests, runs NO
+//                  governorTick / startHeartbeat / cognitive worker. Reads DTUs
+//                  through CONCORD_DTU_SIDECAR=1 so it still sees sim writes.
+//   Sim process:   CONCORD_HEARTBEAT_ONLY=1        — runs the full heartbeat +
+//                  emergent sim, binds NO HTTP port.
+// Both share the WAL DB. Default (neither set) → one process does both, exactly
+// as before. See engines/concord-read-router/RUNBOOK.md-style deploy notes in
+// docs/CONCURRENCY_CEILING_AUDIT.md §4 Tier 1.
+const HEARTBEAT_ONLY = process.env.CONCORD_HEARTBEAT_ONLY === "1" || process.env.CONCORD_HEARTBEAT_ONLY === "true";
 const AUTH_MODE_VALUES = new Set(["public", "apikey", "jwt", "hybrid"]);
 const LEGACY_AUTH_ENABLED = String(process.env.AUTH_ENABLED || "true").toLowerCase() === "true";
 const AUTH_MODE_RAW = String(process.env.AUTH_MODE || "").toLowerCase().trim();
@@ -6309,6 +6334,25 @@ const AUTH = {
   apiKeys: new Map(),
 };
 
+// Per-request user-record cache. `authMiddleware` calls `AuthDB.getUser()` on
+// EVERY authenticated request — a synchronous `db.prepare(...).get()` + a
+// `JSON.parse(scopes)` on the one event loop. Under a concurrent burst (measured
+// 2026-09-08: 250 parallel macro calls) those point-lookups serialise on the
+// loop and became the dominant per-request cost (~740ms p50 for the whole burst,
+// identical across macro types incl. the off-thread Rust ones — proof the tax is
+// in the pipeline, not the handler). This cache turns the repeat lookups within
+// a burst into Map reads. TTL is deliberately SHORT (5s) so a role/scope/ban
+// change takes effect fast without chasing every `UPDATE users` call site;
+// security-critical mutations (is_active=0, password change) call
+// `bustUserCache()` explicitly for immediate effect.
+const _userCache = new LruMap(50_000);
+const _USER_CACHE_TTL_MS = Number(process.env.CONCORD_USER_CACHE_TTL_MS) || 5_000;
+function bustUserCache(userId) {
+  if (userId) _userCache.delete(String(userId));
+  else _userCache.clear();
+}
+globalThis.__concordBustUserCache = bustUserCache; // reachable from routes/lib without an import cycle
+
 // Database-backed auth functions
 const AuthDB = {
   // Users
@@ -6331,11 +6375,23 @@ const AuthDB = {
         stmt.run(user.id, user.username, user.email, user.passwordHash, user.role, JSON.stringify(user.scopes), user.createdAt, user.lastLoginAt);
       }
     }
+    bustUserCache(user.id);
     AUTH.users.set(user.id, user);
     saveAuthData();
   },
 
   getUser(userId) {
+    if (userId != null) {
+      const key = String(userId);
+      const hit = _userCache.get(key);
+      if (hit && (Date.now() - hit.at) < _USER_CACHE_TTL_MS) return hit.user;
+    }
+    const user = this._getUserUncached(userId);
+    if (userId != null) _userCache.set(String(userId), { user, at: Date.now() });
+    return user;
+  },
+
+  _getUserUncached(userId) {
     if (db) {
       // brain_mode: Private/High Power Mode per-account routing preference
       // (migration 397). Read here — not via a separate targeted query —
@@ -6428,6 +6484,7 @@ const AuthDB = {
       const stmt = db.prepare("UPDATE users SET last_login_at = ? WHERE id = ?");
       stmt.run(now, userId);
     }
+    bustUserCache(userId);
     const user = AUTH.users.get(userId);
     if (user) {
       user.lastLoginAt = now;
@@ -6476,6 +6533,7 @@ const AuthDB = {
         db.prepare("UPDATE users SET date_of_birth = ? WHERE id = ?").run(dob || null, userId);
       }
     }
+    bustUserCache(userId);
     const user = AUTH.users.get(userId);
     if (user) { user.dateOfBirth = dob || null; }
     saveAuthData();
@@ -6488,6 +6546,7 @@ const AuthDB = {
     if (db) {
       try { db.prepare("UPDATE users SET is_active = 0 WHERE id = ?").run(userId); } catch { /* schema-tolerant */ }
     }
+    bustUserCache(userId);
     AUTH.users.delete(userId);
     saveAuthData();
     return true;
@@ -9199,6 +9258,8 @@ let _lastPeriodicSaveHash = "";
 let _lastPeriodicSaveSeq = -1;
 trackedSetInterval(() => {
   try {
+    // Read-only replica never persists state — the writer owns it.
+    if (READ_REPLICA) return;
     // Skip entirely when nothing has requested a save since last time.
     //
     // This check used to sit AFTER `JSON.stringify(_serializeState())`, using
@@ -12382,6 +12443,10 @@ let _chunkedSaveTears = 0;
 const _stringifyStateChunked = (snapshot) => stringifyChunked(snapshot);
 
 function saveStateDebounced() {
+  // Read-only replica: the writer owns state persistence. A replica that gets
+  // here (e.g. via a stray in-memory mutation during a read) must not schedule
+  // a save — the readonly DB rejects it and the JSON path can't write either.
+  if (READ_REPLICA) return;
   // Monotonic mutation counter. Every mutation path in the server funnels
   // through here, so this is the cheapest honest "has anything changed?"
   // signal available — the 5-min periodic safety-net reads it to skip a full
@@ -14877,7 +14942,24 @@ function executeInSandbox({ entityId, command, workDir, timeoutMs, maxOutputByte
     return Promise.resolve({ exitCode: 1, stdout: "", stderr: `Sandbox: command "${executable}" not in allowlist.`, timedOut: false });
   }
 
-  return new Promise((resolve) => {
+  return (async () => {
+    // Concurrency Refactor Phase 1 (audit C03): the spawnSync below blocks the
+    // event loop for up to timeoutMs even though it's wrapped in a Promise.
+    // Prefer the Go sidecar (owns the child process); fail soft to inline.
+    try {
+      if (await goSidecar.isAvailable()) {
+        return await goSidecar.sandbox({
+          command,
+          workDir,
+          timeoutMs,
+          maxOutputBytes,
+          env: { ENTITY_ID: String(entityId || "") },
+        });
+      }
+    } catch (_e) {
+      logger.debug("server", "go-sidecar sandbox unavailable — inline fallback", { error: _e?.message });
+    }
+
     const proc = spawnSync(executable, args, {
       cwd: workDir,
       timeout: timeoutMs,
@@ -14892,13 +14974,13 @@ function executeInSandbox({ entityId, command, workDir, timeoutMs, maxOutputByte
       encoding: "utf-8"
     });
 
-    resolve({
+    return {
       exitCode: proc.status || 0,
       stdout: String(proc.stdout || ""),
       stderr: String(proc.stderr || ""),
       timedOut: proc.error?.code === "ETIMEDOUT"
-    });
-  });
+    };
+  })();
 }
 
 // ============================================================================
@@ -15122,7 +15204,9 @@ register("multimodal","vision_analyze", (ctx, input={}) => {
 
   // Local-first: use multimodal brain config (respects BRAIN_MULTIMODAL_URL + OLLAMA_VISION_MODEL)
   const _mmBrain = BRAIN_CONFIG.multimodal;
-  const OLLAMA_URL = _mmBrain.url || process.env.OLLAMA_URL || process.env.OLLAMA_HOST || "";
+  // Phase 4: _mmBrain.url wins (cloudflare:// vision stays on CF); OLLAMA_PROXY_URL
+  // only backstops the bare local-Ollama fallback chain.
+  const OLLAMA_URL = _mmBrain.url || process.env.OLLAMA_PROXY_URL || process.env.OLLAMA_URL || process.env.OLLAMA_HOST || "";
   if (OLLAMA_URL) {
     const model = String(_mmBrain.model || process.env.OLLAMA_VISION_MODEL || "qwen2.5vl:7b");
     const payload = {
@@ -15186,6 +15270,13 @@ register("voice","transcribe", async (ctx, input={}) => {
   if (bin) {
     const audioPath = String(input.audioPath || "");
     if (!audioPath) return { ok:false, error:"audioPath required (server-side file path)" };
+    // Concurrency Refactor Phase 1 (audit C03): Go sidecar first, fail soft.
+    try {
+      if (await goSidecar.isAvailable()) {
+        const r = await goSidecar.whisper({ audioPath, timeoutMs: 60000 });
+        if (r.ok) return { ok:true, transcript: (r.transcript || "").trim(), source: "whisper_cpp" };
+      }
+    } catch (_e) { logger.debug("server", "go-sidecar transcribe unavailable — inline fallback", { error: _e?.message }); }
     const args = [ "-f", audioPath, "--output-txt" ];
     const p = spawnSync(bin, args, { encoding:"utf-8" });
     if (p.error) return { ok:false, error:String(p.error) };
@@ -15221,8 +15312,20 @@ register("voice","tts", async (ctx, input={}) => {
       existsSync: fs.existsSync,
     });
     const args = modelArg ? ["--model", modelArg] : [];
-    const p = spawnSync(bin, args, { input: text, encoding:"utf-8" });
-    if (p.error) return { ok:false, error:String(p.error) };
+    // Concurrency Refactor Phase 1 (audit C03): Go sidecar first, fail soft.
+    let wavBuffer = null;
+    try {
+      if (await goSidecar.isAvailable()) {
+        const r = await goSidecar.piper({ text, modelArg: modelArg || "", timeoutMs: 30000 });
+        if (r.ok && r.wav) wavBuffer = r.wav;
+      }
+    } catch (_e) { logger.debug("server", "go-sidecar tts unavailable — inline fallback", { error: _e?.message }); }
+    if (!wavBuffer) {
+      const p = spawnSync(bin, args, { input: text }); // no encoding → stdout stays a Buffer (binary wav)
+      if (p.error) return { ok:false, error:String(p.error) };
+      wavBuffer = p.stdout;
+    }
+    const p = { stdout: wavBuffer };
     const outPath = String(input.outPath || "");
     if (outPath) {
       // Path traversal protection - only allow writes to entity workspace or tmp
@@ -17520,7 +17623,23 @@ const _SYSTEM_DTU_SOURCES = new Set([
 ]);
 
 /** All DTUs (including system/internal). Use for admin endpoints only. */
-function dtusArray() { return typeof STATE.dtus?.values === "function" ? Array.from(STATE.dtus.values()) : []; }
+// Version-keyed snapshot cache (Concurrency Refactor Tier 0). ~40 call sites
+// each did their own Array.from(STATE.dtus.values()) — a 12k-element copy per
+// call. The store's getVersion() bumps on every set()/delete(), so between
+// writes every caller can share one frozen-in-time array. Callers treat the
+// result as read-only (verified: the one `dtusArray().sort()` site was copied);
+// a plain Map (pre-boot / backup-restore) has no getVersion → no caching.
+let _dtusArrayCache = null;
+let _dtusArrayCacheVer = -2;
+function dtusArray() {
+  if (typeof STATE.dtus?.values !== "function") return [];
+  let ver = -1;
+  try { if (typeof STATE.dtus.getVersion === "function") ver = STATE.dtus.getVersion(); } catch { /* fall through */ }
+  if (ver >= 0 && ver === _dtusArrayCacheVer && _dtusArrayCache) return _dtusArrayCache;
+  const arr = Array.from(STATE.dtus.values());
+  if (ver >= 0) { _dtusArrayCache = arr; _dtusArrayCacheVer = ver; }
+  return arr;
+}
 
 /**
  * Defense-in-depth: refuse a session lookup if the requester doesn't
@@ -17598,14 +17717,40 @@ function _resolveViewerLocation(viewerId) {
   return entry;
 }
 
+// ── userVisibleDTUs cache (Concurrency Refactor Tier 0, 2026-09-08) ──────────
+// Measured (docs/CONCURRENCY_CEILING_AUDIT.md): this filter was the dominant
+// event-loop parker — `dtu.list` went 5ms → 655ms (130×) under ~200 concurrent
+// while pure-compute macros stayed flat. It is an O(corpus) scan with a fresh
+// Array.from() copy, called from 15 sites, uncached. ~12k DTUs × 18k calls/day.
+//
+// Invalidation is exact, not TTL: STATE.dtus is the write-through DTU store
+// (server.js:12677) whose getVersion() monotonic counter bumps on EVERY
+// set()/delete() (dtu-store.js — every commit path funnels through it, no
+// scattered-call-site trust). Cache entry is valid iff its stored version ===
+// the current store version. A viewer changing region busts their own entry
+// via invalidateViewerLocation() below. If STATE.dtus is a plain Map (pre-boot,
+// or backup-restore path) getVersion is absent → we skip the cache entirely.
+const _uvCache = new Map(); // viewerKey → { ver, result }
+const _UV_CACHE_MAX = 4000;
+function _dtuStoreVersion() {
+  try { return typeof STATE.dtus?.getVersion === "function" ? STATE.dtus.getVersion() : -1; }
+  catch { return -1; }
+}
+
 function userVisibleDTUs(viewerId = null) {
+  const cacheKey = viewerId || " anon";
+  const ver = _dtuStoreVersion();
+  if (ver >= 0) {
+    const hit = _uvCache.get(cacheKey);
+    if (hit && hit.ver === ver) return hit.result;
+  }
   // Resolve once per call so per-DTU filtering doesn't thrash the
   // DB cache lookup. Anon viewers get no regional/national view
   // which means any regional/national-tier DTU is hidden from them
   // (correct — they haven't declared a location).
   const viewerLoc = _resolveViewerLocation(viewerId);
 
-  return dtusArray().filter(d => {
+  const result = dtusArray().filter(d => {
     // System internal filters (always applied)
     if (_SYSTEM_DTU_SOURCES.has(d.source)) return false;
     if (_SYSTEM_DTU_SOURCES.has(d.creatorType)) return false;
@@ -17659,6 +17804,15 @@ function userVisibleDTUs(viewerId = null) {
 
     return true;
   });
+
+  if (ver >= 0) {
+    // Bound the cache: one entry per active viewer + anon. A hard clear on
+    // overflow is fine — it just forces a rebuild, and 4k concurrent distinct
+    // viewers on one node is already well past this box's real ceiling.
+    if (_uvCache.size >= _UV_CACHE_MAX) _uvCache.clear();
+    _uvCache.set(cacheKey, { ver, result });
+  }
+  return result;
 }
 
 /**
@@ -17669,6 +17823,9 @@ function userVisibleDTUs(viewerId = null) {
 function invalidateViewerLocation(userId) {
   if (!userId) return;
   _VIEWER_LOC_CACHE.delete(userId);
+  // A region/nation change alters this viewer's federation-tier visibility;
+  // the version-keyed _uvCache can't see that, so bust their entry directly.
+  _uvCache.delete(userId);
 }
 function dtusByIds(ids=[]) {
   const out = [];
@@ -18975,8 +19132,12 @@ function initLLMPipeline() {
   // Use BRAIN_CONSCIOUS_URL as the primary Ollama URL (matches 4-brain architecture)
   const ollamaUrl = process.env.OLLAMA_URL || process.env.BRAIN_CONSCIOUS_URL || process.env.OLLAMA_HOST || "http://ollama:11434";
   LLM_PIPELINE.providers.ollama.url = ollamaUrl;
-  // Use BRAIN_CONSCIOUS_MODEL if set; fall back to OLLAMA_MODEL; last resort llama3.2
-  LLM_PIPELINE.providers.ollama.model = process.env.OLLAMA_MODEL || process.env.BRAIN_CONSCIOUS_MODEL || "concord-conscious:latest";
+  // Use BRAIN_CONSCIOUS_MODEL if set; fall back to OLLAMA_MODEL; last resort
+  // llama3.2. resolveBrainModel folds in BRAIN_LOCAL_UNIFIED_MODEL so a
+  // single-Ollama box doesn't hot-swap this pipeline's model against the
+  // 4 brains'.
+  LLM_PIPELINE.providers.ollama.model = process.env.OLLAMA_MODEL
+    || resolveBrainModel(process.env.BRAIN_CONSCIOUS_MODEL, "concord-conscious:latest", ollamaUrl);
   LLM_PIPELINE.providers.ollama.enabled = Boolean(ollamaUrl);
 
   structuredLog("info", "llm_pipeline_initialized", {
@@ -19372,7 +19533,7 @@ const _singleOllamaFallback = process.env.OLLAMA_URL || process.env.OLLAMA_HOST;
 const BRAIN = {
   conscious: {
     url: process.env.BRAIN_CONSCIOUS_URL || _singleOllamaFallback || "http://ollama-conscious:11434",
-    model: process.env.BRAIN_CONSCIOUS_MODEL || "concord-conscious:latest",
+    model: resolveBrainModel(process.env.BRAIN_CONSCIOUS_MODEL, "concord-conscious:latest", process.env.BRAIN_CONSCIOUS_URL || _singleOllamaFallback || "http://ollama-conscious:11434"),
     role: "chat, deep reasoning, complex queries",
     systemPrompt: BRAIN_IDENTITY.conscious,
     enabled: false,
@@ -19380,7 +19541,7 @@ const BRAIN = {
   },
   subconscious: {
     url: process.env.BRAIN_SUBCONSCIOUS_URL || _singleOllamaFallback || "http://ollama-subconscious:11434",
-    model: process.env.BRAIN_SUBCONSCIOUS_MODEL || "qwen2.5:7b-instruct-q4_K_M",
+    model: resolveBrainModel(process.env.BRAIN_SUBCONSCIOUS_MODEL, "qwen2.5:7b-instruct-q4_K_M", process.env.BRAIN_SUBCONSCIOUS_URL || _singleOllamaFallback || "http://ollama-subconscious:11434"),
     role: "autogen, dream, evolution, synthesis, birth",
     systemPrompt: BRAIN_IDENTITY.subconscious,
     enabled: false,
@@ -19388,7 +19549,7 @@ const BRAIN = {
   },
   utility: {
     url: process.env.BRAIN_UTILITY_URL || _singleOllamaFallback || "http://ollama-utility:11434",
-    model: process.env.BRAIN_UTILITY_MODEL || "qwen2.5:3b",
+    model: resolveBrainModel(process.env.BRAIN_UTILITY_MODEL, "qwen2.5:3b", process.env.BRAIN_UTILITY_URL || _singleOllamaFallback || "http://ollama-utility:11434"),
     role: "lens interactions, entity actions, quick domain tasks",
     systemPrompt: BRAIN_IDENTITY.utility,
     enabled: false,
@@ -19396,7 +19557,7 @@ const BRAIN = {
   },
   repair: {
     url: process.env.BRAIN_REPAIR_URL || _singleOllamaFallback || "http://ollama-repair:11434",
-    model: process.env.BRAIN_REPAIR_MODEL || "qwen2.5:1.5b",
+    model: resolveBrainModel(process.env.BRAIN_REPAIR_MODEL, "qwen2.5:1.5b", process.env.BRAIN_REPAIR_URL || _singleOllamaFallback || "http://ollama-repair:11434"),
     role: "error detection, auto-fix, runtime repair",
     systemPrompt: BRAIN_IDENTITY.repair,
     enabled: false,
@@ -25152,8 +25313,21 @@ register("dtu", "create", async (ctx, input) => {
   } finally { releaseMutex(); }
 }, { description: "Create a DTU (regular/mega/hyper) with structured core; UI receives human projection." });
 
-register("dtu", "get", (ctx, input) => {
+register("dtu", "get", async (ctx, input) => {
   const id = String(input.id || "");
+  // Concurrency Refactor Phase 3: read via the Rust sidecar (off the event
+  // loop) when CONCORD_DTU_SIDECAR=1 and it's up. Fail soft to the in-memory
+  // store. Correctness pinned by engines/concord-dtu-sidecar/proof/run-proof.mjs.
+  if (dtuSidecar.ENABLED && !_dtuSidecarLagBypass()) {
+    try {
+      if (await dtuSidecar.isAvailable()) {
+        const r = await dtuSidecar.getDTU(id);
+        if (r && (r.ok === true || r.error === "DTU not found")) {
+          return r.ok ? { ok: true, dtu: r.dtu } : { ok: false, error: "DTU not found" };
+        }
+      }
+    } catch (_e) { logger.debug("server", "dtu-sidecar get unavailable — inline fallback", { error: _e?.message }); }
+  }
   // Only return from main DTU store - shadow DTUs are internal
   const dtu = STATE.dtus.get(id);
   if (!dtu) return { ok: false, error: "DTU not found" };
@@ -25348,7 +25522,7 @@ register("dtu", "stats", (ctx, _input = {}) => {
   } catch (e) { return { ok: false, error: "handler_error", message: String(e?.message || e) }; }
 }, { public: true });
 
-register("dtu", "list", (ctx, input) => {
+register("dtu", "list", async (ctx, input) => {
   try {
   const limit = clamp(Number(input.limit || 5000), 1, 5000);
   const offset = clamp(Number(input.offset || 0), 0, 1e9);
@@ -25360,6 +25534,39 @@ register("dtu", "list", (ctx, input) => {
   // never other users' published DTUs. Used by the dashboard "My Activity"
   // chart so the creation rhythm is the signed-in user's, not the global feed.
   const mineOnly = input.mine === true || input.mine === "true" || input.owner === "me";
+
+  // Concurrency Refactor Phase 3: run the visibility filter in the Rust sidecar
+  // (off the event loop) when CONCORD_DTU_SIDECAR=1 and it's up. Fail soft to
+  // the in-memory filter below. Behaviour pinned by the differential proof at
+  // engines/concord-dtu-sidecar/proof/run-proof.mjs.
+  if (dtuSidecar.ENABLED && !_dtuSidecarLagBypass()) {
+    try {
+      if (await dtuSidecar.isAvailable()) {
+        const loc = _resolveViewerLocation(userId);
+        const r = await dtuSidecar.list({
+          viewer: userId || "",
+          scope: scopeFilter,
+          tier,
+          q: input.q || "",
+          mine: mineOnly,
+          limit,
+          offset,
+          viewerRegional: loc.declaredRegional || "",
+          viewerNational: loc.declaredNational || "",
+        });
+        if (r && r.ok && Array.isArray(r.dtus)) {
+          const items = r.dtus;
+          if (typeof calculateFreshness === "function") {
+            for (const d of items) {
+              d._freshness = calculateFreshness(d);
+              d._freshnessLabel = freshnessLabel(d._freshness);
+            }
+          }
+          return { ok: true, dtus: items, limit, offset, total: r.total ?? items.length, _source: "dtu-sidecar" };
+        }
+      }
+    } catch (_e) { logger.debug("server", "dtu-sidecar list unavailable — inline fallback", { error: _e?.message }); }
+  }
 
   // Filter out shadow/repair/system DTUs - internal, not real user content.
   // Pass viewer ID so private/user-scoped uploads by other users are hidden.
@@ -37050,6 +37257,7 @@ function buildCognitiveSnapshot() {
 
 // ── Cognitive Worker: result merger ──────────────────────────────────────────
 // Applies worker pipeline results on the main thread via the macro system.
+let _cogTickSkips = 0; // benign "tick skipped, still running" counter (log-rate-limited below)
 async function mergeCognitiveResults(results) {
   if (!results) return;
 
@@ -37059,7 +37267,21 @@ async function mergeCognitiveResults(results) {
   }
 
   if (results.errors?.length) {
-    console.warn("[cognitive-worker] Tick errors:", results.errors);
+    // `tick_skipped_already_running` is benign backpressure — the worker
+    // correctly skips a tick when the previous one (LLM-bound) is still going.
+    // It was ~13% of stderr on the degraded-brains box. Count it, don't spam it:
+    // surface only every 50th occurrence so a genuine sustained stall is still
+    // visible. Any OTHER error still logs immediately.
+    const realErrors = results.errors.filter((e) => e !== "tick_skipped_already_running");
+    if (results.errors.includes("tick_skipped_already_running")) {
+      _cogTickSkips = (_cogTickSkips || 0) + 1;
+      if (_cogTickSkips % 50 === 0) {
+        console.warn(`[cognitive-worker] tick skipped (still running) ×${_cogTickSkips} — cognitive ticks are LLM-bound and not keeping up`);
+      }
+    }
+    if (realErrors.length) {
+      console.warn("[cognitive-worker] Tick errors:", realErrors);
+    }
   }
 
   if (results.timings) {
@@ -37236,6 +37458,26 @@ async function terminateCognitiveWorkerForTest() {
 }
 
 function startHeartbeat() {
+  // Concurrency Refactor Tier 1: CONCORD_DISABLE_HEARTBEAT=true now COMPLETELY
+  // disables the emergent tick on this process — the local-scope/global/weekly
+  // timers, the cognitive worker spawn, AND buildCognitiveSnapshot (all of
+  // which live in or below this function). Previously it only short-circuited
+  // _startGovernorHeartbeat's registry dispatch (see its own env check) —
+  // this function ran regardless, which is the gap the audit named. The sim
+  // work moves to a sibling CONCORD_HEARTBEAT_ONLY=1 process.
+  if (String(process.env.CONCORD_DISABLE_HEARTBEAT).toLowerCase() === "true") {
+    structuredLog("info", "heartbeat_skipped_disabled_env", { mode: "http-only" });
+    return;
+  }
+  // Read-only replicas never simulate — the writer owns all emergent state +
+  // every DB write. Without this guard a replica ran the full tick and spammed
+  // `state_save_failed` / `[feed] DB write failed` / `persistEmergentName failed`
+  // on every cycle (harmless — the readonly handle rejects the write — but noisy
+  // and a waste of the replica's loop, which exists to serve reads fast).
+  if (READ_REPLICA) {
+    structuredLog("info", "heartbeat_skipped_read_replica", {});
+    return;
+  }
   if (heartbeatTimer) clearInterval(heartbeatTimer);
   if (weeklyTimer) clearInterval(weeklyTimer);
   if (globalTickTimer) clearInterval(globalTickTimer);
@@ -38414,6 +38656,9 @@ app.use("/api/conkay", createConkayDesignRouter({ requireAuth, db }));
 // ConKay CAD Wave 1 — multi-part assembly store + revise
 import createConkayAssemblyRouter from "./routes/conkay-assembly.js";
 app.use("/api/conkay", createConkayAssemblyRouter({ requireAuth, db }));
+// ConKay industry verticals — molecular / hospital / prosthetics / studio / aero (NEW paths)
+import createConkayVerticalsRouter from "./routes/conkay-verticals.js";
+app.use("/api/conkay", createConkayVerticalsRouter({ requireAuth, db }));
 app.use("/api/wagers", createWagersRouter({ requireAuth, db, realtimeEmit }));
 app.use("/api/npc-shop", createNPCShopRouter({ requireAuth, db }));
 
@@ -57129,7 +57374,7 @@ function generateEmbedHtml(embed) {
 // ============================================================================
 
 // ---- Voice Notes ----
-function processVoiceNote(audioBuffer, options = {}) {
+async function processVoiceNote(audioBuffer, options = {}) {
   // Use local Whisper if available
   const WHISPER_BIN = process.env.WHISPER_CPP_BIN || process.env.WHISPER_BIN;
 
@@ -57138,21 +57383,36 @@ function processVoiceNote(audioBuffer, options = {}) {
   }
 
   try {
-    // Save audio to temp file
-    const tempPath = path.join(DATA_DIR, `temp_audio_${Date.now()}.wav`);
-    fs.writeFileSync(tempPath, audioBuffer);
+    let transcript = "";
 
-    // Run Whisper
-    const result = spawnSync(WHISPER_BIN, ["-f", tempPath, "-otxt"], {
-      timeout: 60000,
-      maxBuffer: 10 * 1024 * 1024
-    });
+    // Concurrency Refactor Phase 1 (audit C03): prefer the Go sidecar so a ~60s
+    // whisper.cpp run never blocks the Node event loop. Fail soft to inline.
+    try {
+      if (await goSidecar.isAvailable()) {
+        const r = await goSidecar.whisper({
+          audioBase64: Buffer.from(audioBuffer).toString("base64"),
+          timeoutMs: 60000,
+        });
+        if (r.ok) transcript = r.transcript || "";
+        else if (r.error === "no_speech_detected") return { ok: false, error: "No speech detected" };
+        // any other sidecar error → fall through to the inline path
+      }
+    } catch (_e) {
+      logger.debug("server", "go-sidecar whisper unavailable — inline fallback", { error: _e?.message });
+    }
 
-    // Clean up
-    try { fs.unlinkSync(tempPath); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
-    try { fs.unlinkSync(tempPath + ".txt"); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
-
-    const transcript = result.stdout?.toString() || "";
+    if (!transcript) {
+      // Inline fallback — spawnSync blocks the loop, but only when the sidecar is down.
+      const tempPath = path.join(DATA_DIR, `temp_audio_${Date.now()}.wav`);
+      fs.writeFileSync(tempPath, audioBuffer);
+      const result = spawnSync(WHISPER_BIN, ["-f", tempPath, "-otxt"], {
+        timeout: 60000,
+        maxBuffer: 10 * 1024 * 1024,
+      });
+      try { fs.unlinkSync(tempPath); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
+      try { fs.unlinkSync(tempPath + ".txt"); } catch (_e) { logger.debug('server', 'silent catch', { error: _e?.message }); }
+      transcript = result.stdout?.toString() || "";
+    }
 
     if (!transcript.trim()) {
       return { ok: false, error: "No speech detected" };
@@ -58279,42 +58539,10 @@ app.get("/api/admin/heartbeat-stats", requireRole("owner", "admin", "sovereign",
   }
 });
 
-// Concord Runtime observability — capability registry + sister constellation.
-app.get("/api/runtime/capabilities", requireRole("owner", "admin", "sovereign", "founder"), async (req, res) => {
-  try {
-    const { listCapabilities, checkCapabilityHealth } = await import("./lib/runtime/capability-registry.js");
-    const filters = {};
-    if (req.query.owner) filters.owner = String(req.query.owner);
-    if (req.query.risk) filters.risk = String(req.query.risk);
-    const capabilities = listCapabilities(filters).map((c) => ({ ...c, health: checkCapabilityHealth(c.capability) }));
-    res.json({ ok: true, count: capabilities.length, capabilities });
-  } catch (e) {
-    res.status(500).json({ ok: false, error: String(e?.message || e) });
-  }
-});
-
-app.get("/api/runtime/capabilities/:capability/health", requireRole("owner", "admin", "sovereign", "founder"), async (req, res) => {
-  try {
-    const { getCapabilityDescriptor, checkCapabilityHealth } = await import("./lib/runtime/capability-registry.js");
-    const capability = req.params.capability;
-    const descriptor = getCapabilityDescriptor(capability);
-    if (!descriptor) return res.status(404).json({ ok: false, error: "not_registered" });
-    res.json({ ok: true, descriptor, health: checkCapabilityHealth(capability) });
-  } catch (e) {
-    res.status(500).json({ ok: false, error: String(e?.message || e) });
-  }
-});
-
-app.get("/api/runtime/events/recent", requireRole("owner", "admin", "sovereign", "founder"), async (req, res) => {
-  try {
-    const { recentEvents } = await import("./lib/runtime/event-bus.js");
-    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 100, 1), 500);
-    res.json({ ok: true, events: recentEvents(limit) });
-  } catch (e) {
-    res.status(500).json({ ok: false, error: String(e?.message || e) });
-  }
-});
-
+// Concord Runtime observability — sister-constellation health rollup. (The
+// capability-registry + event-bus routes that used to sit above this one were
+// a duplicate of the block near the mission-control routes below; removed
+// 2026-09-08 — Express was appending the second copy as dead handlers.)
 app.get("/api/runtime/constellation", requireRole("owner", "admin", "sovereign", "founder"), async (req, res) => {
   try {
     const { collectConstellationHealth } = await import("./lib/runtime/constellation.js");
@@ -63325,79 +63553,35 @@ app.get("/api/papers/tags", (req, res) => {
   res.json({ ok: true, tags: Array.from(tagSet).sort() });
 });
 
-// Credits/wallet system - requires authentication
-app.post("/api/credits/wallet", requireAuth(), (req, res) => {
-  const { walletId } = req.body || {};
-  if (!walletId) return res.status(400).json({ ok: false, error: "walletId required" });
-
-  // Initialize wallets store if needed
-  if (!STATE.wallets) STATE.wallets = new Map();
-
-  // Get or create wallet
-  let wallet = STATE.wallets.get(walletId);
-  if (!wallet) {
-    wallet = {
-      id: walletId,
-      balance: 100, // Starting balance
-      transactions: [],
-      createdAt: new Date().toISOString()
-    };
-    STATE.wallets.set(walletId, wallet);
-  }
-
-  res.json({ ok: true, wallet });
+// ── /api/credits/* — DEPRECATED (Concurrency Refactor Tier 2, 2026-09-08) ──
+// This was a SEPARATE in-memory wallet (STATE.wallets, per-process, `balance:
+// 100` starting grant) with a client-supplied `amount` on /earn — a free-mint
+// surface AND per-process-incoherent under a cluster (docs/CONCURRENCY_STATE_AUDIT.md
+// Tier M). It is NOT the real economy (user_wallets + economy_ledger, mutated
+// only via mintCoins/walletDebit/walletCredit). Its only caller was a fake
+// "Manual earn/spend" demo button in the crypto lens.
+//
+// wallet/balance now READ the real ledger-summed CC balance (read-only, no
+// per-process state). earn/spend are honest no-ops — credits are not a
+// mintable currency. The crypto-lens buttons should be removed in the
+// frontend consolidation pass (they violate honest-by-construction).
+async function _realCcBalance(userId) {
+  if (!userId || !db) return 0;
+  try {
+    const { getBalance } = await import("./economy/balances.js");
+    return getBalance(db, userId)?.balance ?? 0;
+  } catch { return 0; }
+}
+app.post("/api/credits/wallet", requireAuth(), async (req, res) => {
+  const userId = req.user?.id || req.actor?.userId || null;
+  const balance = await _realCcBalance(userId);
+  res.json({ ok: true, wallet: { id: String(req.body?.walletId || userId || "wallet"), balance, transactions: [], readOnly: true } });
 });
-
 app.post("/api/credits/earn", requireAuth(), (req, res) => {
-  const { walletId, amount, reason = "quest" } = req.body || {};
-  if (!walletId) return res.status(400).json({ ok: false, error: "walletId required" });
-  if (!amount || amount <= 0) return res.status(400).json({ ok: false, error: "positive amount required" });
-
-  if (!STATE.wallets) STATE.wallets = new Map();
-
-  let wallet = STATE.wallets.get(walletId);
-  if (!wallet) {
-    wallet = { id: walletId, balance: 0, transactions: [], createdAt: new Date().toISOString() };
-  }
-
-  wallet.balance += amount;
-  wallet.transactions.push({
-    type: "earn",
-    amount,
-    reason,
-    timestamp: new Date().toISOString()
-  });
-
-  STATE.wallets.set(walletId, wallet);
-  res.json({ ok: true, wallet, earned: amount });
+  res.status(200).json({ ok: false, error: "credits_not_mintable", detail: "CC is earned only through real economy events (marketplace sales, royalties). /api/credits/earn is deprecated." });
 });
-
 app.post("/api/credits/spend", requireAuth(), (req, res) => {
-  const { walletId, amount, reason = "spend" } = req.body || {};
-  if (!walletId) return res.status(400).json({ ok: false, error: "walletId required" });
-  if (!amount || amount <= 0) return res.status(400).json({ ok: false, error: "positive amount required" });
-
-  if (!STATE.wallets) STATE.wallets = new Map();
-
-  const wallet = STATE.wallets.get(walletId);
-  if (!wallet) {
-    return res.status(404).json({ ok: false, error: "wallet not found" });
-  }
-
-  if (wallet.balance < amount) {
-    return res.status(400).json({ ok: false, error: "insufficient balance", balance: wallet.balance });
-  }
-
-  wallet.balance -= amount;
-  wallet.transactions.push({
-    type: "spend",
-    amount,
-    reason,
-    timestamp: new Date().toISOString()
-  });
-
-  STATE.wallets.set(walletId, wallet);
-  res.json({ ok: true, wallet, spent: amount });
+  res.status(200).json({ ok: false, error: "credits_not_spendable_here", detail: "Spend CC through the real economy paths (/api/economic/marketplace/buy, etc.). /api/credits/spend is deprecated." });
 });
 
 // Global feed - public DTUs feed
@@ -65991,10 +66175,10 @@ app.get("/api/hive/limits", asyncHandler(async (_req, res) => {
 app.get("/api/hive/status", asyncHandler(async (_req, res) => {
   res.json({ ok: true, aliasOf: "/api/hive/metrics", suggest: ["/api/hive/metrics", "/api/hive/limits"], status: "ok" });
 }));
-app.get("/api/credits/balance", requireAuth(), (req, res) => {
+app.get("/api/credits/balance", requireAuth(), async (req, res) => {
   try {
     const userId = req.user?.id || req.actor?.userId;
-    res.json({ ok: true, userId, balance: null, aliasOf: "POST /api/credits/wallet", note: "read stub — use wallet endpoint for authoritative balance" });
+    res.json({ ok: true, userId, balance: await _realCcBalance(userId), source: "economy_ledger", note: "real ledger-summed CC balance; /api/credits mutation endpoints are deprecated" });
   } catch (e) {
     res.status(500).json({ ok: false, error: String(e?.message || e) });
   }
@@ -67090,7 +67274,7 @@ app.post("/api/command/nlp", asyncHandler(async (req, res) => {
       break;
     }
     case "recent": {
-      const recent = dtusArray()
+      const recent = [...dtusArray()]   // copy — dtusArray() may return a shared cached snapshot
         .sort((a, b) => new Date(b.updatedAt || b.createdAt || 0).getTime() - new Date(a.updatedAt || a.createdAt || 0).getTime())
         .slice(0, 10)
         .map(d => ({ id: d.id, title: d.title, freshness: calculateFreshness(d), updatedAt: d.updatedAt }));
@@ -72333,9 +72517,13 @@ if (globalThis.__sentry) {
 // on /health.
 const _FORCE_LISTEN = String(process.env.CONCORD_FORCE_LISTEN || "").toLowerCase() === "true";
 const SHOULD_LISTEN = _FORCE_LISTEN || (
+  !HEARTBEAT_ONLY &&   // the sim-only process runs the tick, binds no port
   (String(process.env.CONCORD_NO_LISTEN || "").toLowerCase() !== "true") &&
   (String(process.env.NODE_ENV || "").toLowerCase() !== "test")
 );
+if (HEARTBEAT_ONLY) {
+  structuredLog("info", "server_heartbeat_only_mode", { detail: "emergent sim + governor tick; no HTTP listener" });
+}
 
 // Read replica: lock the connection read-only for the serving phase. All the
 // boot-time no-op schema inits have run by now; from here the replica must only
@@ -72443,6 +72631,40 @@ try {
       histogram.reset();
     } catch { /* perf_hooks unhappy — swallow, monitor is informational */ }
   }, 30_000).unref();
+
+  // Concurrency Refactor (2026-09-08): the 3s/30s monitor above only catches
+  // full FREEZES. A concurrent-request burst starves the loop at 300-800ms —
+  // real user-facing pain, invisible to that threshold. This second pass is
+  // faster (5s window) and lower (250ms default) so a load spike shows up in
+  // the log with a timestamp to cross-reference. Same ~50ns/sample histogram.
+  const BURST_THRESHOLD_NS = (Number(process.env.CONCORD_LAG_BURST_THRESHOLD_MS) || 250) * 1e6;
+  let _burstSpikeStreak = 0;
+  const _burstHist = monitorEventLoopDelay({ resolution: 20 });
+  _burstHist.enable();
+  setInterval(() => {
+    try {
+      const maxNs = _burstHist.max;
+      if (Number.isFinite(maxNs) && maxNs > BURST_THRESHOLD_NS) {
+        _burstSpikeStreak++;
+        // log the first spike, then every 6th (~30s) while it persists, so a
+        // sustained overload is one line/30s not a flood.
+        if (_burstSpikeStreak === 1 || _burstSpikeStreak % 6 === 0) {
+          const culprit = (globalThis.__lastLagProbeName && (Date.now() - (globalThis.__lastLagProbeTs || 0) < 10_000))
+            ? globalThis.__lastLagProbeName : "concurrent_request_load?";
+          structuredLog("warn", "event_loop_burst_lag", {
+            maxMs: Math.round(maxNs / 1e6),
+            p99Ms: Math.round(_burstHist.percentile(99) / 1e6),
+            windowSeconds: 5,
+            consecutiveWindows: _burstSpikeStreak,
+            culprit,
+          });
+        }
+      } else {
+        _burstSpikeStreak = 0;
+      }
+      _burstHist.reset();
+    } catch { /* informational */ }
+  }, 5_000).unref();
 } catch (e) {
   structuredLog("info", "event_loop_monitor_unavailable", { error: String(e?.message || e) });
 }

@@ -142,6 +142,8 @@ const PUBLIC_PATHS = new Set([
   '/conkay-evo-glb-smoke.html',
   // CAD Wave 1 assembly multi-part + revise smoke (public HTML).
   '/conkay-assembly-smoke.html',
+  // set_transform player-LIVE smoke: apply_mesh → set_transform → transform_set.
+  '/conkay-set-transform-smoke.html',
 ]);
 
 const PUBLIC_PREFIXES = [
@@ -289,7 +291,8 @@ export function middleware(request: NextRequest) {
       pathname === '/conkay-nlp-cad-smoke.html' ||
       pathname === '/conkay-glb-smoke.html' ||
       pathname === '/conkay-evo-glb-smoke.html' ||
-      pathname === '/conkay-assembly-smoke.html'
+      pathname === '/conkay-assembly-smoke.html' ||
+      pathname === '/conkay-set-transform-smoke.html'
     ) {
       effectiveCsp = csp
         .replace(/frame-ancestors 'none'/, "frame-ancestors 'self'")

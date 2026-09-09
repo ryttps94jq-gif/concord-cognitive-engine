@@ -332,3 +332,6 @@ apps/concordia-living-world/unity-client/Assets/Concordia/Models.meta
 apps/concordia-living-world/unity-client/Assets/Concordia/Shots.meta
 apps/concordia-living-world/unity-client/Assets/StreamingAssets/LlamaLib-v2.0.5.meta
 
+
+# ConKay OCC B-rep STEP files (local Mac kitchen / server data)
+server/data/conkay-brep/

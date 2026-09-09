@@ -23,6 +23,13 @@ kept for provenance and should not be read as current counts.
 
 # CURRENT STATE — live run 2026-07-25T12:11:32Z
 
+> **SUPERSEDED (2026-09-08).** The live picture is the **2026-09-08
+> owner-authorized refresh** entry further down this file (search
+> "owner-authorized BASELINE + BUDGET refresh"): `BASELINE.json` 2026-09-08T21:35Z,
+> 565 fingerprints, 0 critical / 24 high / 71 medium / 29 low / 448 info (572);
+> `BUDGET.json` v14 `maxTotal` 620; `--diff --ci` green (added 0 / removed 0).
+> Everything below is a 2026-07-25 snapshot kept for provenance.
+
 Produced by exactly one invocation of `cd server && node scripts/run-detectors.js`
 at HEAD `9ea23642` (branch `claude/game-systems-audit-continuation-cobe3q`).
 46 detectors registered, all reported `ok` — no `no_db`, no `detector_threw`.
@@ -505,6 +512,84 @@ document's own historical section says "**44 detectors**"; the live run
 registers and executes **46**. (CLAUDE.md's "~30 detectors" is a correct
 historical statement about the state at PR #808, not a current count, and
 does not need changing.)
+
+---
+
+## 2026-09-08 — `concurrency-refactor` owner-authorized BASELINE + BUDGET refresh
+
+User instruction: "Do the baseline refresh". Executed:
+`node scripts/run-detectors.js --rewrite-baseline` on the current tree →
+**`BASELINE.json` 2026-09-08T21:35Z, 565 fingerprints, 0 critical / 24 high /
+71 medium / 29 low / 448 info (572)**. `--diff --ci` against it:
+**`added 0 / removed 0 / unchanged 565`** — the baseline exactly matches the
+tree. `BUDGET.json` → **v14 `maxTotal` 620** (threshold 651; 572 fits with ~8%
+headroom, wider than the usual 5% to absorb `macro-usage`'s run-to-run
+telemetry swing — info went 196→448 this cycle as the db-backed probing pass
+exercised more macros).
+
+**Fixed before the capture (real defects, committed):**
+- `critical` **1 → 0** — `maintenance-gates` / schema-drift gate:
+  `evo_assets.asset_id` → `id` (`world-asset-composition.js:85`),
+  `macro_call_log.created_at` → `ts` (`lens-behavioral-contract.js:173`).
+  `verify-schema-drift.mjs --ci` now DRIFT 0.
+- 3× `duplicate_route_registration` — `/api/runtime/{capabilities,
+  capabilities/:capability/health,events/recent}` each registered twice in
+  `server.js`; removed the earlier block.
+- 2× `perf_uncaught_sql_loop` — `pce/pattern-regression.js#updateRegressionBaselines`
+  and `pce/ast-cache.js#invalidateAstCache` re-prepared statements per loop
+  iteration; hoisted.
+- `invariant-guardian` + `observability-gap` on `usb-lease-cycle.js` — wrapped
+  the heartbeat handler in try/catch. invariant-guardian now 0 findings.
+- `perf_empty_catch` on `mcp.js:483` — dead no-op try-block removed.
+- 2× `perf_sync_fs_in_handler` on `occ-bridge.js:237,291` — the STEP-file
+  `readFileSync`s (real event-loop blocks proportional to geometry size) →
+  `await readFile`.
+- Pre-existing RED test — `pce-concord-bench` "verifies Dila empirical macros
+  are wired": `domains/dila.js` now registers `concord_bench` /
+  `pce_improvement_cycle` / `pce_metrics` / `coding_pipeline` as thin
+  delegations to `lib/pce/index.js`. Bench suite 45/45.
+
+**Cleared by the fresh scan (28 stale highs, in `removed`):**
+27× `dead-macro-call` + 1× `lens-manifest-capability`, all on
+`components/sentinel/*`. The old baseline predated `server/domains/sentinel.js`
+registering its 26 `sentinel.*` pairs (`triage.*`, `monitor.*`, `alerts.*`,
+`scan.*`, `query.*`, `intel.*`, `metrics.series`, `timeline.*`) — verified
+`buildRegisteredMacroPairs` now finds all 26 (`has sentinel triage.open? true`).
+Also the phantom `command-injection` on `.claude/worktrees/w1/...` — detector
+`_framework.js` walk now skips `.claude/` (git worktrees on other branches).
+
+**24 highs baselined — all reviewed, genuine false-positive or by-design:**
+- **15× `perf_sync_fs_in_handler`** — `occ-bridge.js` 26/29/30/66/74/317
+  (one-time `existsSync` Python-CLI / binary path resolution, microseconds);
+  `conkay/verticals/prosthetics.js` 199/217/227/228 (a deliberately-synchronous
+  CAD g-code + telemetry generator writing small artifacts once per run —
+  making it async ripples to every caller for no measurable gain);
+  `lease-system.js` 31/32/41 (sub-KB JSON lock-file reads at 60s heartbeat
+  cadence); `capability-registry.js:190` (one health-check `existsSync`).
+- **7× `money_txn_untransacted_writes`** — `creditWallet` / `debitWallet` /
+  `handleWebhook` / `ledger.js#recordTransaction` are the detector's own
+  documented control-flow-blind mutually-exclusive-branch class (a `try` INSERT
+  + a `catch` fallback INSERT for a pre-migration column — only one ever runs);
+  `account-lifecycle.js#requestAccountDeletion` writes `account_deletion_requests`
+  (an audit/scheduling table, `balance_at_request` is a snapshot column, no CC
+  moves) via a single `INSERT ... ON CONFLICT DO UPDATE`;
+  `routes/wagers.js#createWagersRouter` is a router-factory aggregation artifact
+  — every real wager handler (lines 190/201/209/219) IS `db.transaction`-wrapped.
+- **~2-4× `authz_write_auth_bypass`** — `/api/welding/portal`, `/api/spectate`,
+  `/api/metrics/vitals` (unauth telemetry beacon by design), `/api/auth/refresh`
+  (token refresh must work without a valid access token). All intentional
+  public-write paths; welding + spectate were already reviewed in prior passes.
+
+**Not fixed (pre-existing, out of scope for this refresh):** 5× `low`
+`stale-code` — `dhtp-rs-{freeze,human-export,ollama-provider}.js`,
+`adaptive-field-compression.js`, `world-asset-composition.js`. The DHTP-RS
+cluster is paused work; `world-asset-composition.js` is reachable via
+`composeFromRegistry` but not currently imported by a live path. Left baselined
+for a future dedicated pass. Also: the `perDetector` map in `BUDGET.json` v14 is
+stale (v13 values, informational only — `ciDecision` gates on `maxTotal` alone).
+
+**Disposition: refresh done, gate green.** The old `CURRENT STATE` section
+below (2026-07-25) is superseded by this entry.
 
 ---
 ---

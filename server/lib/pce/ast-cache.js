@@ -110,10 +110,9 @@ export function indexFileAst(db, repoRoot, filePath, { force = false } = {}) {
 
 export function invalidateAstCache(db, repoRoot, filePaths = []) {
   if (!db || !tablesReady(db)) return { ok: false, reason: "migration_required" };
+  const delStmt = db.prepare(`DELETE FROM pce_ast_cache WHERE repo_root = ? AND file_path = ?`);
   for (const fp of filePaths) {
-    try {
-      db.prepare(`DELETE FROM pce_ast_cache WHERE repo_root = ? AND file_path = ?`).run(repoRoot, fp);
-    } catch { /* optional */ }
+    try { delStmt.run(repoRoot, fp); } catch { /* optional */ }
   }
   return { ok: true, invalidated: filePaths.length };
 }

@@ -53,6 +53,28 @@ export function initDTUStore(db) {
       CREATE INDEX IF NOT EXISTS idx_dtu_source ON dtu_store(source);
       CREATE INDEX IF NOT EXISTS idx_dtu_updated ON dtu_store(updated_at DESC);
     `);
+
+    // Concurrency Refactor Phase 3 (migration 442): visibility columns so the
+    // DTU list filter can run in SQL (and off the Node event loop via the Rust
+    // read sidecar). Also fixes a latent bug — `data` used to sometimes be only
+    // `dtu.body`, which `rehydrateFromSQLite` then dropped for lack of an `id`.
+    // Guarded per-column: ALTER TABLE ADD COLUMN has no IF NOT EXISTS in SQLite.
+    for (const [col, type] of [
+      ["owner_user_id", "TEXT"], ["visibility", "TEXT"], ["privacy", "TEXT"],
+      ["federation_tier", "TEXT"], ["location_regional", "TEXT"],
+      ["location_national", "TEXT"], ["kind", "TEXT"],
+    ]) {
+      try {
+        db.exec(`ALTER TABLE dtu_store ADD COLUMN ${col} ${type}`);
+      } catch (e) {
+        if (!String(e?.message || "").includes("duplicate column")) throw e;
+      }
+    }
+    db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_dtu_store_owner ON dtu_store(owner_user_id);
+      CREATE INDEX IF NOT EXISTS idx_dtu_store_visibility ON dtu_store(visibility);
+      CREATE INDEX IF NOT EXISTS idx_dtu_store_list ON dtu_store(scope, tier, created_at DESC);
+    `);
     return true;
   } catch (e) {
     console.error("[DTUStore] Failed to initialize table:", e.message);
@@ -95,8 +117,8 @@ export function createDTUStore(db, memoryMap, opts = {}) {
 
       _stmts = {
         upsert: db.prepare(`
-          INSERT OR REPLACE INTO dtu_store (id, title, tier, scope, tags, source, created_at, updated_at, data, content_hash, compressed_size, rights_id)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          INSERT OR REPLACE INTO dtu_store (id, title, tier, scope, tags, source, created_at, updated_at, data, content_hash, compressed_size, rights_id, owner_user_id, visibility, privacy, federation_tier, location_regional, location_national, kind)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `),
         get: db.prepare("SELECT data FROM dtu_store WHERE id = ?"),
         delete: db.prepare("DELETE FROM dtu_store WHERE id = ?"),
@@ -195,8 +217,25 @@ export function createDTUStore(db, memoryMap, opts = {}) {
       const safeTags = Array.isArray(dtu.tags) ? dtu.tags : [];
       const safeSource = typeof dtu.source === "string" ? dtu.source : (dtu.source ? String(dtu.source) : "system");
 
-      // Sniff payload type (Sprint 32 E6 — binary attachments)
-      const { payloadData, payloadBytes, payloadKind } = sniffPayload(dtu);
+      // Sniff payload type (Sprint 32 E6 — binary attachments). Only
+      // `payloadBytes`/`payloadKind` are used now: the `data` column is ALWAYS
+      // the full DTU object. The old `payloadData || JSON.stringify(dtu)` could
+      // store just `dtu.body`, which `rehydrateFromSQLite` then dropped on
+      // restart for lack of a top-level `id` (silent data loss). Fixed with
+      // migration 442.
+      const { payloadBytes, payloadKind } = sniffPayload(dtu);
+
+      // Visibility columns (migration 442) — same dual camelCase/snake_case
+      // reads as server.js userVisibleDTUs, so the SQL filter and the JS filter
+      // agree. `str()` keeps a stray non-string field from poisoning the bind.
+      const str = (v) => (typeof v === "string" && v ? v : null);
+      const ownerUserId = str(dtu.author) || str(dtu.ownerId) || str(dtu.userId) || str(dtu.createdBy);
+      const visibility = str(dtu.visibility) || str(dtu.meta?.visibility);
+      const privacy = str(dtu.privacy);
+      const federationTier = str(dtu.federation_tier) || str(dtu.federationTier);
+      const locRegional = str(dtu.location_regional) || str(dtu.locationRegional);
+      const locNational = str(dtu.location_national) || str(dtu.locationNational);
+      const kind = str(dtu.machine?.kind) || str(dtu.kind);
 
       s.upsert.run(
         String(dtu.id ?? ""),
@@ -207,10 +246,17 @@ export function createDTUStore(db, memoryMap, opts = {}) {
         safeSource,
         String(dtu.createdAt ?? now),
         String(dtu.updatedAt ?? now),
-        payloadData || JSON.stringify(dtu),
+        JSON.stringify(dtu),
         String(content_hash),
         Number.isFinite(compressed_size) ? compressed_size : 0,
-        dtu.rights_id == null ? null : String(dtu.rights_id)
+        dtu.rights_id == null ? null : String(dtu.rights_id),
+        ownerUserId,
+        visibility,
+        privacy,
+        federationTier,
+        locRegional,
+        locNational,
+        kind,
       );
 
       // Also store binary payload if needed (Sprint 32 E6)

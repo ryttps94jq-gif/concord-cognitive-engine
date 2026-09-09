@@ -589,6 +589,7 @@ export default function createAuthRouter({
 
       const now = Math.floor(Date.now() / 1000);
       db.prepare(`UPDATE users SET brain_mode = ?, brain_mode_set_at = ? WHERE id = ?`).run(brainMode, now, req.user.id);
+      globalThis.__concordBustUserCache?.(req.user.id);
 
       auditLog("auth", "choose_brain_mode", {
         userId: req.user.id,
@@ -965,6 +966,7 @@ export default function createAuthRouter({
       user.passwordHash = _newHash;
       saveAuthData();
     }
+    globalThis.__concordBustUserCache?.(req.user.id);
 
     auditLog("auth", "password_changed", {
       userId: req.user.id,
@@ -1035,6 +1037,7 @@ export default function createAuthRouter({
       user.passwordHash = _resetHash;
       saveAuthData();
     }
+    globalThis.__concordBustUserCache?.(user.id);
     consumeResetToken(token); // single-use — a leaked link dies on first redemption
     // Security best practice: a password reset invalidates every outstanding
     // session (the attacker who prompted the reset may hold one).

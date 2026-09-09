@@ -480,7 +480,7 @@ export default function createMCPRouter({
         protocol: "MCP",
         protocolVersion: "2024-11-05",
         server: "concord-cognitive-engine",
-        localToolCount: (() => { try { const { filterMcpAdvertisedKeys } = require ? null : null; } catch(_){} try { return [...LENS_ACTIONS.keys()].filter(k => { const a=k.split(".").slice(1).join("."); return !["analyze","generate","suggest","like","bookmark","share","repost","pin","vote","rate","archive","publish","save","move","follow","unfollow","react","comment"].includes(a); }).length; } catch(_){ return LENS_ACTIONS.size; } })(),
+        localToolCount: (() => { try { return [...LENS_ACTIONS.keys()].filter(k => { const a=k.split(".").slice(1).join("."); return !["analyze","generate","suggest","like","bookmark","share","repost","pin","vote","rate","archive","publish","save","move","follow","unfollow","react","comment"].includes(a); }).length; } catch(_){ return LENS_ACTIONS.size; } })(),
         rawLensActionCount: LENS_ACTIONS.size,
         externalServers: externalServers.size,
         sseClients: sseClients.size,

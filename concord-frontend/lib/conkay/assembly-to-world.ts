@@ -167,6 +167,14 @@ export async function runAssemblyChatRevise(opts: {
     }
   }
 
+  // chat shortcuts
+  if (/^undo\b/i.test(text) || text.toLowerCase() === 'u') {
+    return runAssemblyUndo({ assemblyId: assemblyId!, syncUnity: opts.syncUnity });
+  }
+  if (/^redo\b/i.test(text)) {
+    return runAssemblyRedo({ assemblyId: assemblyId!, syncUnity: opts.syncUnity });
+  }
+
   const revised = await reviseAssembly(assemblyId!, text);
   if (!revised?.ok) {
     // If revise failed because utterance was "build assembly" already handled
@@ -187,6 +195,8 @@ export async function runAssemblyChatRevise(opts: {
       unity = redrawAssemblyInUnity(parts);
     } else if (revised.action === 'list') {
       unity = { ok: true, mode: 'noop' };
+    } else if (revised.action === 'undo' || revised.action === 'redo') {
+      unity = redrawAssemblyInUnity(parts);
     }
   }
 
@@ -200,6 +210,44 @@ export async function runAssemblyChatRevise(opts: {
   };
 }
 
+
+
+export async function undoAssemblyApi(assemblyId: string) {
+  const res = await api.post(`/api/conkay/assemblies/${assemblyId}/undo`);
+  return res?.data;
+}
+
+export async function redoAssemblyApi(assemblyId: string) {
+  const res = await api.post(`/api/conkay/assemblies/${assemblyId}/redo`);
+  return res?.data;
+}
+
+export async function fetchAssemblyHistory(assemblyId: string) {
+  const res = await api.get(`/api/conkay/assemblies/${assemblyId}/history`);
+  return res?.data;
+}
+
+/** Undo then redraw Unity from restored parts. */
+export async function runAssemblyUndo(opts: { assemblyId: string; syncUnity?: boolean }) {
+  const out = await undoAssemblyApi(opts.assemblyId);
+  if (!out?.ok) return { ok: false, error: out?.error || 'undo_failed', ...out };
+  let unity = null;
+  if (opts.syncUnity !== false && unityIframePresent()) {
+    unity = redrawAssemblyInUnity(out.parts || []);
+  }
+  return { ok: true, action: 'undo', assemblyId: opts.assemblyId, parts: out.parts, unity, canUndo: out.canUndo, canRedo: out.canRedo };
+}
+
+/** Redo then redraw Unity from restored parts. */
+export async function runAssemblyRedo(opts: { assemblyId: string; syncUnity?: boolean }) {
+  const out = await redoAssemblyApi(opts.assemblyId);
+  if (!out?.ok) return { ok: false, error: out?.error || 'redo_failed', ...out };
+  let unity = null;
+  if (opts.syncUnity !== false && unityIframePresent()) {
+    unity = redrawAssemblyInUnity(out.parts || []);
+  }
+  return { ok: true, action: 'redo', assemblyId: opts.assemblyId, parts: out.parts, unity, canUndo: out.canUndo, canRedo: out.canRedo };
+}
 
 /** Fetch BOM JSON for an assembly. */
 export async function fetchAssemblyBom(assemblyId: string) {
@@ -267,3 +315,207 @@ export async function downloadStep(opts: { assemblyId: string; partId?: string; 
   }
   return { ok: true, filename, size: blob.size };
 }
+
+/** Fetch orthographic drawing JSON (front/top/side + svg). */
+export async function fetchAssemblyDrawing(assemblyId: string) {
+  const res = await api.get(`/api/conkay/assemblies/${assemblyId}/drawing.json`);
+  return res?.data;
+}
+
+/** Download assembly drawing SVG. */
+export async function downloadAssemblyDrawing(assemblyId: string) {
+  const res = await api.get(`/api/conkay/assemblies/${assemblyId}/drawing.svg`, { responseType: 'blob' });
+  const blob = res?.data instanceof Blob ? res.data : new Blob([res?.data], { type: 'image/svg+xml' });
+  const filename = `conkay-assembly-${assemblyId.slice(0, 8)}-drawing.svg`;
+  if (typeof window !== 'undefined') {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+  return { ok: true, filename, size: blob.size };
+}
+
+/** List material library. */
+export async function fetchMaterials() {
+  const res = await api.get('/api/conkay/materials');
+  return res?.data;
+}
+
+/** Attach material to a part. */
+export async function attachPartMaterial(assemblyId: string, partId: string, material: string) {
+  const res = await api.post(`/api/conkay/assemblies/${assemblyId}/parts/${partId}/material`, { material });
+  return res?.data;
+}
+
+/** Download multi-page drawing PDF pack. */
+export async function downloadAssemblyDrawingPdf(assemblyId: string) {
+  const res = await api.get(`/api/conkay/assemblies/${assemblyId}/drawing.pdf`, { responseType: 'blob' });
+  const blob = res?.data instanceof Blob ? res.data : new Blob([res?.data], { type: 'application/pdf' });
+  const filename = `conkay-assembly-${assemblyId.slice(0, 8)}-drawing.pdf`;
+  if (typeof window !== 'undefined') {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+  return { ok: true, filename, size: blob.size };
+}
+
+/** Explode assembly transforms from COM; then set_transform / redraw in Unity. */
+export async function explodeAssemblyApi(assemblyId: string, factor = 1) {
+  const res = await api.post(`/api/conkay/assemblies/${assemblyId}/explode`, { factor });
+  const out = res?.data;
+  let unity: unknown = null;
+  if (out?.ok && Array.isArray(out.parts)) {
+    const parts = out.parts as AssemblyPartView[];
+    const xfResults = parts.map((part) => revisePartTransformInUnity(part));
+    const anyXf = xfResults.some((r) => r.ok && r.mode === 'set_transform');
+    if (!anyXf) {
+      unity = redrawAssemblyInUnity(parts);
+    } else {
+      unity = { setTransform: xfResults, ok: true };
+    }
+  }
+  return { ...out, unity };
+}
+
+export async function addAssemblyGdt(assemblyId: string, body: Record<string, unknown>) {
+  const res = await api.post(`/api/conkay/assemblies/${assemblyId}/gdt`, body);
+  return res?.data;
+}
+
+export async function listAssemblyGdt(assemblyId: string) {
+  const res = await api.get(`/api/conkay/assemblies/${assemblyId}/gdt`);
+  return res?.data;
+}
+
+export async function addAssemblyDimension(assemblyId: string, body: Record<string, unknown>) {
+  const res = await api.post(`/api/conkay/assemblies/${assemblyId}/dimensions`, body);
+  return res?.data;
+}
+
+/** Download OCC advanced B-rep STEP (kernel=occ). */
+export async function downloadBrepStep(opts: { assemblyId: string; filename?: string }) {
+  const path = `/api/conkay/assemblies/${opts.assemblyId}/export.brep.step`;
+  const res = await api.get(path, { responseType: 'blob' });
+  const blob = res?.data instanceof Blob ? res.data : new Blob([res?.data], { type: 'application/step' });
+  const filename = opts.filename || `conkay-assembly-${opts.assemblyId.slice(0, 8)}-brep.step`;
+  if (typeof window !== 'undefined') {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+  return { ok: true, filename, size: blob.size };
+}
+
+/** OCC feature-rebuild (Gate A) — body: { partId, features, out?, ... } */
+export async function occFeatureRebuild(body: Record<string, unknown>) {
+  const res = await api.post('/api/conkay/occ/feature-rebuild', body);
+  return res?.data;
+}
+
+/** Rebuild solid for assembly part from feature tree; returns mesh for Unity apply. */
+export async function rebuildPartSolid(assemblyId: string, partId: string, body: Record<string, unknown> = {}) {
+  const res = await api.post(`/api/conkay/assemblies/${assemblyId}/parts/${partId}/rebuild-solid`, body);
+  return res?.data;
+}
+
+/** Append feature to OCC feature tree. */
+export async function occFeatureAppend(body: Record<string, unknown>) {
+  const res = await api.post('/api/conkay/occ/feature-append', body);
+  return res?.data;
+}
+
+/** Probe OCC + local cert status text (best-effort). */
+export async function fetchOccStatus() {
+  const res = await api.get('/api/conkay/occ/status');
+  return res?.data;
+}
+
+/** INDUSTRIAL_CLASS — multi-DOF mate solve (OCC gp_Trsf; not AABB snap). */
+export async function mateSolveDof(body: Record<string, unknown>) {
+  const res = await api.post('/api/conkay/occ/mate-solve-dof', body);
+  return res?.data;
+}
+
+/** INDUSTRIAL_CLASS — sketch constraints + extrude. */
+export async function sketchSolve(body: Record<string, unknown>) {
+  const res = await api.post('/api/conkay/occ/sketch-solve', body);
+  return res?.data;
+}
+
+/** INDUSTRIAL_CLASS — digital ASME Y14.5 software metrology (NOT ISO CMM). */
+export async function gdtDigital(body: Record<string, unknown>) {
+  const res = await api.post('/api/conkay/occ/gdt-digital', body);
+  return res?.data;
+}
+
+/** List OCC feature tree for a partId. */
+export async function occFeatureList(partId: string) {
+  const res = await api.get(`/api/conkay/occ/feature-list/${encodeURIComponent(partId)}`);
+  return res?.data;
+}
+
+/** ERP-shaped BOM JSON (part numbers, mass/volume, vendor stubs, rollup). NOT SAP/Oracle. */
+export async function fetchErpBom(assemblyId: string, opts?: { overheadPct?: number }) {
+  const q =
+    opts?.overheadPct != null && Number.isFinite(opts.overheadPct)
+      ? `?overheadPct=${encodeURIComponent(String(opts.overheadPct))}`
+      : '';
+  const res = await api.get(`/api/conkay/assemblies/${assemblyId}/bom/erp${q}`);
+  return res?.data;
+}
+
+/** Browser download of ERP BOM as JSON. */
+export async function downloadErpBomJson(assemblyId: string) {
+  const bom = await fetchErpBom(assemblyId);
+  if (!bom?.ok) return { ok: false, error: bom?.reason || bom?.error || 'erp_bom_failed' };
+  const blob = new Blob([JSON.stringify(bom, null, 2)], { type: 'application/json' });
+  const filename = `conkay-erp-bom-${assemblyId.slice(0, 8)}.json`;
+  if (typeof window !== 'undefined') {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+  return { ok: true, filename, bom };
+}
+
+/** Browser download of ERP BOM as CSV. */
+export async function downloadErpBomCsv(assemblyId: string) {
+  const res = await api.get(`/api/conkay/assemblies/${assemblyId}/bom/erp.csv`, { responseType: 'blob' });
+  const blob = res?.data instanceof Blob ? res.data : new Blob([res?.data], { type: 'text/csv' });
+  const filename = `conkay-erp-bom-${assemblyId.slice(0, 8)}.csv`;
+  if (typeof window !== 'undefined') {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+  return { ok: true, filename, size: blob.size };
+}
+
+/** Create OCC feature tree for a partId. */
+export async function occFeatureCreate(body: Record<string, unknown>) {
+  const res = await api.post('/api/conkay/occ/feature-create', body);
+  return res?.data;
+}
+
+/** Undo last OCC feature on a part. */
+export async function occFeatureUndo(body: Record<string, unknown>) {
+  const res = await api.post('/api/conkay/occ/feature-undo', body);
+  return res?.data;
+}
+
