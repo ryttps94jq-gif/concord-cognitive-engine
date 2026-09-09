@@ -414,6 +414,9 @@ function RecentProjectsList({
 // Main Studio Page Component
 // ============================================================================
 
+type SaveStatus = 'idle' | 'success' | 'error';
+type PublishLicense = 'basic' | 'premium' | 'exclusive';
+
 export default function StudioLensPage() {
   useLensNav('studio');
   const {
@@ -424,6 +427,7 @@ export default function StudioLensPage() {
     lastUpdated,
   } = useRealtimeLens('studio');
   const {
+    items: studioArtifacts,
     isLoading: _isLoading,
     isError: _isError,
     error: _error,
@@ -464,7 +468,6 @@ export default function StudioLensPage() {
   const [zoomLevel, setZoomLevel] = useState(1);
   const [showNewProject, setShowNewProject] = useState(false);
   const [showAddTrack, setShowAddTrack] = useState(false);
-  const { items: studioArtifacts } = useLensData('studio', 'project', { noSeed: true });
   const runStudioAction = useRunArtifact('studio');
   const [studioActionResult, setStudioActionResult] = useState<Record<string, unknown> | null>(
     null
@@ -533,12 +536,12 @@ export default function StudioLensPage() {
   const [recordingTimer, setRecordingTimer] = useState(0);
   const [isPlayingBack, setIsPlayingBack] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
   // Publish to marketplace state
   const [showPublishModal, setShowPublishModal] = useState(false);
   const [publishTitle, setPublishTitle] = useState('');
   const [publishPrice, setPublishPrice] = useState('');
-  const [publishLicense, setPublishLicense] = useState<'basic' | 'premium' | 'exclusive'>('basic');
+  const [publishLicense, setPublishLicense] = useState<PublishLicense>('basic');
   const [publishTags, setPublishTags] = useState('');
   const [publishSubmitting, setPublishSubmitting] = useState(false);
   const [publishError, setPublishError] = useState<string | null>(null);

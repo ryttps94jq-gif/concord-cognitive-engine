@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-09T06:17:11.429Z",
+  "generatedAt": "2026-09-09T06:18:31.478Z",
   "rows": [
     {
       "lens": "world",
@@ -40,24 +40,6 @@
       "dupActionPaths": 0,
       "domainComponentCount": 39,
       "stackingScore": 17.07
-    },
-    {
-      "lens": "studio",
-      "loc": 2991,
-      "inlineBloat": 1391,
-      "featureImports": 20,
-      "sharedImports": 12,
-      "coLocatedImports": 0,
-      "useStateCount": 50,
-      "useEffectCount": 6,
-      "viewStateMachines": 2,
-      "renderStrategies": 2,
-      "screenBranches": 20,
-      "deadViewValues": 0,
-      "deadViewList": [],
-      "dupActionPaths": 1,
-      "domainComponentCount": 41,
-      "stackingScore": 14.88
     },
     {
       "lens": "board",
@@ -112,6 +94,24 @@
       "dupActionPaths": 0,
       "domainComponentCount": 32,
       "stackingScore": 8.04
+    },
+    {
+      "lens": "studio",
+      "loc": 2994,
+      "inlineBloat": 1394,
+      "featureImports": 20,
+      "sharedImports": 12,
+      "coLocatedImports": 0,
+      "useStateCount": 50,
+      "useEffectCount": 6,
+      "viewStateMachines": 0,
+      "renderStrategies": 1,
+      "screenBranches": 20,
+      "deadViewValues": 0,
+      "deadViewList": [],
+      "dupActionPaths": 0,
+      "domainComponentCount": 41,
+      "stackingScore": 7.88
     },
     {
       "lens": "crafting",
