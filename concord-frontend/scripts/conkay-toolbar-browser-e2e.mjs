@@ -8,7 +8,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execSync } from 'node:child_process';
-import { chromium } from 'playwright';
+import playwright from 'playwright';
+const { chromium } = playwright;
 
 const HOME = os.homedir();
 const OUT = path.join(HOME, '.zuko', 'remaining-work', 'conkay-toolbar-browser-e2e-proof.json');
@@ -247,6 +248,23 @@ try {
           err: j?.error || j?.code || j?.reason || null,
         });
       }
+      if (/\/api\/dtus\/?(\?|$)/.test(u) && r.request().method() === 'POST') {
+        // Backup capture if route intercept misses
+        if (mintBodies.length === 0) {
+          const text = await r.text().catch(() => '');
+          let j = null;
+          try { j = JSON.parse(text); } catch { /* ignore */ }
+          mintBodies.push({
+            status: r.status(),
+            ok: r.ok(),
+            keys: j && typeof j === 'object' ? Object.keys(j) : [],
+            preview: text ? text.slice(0, 500) : null,
+            id: extractMintId(j),
+            rawOk: j?.ok,
+            via: 'response_listener',
+          });
+        }
+      }
     } catch { /* ignore */ }
   });
 
@@ -367,11 +385,12 @@ try {
 
     const lastMol = molBodies[molBodies.length - 1];
     if (mintBodies.length > 0) break;
-    // Mol OK but mint still in-flight — wait up to 10s more for POST /api/dtus
+    // Mol OK but mint still in-flight — wait up to 45s (legacy bundle may
+    // JSON.stringify full mesh on UI thread before mint POST).
     if (lastMol && lastMol.ok && lastMol.okFlag !== false) {
       const tMint = Date.now();
-      while (Date.now() - tMint < 10000 && mintBodies.length === 0) {
-        await page.waitForTimeout(400);
+      while (Date.now() - tMint < 45000 && mintBodies.length === 0) {
+        await page.waitForTimeout(500);
       }
       break;
     }
