@@ -1860,6 +1860,7 @@ import { init as initGRC, formatAndValidate as grcFormatAndValidate, getGRCSyste
 import configureMiddleware from "./middleware/index.js";
 import { readReplicaGate } from "./lib/read-replica-allowlist.js";
 import { createLLMQueue } from "./lib/llm-queue.js";
+import { bindNpcCoalescerQueue } from "./lib/npc-prompt-coalescer.js";
 import { getCurrentLagMs as getEventLoopLagMs } from "./lib/event-loop-pressure.js";
 import { createLoadSheddingMiddleware } from "./lib/request-admission.js";
 import * as goSidecar from "./lib/sidecars/go-sidecar-client.js"; // Concurrency Refactor Phase 1 — Whisper/Piper/sandbox off the event loop
@@ -19401,6 +19402,16 @@ const _llmQueue = createLLMQueue({
     structuredLog("warn", "llm_queue_reject", { priority, reason });
   },
 });
+
+// NPC/emergent/ambient generate() coalescer — share `_llmQueue` at LOW for
+// background, CRITICAL for interactive bypass. Do NOT spin a third parallel
+// queue. Kill-switch: CONCORD_NPC_COALESCE=0. Default ON for background paths.
+// Does NOT enable A40 ollama-proxy cutover.
+try {
+  bindNpcCoalescerQueue(_llmQueue);
+} catch (e) {
+  structuredLog("warn", "npc_coalescer_bind_failed", { error: String(e?.message || e) });
+}
 
 const _breakers = createBreakerRegistry({
   onStateChange: (name, from, to) => {
